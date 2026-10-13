@@ -1,0 +1,197 @@
+// Package testenv gives a test binary an environment of its own, so that what
+// is installed and configured on the machine running the tests can neither
+// change what they see nor be changed by them.
+//
+// Every package with tests runs through it (TestEveryPackageRunsInTheTestEnvironment
+// checks that). It touches no file of the machine: it changes this process's
+// environment only, for the length of the run, and everything it points to is
+// in a temporary directory removed at the end.
+package testenv
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+	"testing"
+)
+
+// Tools are the programs the tests may find on PATH: git, which unibox
+// drives and is not faked, go, which builds the stand-ins, and the shell
+// with the utilities the stand-in scripts are written in. Everything else -
+// sbx, herdr, the agents - is absent unless a test puts a stand-in of its
+// own on PATH.
+var Tools = []string{
+	"git", "go",
+	"sh", "cat", "printf", "echo", "sleep", "true", "false", "env",
+	"mkdir", "rm", "mv", "cp", "ln", "touch", "chmod", "ls", "pwd",
+	"head", "tail", "grep", "sed", "tr", "cut", "wc", "sort", "tee",
+	"dirname", "basename", "readlink", "date", "kill", "du", "find",
+}
+
+// Main runs a package's tests in an environment of their own.
+func Main(m *testing.M) {
+	cleanup := Isolate()
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
+}
+
+// Isolate points this process at a throwaway home, git configuration and
+// PATH, and returns what removes them. For a package whose TestMain does
+// more than Main.
+func Isolate() func() {
+	root, err := os.MkdirTemp("", "unibox-test-")
+	if err != nil {
+		fail(err)
+	}
+	// Go keeps its caches and settings under the home: without them a test
+	// that builds a stand-in would compile the world, or fetch it.
+	// The C compiler is found on PATH too, and without it go quietly builds
+	// without cgo, so it is named by its path.
+	goKeys := []string{"GOCACHE", "GOMODCACHE", "GOPATH", "GOENV", "GOTOOLCHAIN", "CGO_ENABLED", "CC", "CXX"}
+	goEnv := map[string]string{}
+	if out, err := exec.Command("go", append([]string{"env"}, goKeys...)...).Output(); err == nil {
+		lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+		for i, key := range goKeys {
+			if i < len(lines) && lines[i] != "" {
+				goEnv[key] = lines[i]
+			}
+		}
+	}
+	// Off macOS the compiler would look for its assembler on a PATH that
+	// has none.
+	if runtime.GOOS != "darwin" {
+		goEnv["CGO_ENABLED"] = "0"
+	}
+	for _, key := range []string{"CC", "CXX"} {
+		if path, err := exec.LookPath(goEnv[key]); err == nil {
+			goEnv[key] = path
+		} else {
+			delete(goEnv, key)
+		}
+	}
+	if missing := missingTools(); missing != "" {
+		os.RemoveAll(root)
+		fmt.Fprintln(os.Stderr, "testenv: "+missing)
+		os.Exit(1)
+	}
+	bin := filepath.Join(root, "bin")
+	must(os.MkdirAll(bin, 0o700))
+	for _, tool := range Tools {
+		if found, err := exec.LookPath(tool); err == nil {
+			must(os.Symlink(found, filepath.Join(bin, tool)))
+		}
+	}
+
+	// Nothing of git's from the machine: no identity, signing, hooks,
+	// aliases or a repository the tests were started inside of.
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, "GIT_") {
+			os.Unsetenv(name)
+		}
+	}
+	gitconfig := filepath.Join(root, "gitconfig")
+	must(os.WriteFile(gitconfig, []byte(`[user]
+	name = unibox tests
+	email = tests@unibox.invalid
+[init]
+	defaultBranch = main
+[commit]
+	gpgsign = false
+[tag]
+	gpgsign = false
+[advice]
+	detachedHead = false
+`), 0o600))
+
+	home := filepath.Join(root, "home")
+	set := map[string]string{
+		"HOME":                home,
+		"XDG_CONFIG_HOME":     filepath.Join(home, ".config"),
+		"XDG_DATA_HOME":       filepath.Join(home, ".local", "share"),
+		"XDG_STATE_HOME":      filepath.Join(home, ".local", "state"),
+		"XDG_CACHE_HOME":      filepath.Join(home, ".cache"),
+		"PATH":                bin,
+		"GIT_CONFIG_GLOBAL":   gitconfig,
+		"GIT_CONFIG_NOSYSTEM": "1",
+		"GIT_TERMINAL_PROMPT": "0",
+	}
+	for key, value := range goEnv {
+		set[key] = value
+	}
+	for key, value := range set {
+		os.Setenv(key, value)
+	}
+	must(os.MkdirAll(home, 0o700))
+	// Nor the terminal, multiplexer or agent the tests were started in:
+	// what unibox does under one is a test's choice.
+	for _, name := range []string{
+		"SSH_AUTH_SOCK", "TMUX", "ZELLIJ", "ZELLIJ_SESSION_NAME", "ZELLIJ_PANE_ID",
+		"HERDR_ENV", "HERDR_PANE_ID", "HERDR_SOCKET", "HERDR_SOCKET_PATH", "HERDR_PLUGIN_STATE_DIR", "HERDR_BIN_PATH",
+		"TERM_PROGRAM", "TERM_PROGRAM_VERSION",
+		"GHOSTTY_RESOURCES_DIR", "GHOSTTY_BIN_DIR", "KITTY_WINDOW_ID", "WEZTERM_PANE",
+		"VISUAL", "EDITOR", "BROWSER", "NO_COLOR",
+	} {
+		os.Unsetenv(name)
+	}
+	return func() { os.RemoveAll(root) }
+}
+
+func must(err error) {
+	if err != nil {
+		fail(err)
+	}
+}
+
+func fail(err error) {
+	fmt.Fprintln(os.Stderr, "testenv:", err)
+	os.Exit(1)
+}
+
+// WriteExecutable writes a stand-in program. A plain os.WriteFile followed by
+// running the file fails now and then on Linux with "text file busy": a
+// child another test forks while the file is still open for writing keeps
+// that descriptor until it execs. Holding the fork lock while the file is
+// open lets no child be forked with it.
+func WriteExecutable(path string, content []byte) error {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	return os.WriteFile(path, content, 0o755)
+}
+
+// minGit is the oldest git the tests run with: merge-tree --write-tree,
+// which forecasts a rebase's conflicts, came in 2.38.
+var minGit = [2]int{2, 38}
+
+// missingTools says what a machine lacks to run the tests at all - a git new
+// enough - before they fail one by one with something harder to read.
+func missingTools() string {
+	path, err := exec.LookPath("git")
+	if err != nil {
+		return fmt.Sprintf("the tests need git %d.%d or newer, and there is none on PATH", minGit[0], minGit[1])
+	}
+	out, err := exec.Command(path, "version").Output()
+	if err != nil {
+		return fmt.Sprintf("%s does not run (%v); the tests need git %d.%d or newer", path, err, minGit[0], minGit[1])
+	}
+	if version, ok := gitAtLeast(string(out), minGit); !ok {
+		return fmt.Sprintf("the tests need git %d.%d or newer; %s is %s", minGit[0], minGit[1], path, version)
+	}
+	return ""
+}
+
+// gitAtLeast reads `git version` - "git version 2.39.5", or with a vendor's
+// note after it - and says whether it is min or newer, and what it is.
+func gitAtLeast(out string, min [2]int) (string, bool) {
+	version := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "git version "))
+	var major, minor int
+	if _, err := fmt.Sscanf(version, "%d.%d", &major, &minor); err != nil {
+		return version, false
+	}
+	return version, major > min[0] || major == min[0] && minor >= min[1]
+}
