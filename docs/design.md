@@ -390,6 +390,17 @@ and the design turns on it:
   variable or an unlocked parent cannot carry it there. A short-lived
   token fits this well with a `refresh` shorter than its lifetime: each
   refresh fetches the next one.
+- **sbx's own `github` secret takes github.com over.** With the built-in
+  `github` service stored (copilot's `gh auth token`), the proxy sets
+  Authorization on requests to github.com itself, and overwrites any the
+  sandbox sent. Checked from a sandbox: git-receive-pack answered 200
+  with no header, with a deliberately invalid one, and with a service's
+  placeholder alike, while gitlab.com answered 401 without one. So a git
+  service on github.com never reaches GitHub while that secret is
+  stored - the token behind `gh auth token` does, whatever its reach. A
+  narrow GitHub token has to be that secret itself (copilot's `auth`
+  pointing at the narrow token, which then also needs Copilot's
+  permission), or the built-in secret has to go.
 - **One forge, several owners.** A fine-grained GitHub token has one
   resource owner - the user or one organization - so repositories of
   several owners on github.com need a token each, told apart by path, not
