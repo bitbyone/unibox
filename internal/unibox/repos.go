@@ -18,6 +18,10 @@ type Request struct {
 	Repositories                                                       []RepoInput
 	Instructions                                                       []string
 	Push, IgnoreLocal, Yes                                             bool
+	// services are the profile's, set by the manager once it knows the
+	// profile: a git service's author and co-author win over --author
+	// and the host's git configuration for the repositories under it.
+	services map[string]Service
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
@@ -153,6 +157,12 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 		names[r.Name] = true
 		if _, err := git(ctx, ".", "check-ref-format", "--branch", r.Branch); err != nil {
 			return nil, nil, fmt.Errorf("invalid branch %q; use a git branch name", r.Branch)
+		}
+		if author, coAuthor := GitIdentity(req.services, r.URL); author != "" || coAuthor != nil {
+			if author != "" {
+				r.Author = author
+			}
+			r.CoAuthor = coAuthor
 		}
 		if _, _, err := AuthorParts(r.Author); err != nil {
 			return nil, nil, err

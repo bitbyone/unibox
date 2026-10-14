@@ -323,6 +323,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 			result.Needs = append(result.Needs, api.Need{Code: "credential_in_container", Service: name, Warning: true, Message: fmt.Sprintf("runtime %s has no credential proxy; the %s token will be readable inside the sandbox - use a narrow, short-lived one", r.Name(), name)})
 		}
 	}
+	req.services = p.Services
 	repos, needs, err := ResolveRepositories(ctx, req)
 	if err != nil {
 		return result, err

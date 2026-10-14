@@ -629,8 +629,16 @@ it would be committed. So:
 - `author: user` takes `user.name` and `user.email` from the host's git
   configuration of the worktree (unagit passes them as `--author`), and
   sets them in each clone in the VM. The commits are the user's, so a
-  forge's push rule that the author must be one of its users passes. It is
-  the one value; a profile cannot name someone else.
+  forge's push rule that the author must be one of its users passes.
+- A **git service** may name the author and the co-author for the
+  repositories under its URLs (`author: "Name <email>"`, `co_author:
+  false`), and wins over `--author`, the host's configuration and
+  `git.co_author`: a work forge gets the work address, whatever the
+  worktree's configuration says. Under several services each field comes
+  from the most specific URL that sets it, as git picks its `http.<url>`
+  settings. Services are host access, so the user approves the identity
+  with the rest. The task's record holds the result, so changing it on a
+  prepared task asks for another task name, as a changed `--author` does.
 - `co_author: true` adds `Co-Authored-By: <agent>` to every commit, the
   agent's name and address from agentbox's table (Claude Code's
   `Claude <noreply@anthropic.com>`, and so on). It is not left to the

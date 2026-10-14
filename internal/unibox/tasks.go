@@ -80,6 +80,7 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 	if len(req.Repositories) == 0 {
 		return api.Task{}, fmt.Errorf("no repository selected; pass --repo <path-or-url>, or unibox resume <task> for a prepared one")
 	}
+	req.services = p.Services
 	repos, err := resolveForTask(ctx, req)
 	if err != nil {
 		return api.Task{}, err
@@ -195,7 +196,7 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 // containsRepositories says whether every one of want is among have, as it is.
 func containsRepositories(have, want []api.Repository) bool {
 	for _, w := range want {
-		if !slices.ContainsFunc(have, func(h api.Repository) bool { return h == w }) {
+		if !slices.ContainsFunc(have, func(h api.Repository) bool { return digest(h) == digest(w) }) {
 			return false
 		}
 	}
@@ -243,6 +244,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	if t.ID == "" {
 		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox tasks lists them", req.Task)
 	}
+	req.services = p.Services
 	repos, err := resolveForTask(ctx, req)
 	if err != nil {
 		return t, nil, err
@@ -253,7 +255,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 		switch {
 		case i < 0:
 			added = append(added, nr)
-		case t.Repositories[i] != nr:
+		case digest(t.Repositories[i]) != digest(nr):
 			return t, nil, fmt.Errorf("task %s already has a repository named %s; give the new one another name with --repo name=source", t.ID, nr.Name)
 		}
 	}

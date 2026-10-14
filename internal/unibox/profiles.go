@@ -59,6 +59,12 @@ type Service struct {
 	// Refresh is how often sbx fetches the token again: a duration shorter
 	// than a short-lived token's lifetime, or on-demand (sbx's default).
 	Refresh string `yaml:"refresh" json:"refresh,omitempty"`
+	// Author and CoAuthor are who commits in the repositories under a git
+	// service's URLs, and whether the agent's co-author trailer goes in;
+	// they win over --author, the host's git configuration and the
+	// profile's git.co_author.
+	Author   string `yaml:"author" json:"author,omitempty"`
+	CoAuthor *bool  `yaml:"co_author" json:"co_author,omitempty"`
 }
 
 const (
@@ -87,6 +93,40 @@ func (s Service) ProxyHosts() []string {
 		}
 	}
 	return out
+}
+
+// GitIdentity is who commits in the repository at url, by the git services
+// whose URLs it is under: each field from the most specific service that
+// sets it, as git picks the most specific of its http.<url> settings. ""
+// and nil leave the author and the co-author trailer to the rest.
+func GitIdentity(services map[string]Service, url string) (string, *bool) {
+	type match struct {
+		length int
+		s      Service
+	}
+	matches := []match{}
+	for _, s := range services {
+		if !s.Git {
+			continue
+		}
+		for _, u := range s.GitURLs() {
+			if strings.HasPrefix(url, u) {
+				matches = append(matches, match{len(u), s})
+			}
+		}
+	}
+	slices.SortStableFunc(matches, func(a, b match) int { return a.length - b.length })
+	author := ""
+	var coAuthor *bool
+	for _, m := range matches {
+		if m.s.Author != "" {
+			author = m.s.Author
+		}
+		if m.s.CoAuthor != nil {
+			coAuthor = m.s.CoAuthor
+		}
+	}
+	return author, coAuthor
 }
 
 // GitURLs are the URL prefixes a git service's header is sent to, each with
@@ -356,6 +396,14 @@ func LoadProfile(root, name string) (Profile, error) {
 		if s.Refresh != "" && s.Refresh != "on-demand" {
 			if d, err := time.ParseDuration(s.Refresh); err != nil || d < time.Minute {
 				return p, fmt.Errorf("profile %s: service %s refresh must be on-demand or a duration of a minute or more, such as 10m", name, svc)
+			}
+		}
+		if (s.Author != "" || s.CoAuthor != nil) && !s.Git {
+			return p, fmt.Errorf("profile %s: service %s sets author or co_author, which only a git service has", name, svc)
+		}
+		if s.Author != "" {
+			if _, _, err := AuthorParts(s.Author); err != nil {
+				return p, fmt.Errorf("profile %s: service %s author must be 'Name <email>'", name, svc)
 			}
 		}
 	}

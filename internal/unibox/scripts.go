@@ -77,7 +77,11 @@ fi
 `)
 		fmt.Fprintf(&b, "git -C \"$dir\" config user.name %s\ngit -C \"$dir\" config user.email %s\n", Quote(name), Quote(email))
 		b.WriteString("git -C \"$dir\" config push.default simple\n")
-		if p.Git.CoAuthor == nil || *p.Git.CoAuthor {
+		coAuthor := p.Git.CoAuthor
+		if r.CoAuthor != nil {
+			coAuthor = r.CoAuthor
+		}
+		if coAuthor == nil || *coAuthor {
 			hook := "#!/bin/sh\nset -eu\ngit interpret-trailers --in-place --if-exists addIfDifferent --trailer " + Quote("Co-Authored-By: "+a.CoAuthor) + " \"$1\"\n"
 			b.WriteString(writeGuest(path.Join(dir, ".git", "unibox-hooks", "commit-msg"), []byte(hook), "700"))
 			fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(path.Join(dir, ".git", "unibox-hooks")))

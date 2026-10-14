@@ -11,6 +11,9 @@ type Repository struct {
 	Branch   string `json:"branch"`
 	HostPath string `json:"host_path,omitempty"`
 	Author   string `json:"author"`
+	// CoAuthor is a git service's say over the agent's co-author trailer
+	// for this repository; unset leaves it to the profile.
+	CoAuthor *bool `json:"co_author,omitempty"`
 }
 
 type Task struct {

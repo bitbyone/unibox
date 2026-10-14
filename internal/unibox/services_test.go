@@ -178,3 +178,38 @@ func TestOwnersOnOneForgeUseTokensOfTheirOwn(t *testing.T) {
 		t.Fatalf("each service needs a secret on the bare host:\n%s", data)
 	}
 }
+
+func TestAGitServiceSaysWhoCommitsUnderIt(t *testing.T) {
+	t.Parallel()
+	no := false
+	services := map[string]Service{
+		"github":      {Git: true, Host: HostList{"github.com"}, Author: "Jan Personal <jan@example.com>", CoAuthor: &no},
+		"github-acme": {Git: true, Host: HostList{"github.com/acme"}, Author: "Jan Work <jan@acme.example>"},
+		"artifactory": {Env: "ART", Host: HostList{"a.example"}, Scheme: SchemeBearer},
+	}
+	author, co := GitIdentity(services, "https://github.com/acme/api.git")
+	if author != "Jan Work <jan@acme.example>" || co == nil || *co {
+		t.Fatalf("the path's author wins and the host's co_author is inherited: %q %v", author, co)
+	}
+	if author, co = GitIdentity(services, "https://github.com/acme2/api.git"); author != "Jan Personal <jan@example.com>" {
+		t.Fatalf("acme2 is not under acme: %q", author)
+	}
+	if author, co = GitIdentity(services, "https://gitlab.com/x/y.git"); author != "" || co != nil {
+		t.Fatal("an unrelated forge took an identity")
+	}
+	// The service's author wins over --author, and the record says so.
+	req := Request{Author: "Someone Else <else@example.com>", Repositories: []RepoInput{{Source: "https://github.com/acme/api.git", Branch: "feat/x"}}, services: services}
+	repos, _, err := ResolveRepositories(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repos[0].Author != "Jan Work <jan@acme.example>" || repos[0].CoAuthor == nil || *repos[0].CoAuthor {
+		t.Fatalf("%+v", repos[0])
+	}
+	// The co-author hook follows the repository, over the profile's default.
+	a, _ := FindAgent("claude")
+	task := api.Task{Directory: "/work/t", Repositories: repos}
+	if script := prepareScript(task, Profile{}, a); strings.Contains(script, "Co-Authored-By") || !strings.Contains(script, "user.email 'jan@acme.example'") {
+		t.Fatalf("%s", script)
+	}
+}
