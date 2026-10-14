@@ -390,6 +390,17 @@ and the design turns on it:
   variable or an unlocked parent cannot carry it there. A short-lived
   token fits this well with a `refresh` shorter than its lifetime: each
   refresh fetches the next one.
+- **One forge, several owners.** A fine-grained GitHub token has one
+  resource owner - the user or one organization - so repositories of
+  several owners on github.com need a token each, told apart by path, not
+  host. git's `http.<url>.extraHeader` is a list, gathered from every
+  matching URL: checked on a local server, `.../org/repo` received both
+  the host's and the org's `Authorization`. An empty value resets the
+  list, and git applies the matches from the least to the most specific
+  URL, whatever their order in the file - so `http.https://github.com/org/`
+  with `extraHeader = ""` then the org's header sends the org's alone,
+  and every other path keeps the host's. Services do not take a path yet;
+  this is how they would.
 - A **host behind the user's VPN** is reached like any other: the proxy
   resolves and connects from the host, so the host's VPN routes it.
   Checked on a throwaway sandbox: gitlab.2n.cz (a private 10.x address)
