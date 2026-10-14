@@ -103,7 +103,8 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err = writeBindings(r.Bindings, s.Agents, log); err != nil {
+		bound := slices.DeleteFunc(slices.Clone(s.Agents), func(id string) bool { return sbxKitToken(s, id) })
+		if err = writeBindings(r.Bindings, bound, log); err != nil {
 			return err
 		}
 		args = append(args, dir)

@@ -412,7 +412,11 @@ and the design turns on it:
   github.com answered 401 without a header - so git on github.com is
   left to the services. The variable is not set in a sandbox created
   before the secret, so unibox sets the placeholder in copilot's
-  environment itself; it is not secret.
+  environment itself; it is not secret. This is copilot's `token` auth:
+  a fixed placeholder (`SessionEnv` hands it to the session), the
+  generated kit declares no github credential for it, and `check` warns
+  (`service_overridden`) while the built-in secret is stored and a
+  service names github.com.
 - **One forge, several owners.** A fine-grained GitHub token has one
   resource owner - the user or one organization - so repositories of
   several owners on github.com need a token each, told apart by path, not
@@ -553,7 +557,8 @@ auth:                         # how each agent signs in
   codex: oauth                # the provider's login, kept by the runtime
   claude: {token: security find-generic-password -s claude-code-oauth-token -w}
                               # a long-lived login token a host command prints
-  copilot: {command: gh auth token} # a host command the runtime runs
+  copilot: {token: security find-generic-password -s unibox-copilot-token -w}
+                              # a token for copilot alone, not sbx's github secret
 ```
 
 - An unknown field is an error naming it, never skipped: a misspelt

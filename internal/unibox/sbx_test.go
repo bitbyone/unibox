@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/tobola/unibox/internal/testenv"
+	"github.com/tobola/unibox/internal/unibox/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -415,5 +416,73 @@ func TestAllowedHostsJoinTheSandboxesPolicy(t *testing.T) {
 	}
 	if data, _ = os.ReadFile(calls); strings.Contains(string(data), "policy") {
 		t.Fatalf("%s", data)
+	}
+}
+
+func TestCopilotSignsInByATokenOfItsOwnAndLeavesGitHubToTheServices(t *testing.T) {
+	bin := t.TempDir()
+	argv := filepath.Join(t.TempDir(), "argv")
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
+if [ "$1 $2" = "secret ls" ]; then
+  echo '{"secrets":[{"scope":"global","type":"service","name":"github","secret":"gho_****"}],"custom_secrets":[]}'
+  exit 0
+fi
+printf '%s\n' "$@" > `+Quote(argv)+`
+`))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := &SBX{Cache: t.TempDir()}
+	ctx := context.Background()
+	p := Profile{Name: "home", Agents: []string{"claude", "copilot"}, HostAccess: HostAccess{
+		Auth:     map[string]AgentAuth{"copilot": {Method: AuthToken, Command: "security find-generic-password -s copilot -w"}},
+		Services: map[string]Service{"github": {Git: true, Host: HostList{"github.com"}, User: "x-access-token", Command: "c"}},
+	}}
+	needs := r.AuthNeeds(ctx, "unibox-home", p)
+	codes := map[string]api.Need{}
+	for _, n := range needs {
+		codes[n.Code] = n
+	}
+	// The built-in github secret would sign github.com in over the service.
+	if w := codes["service_overridden"]; !w.Warning || w.Service != "github" || !strings.Contains(w.Message, "sbx secret rm github") {
+		t.Fatalf("%+v", needs)
+	}
+	if n := codes["login_required"]; n.Agent != "copilot" || !strings.Contains(n.Message, "COPILOT_GITHUB_TOKEN") {
+		t.Fatalf("%+v", needs)
+	}
+	if err := r.Login(ctx, "copilot", p.Auth["copilot"], strings.NewReader(""), io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(argv)
+	for _, want := range []string{"set-custom\n--env\nCOPILOT_GITHUB_TOKEN\n--placeholder\ngho_unibox0copilot0proxy0managed0000\n", "--host\napi.individual.githubcopilot.com\n", "--command\nsecurity find-generic-password -s copilot -w\n"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("login lacks %q:\n%s", want, data)
+		}
+	}
+	if strings.Contains(string(data), "--host\ngithub.com\n") {
+		t.Fatal("copilot's token must not reach github.com")
+	}
+	// The session gets the placeholder, being unibox's own; claude's is drawn
+	// by sbx and stays its business.
+	if env := r.SessionEnv(p, "copilot"); len(env) != 1 || env[0] != "COPILOT_GITHUB_TOKEN=gho_unibox0copilot0proxy0managed0000" {
+		t.Fatalf("%v", env)
+	}
+	claude := p
+	claude.Auth = map[string]AgentAuth{"claude": {Method: AuthToken, Command: "c"}}
+	if env := r.SessionEnv(claude, "claude"); env != nil {
+		t.Fatalf("%v", env)
+	}
+	// The generated kit declares no github credential and approves none.
+	bindings := filepath.Join(t.TempDir(), "credentials.yaml")
+	r.Bindings = bindings
+	spec := Spec{Name: "unibox-home", Image: "x", Agents: []string{"claude", "copilot"}, Access: p.HostAccess}
+	if err := r.Create(ctx, spec, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	descriptor, _ := os.ReadFile(filepath.Join(r.KitDir("unibox-home"), "unibox-home.yaml"))
+	if strings.Contains(string(descriptor), "service: github") || !strings.Contains(string(descriptor), "api.githubcopilot.com:443") {
+		t.Fatalf("the kit still wires github, or lost copilot's hosts:\n%s", descriptor)
+	}
+	approved, _ := os.ReadFile(bindings)
+	if strings.Contains(string(approved), "github") {
+		t.Fatalf("github was approved:\n%s", approved)
 	}
 }

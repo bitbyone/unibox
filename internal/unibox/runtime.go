@@ -71,6 +71,12 @@ type Authenticator interface {
 	Login(ctx context.Context, agent string, a AgentAuth, in io.Reader, out, errout io.Writer) error
 }
 
+// SessionEnver is a runtime that gives an agent's session variables of its
+// own - placeholders its proxy swaps for a login, never a value.
+type SessionEnver interface {
+	SessionEnv(p Profile, agent string) []string
+}
+
 // Child processes receive only the host context they need. In particular, an
 // installed runtime must not discover an unrelated token or SSH agent by accident.
 func HostEnvironment() []string {

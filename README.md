@@ -89,7 +89,7 @@ agents: [claude, codex, copilot]
 instructions: [unibox]               # from instructions/
 auth:
   codex: oauth                       # provider login kept by the runtime
-  copilot: {command: gh auth token}  # host command that prints a token
+  copilot: {token: security find-generic-password -s unibox-copilot-token -w}
 allow_network: [jitpack.io]          # hosts to allow
 deny_network: [gist.github.com]      # hosts to block
 ```
@@ -114,7 +114,11 @@ terminal on `run`. unibox never sees the value.
 | `oauth` | the provider's own login |
 | `api-key` | an API key |
 | `{command: <cmd>}` | a host command that prints the key, e.g. `gh auth token` |
-| `{token: <cmd>}` | a host command that prints a long-lived login token, e.g. one from `claude setup-token` |
+| `{token: <cmd>}` | a host command that prints a long-lived login token, e.g. one from `claude setup-token`, or a GitHub token for copilot alone |
+
+Sign copilot in by `token`, not `command`: `command` stores sbx's built-in
+`github` secret, and with it sbx signs every request to github.com in itself -
+over the git `services` of the profile. `unibox check` warns when it is stored.
 
 ## Runtimes
 

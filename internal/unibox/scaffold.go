@@ -92,7 +92,9 @@ instructions: [unibox]
 # auth:
 #   codex: oauth                      # the ChatGPT login sbx keeps
 #   claude: {token: security find-generic-password -s claude-code-oauth-token -w}
-#   copilot: {command: gh auth token}
+#   copilot: {token: security find-generic-password -s unibox-copilot-token -w}
+#                                     # copilot's own token; {command: gh auth token}
+#                                     # would take github.com over from git services
 # Host-facing services the sandbox reaches: the token lives on the host and
 # reaches the sandbox only as a placeholder the proxy swaps. A git service
 # wires the sandbox's git; an env service names the variable a tool reads.

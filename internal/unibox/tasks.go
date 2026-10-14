@@ -489,8 +489,14 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	a, _ := FindAgent(t.Agent)
 	args := append([]string{a.Command}, a.Args...)
 	args = append(args, extra...)
-	if len(a.Env) > 0 {
-		args = append(append([]string{"env"}, a.Env...), args...)
+	env := slices.Clone(a.Env)
+	if s, ok := r.(SessionEnver); ok {
+		if p, err := m.profile(b.Profile); err == nil {
+			env = append(env, s.SessionEnv(p, a.ID)...)
+		}
+	}
+	if len(env) > 0 {
+		args = append(append([]string{"env"}, env...), args...)
 	}
 	dir := t.Directory
 	if len(t.Repositories) == 1 {

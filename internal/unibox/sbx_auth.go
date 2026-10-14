@@ -18,7 +18,7 @@ import (
 var sbxAuthMethods = map[string][]string{
 	"claude":  {AuthOAuth, AuthAPIKey, AuthCommand, AuthToken},
 	"codex":   {AuthOAuth, AuthAPIKey, AuthCommand},
-	"copilot": {AuthAPIKey, AuthCommand},
+	"copilot": {AuthAPIKey, AuthCommand, AuthToken},
 }
 
 // sbxTokens are the agents that sign in by a long-lived token in an
@@ -27,11 +27,37 @@ var sbxAuthMethods = map[string][]string{
 // puts the token in its place on requests to the hosts. This is how claude
 // keeps a subscription login beside codex's, since sbx wires one OAuth
 // login per sandbox - and it outlives a recreated sandbox.
+//
+// Copilot's is how it stays off sbx's built-in github secret, which makes
+// the proxy set Authorization on github.com itself and so overrides the
+// profile's git services there. Its placeholder is fixed, not drawn, so
+// unibox can hand it to copilot's session (SessionEnv): the variable is not
+// set in a sandbox created before the secret, and the placeholder is no
+// secret. Copilot takes it, being of a GitHub token's shape.
 var sbxTokens = map[string]struct {
 	Env, Placeholder string
 	Hosts            []string
 }{
-	"claude": {"CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-{rand}", []string{"api.anthropic.com"}},
+	"claude":  {"CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-{rand}", []string{"api.anthropic.com"}},
+	"copilot": {"COPILOT_GITHUB_TOKEN", "gho_unibox0copilot0proxy0managed0000", []string{"api.github.com", "api.githubcopilot.com", "api.individual.githubcopilot.com", "api.business.githubcopilot.com", "api.enterprise.githubcopilot.com", "copilot.github.com"}},
+}
+
+// SessionEnv hands an agent's session the placeholder of a token login
+// unibox chose itself; a drawn one ({rand}) is sbx's to set.
+func (r *SBX) SessionEnv(p Profile, agent string) []string {
+	t, ok := sbxTokens[agent]
+	if !ok || p.Auth[agent].Method != AuthToken || strings.Contains(t.Placeholder, "{rand}") {
+		return nil
+	}
+	return []string{t.Env + "=" + t.Placeholder}
+}
+
+// sbxKitToken says whether an agent signs in by a token of its own, so the
+// generated kit must not declare its built-in service credential: copilot's
+// would bring sbx's github secret back to github.com.
+func sbxKitToken(s Spec, agent string) bool {
+	_, ok := sbxTokens[agent]
+	return ok && agent == "copilot" && s.Access.Auth[agent].Method == AuthToken
 }
 
 // storedLogins says, for each service with something stored for the
@@ -88,12 +114,24 @@ func (r *SBX) AuthNeeds(ctx context.Context, sandbox string, p Profile) []api.Ne
 	if len(oauth) > 1 && len(p.Agents) > 1 {
 		needs = append(needs, api.Need{Code: "auth_conflict", Message: fmt.Sprintf("sbx signs one agent of a sandbox in by OAuth, and profile %s asks it for %s; give the others api-key or a command", p.Name, strings.Join(oauth, " and "))})
 	}
-	if len(p.Auth) == 0 {
+	githubService := ""
+	for name, s := range p.Services {
+		if slices.Contains(s.ProxyHosts(), "github.com") {
+			githubService = name
+		}
+	}
+	if len(p.Auth) == 0 && githubService == "" {
 		return needs
 	}
 	stored, err := storedLogins(ctx, sandbox)
 	if err != nil {
 		return append(needs, api.Need{Code: "runtime_unavailable", Message: err.Error()})
+	}
+	// sbx's built-in github secret makes the proxy set Authorization on
+	// github.com itself, over whatever the sandbox sends - so a service
+	// there would be the token behind that secret, not the one it names.
+	if githubService != "" && stored["github"] != "" {
+		needs = append(needs, api.Need{Code: "service_overridden", Service: githubService, Warning: true, Message: fmt.Sprintf("sbx keeps a github secret, which signs github.com in over service %s; remove it with sbx secret rm github (sign copilot in by token instead)", githubService)})
 	}
 	for _, id := range p.Agents {
 		a, ok := p.Auth[id]

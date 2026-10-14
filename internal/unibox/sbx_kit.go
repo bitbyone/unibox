@@ -239,7 +239,7 @@ func (r *SBX) writeKit(s Spec, oauth map[string]bool) (string, error) {
 		for _, h := range sbxKitHosts[id] {
 			hosts[h] = true
 		}
-		if c, ok := sbxKitCredentials[id]; ok {
+		if c, ok := sbxKitCredentials[id]; ok && !sbxKitToken(s, id) {
 			credentials = append(credentials, c)
 		}
 	}
