@@ -373,7 +373,7 @@ and the design turns on it:
   base64-encodes `user:password`, so a placeholder password never appears
   in the header for the proxy to find. Instead unibox writes
   `git config --global http.https://<host>/.extraHeader "Authorization:
-  <placeholder>"` into the task's preparation; git sends the placeholder
+  <placeholder>"` into the sandbox's setup; git sends the placeholder
   verbatim and the proxy swaps in the whole credential. This is the way
   around a v3 kit ignoring `apiKey.inject.scheme`, and it is forge-neutral
   - the stored value is the entire header, composed on the host (`printf
@@ -642,9 +642,11 @@ it would be committed. So:
   settings. Services are host access, so the user approves the identity
   with the rest. The task's record holds the result, so changing it on a
   prepared task asks for another task name, as a changed `--author` does.
-- **A clone the agent makes itself** gets its service's author too: each
-  preparation writes the services' identities as git config files under
-  `~/.config/unibox/identities` and includes them globally with
+- **A clone the agent makes itself** gets its service's author too: the
+  sandbox's setup - at creation and before every session - writes the
+  services' extraHeaders and identities into its global git
+  configuration, the identities as files under
+  `~/.config/unibox/identities` included with
   `includeIf "hasconfig:remote.*.url:<url>**"`, least specific first so
   the most specific wins (git 2.36 or later; checked with a host and a
   path of one forge). A clone unibox prepared keeps its own

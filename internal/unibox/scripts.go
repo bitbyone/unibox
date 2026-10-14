@@ -15,7 +15,7 @@ func writeGuest(file string, data []byte, mode string) string {
 }
 
 func initializeScript(p Profile, instructions string) string {
-	s := "set -eu\n"
+	s := "set -eu\n" + gitServicesScript(p)
 	for _, id := range p.Agents {
 		a, _ := FindAgent(id)
 		s += "mkdir -p \"$HOME/" + path.Dir(a.Instructions) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString([]byte(instructions))) + " | base64 -d > \"$HOME/" + a.Instructions + "\"\n"
@@ -31,9 +31,11 @@ func initializeScript(p Profile, instructions string) string {
 	return s
 }
 
-func prepareScript(t api.Task, p Profile, a Agent) string {
+// gitServicesScript wires the sandbox's git to its git services, for every
+// clone in it - prepared by unibox or made by the agent - so it is part of
+// the sandbox's setup, not a task's.
+func gitServicesScript(p Profile) string {
 	var b strings.Builder
-	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\nmkdir -p " + Quote(t.Directory) + "\n")
 	// A git service sends its placeholder as the Authorization header; the
 	// proxy swaps the host's whole credential in. git's own helper cannot
 	// carry it - git base64-encodes user:password, hiding the placeholder -
@@ -52,6 +54,12 @@ func prepareScript(t api.Task, p Profile, a Agent) string {
 		}
 	}
 	b.WriteString(identityScript(p))
+	return b.String()
+}
+
+func prepareScript(t api.Task, p Profile, a Agent) string {
+	var b strings.Builder
+	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\nmkdir -p " + Quote(t.Directory) + "\n")
 	for _, r := range t.Repositories {
 		dir := path.Join(t.Directory, r.Name)
 		name, email, _ := AuthorParts(r.Author)
@@ -109,11 +117,22 @@ func identityScript(p Profile) string {
 	type entry struct{ url, file string }
 	entries := []entry{}
 	var b strings.Builder
-	b.WriteString("ids=\"$HOME/.config/unibox/identities\"\nrm -rf \"$ids\"\nmkdir -p \"$ids\"\n: > \"$ids/index.gitconfig\"\n")
+	// Without identities only the old files go; an include of a missing
+	// file is ignored by git, and the global config is left alone.
+	b.WriteString("ids=\"$HOME/.config/unibox/identities\"\nrm -rf \"$ids\"\n")
+	names := []string{}
 	for name, s := range p.Services {
-		if !s.Git || s.Author == "" {
-			continue
+		if s.Git && s.Author != "" {
+			names = append(names, name)
 		}
+	}
+	if len(names) == 0 {
+		return b.String()
+	}
+	slices.Sort(names)
+	b.WriteString("mkdir -p \"$ids\"\n: > \"$ids/index.gitconfig\"\n")
+	for _, name := range names {
+		s := p.Services[name]
 		who, email, _ := AuthorParts(s.Author)
 		file := "\"$ids/" + name + ".gitconfig\""
 		fmt.Fprintf(&b, "git config -f %s user.name %s\ngit config -f %s user.email %s\n", file, Quote(who), file, Quote(email))

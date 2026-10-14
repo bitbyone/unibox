@@ -100,14 +100,19 @@ func TestGitServicesWireTheSandboxGitWithTheirPlaceholder(t *testing.T) {
 	p := Profile{Name: "node", Agents: []string{"claude"}, HostAccess: HostAccess{Services: map[string]Service{"github": svc}}}
 	a, _ := FindAgent("claude")
 	task := api.Task{Directory: "/work/t", Repositories: []api.Repository{{Name: "repo", URL: "https://github.com/o/r", Branch: "work", Author: "A <a@example.com>"}}}
-	script := prepareScript(task, p, a)
+	script := initializeScript(p, "")
 	ph := ServicePlaceholder("github", svc)
 	if !strings.Contains(script, "git config --global") || !strings.Contains(script, "http.https://github.com/.extraHeader") || !strings.Contains(script, "Authorization: "+ph) {
 		t.Fatalf("git service not wired: %s", script)
 	}
+	// It is the sandbox's setup, so every clone has it, a task's or the
+	// agent's own; preparing a task does not write it again.
+	if strings.Contains(prepareScript(task, p, a), "extraHeader") {
+		t.Fatal("a task rewrites the sandbox's git wiring")
+	}
 	// An env service builds its own header; git is not touched for it.
 	envOnly := Profile{Name: "node", Agents: []string{"claude"}, HostAccess: HostAccess{Services: map[string]Service{"art": {Host: HostList{"a.example"}, Scheme: SchemeBearer, Env: "ART", Command: "c"}}}}
-	if strings.Contains(prepareScript(task, envOnly, a), "extraHeader") {
+	if strings.Contains(initializeScript(envOnly, ""), "extraHeader") {
 		t.Fatal("an env service should not wire git")
 	}
 }
@@ -154,8 +159,7 @@ func TestOwnersOnOneForgeUseTokensOfTheirOwn(t *testing.T) {
 	}
 	// The path's header must replace the host's, not join it: each list is
 	// reset before its header is added.
-	a, _ := FindAgent("claude")
-	script := prepareScript(api.Task{Directory: "/work/t"}, p, a)
+	script := initializeScript(p, "")
 	for name, url := range map[string]string{"github": "https://github.com/", "github-acme": "https://github.com/acme/"} {
 		key := Quote("http." + url + ".extraHeader")
 		want := "git config --global --add " + key + " ''\ngit config --global --add " + key + " " + Quote("Authorization: "+ServicePlaceholder(name, p.Services[name]))
