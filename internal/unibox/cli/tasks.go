@@ -133,6 +133,22 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 				}
 				changed = true
 			case "login_required":
+				// A token or command sign-in needs nothing typed: the host
+				// command is in the profile the user just approved, so the
+				// runtime is told its source without asking again. An OAuth
+				// login or a key still needs the user at the terminal.
+				_, _, p, err := o.manager.Definition(*r)
+				if err != nil {
+					return err
+				}
+				if m := p.Auth[n.Agent].Method; m == unibox.AuthToken || m == unibox.AuthCommand {
+					fmt.Fprintf(o.log, "storing %s's %s source in the runtime\n", n.Agent, m)
+					if err := o.manager.Login(cmd.Context(), *r, n.Agent, strings.NewReader(""), o.log, o.log); err != nil {
+						return err
+					}
+					changed = true
+					continue
+				}
 				if o.json || !o.ask(n.Message+".\nStore it now?") {
 					return unibox.Fail(4, n.Code, "%s", n.Message)
 				}

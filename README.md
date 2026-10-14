@@ -106,8 +106,10 @@ agent.
 
 ## Auth
 
-The runtime stores secrets on the host; a missing one is asked for in your
-terminal on `run`. unibox never sees the value.
+The runtime stores secrets on the host. A missing `token` or `command`
+login is stored on `run` without asking - its command is in the profile you
+approved; an OAuth login or a key is asked for in your terminal. unibox
+never sees the value.
 
 | `auth` value | Meaning |
 | --- | --- |

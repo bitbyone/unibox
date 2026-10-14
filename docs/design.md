@@ -581,8 +581,11 @@ auth:                         # how each agent signs in
   api.anthropic.com, and the login outlives a recreated sandbox.
 - `auth` is host access and is approved with the rest. The runtime keeps
   the logins on the host; unibox only checks that each is there, and
-  before a start offers to store what is missing - sbx asks for it on the
-  terminal (`sbx secret set ...`, the browser for an OAuth login), so the
+  before a start stores what is missing. A `token` or `command` login is
+  stored without a question: its host command is in the profile the user
+  approved, so unibox tells sbx the source and sbx runs it. An OAuth
+  login or a key is offered instead - sbx asks for it on the terminal
+  (`sbx secret set ...`, the browser for an OAuth login). Either way the
   value never passes through unibox. sbx stores locally only ChatGPT's
   OAuth login (claude's OAuth is a sign-in inside the sandbox, kept by
   the proxy) and signs one agent of a sandbox in by OAuth, so two `oauth`

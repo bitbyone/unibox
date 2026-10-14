@@ -87,7 +87,7 @@ memory: %s
 agents: [%s]
 instructions: [unibox]
 # How each agent signs in; unibox checks it before a sandbox starts and
-# offers to store what is missing. sbx signs one agent of a sandbox in by
+# stores what is missing (a token or command without asking). sbx signs one agent of a sandbox in by
 # OAuth.
 # auth:
 #   codex: oauth                      # the ChatGPT login sbx keeps
