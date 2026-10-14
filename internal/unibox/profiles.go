@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -52,6 +53,9 @@ type Service struct {
 	User    string   `yaml:"user" json:"user,omitempty"`
 	Env     string   `yaml:"env" json:"env,omitempty"`
 	Command string   `yaml:"command" json:"command"`
+	// Refresh is how often sbx fetches the token again: a duration shorter
+	// than a short-lived token's lifetime, or on-demand (sbx's default).
+	Refresh string `yaml:"refresh" json:"refresh,omitempty"`
 }
 
 const (
@@ -292,6 +296,11 @@ func LoadProfile(root, name string) (Profile, error) {
 		// token by design.
 		if s.Env != "" && (!envName.MatchString(s.Env) || s.Env == "HOME" || s.Env == "PATH") {
 			return p, fmt.Errorf("profile %s: service %s env %q is not a valid environment name", name, svc, s.Env)
+		}
+		if s.Refresh != "" && s.Refresh != "on-demand" {
+			if d, err := time.ParseDuration(s.Refresh); err != nil || d < time.Minute {
+				return p, fmt.Errorf("profile %s: service %s refresh must be on-demand or a duration of a minute or more, such as 10m", name, svc)
+			}
 		}
 	}
 	if p.Git.Author != "" && p.Git.Author != "user" {

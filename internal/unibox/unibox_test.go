@@ -68,6 +68,8 @@ func TestProfilesRejectUnknownFieldsAndEscapes(t *testing.T) {
 		{"service-user-without-basic", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: bearer, user: u}}\n"},
 		{"service-bad-env-name", "image: example/image\nagents: [claude]\nservices: {x: {env: lower, host: h.example, command: c, scheme: bearer}}\n"},
 		{"service-host-star", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*', command: c, user: u}}\n"},
+		{"service-bad-refresh", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: soon}}\n"},
+		{"service-refresh-too-short", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: 5s}}\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -103,6 +103,7 @@ instructions: [unibox]
 #     scheme: basic                   # Authorization: Basic base64(user:token)
 #     user: x-access-token
 #     command: gh auth token          # a host command printing the token
+#     refresh: 10m                    # optional: fetch again, for short-lived tokens
 #   artifactory:                      # any host service
 #     host: [artifactory.example.com, "*.jfrog.io"]
 #     scheme: bearer

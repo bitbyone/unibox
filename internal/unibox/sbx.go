@@ -148,6 +148,9 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 		for _, h := range svc.Host {
 			args = append(args, "--host", h)
 		}
+		if svc.Refresh != "" {
+			args = append(args, "--refresh", svc.Refresh)
+		}
 		args = append(args, "--command", serviceSecretCommand(svc))
 		if err := runLogged(hostCommand(ctx, "sbx", args...), log); err != nil {
 			return fmt.Errorf("sbx could not store the %s service login: %w", name, err)

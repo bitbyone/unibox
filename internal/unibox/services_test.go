@@ -70,7 +70,7 @@ func TestCreateProvisionsServicesAndAllowsTheirHosts(t *testing.T) {
 	acc := HostAccess{
 		AllowNetwork: []string{"jitpack.io"},
 		Services: map[string]Service{
-			"github": {Git: true, Host: HostList{"github.com"}, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token"},
+			"github": {Git: true, Host: HostList{"github.com"}, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token", Refresh: "10m"},
 		},
 	}
 	spec := Spec{Name: "unibox-home", Image: "x", Agent: "codex", Agents: []string{"codex"}, Access: acc}
@@ -82,7 +82,7 @@ func TestCreateProvisionsServicesAndAllowsTheirHosts(t *testing.T) {
 	if !strings.Contains(string(data), "policy allow network --sandbox unibox-home jitpack.io,github.com") {
 		t.Fatalf("service host did not join the allow policy: %s", data)
 	}
-	for _, want := range []string{"secret set-custom --sandbox unibox-home", "--env UNIBOX_SVC_GITHUB", "--placeholder " + ph, "--host github.com", "--command"} {
+	for _, want := range []string{"secret set-custom --sandbox unibox-home", "--env UNIBOX_SVC_GITHUB", "--placeholder " + ph, "--host github.com", "--refresh 10m", "--command"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("set-custom lacks %q: %s", want, data)
 		}
