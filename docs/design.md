@@ -381,6 +381,16 @@ and the design turns on it:
   the reliable channel; the env path wants confirming in a real unibox kit
   before the first non-git service ships.
 
+A runtime without a credential proxy (`CredentialProxy` is a capability;
+sbx has it, a later podman adapter may not) cannot keep the value off the
+agent. There the adapter may degrade on purpose - inject the token into
+the sandbox, a git credential helper or an env var - but only knowingly:
+unibox raises a `Need` (a warning the user acknowledges, like an
+uncommitted change) that says the token will be readable inside the
+sandbox, so a narrow, short-lived one is chosen for the weaker boundary.
+The proxy is not sbx's alone to keep; it is the property the hard rule
+leans on, and a runtime that drops it says so to the user's face.
+
 ## Profiles
 
 ### Where they live
