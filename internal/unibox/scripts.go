@@ -36,15 +36,18 @@ func prepareScript(t api.Task, p Profile, a Agent) string {
 	// A git service sends its placeholder as the Authorization header; the
 	// proxy swaps the host's whole credential in. git's own helper cannot
 	// carry it - git base64-encodes user:password, hiding the placeholder -
-	// so it goes in verbatim through http.extraHeader.
+	// so it goes in verbatim through http.extraHeader. git sends every
+	// extraHeader whose URL matches, from the least specific URL to the
+	// most, so each list starts with an empty value, which resets it: a
+	// path's header replaces its host's instead of joining it.
 	for name, s := range p.Services {
 		if !s.Git {
 			continue
 		}
 		header := "Authorization: " + ServicePlaceholder(name, s)
-		for _, h := range s.Host {
-			key := "http.https://" + h + "/.extraHeader"
-			fmt.Fprintf(&b, "git config --global %s %s\n", Quote(key), Quote(header))
+		for _, u := range s.GitURLs() {
+			key := Quote("http." + u + ".extraHeader")
+			fmt.Fprintf(&b, "git config --global --unset-all %s || true\ngit config --global --add %s ''\ngit config --global --add %s %s\n", key, key, key, Quote(header))
 		}
 	}
 	for _, r := range t.Repositories {

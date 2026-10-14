@@ -104,6 +104,11 @@ instructions: [unibox]
 #     user: x-access-token
 #     command: gh auth token          # a host command printing the token
 #     refresh: 10m                    # optional: fetch again, for short-lived tokens
+#   github-acme:                      # another owner on the same forge
+#     git: true
+#     host: github.com/acme           # a path: its own token for these repositories
+#     user: x-access-token
+#     command: security find-generic-password -s unibox-github-acme-token -w
 #   artifactory:                      # any host service
 #     host: [artifactory.example.com, "*.jfrog.io"]
 #     scheme: bearer

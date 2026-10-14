@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -131,7 +132,11 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 	// any the profile already set.
 	allow := append([]string{}, s.Access.AllowNetwork...)
 	for _, svc := range s.Access.Services {
-		allow = append(allow, svc.Host...)
+		for _, h := range svc.ProxyHosts() {
+			if !slices.Contains(allow, h) {
+				allow = append(allow, h)
+			}
+		}
 	}
 	if len(allow) > 0 {
 		// sbx create takes deny rules only; an allow rule is added to the
@@ -145,7 +150,9 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 	// command runs on the host and sbx keeps the result.
 	for name, svc := range s.Access.Services {
 		args := []string{"secret", "set-custom", "--sandbox", s.Name, "--env", ServiceEnv(name, svc), "--placeholder", ServicePlaceholder(name, svc)}
-		for _, h := range svc.Host {
+		// Two services may share a host, told apart by path; sbx keeps a
+		// secret for each and swaps each placeholder for its own value.
+		for _, h := range svc.ProxyHosts() {
 			args = append(args, "--host", h)
 		}
 		if svc.Refresh != "" {

@@ -45,7 +45,10 @@ type HostAccess struct {
 // host command that prints the token; scheme is how the Authorization header
 // is formed (basic needs user). git wires the sandbox's git to the hosts and
 // unibox owns the whole header; env names the variable a tool reads the
-// placeholder from instead. Exactly one of git or env is set.
+// placeholder from instead. Exactly one of git or env is set. A git
+// service's host may carry a path, github.com/some-org, so that owners on
+// one forge use tokens of their own: a fine-grained GitHub token covers one
+// owner only.
 type Service struct {
 	Git     bool     `yaml:"git" json:"git,omitempty"`
 	Host    HostList `yaml:"host" json:"host"`
@@ -63,6 +66,43 @@ const (
 	SchemeBearer = "bearer"
 	SchemeRaw    = "raw"
 )
+
+var servicePath = regexp.MustCompile(`^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$`)
+
+// splitServiceHost parts a service host into the host the proxy matches and
+// the path git matches under it, without its slashes; "" when none.
+func splitServiceHost(h string) (string, string) {
+	host, path, _ := strings.Cut(h, "/")
+	return host, strings.Trim(path, "/")
+}
+
+// ProxyHosts are the hosts the runtime's proxy and network policy know a
+// service by: its hosts without their paths, each once.
+func (s Service) ProxyHosts() []string {
+	out := []string{}
+	for _, h := range s.Host {
+		host, _ := splitServiceHost(h)
+		if !slices.Contains(out, host) {
+			out = append(out, host)
+		}
+	}
+	return out
+}
+
+// GitURLs are the URL prefixes a git service's header is sent to, each with
+// its trailing slash so github.com/org does not also match github.com/org2.
+func (s Service) GitURLs() []string {
+	out := []string{}
+	for _, h := range s.Host {
+		host, path := splitServiceHost(h)
+		u := "https://" + host + "/"
+		if path != "" {
+			u += path + "/"
+		}
+		out = append(out, u)
+	}
+	return out
+}
 
 // HostList is one host or a list of them: scheme and command are shared, so a
 // service reaching several hosts with the same login writes them as a
@@ -253,6 +293,7 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile %s: auth of %s must be oauth, api-key, {command: <one host command>} or {token: <one host command>}", name, id)
 		}
 	}
+	gitURLs := map[string]string{}
 	for svc, s := range p.Services {
 		if err := ValidName(svc); err != nil {
 			return p, fmt.Errorf("profile %s: service name %q: %w", name, svc, err)
@@ -261,8 +302,23 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile %s: service %s needs a host it authenticates to", name, svc)
 		}
 		for _, h := range s.Host {
-			if !networkPattern.MatchString(h) || h == "*" {
-				return p, fmt.Errorf("profile %s: service %s host %q must be one host, wildcard domain (*.example.com), IP or CIDR, optionally with :port", name, svc, h)
+			host, path := splitServiceHost(h)
+			if !networkPattern.MatchString(host) || host == "*" {
+				return p, fmt.Errorf("profile %s: service %s host %q must be one host, wildcard domain (*.example.com) or IP, optionally with :port", name, svc, h)
+			}
+			if s.Git && strings.ContainsAny(host, "*?[]!") {
+				return p, fmt.Errorf("profile %s: service %s is a git service; its host %q must be exact, since git sends the header by URL", name, svc, h)
+			}
+			if strings.Contains(h, "/") && (!s.Git || !servicePath.MatchString(path) || slices.Contains(strings.Split(path, "/"), "..") || slices.Contains(strings.Split(path, "/"), ".")) {
+				return p, fmt.Errorf("profile %s: service %s host %q: only a git service takes a path, such as github.com/some-org", name, svc, h)
+			}
+		}
+		if s.Git {
+			for _, u := range s.GitURLs() {
+				if other, ok := gitURLs[u]; ok {
+					return p, fmt.Errorf("profile %s: services %s and %s both sign git in at %s; give one of them another host or path", name, other, svc, u)
+				}
+				gitURLs[u] = svc
 			}
 		}
 		if strings.TrimSpace(s.Command) == "" || strings.ContainsAny(s.Command, "\n\r") {

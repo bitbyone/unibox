@@ -399,8 +399,12 @@ and the design turns on it:
   list, and git applies the matches from the least to the most specific
   URL, whatever their order in the file - so `http.https://github.com/org/`
   with `extraHeader = ""` then the org's header sends the org's alone,
-  and every other path keeps the host's. Services do not take a path yet;
-  this is how they would.
+  and every other path keeps the host's. A git service's host takes a
+  path (`github.com/some-org`) and unibox writes each list that way; the
+  proxy still matches the bare host, and sbx keeps two custom secrets on
+  one host apart by their placeholders (checked: each swapped for its own
+  value). One classic token for every owner stays a single service on the
+  bare host.
 - A **host behind the user's VPN** is reached like any other: the proxy
   resolves and connects from the host, so the host's VPN routes it.
   Checked on a throwaway sandbox: gitlab.2n.cz (a private 10.x address)

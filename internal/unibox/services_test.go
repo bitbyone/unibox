@@ -136,3 +136,45 @@ func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
 		t.Fatal("a proxy-less runtime did not warn about the service token")
 	}
 }
+
+func TestOwnersOnOneForgeUseTokensOfTheirOwn(t *testing.T) {
+	root := profileFixture(t)
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    user: x-access-token\n    command: security find-generic-password -s gh-me -w\n  github-acme:\n    git: true\n    host: github.com/acme\n    user: x-access-token\n    command: security find-generic-password -s gh-acme -w\n")
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acme := p.Services["github-acme"]
+	if got := acme.GitURLs(); len(got) != 1 || got[0] != "https://github.com/acme/" {
+		t.Fatalf("%v", got)
+	}
+	if got := acme.ProxyHosts(); len(got) != 1 || got[0] != "github.com" {
+		t.Fatalf("the proxy matches hosts, not paths: %v", got)
+	}
+	// The path's header must replace the host's, not join it: each list is
+	// reset before its header is added.
+	a, _ := FindAgent("claude")
+	script := prepareScript(api.Task{Directory: "/work/t"}, p, a)
+	for name, url := range map[string]string{"github": "https://github.com/", "github-acme": "https://github.com/acme/"} {
+		key := Quote("http." + url + ".extraHeader")
+		want := "git config --global --add " + key + " ''\ngit config --global --add " + key + " " + Quote("Authorization: "+ServicePlaceholder(name, p.Services[name]))
+		if !strings.Contains(script, want) {
+			t.Fatalf("%s not wired with a reset:\n%s", name, script)
+		}
+	}
+	bin := t.TempDir()
+	calls := filepath.Join(t.TempDir(), "calls")
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\necho \"$*\" >> "+Quote(calls)+"\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := &SBX{Cache: t.TempDir()}
+	if err := r.Create(context.Background(), Spec{Name: "unibox-home", Image: "x", Agent: "claude", Agents: []string{"claude"}, Access: p.HostAccess}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(calls)
+	if !strings.Contains(string(data), "policy allow network --sandbox unibox-home github.com\n") {
+		t.Fatalf("the host should be allowed once:\n%s", data)
+	}
+	if strings.Count(string(data), "--host github.com --command") != 2 || strings.Contains(string(data), "github.com/acme") {
+		t.Fatalf("each service needs a secret on the bare host:\n%s", data)
+	}
+}

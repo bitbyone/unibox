@@ -69,6 +69,10 @@ func TestProfilesRejectUnknownFieldsAndEscapes(t *testing.T) {
 		{"service-bad-env-name", "image: example/image\nagents: [claude]\nservices: {x: {env: lower, host: h.example, command: c, scheme: bearer}}\n"},
 		{"service-host-star", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*', command: c, user: u}}\n"},
 		{"service-bad-refresh", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: soon}}\n"},
+		{"service-path-on-env", "image: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example/org, command: c, scheme: bearer}}\n"},
+		{"service-path-escapes", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example/org/../other, command: c, user: u}}\n"},
+		{"service-git-wildcard", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*.example.com', command: c, user: u}}\n"},
+		{"service-git-same-url", "image: example/image\nagents: [claude]\nservices: {a: {git: true, host: h.example/org, command: c, user: u}, b: {git: true, host: h.example/org/, command: c, user: u}}\n"},
 		{"service-refresh-too-short", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: 5s}}\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
