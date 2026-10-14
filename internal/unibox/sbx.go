@@ -160,8 +160,17 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 			args = append(args, "--refresh", svc.Refresh)
 		}
 		args = append(args, "--command", serviceSecretCommand(svc))
-		if err := runLogged(hostCommand(ctx, "sbx", args...), log); err != nil {
+		// sbx explains each stored secret at length - a note on commands, a
+		// reminder about variables in running sandboxes that git services
+		// do not read - so its words are kept for a failure, and the
+		// service is told in one line.
+		if err := runQuiet(hostCommand(ctx, "sbx", args...)); err != nil {
 			return fmt.Errorf("sbx could not store the %s service login: %w", name, err)
+		}
+		if svc.Git {
+			fmt.Fprintf(log, "service %s: git signs in at %s through the proxy\n", name, strings.Join(svc.GitURLs(), ", "))
+		} else {
+			fmt.Fprintf(log, "service %s: %s carries its placeholder to %s\n", name, ServiceEnv(name, svc), strings.Join(svc.ProxyHosts(), ", "))
 		}
 	}
 	return nil

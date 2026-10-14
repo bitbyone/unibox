@@ -111,6 +111,18 @@ func runLogged(c *exec.Cmd, log io.Writer) error {
 	}
 	return nil
 }
+
+// runQuiet keeps a command's chatter to itself and shows it only when the
+// command fails, where it is what explains the failure.
+func runQuiet(c *exec.Cmd) error {
+	var out bytes.Buffer
+	c.Stdout = &out
+	c.Stderr = &out
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("%s failed: %s", c.Path, strings.TrimSpace(out.String()))
+	}
+	return nil
+}
 func runtimeOutput(ctx context.Context, r Runtime, name string, args ...string) (string, error) {
 	b, err := commandOutput(r.Exec(ctx, name, Command{Args: args}))
 	return strings.TrimSpace(string(b)), err

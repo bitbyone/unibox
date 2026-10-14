@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -142,10 +143,13 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 					return err
 				}
 				if m := p.Auth[n.Agent].Method; m == unibox.AuthToken || m == unibox.AuthCommand {
-					fmt.Fprintf(o.log, "storing %s's %s source in the runtime\n", n.Agent, m)
-					if err := o.manager.Login(cmd.Context(), *r, n.Agent, strings.NewReader(""), o.log, o.log); err != nil {
+					// sbx's notes on a stored secret are kept for a failure.
+					var said bytes.Buffer
+					if err := o.manager.Login(cmd.Context(), *r, n.Agent, strings.NewReader(""), &said, &said); err != nil {
+						fmt.Fprint(o.log, said.String())
 						return err
 					}
+					fmt.Fprintf(o.log, "stored %s's %s source in the runtime\n", n.Agent, m)
 					changed = true
 					continue
 				}

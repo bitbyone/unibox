@@ -271,3 +271,23 @@ func TestAnAgentsOwnCloneCommitsAsItsService(t *testing.T) {
 		}
 	}
 }
+
+func TestStoringAServiceSaysOneLineAndKeepsSbxForAFailure(t *testing.T) {
+	bin := t.TempDir()
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nif [ \"$2\" = set-custom ]; then echo 'Note: --command custom secrets are stored and replayed'; echo 'You may need to update environment variable'; for a in \"$@\"; do [ \"$a\" = bad.example ] && { echo 'command failed: no such item' >&2; exit 1; }; done; fi\nexit 0\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := &SBX{Cache: t.TempDir()}
+	acc := HostAccess{Services: map[string]Service{"github-acme": {Git: true, Host: HostList{"github.com/acme"}, User: "x-access-token", Command: "c"}}}
+	var log strings.Builder
+	if err := r.Create(context.Background(), Spec{Name: "unibox-home", Image: "x", Agent: "claude", Agents: []string{"claude"}, Access: acc}, &log); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(log.String(), "service github-acme: git signs in at https://github.com/acme/ through the proxy\n") || strings.Contains(log.String(), "Note:") || strings.Contains(log.String(), "You may need") {
+		t.Fatalf("%s", log.String())
+	}
+	acc.Services = map[string]Service{"broken": {Git: true, Host: HostList{"bad.example"}, User: "u", Command: "c"}}
+	err := r.Create(context.Background(), Spec{Name: "unibox-home", Image: "x", Agent: "claude", Agents: []string{"claude"}, Access: acc}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "no such item") || !strings.Contains(err.Error(), "broken") {
+		t.Fatalf("a failure must say what sbx said: %v", err)
+	}
+}
