@@ -158,8 +158,11 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 		if _, err := git(ctx, ".", "check-ref-format", "--branch", r.Branch); err != nil {
 			return nil, nil, fmt.Errorf("invalid branch %q; use a git branch name", r.Branch)
 		}
+		// --author is what the user asked for this run, so it wins; a git
+		// service's author is the profile's default for its repositories,
+		// over the host's configuration. Its co_author has no flag to lose to.
 		if author, coAuthor := GitIdentity(req.services, r.URL); author != "" || coAuthor != nil {
-			if author != "" {
+			if author != "" && req.Author == "" {
 				r.Author = author
 			}
 			r.CoAuthor = coAuthor

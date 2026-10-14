@@ -627,18 +627,30 @@ it would be committed. So:
 ### Commits
 
 - `author: user` takes `user.name` and `user.email` from the host's git
-  configuration of the worktree (unagit passes them as `--author`), and
+  configuration of the worktree (unibox reads it itself; unagit passes
+  `--author` only for an author the user chose), and
   sets them in each clone in the VM. The commits are the user's, so a
   forge's push rule that the author must be one of its users passes.
 - A **git service** may name the author and the co-author for the
   repositories under its URLs (`author: "Name <email>"`, `co_author:
-  false`), and wins over `--author`, the host's configuration and
-  `git.co_author`: a work forge gets the work address, whatever the
-  worktree's configuration says. Under several services each field comes
+  false`). The author is the profile's default, over the host's
+  configuration; an explicit `--author` still wins, since it is what the
+  user asked for this run, so unagit passes `--author` only when the user
+  chose one, or a service's author never shows. `co_author` has no flag
+  and wins over `git.co_author`. Under several services each field comes
   from the most specific URL that sets it, as git picks its `http.<url>`
   settings. Services are host access, so the user approves the identity
   with the rest. The task's record holds the result, so changing it on a
   prepared task asks for another task name, as a changed `--author` does.
+- **A clone the agent makes itself** gets its service's author too: each
+  preparation writes the services' identities as git config files under
+  `~/.config/unibox/identities` and includes them globally with
+  `includeIf "hasconfig:remote.*.url:<url>**"`, least specific first so
+  the most specific wins (git 2.36 or later; checked with a host and a
+  path of one forge). A clone unibox prepared keeps its own
+  `user.name`/`user.email`, which outrank the includes. Such a clone has
+  no co-author hook and is not in the task's record: what must be kept
+  belongs in `unibox add-repo`.
 - `co_author: true` adds `Co-Authored-By: <agent>` to every commit, the
   agent's name and address from agentbox's table (Claude Code's
   `Claude <noreply@anthropic.com>`, and so on). It is not left to the

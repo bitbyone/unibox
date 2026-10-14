@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -50,6 +51,7 @@ func prepareScript(t api.Task, p Profile, a Agent) string {
 			fmt.Fprintf(&b, "git config --global --unset-all %s || true\ngit config --global --add %s ''\ngit config --global --add %s %s\n", key, key, key, Quote(header))
 		}
 	}
+	b.WriteString(identityScript(p))
 	for _, r := range t.Repositories {
 		dir := path.Join(t.Directory, r.Name)
 		name, email, _ := AuthorParts(r.Author)
@@ -92,6 +94,43 @@ fi
 			fmt.Fprintf(&b, "if [ -f %s ]; then (cd \"$dir\" && /bin/sh %s); fi\n", Quote(path.Join(dir, p.Bootstrap)), Quote(p.Bootstrap))
 		}
 	}
+	return b.String()
+}
+
+// identityScript gives a clone the agent makes itself the author its git
+// service names, as the clones unibox prepares have. Each service's identity
+// is a file of its own, included when a repository's remote is under the
+// service's URL; git applies the includes in order, so they are listed from
+// the least specific URL to the most and the most specific wins. A clone
+// unibox prepared keeps its own user.name and user.email, which outrank
+// anything global. The index is rewritten every time, so a service that
+// left the profile leaves the sandbox's identities too.
+func identityScript(p Profile) string {
+	type entry struct{ url, file string }
+	entries := []entry{}
+	var b strings.Builder
+	b.WriteString("ids=\"$HOME/.config/unibox/identities\"\nrm -rf \"$ids\"\nmkdir -p \"$ids\"\n: > \"$ids/index.gitconfig\"\n")
+	for name, s := range p.Services {
+		if !s.Git || s.Author == "" {
+			continue
+		}
+		who, email, _ := AuthorParts(s.Author)
+		file := "\"$ids/" + name + ".gitconfig\""
+		fmt.Fprintf(&b, "git config -f %s user.name %s\ngit config -f %s user.email %s\n", file, Quote(who), file, Quote(email))
+		for _, u := range s.GitURLs() {
+			entries = append(entries, entry{u, file})
+		}
+	}
+	slices.SortStableFunc(entries, func(a, b entry) int {
+		if len(a.url) != len(b.url) {
+			return len(a.url) - len(b.url)
+		}
+		return strings.Compare(a.url, b.url)
+	})
+	for _, e := range entries {
+		fmt.Fprintf(&b, "git config -f \"$ids/index.gitconfig\" --add %s %s\n", Quote("includeIf.hasconfig:remote.*.url:"+e.url+"**.path"), e.file)
+	}
+	b.WriteString("git config --global --replace-all include.path \"$ids/index.gitconfig\" 'unibox/identities/index'\n")
 	return b.String()
 }
 

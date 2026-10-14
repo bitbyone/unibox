@@ -109,7 +109,7 @@ instructions: [unibox]
 #     host: github.com/acme           # a path: its own token for these repositories
 #     user: x-access-token
 #     command: security find-generic-password -s unibox-github-acme-token -w
-#     author: Jan Novak <jan@acme.example>   # who commits under it; wins over --author
+#     author: Jan Novak <jan@acme.example>   # who commits under it, unless --author says otherwise
 #     co_author: false                       # no agent trailer in these repositories
 #   artifactory:                      # any host service
 #     host: [artifactory.example.com, "*.jfrog.io"]

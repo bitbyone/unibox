@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -197,9 +198,15 @@ func TestAGitServiceSaysWhoCommitsUnderIt(t *testing.T) {
 	if author, co = GitIdentity(services, "https://gitlab.com/x/y.git"); author != "" || co != nil {
 		t.Fatal("an unrelated forge took an identity")
 	}
-	// The service's author wins over --author, and the record says so.
+	// --author is the user's say for this run and wins; without it the
+	// service's author does, over the host's configuration.
 	req := Request{Author: "Someone Else <else@example.com>", Repositories: []RepoInput{{Source: "https://github.com/acme/api.git", Branch: "feat/x"}}, services: services}
 	repos, _, err := ResolveRepositories(context.Background(), req)
+	if err != nil || repos[0].Author != "Someone Else <else@example.com>" || repos[0].CoAuthor == nil || *repos[0].CoAuthor {
+		t.Fatalf("--author lost to the profile: %+v %v", repos, err)
+	}
+	req.Author = ""
+	repos, _, err = ResolveRepositories(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,5 +218,52 @@ func TestAGitServiceSaysWhoCommitsUnderIt(t *testing.T) {
 	task := api.Task{Directory: "/work/t", Repositories: repos}
 	if script := prepareScript(task, Profile{}, a); strings.Contains(script, "Co-Authored-By") || !strings.Contains(script, "user.email 'jan@acme.example'") {
 		t.Fatalf("%s", script)
+	}
+}
+
+func TestAnAgentsOwnCloneCommitsAsItsService(t *testing.T) {
+	t.Parallel()
+	p := Profile{HostAccess: HostAccess{Services: map[string]Service{
+		"github":      {Git: true, Host: HostList{"github.com"}, Author: `Jan "Personal" <jan@example.com>`},
+		"github-acme": {Git: true, Host: HostList{"github.com/acme"}, Author: "Jan Work <jan@acme.example>"},
+		"gitlab":      {Git: true, Host: HostList{"gitlab.com"}},
+	}}}
+	home := t.TempDir()
+	env := append(os.Environ(), "HOME="+home, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+filepath.Join(home, ".gitconfig"))
+	run := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir, cmd.Env = dir, env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v: %s", args, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	// Twice: preparation repeats, and must not pile the includes up.
+	for range 2 {
+		run(home, "sh", "-eu", "-c", identityScript(p))
+	}
+	if got := run(home, "git", "config", "--global", "--get-all", "include.path"); got == "" || strings.Count(got, "\n") != 0 {
+		t.Fatalf("includes piled up: %q", got)
+	}
+	who := func(url string) string {
+		dir := t.TempDir()
+		run(dir, "git", "init", "-q")
+		run(dir, "git", "remote", "add", "origin", url)
+		cmd := exec.Command("git", "config", "user.email")
+		cmd.Dir, cmd.Env = dir, env
+		out, _ := cmd.Output()
+		return strings.TrimSpace(string(out))
+	}
+	for url, want := range map[string]string{
+		"https://github.com/acme/api.git":  "jan@acme.example",
+		"https://github.com/acme2/api.git": "jan@example.com",
+		"https://github.com/other/x.git":   "jan@example.com",
+		"https://gitlab.com/a/b.git":       "",
+	} {
+		if got := who(url); got != want {
+			t.Errorf("%s commits as %q, want %q", url, got, want)
+		}
 	}
 }
