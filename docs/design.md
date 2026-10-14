@@ -401,6 +401,18 @@ and the design turns on it:
   narrow GitHub token has to be that secret itself (copilot's `auth`
   pointing at the narrow token, which then also needs Copilot's
   permission), or the built-in secret has to go.
+- **Copilot without the built-in secret.** It goes: copilot reads its
+  token from `COPILOT_GITHUB_TOKEN`, and accepts a placeholder of the
+  token's shape there. Checked on a throwaway sandbox with the global
+  `github` secret removed: a custom secret (`--env COPILOT_GITHUB_TOKEN
+  --placeholder 'gho_{rand}'`, the hosts copilot calls - api.github.com,
+  api.githubcopilot.com and its individual, business and enterprise
+  hosts, copilot.github.com - and a host command for the token) let
+  copilot answer, an unregistered `gho_` value got its login prompt, and
+  github.com answered 401 without a header - so git on github.com is
+  left to the services. The variable is not set in a sandbox created
+  before the secret, so unibox sets the placeholder in copilot's
+  environment itself; it is not secret.
 - **One forge, several owners.** A fine-grained GitHub token has one
   resource owner - the user or one organization - so repositories of
   several owners on github.com need a token each, told apart by path, not
