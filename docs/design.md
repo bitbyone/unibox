@@ -390,6 +390,13 @@ and the design turns on it:
   variable or an unlocked parent cannot carry it there. A short-lived
   token fits this well with a `refresh` shorter than its lifetime: each
   refresh fetches the next one.
+- A **host behind the user's VPN** is reached like any other: the proxy
+  resolves and connects from the host, so the host's VPN routes it.
+  Checked on a throwaway sandbox: gitlab.2n.cz (a private 10.x address)
+  answered `Approval required` until allowed, then GitLab's own 302 - sbx
+  does not refuse private addresses. A service's hosts join the
+  sandbox's allow policy, so nothing more is needed but the VPN being up
+  when the sandbox reaches the host.
 - A **bearer or raw** service needs no git wiring: the tool reads the
   placeholder from `env` and sends it as its own Authorization, which the
   proxy substitutes. One caveat found and not yet closed: the custom
