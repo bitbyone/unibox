@@ -228,6 +228,43 @@ func (o *options) taskCommand(name string) *cobra.Command {
 	return c
 }
 
+// addRepoCommand grows a prepared task by more repositories. The agent in a
+// running session sees them at once: they are clones in its task directory.
+func (o *options) addRepoCommand() *cobra.Command {
+	var req unibox.Request
+	c := &cobra.Command{Use: "add-repo task --repo <path-or-url>...", Args: cobra.ExactArgs(1), Short: "Clone more repositories into a prepared task, also while its agent runs", RunE: func(cmd *cobra.Command, args []string) error {
+		req.Task = args[0]
+		if len(req.Repositories) == 0 {
+			return fmt.Errorf("no repository selected; pass --repo <path-or-url>")
+		}
+		if err := o.preflight(cmd, &req); err != nil {
+			return err
+		}
+		t, added, err := o.manager.AddRepositories(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "task": t, "added": added})
+		}
+		if len(added) == 0 {
+			fmt.Fprintf(o.output, "task %s already holds these repositories\n", t.ID)
+			return nil
+		}
+		for _, r := range added {
+			fmt.Fprintf(o.output, "added %s to task %s at %s/%s\n", r.Name, t.ID, t.Directory, r.Name)
+		}
+		return nil
+	}}
+	f := c.Flags()
+	f.StringVar(&req.Author, "author", "", "Commit author, as Name <email>")
+	f.BoolVar(&req.Push, "push", false, "Push selected local branches; create one nobody has from the local HEAD, or a URL's default tip (never force)")
+	f.BoolVar(&req.IgnoreLocal, "ignore-local", false, "Use the forge version despite uncommitted or unpushed local changes")
+	f.Var(&orderedValue{req: &req}, "repo", "Repository path or HTTPS URL, optionally name=source (repeatable)")
+	f.Var(&orderedValue{req: &req, branch: true}, "branch", "Before all repos: shared branch; after a repo: override only that repo")
+	return c
+}
+
 func (o *options) createCommand() *cobra.Command {
 	var req unibox.Request
 	c := &cobra.Command{Use: "create sandbox", Args: cobra.ExactArgs(1), Short: "Create a named environment without mounting a host workspace", RunE: func(cmd *cobra.Command, args []string) error {

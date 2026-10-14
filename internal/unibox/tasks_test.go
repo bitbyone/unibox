@@ -436,3 +436,69 @@ func TestClaudeTrustsTheTaskItRunsIn(t *testing.T) {
 		}
 	}
 }
+
+func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
+	t.Parallel()
+	payments, _ := remoteFixture(t)
+	ledger, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	paymentsURL := "https://forge.invalid/team/payments.git"
+	ledgerURL := "https://forge.invalid/team/ledger.git"
+	f.remotes[paymentsURL] = "file://" + payments
+	f.remotes[ledgerURL] = "file://" + ledger
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
+		t.Fatal(err)
+	}
+	author := "Person <person@example.com>"
+	first := Request{Sandbox: "dev", Task: "refunds", Agent: "claude", Author: author, Repositories: []RepoInput{{Source: paymentsURL, Branch: "feat/refunds"}}}
+	if _, err := m.Prepare(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	// A running session holds the task; adding must not wait for it.
+	_, _, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "refunds"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := Request{Task: "refunds", Author: author, Repositories: []RepoInput{{Source: ledgerURL, Branch: "feat/refunds"}}}
+	task, added, err := m.AddRepositories(ctx, add)
+	usage.Close()
+	taskLock.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(added) != 1 || added[0].Name != "ledger" || len(task.Repositories) != 2 {
+		t.Fatalf("%+v %+v", added, task)
+	}
+	clone := filepath.Join(f.root, "unibox-dev", "work", "refunds", "ledger")
+	if got := gitTest(t, clone, "branch", "--show-current"); got != "feat/refunds" {
+		t.Fatal(got)
+	}
+	b, _ := m.sandbox("dev")
+	if len(b.Tasks) != 1 || len(b.Tasks[0].Repositories) != 2 {
+		t.Fatalf("the task record did not grow: %+v", b.Tasks)
+	}
+	// Adding the same again is nothing to do; another source under a held
+	// name is refused rather than mixed into the clone.
+	if _, added, err = m.AddRepositories(ctx, add); err != nil || len(added) != 0 {
+		t.Fatalf("%+v %v", added, err)
+	}
+	clash := Request{Task: "refunds", Author: author, Repositories: []RepoInput{{Name: "ledger", Source: paymentsURL, Branch: "feat/refunds"}}}
+	if _, _, err = m.AddRepositories(ctx, clash); err == nil || !strings.Contains(err.Error(), "already has a repository named ledger") {
+		t.Fatalf("%v", err)
+	}
+	// The task its first repository names is still found by them.
+	if _, err = m.Prepare(ctx, first); err != nil {
+		t.Fatalf("the grown task is no longer found by its first repository: %v", err)
+	}
+	// An added clone is checked for unpushed work like the first.
+	write(t, filepath.Join(clone, "agent.txt"), "work\n")
+	gitTest(t, clone, "add", "agent.txt")
+	gitTest(t, clone, "commit", "-m", "Agent work")
+	if err = m.Remove(ctx, "dev", ""); err == nil {
+		t.Fatal("removed a sandbox with an unpushed commit in an added repository")
+	}
+	if _, _, err = m.AddRepositories(ctx, Request{Task: "missing", Repositories: add.Repositories}); err == nil {
+		t.Fatal("added to a task that does not exist")
+	}
+}

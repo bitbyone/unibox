@@ -80,25 +80,8 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 	if len(req.Repositories) == 0 {
 		return api.Task{}, fmt.Errorf("no repository selected; pass --repo <path-or-url>, or unibox resume <task> for a prepared one")
 	}
-	repos, needs, err := ResolveRepositories(ctx, req)
+	repos, err := resolveForTask(ctx, req)
 	if err != nil {
-		return api.Task{}, err
-	}
-	if req.Push {
-		for _, n := range needs {
-			if n.Code == "default_branch" || n.Code == "default_branch_unknown" {
-				return api.Task{}, checkNeeds([]api.Need{n})
-			}
-		}
-		if err = PushRepositories(ctx, repos); err != nil {
-			return api.Task{}, err
-		}
-		repos, needs, err = ResolveRepositories(ctx, req)
-		if err != nil {
-			return api.Task{}, err
-		}
-	}
-	if err = checkNeeds(needs); err != nil {
 		return api.Task{}, err
 	}
 	state, err := m.Paths.ReadState()
@@ -123,8 +106,13 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 	t := api.Task{ID: id, Sandbox: b.Name, Directory: "/work/" + id, Repositories: repos, Agent: req.Agent, State: "pending"}
 	for _, old := range b.Tasks {
 		if old.ID == id {
+			// A task grown by add-repo is still the task its first
+			// repositories name; they find it with all it holds now.
 			if digest(old.Repositories) != digest(repos) {
-				return t, fmt.Errorf("task %s belongs to different repositories, branches or authors; choose another --task name", id)
+				if !containsRepositories(old.Repositories, repos) {
+					return t, fmt.Errorf("task %s belongs to different repositories, branches or authors; choose another --task name", id)
+				}
+				t.Repositories = old.Repositories
 			}
 			if resume && old.State == "ready" {
 				old.Agent = req.Agent
@@ -175,6 +163,134 @@ func replaceTask(b *api.Sandbox, t api.Task) {
 		}
 	}
 	b.Tasks = append(b.Tasks, t)
+}
+
+// resolveForTask turns a request's repositories into the forge clones a task
+// holds, pushing first when asked, and refuses what would lose local work.
+func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) {
+	repos, needs, err := ResolveRepositories(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if req.Push {
+		for _, n := range needs {
+			if n.Code == "default_branch" || n.Code == "default_branch_unknown" {
+				return nil, checkNeeds([]api.Need{n})
+			}
+		}
+		if err = PushRepositories(ctx, repos); err != nil {
+			return nil, err
+		}
+		repos, needs, err = ResolveRepositories(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err = checkNeeds(needs); err != nil {
+		return nil, err
+	}
+	return repos, nil
+}
+
+// containsRepositories says whether every one of want is among have, as it is.
+func containsRepositories(have, want []api.Repository) bool {
+	for _, w := range want {
+		if !slices.ContainsFunc(have, func(h api.Repository) bool { return h == w }) {
+			return false
+		}
+	}
+	return true
+}
+
+// AddRepositories clones more repositories into a task that is already
+// prepared, beside the ones it holds. Nothing is mounted: each is an
+// independent forge clone in the task's directory, so an agent running in
+// the task sees it at once and needs no restart. The task lock is left to
+// the session that holds it; the sandbox guard serializes this with other
+// preparations, and the task's record grows so removal still checks every
+// clone for unpushed work.
+func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, []api.Repository, error) {
+	if req.Task == "" {
+		return api.Task{}, nil, fmt.Errorf("name the task to add to; unibox tasks lists them")
+	}
+	if len(req.Repositories) == 0 {
+		return api.Task{}, nil, fmt.Errorf("no repository selected; pass --repo <path-or-url>")
+	}
+	name, err := m.taskSandbox(req.Task, false)
+	if err != nil {
+		return api.Task{}, nil, err
+	}
+	req.Sandbox = name
+	_, r, p, err := m.Definition(req)
+	if err != nil {
+		return api.Task{}, nil, err
+	}
+	guard, err := m.guard(name)
+	if err != nil {
+		return api.Task{}, nil, err
+	}
+	defer guard.Close()
+	b, err := m.sandbox(name)
+	if err != nil {
+		return api.Task{}, nil, err
+	}
+	var t api.Task
+	for _, v := range b.Tasks {
+		if v.ID == req.Task {
+			t = v
+		}
+	}
+	if t.ID == "" {
+		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox tasks lists them", req.Task)
+	}
+	repos, err := resolveForTask(ctx, req)
+	if err != nil {
+		return t, nil, err
+	}
+	added := []api.Repository{}
+	for _, nr := range repos {
+		i := slices.IndexFunc(t.Repositories, func(o api.Repository) bool { return o.Name == nr.Name })
+		switch {
+		case i < 0:
+			added = append(added, nr)
+		case t.Repositories[i] != nr:
+			return t, nil, fmt.Errorf("task %s already has a repository named %s; give the new one another name with --repo name=source", t.ID, nr.Name)
+		}
+	}
+	if len(added) == 0 {
+		return t, added, nil
+	}
+	if err = m.ensure(ctx, &b, r, p, false, false); err != nil {
+		return t, nil, err
+	}
+	usage, err := m.usage(b.Name, true)
+	if err != nil {
+		return t, nil, err
+	}
+	defer usage.Close()
+	a, _ := FindAgent(t.Agent)
+	part := t
+	part.Repositories = added
+	fmt.Fprintf(m.Log, "adding %d repositories to task %s\n", len(added), t.ID)
+	if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(prepareScript(part, p, a))}), m.Log); err != nil {
+		return t, nil, err
+	}
+	t.Repositories = append(t.Repositories, added...)
+	// Only this task's record changes; a session started meanwhile has
+	// recorded its run in the same state and must keep it.
+	err = m.Paths.State(func(s *State) error {
+		box := s.Sandboxes[b.Name]
+		for _, v := range box.Tasks {
+			if v.ID == t.ID {
+				v.Repositories = t.Repositories
+				replaceTask(&box, v)
+				t = v
+			}
+		}
+		s.Sandboxes[b.Name] = box
+		return nil
+	})
+	return t, added, err
 }
 
 // The guard serializes preparation and lifecycle changes. Usage locks survive

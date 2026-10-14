@@ -192,6 +192,13 @@ grouped worktree  <── git pull ───┐    /work/<task>/<repo>  clones o
   never config or hooks, so the host stays safe however the agent behaves.
 - **The cost**: what the agent has not pushed is not seen on the host. Its
   instructions tell it to commit and push as it goes.
+- **A task can grow while it runs** (`unibox add-repo <task> --repo ...`).
+  Since nothing is mounted, adding a repository is one more clone into
+  `/work/<task>/`, made through the runtime's exec. The agent in a running
+  session sees it at once and needs no restart. The task lock stays with
+  the session; the sandbox guard serializes the clone with other
+  preparations. The task's record grows, so removal checks the new clone
+  for unpushed work too, and the first repositories still find the task.
 
 Considered and rejected:
 

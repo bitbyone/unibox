@@ -51,6 +51,7 @@ unibox run --profile web --new-sandbox web-1 --repo . --branch feat/login --agen
 
 unibox tasks                                      # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
+unibox add-repo <task> --repo ../api --branch feat/login  # clone one more, even while it runs
 unibox shell web-1                                # shell inside the sandbox
 unibox recreate web-1                             # apply profile changes
 ```
