@@ -379,6 +379,14 @@ and the design turns on it:
   - the stored value is the entire header, composed on the host (`printf
   '%s:%s' <user> "$(<command>)" | base64`), so the token and its base64
   never leave it.
+- A **command** secret is stored as its source, not its value: the sbx
+  daemon runs the command on the host at verification and again on every
+  refresh (`--refresh`, 55 minutes by default), from a fresh temporary
+  directory (sbx's own help). So a credential helper runs outside the
+  process tree that created the sandbox, at any hour, with no terminal: it
+  must reach its secret alone - a keychain, an agent socket - and an
+  environment variable or an unlocked parent cannot carry it there. A
+  short-lived token fits this well: the refresh fetches the next one.
 - A **bearer or raw** service needs no git wiring: the tool reads the
   placeholder from `env` and sends it as its own Authorization, which the
   proxy substitutes. One caveat found and not yet closed: the custom
