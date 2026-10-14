@@ -346,9 +346,9 @@ services:
     command: op read op://vault/artifactory/token
 ```
 
-unibox turns each into one `sbx secret set-custom` before the sandbox is
-created, and never sees the value: the command runs on the host, sbx
-keeps the result in its keychain, the sandbox gets a placeholder. The
+unibox turns each into one `sbx secret set-custom`, scoped to the sandbox,
+as it is created, and never sees the value: the command runs on the host,
+sbx keeps the result in its keychain, the sandbox gets a placeholder. The
 token is the boundary - issue it narrow (a GitLab project token, a
 GitHub fine-grained token) and the forge protects what it must.
 

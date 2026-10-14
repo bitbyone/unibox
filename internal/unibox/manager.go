@@ -315,6 +315,14 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	if a, ok := r.(Authenticator); ok {
 		result.Needs = append(result.Needs, a.AuthNeeds(ctx, b.RuntimeName, p)...)
 	}
+	// A runtime without a credential proxy cannot keep a service's token off
+	// the agent; it may still run, but the user is told the token will be
+	// readable inside the sandbox so a narrow, short-lived one is chosen.
+	if len(p.Services) > 0 && !r.Capabilities().CredentialProxy {
+		for name := range p.Services {
+			result.Needs = append(result.Needs, api.Need{Code: "credential_in_container", Service: name, Warning: true, Message: fmt.Sprintf("runtime %s has no credential proxy; the %s token will be readable inside the sandbox - use a narrow, short-lived one", r.Name(), name)})
+		}
+	}
 	repos, needs, err := ResolveRepositories(ctx, req)
 	if err != nil {
 		return result, err

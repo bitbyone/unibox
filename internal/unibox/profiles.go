@@ -33,6 +33,55 @@ type HostAccess struct {
 	// Auth is how each agent signs in. It is host access: the runtime keeps
 	// the logins on the host, and a command runs there to fetch a token.
 	Auth map[string]AgentAuth `yaml:"auth" json:"auth,omitempty"`
+	// Services are the host-facing services the sandbox reaches - a git
+	// forge, an Artifactory, a registry. Like Auth, the token lives on the
+	// host and reaches the sandbox only as a placeholder the proxy swaps.
+	Services map[string]Service `yaml:"services" json:"services,omitempty"`
+}
+
+// Service is a host-facing endpoint the sandbox authenticates to by a token
+// the host holds. host is the host or hosts it speaks to; command is the
+// host command that prints the token; scheme is how the Authorization header
+// is formed (basic needs user). git wires the sandbox's git to the hosts and
+// unibox owns the whole header; env names the variable a tool reads the
+// placeholder from instead. Exactly one of git or env is set.
+type Service struct {
+	Git     bool     `yaml:"git" json:"git,omitempty"`
+	Host    HostList `yaml:"host" json:"host"`
+	Scheme  string   `yaml:"scheme" json:"scheme,omitempty"`
+	User    string   `yaml:"user" json:"user,omitempty"`
+	Env     string   `yaml:"env" json:"env,omitempty"`
+	Command string   `yaml:"command" json:"command"`
+}
+
+const (
+	SchemeBasic  = "basic"
+	SchemeBearer = "bearer"
+	SchemeRaw    = "raw"
+)
+
+// HostList is one host or a list of them: scheme and command are shared, so a
+// service reaching several hosts with the same login writes them as a
+// sequence rather than repeating itself.
+type HostList []string
+
+func (h *HostList) UnmarshalYAML(n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		*h = HostList{n.Value}
+		return nil
+	case yaml.SequenceNode:
+		out := make(HostList, 0, len(n.Content))
+		for _, c := range n.Content {
+			if c.Kind != yaml.ScalarNode {
+				return fmt.Errorf("line %d: a service host is a name or a list of names", n.Line)
+			}
+			out = append(out, c.Value)
+		}
+		*h = out
+		return nil
+	}
+	return fmt.Errorf("line %d: a service host is a name or a list of names", n.Line)
 }
 
 // AgentAuth is an agent's way to sign in: oauth (the provider's own login,
@@ -198,6 +247,51 @@ func LoadProfile(root, name string) (Profile, error) {
 		case (a.Method == AuthCommand || a.Method == AuthToken) && strings.TrimSpace(a.Command) != "" && !strings.ContainsAny(a.Command, "\n\r"):
 		default:
 			return p, fmt.Errorf("profile %s: auth of %s must be oauth, api-key, {command: <one host command>} or {token: <one host command>}", name, id)
+		}
+	}
+	for svc, s := range p.Services {
+		if err := ValidName(svc); err != nil {
+			return p, fmt.Errorf("profile %s: service name %q: %w", name, svc, err)
+		}
+		if len(s.Host) == 0 {
+			return p, fmt.Errorf("profile %s: service %s needs a host it authenticates to", name, svc)
+		}
+		for _, h := range s.Host {
+			if !networkPattern.MatchString(h) || h == "*" {
+				return p, fmt.Errorf("profile %s: service %s host %q must be one host, wildcard domain (*.example.com), IP or CIDR, optionally with :port", name, svc, h)
+			}
+		}
+		if strings.TrimSpace(s.Command) == "" || strings.ContainsAny(s.Command, "\n\r") {
+			return p, fmt.Errorf("profile %s: service %s needs command: one host command that prints its token", name, svc)
+		}
+		if s.Git == (s.Env != "") {
+			return p, fmt.Errorf("profile %s: service %s is either git: true or env: NAME, not both or neither", name, svc)
+		}
+		scheme := s.Scheme
+		if scheme == "" {
+			scheme = SchemeBasic
+		}
+		switch scheme {
+		case SchemeBasic, SchemeBearer, SchemeRaw:
+		default:
+			return p, fmt.Errorf("profile %s: service %s scheme must be basic, bearer or raw", name, svc)
+		}
+		if scheme == SchemeBasic && strings.TrimSpace(s.User) == "" {
+			return p, fmt.Errorf("profile %s: service %s uses basic auth; give it the user to pair with the token", name, svc)
+		}
+		if scheme != SchemeBasic && strings.TrimSpace(s.User) != "" {
+			return p, fmt.Errorf("profile %s: service %s sets user, which only the basic scheme uses", name, svc)
+		}
+		// An env service lets the tool build the header, so basic would make
+		// it base64 the placeholder and the proxy would never find it.
+		if s.Env != "" && scheme == SchemeBasic {
+			return p, fmt.Errorf("profile %s: service %s reads its token from env, so it cannot use basic; use bearer or raw", name, svc)
+		}
+		// The env name is the tool's own for an env service, derived for a
+		// git one; sensitiveEnv does not apply - a service variable is a
+		// token by design.
+		if s.Env != "" && (!envName.MatchString(s.Env) || s.Env == "HOME" || s.Env == "PATH") {
+			return p, fmt.Errorf("profile %s: service %s env %q is not a valid environment name", name, svc, s.Env)
 		}
 	}
 	if p.Git.Author != "" && p.Git.Author != "user" {
@@ -384,7 +478,43 @@ func (p Profile) AccessHash() string  { return digest(p.HostAccess) }
 // environment value, a cache mount, a network rule. A profile asking for
 // nothing has nothing to approve: nothing of it crosses the boundary.
 func (p Profile) HostFacing() bool {
-	return len(p.Env)+len(p.Caches)+len(p.DenyNetwork)+len(p.AllowNetwork)+len(p.Auth) > 0
+	return len(p.Env)+len(p.Caches)+len(p.DenyNetwork)+len(p.AllowNetwork)+len(p.Auth)+len(p.Services) > 0
+}
+
+// ServicePlaceholder is the string a service's token is hidden behind inside
+// the sandbox: distinctive and non-secret, so the proxy finds it in a header
+// and swaps the host's value in. It is deterministic in the service's name
+// and hosts, so provisioning and the git wiring derive the same string
+// without asking the runtime.
+func ServicePlaceholder(name string, s Service) string {
+	sum := sha256.Sum256([]byte(name + "\x00" + strings.Join(s.Host, ",")))
+	return "unibox-svc-" + name + "-" + hex.EncodeToString(sum[:4])
+}
+
+// ServiceEnv is the environment variable the placeholder is set in: the
+// tool's own for an env service, a derived UNIBOX_SVC_ name for a git one
+// (the runtime wants a variable, but git reads the placeholder from its
+// config, not the environment).
+func ServiceEnv(name string, s Service) string {
+	if s.Env != "" {
+		return s.Env
+	}
+	return "UNIBOX_SVC_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+}
+
+// serviceSecretCommand is the host command whose output sbx stores for the
+// service. For a git service unibox owns the whole Authorization header, so
+// it is composed here; for an env service the tool builds the header and
+// only the raw token is stored. $( ) strips the token's trailing newline.
+func serviceSecretCommand(s Service) string {
+	switch {
+	case s.Git && s.Scheme == SchemeBearer:
+		return fmt.Sprintf(`printf 'Bearer %%s' "$(%s)"`, s.Command)
+	case s.Git && s.Scheme != SchemeRaw:
+		return fmt.Sprintf(`printf 'Basic %%s' "$(printf '%%s:%%s' %s "$(%s)" | base64 | tr -d '\n')"`, Quote(s.User), s.Command)
+	default:
+		return fmt.Sprintf(`printf '%%s' "$(%s)"`, s.Command)
+	}
 }
 func (p Profile) BuildArgs(runtime string) ([]string, error) {
 	args := []string{"AGENTBOX_RUNTIME=" + runtime, "UNIBOX_RUNTIME=" + runtime}

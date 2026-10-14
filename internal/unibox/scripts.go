@@ -33,6 +33,20 @@ func initializeScript(p Profile, instructions string) string {
 func prepareScript(t api.Task, p Profile, a Agent) string {
 	var b strings.Builder
 	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\nmkdir -p " + Quote(t.Directory) + "\n")
+	// A git service sends its placeholder as the Authorization header; the
+	// proxy swaps the host's whole credential in. git's own helper cannot
+	// carry it - git base64-encodes user:password, hiding the placeholder -
+	// so it goes in verbatim through http.extraHeader.
+	for name, s := range p.Services {
+		if !s.Git {
+			continue
+		}
+		header := "Authorization: " + ServicePlaceholder(name, s)
+		for _, h := range s.Host {
+			key := "http.https://" + h + "/.extraHeader"
+			fmt.Fprintf(&b, "git config --global %s %s\n", Quote(key), Quote(header))
+		}
+	}
 	for _, r := range t.Repositories {
 		dir := path.Join(t.Directory, r.Name)
 		name, email, _ := AuthorParts(r.Author)

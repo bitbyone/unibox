@@ -127,10 +127,31 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 	if err := runLogged(cmd, log); err != nil {
 		return err
 	}
-	if len(s.Access.AllowNetwork) > 0 {
+	// Service hosts must be reachable, so they widen the allow policy with
+	// any the profile already set.
+	allow := append([]string{}, s.Access.AllowNetwork...)
+	for _, svc := range s.Access.Services {
+		allow = append(allow, svc.Host...)
+	}
+	if len(allow) > 0 {
 		// sbx create takes deny rules only; an allow rule is added to the
 		// sandbox's own policy, which a deny rule still overrides.
-		return runLogged(hostCommand(ctx, "sbx", "policy", "allow", "network", "--sandbox", s.Name, strings.Join(s.Access.AllowNetwork, ",")), log)
+		if err := runLogged(hostCommand(ctx, "sbx", "policy", "allow", "network", "--sandbox", s.Name, strings.Join(allow, ",")), log); err != nil {
+			return err
+		}
+	}
+	// A service's token is fetched and stored on the host; the sandbox gets
+	// a placeholder the proxy swaps. unibox never sees the value - the
+	// command runs on the host and sbx keeps the result.
+	for name, svc := range s.Access.Services {
+		args := []string{"secret", "set-custom", "--sandbox", s.Name, "--env", ServiceEnv(name, svc), "--placeholder", ServicePlaceholder(name, svc)}
+		for _, h := range svc.Host {
+			args = append(args, "--host", h)
+		}
+		args = append(args, "--command", serviceSecretCommand(svc))
+		if err := runLogged(hostCommand(ctx, "sbx", args...), log); err != nil {
+			return fmt.Errorf("sbx could not store the %s service login: %w", name, err)
+		}
 	}
 	return nil
 }

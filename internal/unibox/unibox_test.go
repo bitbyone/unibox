@@ -58,6 +58,16 @@ func TestProfilesRejectUnknownFieldsAndEscapes(t *testing.T) {
 		{"auth-unknown", "image: example/image\nagents: [claude]\nauth: {claude: password}\n"},
 		{"auth-empty-command", "image: example/image\nagents: [claude]\nauth: {claude: {command: ''}}\n"},
 		{"auth-other-key", "image: example/image\nagents: [claude]\nauth: {claude: {script: x}}\n"},
+		{"service-no-host", "image: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, command: gh auth token}}\n"},
+		{"service-no-command", "image: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, host: github.com}}\n"},
+		{"service-both-git-env", "image: example/image\nagents: [claude]\nservices: {x: {git: true, env: TOK, host: h.example, command: c, scheme: raw}}\n"},
+		{"service-neither-git-env", "image: example/image\nagents: [claude]\nservices: {x: {host: h.example, command: c, scheme: raw}}\n"},
+		{"service-basic-no-user", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c}}\n"},
+		{"service-env-basic", "image: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example, command: c, scheme: basic, user: u}}\n"},
+		{"service-bad-scheme", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: digest, user: u}}\n"},
+		{"service-user-without-basic", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: bearer, user: u}}\n"},
+		{"service-bad-env-name", "image: example/image\nagents: [claude]\nservices: {x: {env: lower, host: h.example, command: c, scheme: bearer}}\n"},
+		{"service-host-star", "image: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*', command: c, user: u}}\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

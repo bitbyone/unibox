@@ -63,6 +63,7 @@ type Need struct {
 	Message    string `json:"message"`
 	Repository string `json:"repository,omitempty"`
 	Agent      string `json:"agent,omitempty"`
+	Service    string `json:"service,omitempty"`
 	Warning    bool   `json:"warning,omitempty"`
 }
 

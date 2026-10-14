@@ -93,6 +93,21 @@ instructions: [unibox]
 #   codex: oauth                      # the ChatGPT login sbx keeps
 #   claude: {token: security find-generic-password -s claude-code-oauth-token -w}
 #   copilot: {command: gh auth token}
+# Host-facing services the sandbox reaches: the token lives on the host and
+# reaches the sandbox only as a placeholder the proxy swaps. A git service
+# wires the sandbox's git; an env service names the variable a tool reads.
+# services:
+#   github:                           # a git forge
+#     git: true
+#     host: github.com
+#     scheme: basic                   # Authorization: Basic base64(user:token)
+#     user: x-access-token
+#     command: gh auth token          # a host command printing the token
+#   artifactory:                      # any host service
+#     host: [artifactory.example.com, "*.jfrog.io"]
+#     scheme: bearer
+#     env: ARTIFACTORY_TOKEN          # the tool reads the placeholder here
+#     command: op read op://vault/artifactory/token
 # Egress beyond the runtime's policy, and hosts to refuse; deny wins.
 # allow_network: [jitpack.io]
 # deny_network: [gist.github.com]

@@ -1,0 +1,138 @@
+package unibox
+
+import (
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/tobola/unibox/internal/unibox/api"
+)
+
+func TestProfilesSayWhichServicesTheSandboxReaches(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    scheme: basic\n    user: x-access-token\n    command: gh auth token\n  artifactory:\n    host: [\"artifactory.example.com\", \"*.jfrog.io\"]\n    scheme: bearer\n    env: ARTIFACTORY_TOKEN\n    command: op read op://vault/artifactory/token\n")
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gh, art := p.Services["github"], p.Services["artifactory"]
+	if !gh.Git || gh.Scheme != SchemeBasic || gh.User != "x-access-token" || len(gh.Host) != 1 || gh.Host[0] != "github.com" {
+		t.Fatalf("github service parsed wrong: %+v", gh)
+	}
+	if art.Git || art.Env != "ARTIFACTORY_TOKEN" || art.Scheme != SchemeBearer || len(art.Host) != 2 {
+		t.Fatalf("artifactory service parsed wrong: %+v", art)
+	}
+	// A service is host access: it changes what the user approves.
+	if !p.HostFacing() {
+		t.Fatal("services need no approval")
+	}
+	plain := p
+	plain.Services = nil
+	if plain.AccessHash() == p.AccessHash() {
+		t.Fatal("services do not change the approval")
+	}
+	// The placeholder is deterministic and carries neither user nor token.
+	ph := ServicePlaceholder("github", gh)
+	if ph != ServicePlaceholder("github", gh) || !strings.HasPrefix(ph, "unibox-svc-github-") || strings.Contains(ph, "x-access-token") {
+		t.Fatalf("placeholder is unstable or revealing: %q", ph)
+	}
+	if ServiceEnv("github", gh) != "UNIBOX_SVC_GITHUB" || ServiceEnv("artifactory", art) != "ARTIFACTORY_TOKEN" {
+		t.Fatal("service env derived wrong")
+	}
+}
+
+func TestServiceSecretCommandNeverCarriesTheTokenItself(t *testing.T) {
+	t.Parallel()
+	basic := serviceSecretCommand(Service{Git: true, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token"})
+	if !strings.Contains(basic, "Basic") || !strings.Contains(basic, "base64") || !strings.Contains(basic, "gh auth token") || !strings.Contains(basic, "x-access-token") {
+		t.Fatalf("basic command wrong: %s", basic)
+	}
+	bearer := serviceSecretCommand(Service{Git: true, Scheme: SchemeBearer, Command: "cmd"})
+	if !strings.Contains(bearer, "Bearer") || strings.Contains(bearer, "base64") {
+		t.Fatalf("bearer command wrong: %s", bearer)
+	}
+	raw := serviceSecretCommand(Service{Env: "TOK", Scheme: SchemeRaw, Command: "cmd"})
+	if strings.Contains(raw, "Bearer") || strings.Contains(raw, "Basic") {
+		t.Fatalf("env command should store the raw token: %s", raw)
+	}
+}
+
+func TestCreateProvisionsServicesAndAllowsTheirHosts(t *testing.T) {
+	bin := t.TempDir()
+	calls := filepath.Join(t.TempDir(), "calls")
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\necho \"$*\" >> "+Quote(calls)+"\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := &SBX{Cache: t.TempDir()}
+	acc := HostAccess{
+		AllowNetwork: []string{"jitpack.io"},
+		Services: map[string]Service{
+			"github": {Git: true, Host: HostList{"github.com"}, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token"},
+		},
+	}
+	spec := Spec{Name: "unibox-home", Image: "x", Agent: "codex", Agents: []string{"codex"}, Access: acc}
+	if err := r.Create(context.Background(), spec, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(calls)
+	ph := ServicePlaceholder("github", acc.Services["github"])
+	if !strings.Contains(string(data), "policy allow network --sandbox unibox-home jitpack.io,github.com") {
+		t.Fatalf("service host did not join the allow policy: %s", data)
+	}
+	for _, want := range []string{"secret set-custom --sandbox unibox-home", "--env UNIBOX_SVC_GITHUB", "--placeholder " + ph, "--host github.com", "--command"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("set-custom lacks %q: %s", want, data)
+		}
+	}
+	// unibox never passes the token value, only the command that prints it.
+	if strings.Contains(string(data), "ghp_") {
+		t.Fatalf("a token value leaked into the argv: %s", data)
+	}
+}
+
+func TestGitServicesWireTheSandboxGitWithTheirPlaceholder(t *testing.T) {
+	t.Parallel()
+	svc := Service{Git: true, Host: HostList{"github.com"}, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token"}
+	p := Profile{Name: "node", Agents: []string{"claude"}, HostAccess: HostAccess{Services: map[string]Service{"github": svc}}}
+	a, _ := FindAgent("claude")
+	task := api.Task{Directory: "/work/t", Repositories: []api.Repository{{Name: "repo", URL: "https://github.com/o/r", Branch: "work", Author: "A <a@example.com>"}}}
+	script := prepareScript(task, p, a)
+	ph := ServicePlaceholder("github", svc)
+	if !strings.Contains(script, "git config --global") || !strings.Contains(script, "http.https://github.com/.extraHeader") || !strings.Contains(script, "Authorization: "+ph) {
+		t.Fatalf("git service not wired: %s", script)
+	}
+	// An env service builds its own header; git is not touched for it.
+	envOnly := Profile{Name: "node", Agents: []string{"claude"}, HostAccess: HostAccess{Services: map[string]Service{"art": {Host: HostList{"a.example"}, Scheme: SchemeBearer, Env: "ART", Command: "c"}}}}
+	if strings.Contains(prepareScript(task, envOnly, a), "extraHeader") {
+		t.Fatal("an env service should not wire git")
+	}
+}
+
+func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	root := m.Config.Environments
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices: {artifactory: {host: a.example, scheme: bearer, env: ART_TOKEN, command: true}}\n")
+	if err := m.Approve("node"); err != nil {
+		t.Fatal(err)
+	}
+	check, err := m.Check(context.Background(), Request{NewSandbox: "dev", Profile: "node", Runtime: "fake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warned bool
+	for _, n := range check.Needs {
+		if n.Code == "credential_in_container" {
+			if !n.Warning || n.Service != "artifactory" {
+				t.Fatalf("warning malformed: %+v", n)
+			}
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatal("a proxy-less runtime did not warn about the service token")
+	}
+}

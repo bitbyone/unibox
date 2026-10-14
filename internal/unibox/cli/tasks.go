@@ -85,6 +85,12 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 		changed := false
 		for _, n := range check.Needs {
 			if n.Warning {
+				// A warning does not block, but the user hears it: a
+				// degraded credential boundary or a check deferred to the
+				// sandbox is theirs to weigh before the task runs.
+				if !o.json {
+					fmt.Fprintf(o.log, "warning: %s\n", n.Message)
+				}
 				continue
 			}
 			switch n.Code {
