@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -141,6 +142,14 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	gitTest(t, clone, "push", "origin", "HEAD")
 	if err = m.Remove(ctx, "dev", ""); err != nil {
 		t.Fatal(err)
+	}
+	// The check says what it checked, not every branch the fetch learned.
+	if log, ok := m.Log.(*bytes.Buffer); !ok {
+		t.Fatal("the fixture's log is not a buffer")
+	} else {
+		if !strings.Contains(log.String(), "payments: clean, every commit on the forge, no stashes") || strings.Contains(log.String(), "[new branch]") {
+			t.Fatalf("the removal check narrates the wrong things:\n%s", log)
+		}
 	}
 	if f.removes != 1 {
 		t.Fatal("safe sandbox was not removed")
