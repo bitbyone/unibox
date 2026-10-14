@@ -321,9 +321,65 @@ unless `--push` asks it to run the user's own `git push -u`.
 - The agents' own logins (Claude, Codex) are sbx's service secrets
   ([below](#one-image-several-agents)).
 
-**Spike**: how sbx hands git its credential - its `github` service, a
-service of one's own for a self-hosted GitLab, or a secret the VM's git
-reads through a helper - and whether that works behind a VPN.
+### Host services the sandbox reaches
+
+A profile says how each agent signs in (`auth`); it says the same, the
+same way, for the host-facing services the sandbox needs - a git forge,
+an Artifactory, a package registry, anything the host authenticates to
+and the agent must reach. These are `services` in `HostAccess` (a change
+asks for `unibox approve` again, as any host access does), a map from a
+name to a host or hosts, how the secret is fetched on the host, and the
+header the proxy sets with it:
+
+```yaml
+services:
+  github:                       # a git forge
+    git: true                   # wire the sandbox's git to these hosts
+    host: github.com
+    scheme: basic               # Authorization: Basic base64(user:token)
+    user: x-access-token
+    command: gh auth token      # a host command that prints the token
+  artifactory:                  # any host service
+    host: ["artifactory.example.com", "*.jfrog.io"]
+    scheme: bearer              # Authorization: Bearer <token>
+    env: ARTIFACTORY_TOKEN      # the tool reads the placeholder here
+    command: op read op://vault/artifactory/token
+```
+
+unibox turns each into one `sbx secret set-custom` before the sandbox is
+created, and never sees the value: the command runs on the host, sbx
+keeps the result in its keychain, the sandbox gets a placeholder. The
+token is the boundary - issue it narrow (a GitLab project token, a
+GitHub fine-grained token) and the forge protects what it must.
+
+What sbx does and does not do here was checked on a throwaway sandbox,
+and the design turns on it:
+
+- A **local** custom secret only substitutes its placeholder wherever the
+  sandbox sends it; `--header` and `--format` are `--cloud` only (sbx says
+  so and refuses them). So the proxy puts the stored value in place of the
+  placeholder verbatim, in the request headers, on requests to `--host`.
+  Verified: a secret stored as `Basic <base64>` under placeholder
+  `ubx-ph-test` turned `Authorization: ubx-ph-test` into
+  `Authorization: Basic <base64>` at the host, and nothing elsewhere.
+- **Git over https** therefore cannot go through git's own credential: git
+  base64-encodes `user:password`, so a placeholder password never appears
+  in the header for the proxy to find. Instead unibox writes
+  `git config --global http.https://<host>/.extraHeader "Authorization:
+  <placeholder>"` into the task's preparation; git sends the placeholder
+  verbatim and the proxy swaps in the whole credential. This is the way
+  around a v3 kit ignoring `apiKey.inject.scheme`, and it is forge-neutral
+  - the stored value is the entire header, composed on the host (`printf
+  '%s:%s' <user> "$(<command>)" | base64`), so the token and its base64
+  never leave it.
+- A **bearer or raw** service needs no git wiring: the tool reads the
+  placeholder from `env` and sends it as its own Authorization, which the
+  proxy substitutes. One caveat found and not yet closed: the custom
+  secret's env var is injected at create, not into a running sandbox, and
+  did not appear in a bare `shell` sandbox's `sbx exec` environment in the
+  test (the built-in `GH_TOKEN=******` did). The header substitution is
+  the reliable channel; the env path wants confirming in a real unibox kit
+  before the first non-git service ships.
 
 ## Profiles
 
@@ -1071,8 +1127,11 @@ Facts the implementation stands on:
 
 ## Follow-ups (2026-10-13)
 
-- Git-over-https from a kit sandbox is undeclared (sbx ignores
-  apiKey.inject scheme in v3); test gh-based pushing, or wait for sbx.
+- Git-over-https from a kit sandbox is solved by `http.extraHeader`
+  carrying a custom-secret placeholder the proxy substitutes (see Host
+  services the sandbox reaches); the `services` profile field and its sbx
+  wiring are the remaining implementation. Confirm the custom-secret env
+  var reaches a non-git tool in a real unibox kit before shipping one.
 - Two session-lock tests flake under full parallel load
   (TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox,
   TestActiveSessionsBlockRecreateButNotAnotherTask, and the usage lock in
