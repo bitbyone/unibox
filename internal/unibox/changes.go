@@ -93,6 +93,8 @@ func settingsSnapshot(p Profile, r Runtime) json.RawMessage {
 	s.Instructions = nil
 	// Read by the commit hook in each session, so no recreation for it.
 	s.Git.CoAuthors = nil
+	// Seeds are merged into the agents' files before each session.
+	s.AgentConfig = nil
 	if _, live := r.(NetworkUpdater); live {
 		s.AllowNetwork, s.DenyNetwork = nil, nil
 	}

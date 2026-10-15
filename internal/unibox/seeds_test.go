@@ -221,6 +221,12 @@ func TestTheSessionCreditsTheAgentAsTheProfileSays(t *testing.T) {
 	if string(settingsSnapshot(p, &fakeRuntime{})) != string(settingsSnapshot(other, &fakeRuntime{})) {
 		t.Fatal("a co-author change would recreate the sandbox")
 	}
+	// Seeds are merged before each session: a moved seed needs none either.
+	other = p
+	other.AgentConfig = map[string]string{"claude/.claude.json": "_data/elsewhere.json"}
+	if string(settingsSnapshot(p, &fakeRuntime{})) != string(settingsSnapshot(other, &fakeRuntime{})) {
+		t.Fatal("a seed change would recreate the sandbox")
+	}
 	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 1\ndockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {co_author: nobody}\n")
 	if _, err := LoadProfile(root, "node"); err == nil {
 		t.Fatal("a co-author without an address was taken")
