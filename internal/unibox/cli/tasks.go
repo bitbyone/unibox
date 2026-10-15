@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -62,8 +61,6 @@ func needsStatus(needs []api.Need) int {
 	for _, n := range needs {
 		if !n.Warning {
 			switch n.Code {
-			case "approval_required":
-				return 2
 			case "image_required":
 				return 3
 			default:
@@ -95,39 +92,18 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 				continue
 			}
 			switch n.Code {
-			case "approval_required":
-				_, _, p, err := o.manager.Definition(*r)
-				if err != nil {
-					return err
-				}
-				before, after, err := o.manager.Approval(p.Name)
-				if err != nil {
-					return err
-				}
-				if o.interactive && !o.json {
-					b, _ := json.MarshalIndent(map[string]any{"previous": before, "requested": after}, "", "  ")
-					fmt.Fprintln(o.log, string(b))
-				}
-				if !o.ask("Approve host access for profile " + p.Name + "?") {
-					return unibox.Fail(2, n.Code, "%s", n.Message)
-				}
-				if err = o.manager.Approve(p.Name); err != nil {
-					return err
-				}
-				changed = true
 			case "image_required":
+				// The profile is the user's; a change of the image is told
+				// and built, not asked about.
 				_, rt, p, err := o.manager.Definition(*r)
 				if err != nil {
 					return err
 				}
-				if o.json {
-					return unibox.Fail(3, n.Code, "%s", n.Message)
-				}
-				if err = o.manager.Diff(cmd.Context(), p.Name, rt.Name(), o.log); err != nil {
-					return err
-				}
-				if !o.yes && !o.ask("Build profile "+p.Name+"?") {
-					return unibox.Fail(3, n.Code, "%s", n.Message)
+				fmt.Fprintf(o.log, "profile %s changed what its image is built from; building it\n", p.Name)
+				if !o.json {
+					if err = o.manager.Diff(cmd.Context(), p.Name, rt.Name(), o.log); err != nil {
+						return err
+					}
 				}
 				if err = o.manager.Build(cmd.Context(), p.Name, rt.Name(), false); err != nil {
 					return err

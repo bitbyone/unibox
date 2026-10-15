@@ -54,6 +54,8 @@ func TestProfilesRejectUnknownFieldsAndEscapes(t *testing.T) {
 		{"allow-list", "image: example/image\nagents: [claude]\nallow_network: [\"a.example,b.example\"]\n"},
 		{"allow-everything-bare", "image: example/image\nagents: [claude]\nallow_network: [\"*\"]\n"},
 		{"deny-space", "image: example/image\nagents: [claude]\ndeny_network: [\"a example\"]\n"},
+		{"allowed-and-denied", "image: example/image\nagents: [claude]\nallow_network: [a.example]\ndeny_network: [a.example]\n"},
+		{"service-host-denied", "image: example/image\nagents: [claude]\ndeny_network: [gitlab.com]\nservices: {gitlab: {git: true, host: gitlab.com, user: oauth2, command: c}}\n"},
 		{"auth-undeclared", "image: example/image\nagents: [claude]\nauth: {codex: oauth}\n"},
 		{"auth-unknown", "image: example/image\nagents: [claude]\nauth: {claude: password}\n"},
 		{"auth-empty-command", "image: example/image\nagents: [claude]\nauth: {claude: {command: ''}}\n"},
@@ -464,7 +466,7 @@ func managerFixture(t *testing.T) (*Manager, *fakeRuntime) {
 	f := &fakeRuntime{root: t.TempDir(), remotes: map[string]string{}}
 	write(t, filepath.Join(f.root, "boot"), "first-boot")
 	m.Runtimes = map[string]Runtime{"fake": f}
-	if err = m.Approve("node"); err != nil {
+	if err = m.RecordAccess("node"); err != nil {
 		t.Fatal(err)
 	}
 	if err = m.Build(context.Background(), "node", "fake", false); err != nil {
@@ -589,25 +591,40 @@ func TestInstructionChangesWaitWithoutRebuildingOrRecreating(t *testing.T) {
 	}
 }
 
-func TestAProfileAskingNothingOfTheHostNeedsNoApproval(t *testing.T) {
+func TestAChangedProfileIsToldNotAskedAbout(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)
 	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "plain", "sandbox.yaml"), "image: example/image\nagents: [claude]\n")
-	p, err := LoadProfile(root, "plain")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nenv: [BUILD_MODE]\nallow_network: [jitpack.io]\n")
+	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := m.approved(p); err != nil {
-		t.Fatalf("a profile with no host access demanded approval: %v", err)
-	}
-	write(t, filepath.Join(root, "sandboxes", "plain", "sandbox.yaml"), "image: example/image\nagents: [claude]\nenv: [BUILD_MODE]\n")
-	asking, err := LoadProfile(root, "plain")
+	// check names what changed, as a warning, and remembers nothing.
+	check, err := m.Check(context.Background(), Request{NewSandbox: "dev", Profile: "node", Runtime: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := m.approved(asking); err == nil {
-		t.Fatal("host access ran unapproved")
+	found := false
+	for _, n := range check.Needs {
+		if n.Code == "profile_changed" {
+			found = n.Warning && strings.Contains(n.Message, "env + BUILD_MODE") && strings.Contains(n.Message, "allow_network + jitpack.io")
+		}
+		if n.Code == "approval_required" {
+			t.Fatal("a change was asked about")
+		}
+	}
+	if !found {
+		t.Fatalf("%+v", check.Needs)
+	}
+	// Starting tells it once and goes on.
+	var log bytes.Buffer
+	if err := m.noteAccess(p, &log); err != nil || !strings.Contains(log.String(), "env + BUILD_MODE") {
+		t.Fatalf("%v %s", err, log.String())
+	}
+	log.Reset()
+	if err := m.noteAccess(p, &log); err != nil || log.Len() != 0 {
+		t.Fatalf("told twice: %s", log.String())
 	}
 }
 

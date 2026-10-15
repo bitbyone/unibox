@@ -330,6 +330,18 @@ func LoadProfile(root, name string) (Profile, error) {
 			}
 		}
 	}
+	// sbx refuses a deny for a host an allow names, and a service's host has
+	// to be reachable.
+	for _, h := range p.DenyNetwork {
+		if slices.Contains(p.AllowNetwork, h) {
+			return p, fmt.Errorf("profile %s: %s is both allowed and denied; keep one", name, h)
+		}
+		for svc, s := range p.Services {
+			if slices.Contains(s.ProxyHosts(), h) {
+				return p, fmt.Errorf("profile %s: %s is denied, but service %s needs it", name, h, svc)
+			}
+		}
+	}
 	for id, a := range p.Auth {
 		if !seen[id] {
 			return p, fmt.Errorf("profile %s: auth names %s, which is not among its agents", name, id)

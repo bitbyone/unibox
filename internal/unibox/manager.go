@@ -68,7 +68,10 @@ func (m *Manager) profile(name string) (Profile, error) {
 
 // Profile loads a profile of the environments repository.
 func (m *Manager) Profile(name string) (Profile, error) { return m.profile(name) }
-func (m *Manager) Approve(name string) error {
+
+// RecordAccess remembers a profile's host access as seen, so the next
+// change of it is told against this one.
+func (m *Manager) RecordAccess(name string) error {
 	p, err := m.profile(name)
 	if err != nil {
 		return err
@@ -86,19 +89,6 @@ func (m *Manager) Approval(name string) (HostAccess, HostAccess, error) {
 	}
 	s, err := m.Paths.ReadState()
 	return s.ApprovedFields[p.ApprovalKey()], p.HostAccess, err
-}
-func (m *Manager) approved(p Profile) error {
-	if !p.HostFacing() {
-		return nil
-	}
-	s, err := m.Paths.ReadState()
-	if err != nil {
-		return err
-	}
-	if s.Approvals[p.ApprovalKey()] != p.AccessHash() {
-		return Fail(2, "approval_required", "profile %s has unapproved host access; inspect it with unibox check and run unibox approve %s", p.Name, p.Name)
-	}
-	return nil
 }
 func buildKey(p Profile, r Runtime) string { return p.ApprovalKey() + ":" + r.Name() }
 func imageTag(p Profile) string            { return "unibox/" + p.Name + ":" + p.Revision[:16] }
@@ -304,8 +294,8 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	if err != nil {
 		return result, err
 	}
-	if err = m.approved(p); err != nil {
-		result.Needs = append(result.Needs, api.Need{Code: "approval_required", Message: err.Error()})
+	if lines := m.AccessChanges(p); len(lines) > 0 {
+		result.Needs = append(result.Needs, api.Need{Code: "profile_changed", Warning: true, Message: fmt.Sprintf("profile %s changed what it asks of the host: %s", p.Name, strings.Join(lines, ", "))})
 	}
 	if err = r.Available(ctx); err != nil {
 		result.Needs = append(result.Needs, api.Need{Code: "runtime_unavailable", Message: err.Error()})
@@ -399,7 +389,7 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 	if err := r.Available(ctx); err != nil {
 		return err
 	}
-	if err := m.approved(p); err != nil {
+	if err := m.noteAccess(p, m.Log); err != nil {
 		return err
 	}
 	if rebuild {
@@ -423,10 +413,11 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 		}
 		env[k] = value
 	}
-	settings := p
-	settings.Instructions = nil
+	// Network rules change live and instructions before every session, so
+	// neither is part of what makes a sandbox.
+	settings := settingsSnapshot(p, r)
 	revision := digest(struct {
-		Profile Profile
+		Profile json.RawMessage
 		Image   string
 		Env     map[string]string
 	}{settings, build.Image, env})
@@ -450,7 +441,17 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 			if err = m.safeBox(ctx, *b, r); err != nil {
 				return err
 			}
-			fmt.Fprintf(m.Log, "recreating sandbox %s\n", b.Name)
+			reasons := settingsChanges(b.Settings, settings)
+			if b.Image != "" && b.Image != build.Image {
+				reasons = append(reasons, "the image was rebuilt")
+			}
+			if force {
+				reasons = append(reasons, "asked for")
+			}
+			if len(reasons) == 0 {
+				reasons = append(reasons, "the profile changed")
+			}
+			fmt.Fprintf(m.Log, "recreating sandbox %s: %s\n", b.Name, strings.Join(reasons, ", "))
 			if err = r.Remove(ctx, b.RuntimeName); err != nil {
 				return err
 			}
@@ -486,10 +487,16 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 		b.Revision = revision
 		b.InstructionRevision = ""
 		b.Memory = p.Memory
+		b.Image, b.Settings = build.Image, settings
+		// Create applied the profile's rules.
+		b.NetworkAllow, b.NetworkDeny = networkRules(p)
 		b.State = "running"
 		if err = m.saveBox(*b); err != nil {
 			return err
 		}
+	}
+	if err = m.syncNetwork(ctx, b, r, p); err != nil {
+		return err
 	}
 	if b.InstructionRevision != instructionRevision && exclusive == nil {
 		exclusive, err = m.usage(b.Name, false)
@@ -653,9 +660,6 @@ func (m *Manager) Recreate(ctx context.Context, name string, rebuild bool) error
 	}
 	p, err := m.profile(b.Profile)
 	if err != nil {
-		return err
-	}
-	if err = m.approved(p); err != nil {
 		return err
 	}
 	if !rebuild {

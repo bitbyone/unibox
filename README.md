@@ -45,8 +45,8 @@ unibox config set environments ~/my-envs          # your environments repo
 unibox init web --agents claude,codex             # create profile "web"
 unibox login web                                  # sign its agents in
 unibox service add web github                     # sign its git in to a forge
-unibox approve web                                # accept what it asks of the host
-unibox build web                                  # build its image
+unibox network allow web jitpack.io               # reach a host the policy refuses, applied live
+unibox build web                                  # build its image now (run builds when needed)
 
 # create sandbox "web-1" from profile "web", clone this repo, run claude
 unibox run --profile web --new-sandbox web-1 --repo . --branch feat/login --agent claude
@@ -55,12 +55,12 @@ unibox tasks                                      # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
 unibox add-repo <task> --repo ../api --branch feat/login  # clone one more, even while it runs
 unibox shell web-1                                # shell inside the sandbox
-unibox recreate web-1                             # apply profile changes
+unibox recreate web-1                             # recreate now (a start does when the profile needs it)
 ```
 
 `unibox check` (same arguments as `run`) lists anything missing before a
-start: approval, image, logins, a branch the forge does not have. `run`
-offers to fix these. Every command accepts `--json`.
+start: an image to build, logins and secrets, a branch the forge does not
+have, and what changed in the profile. `run` fixes what it can. Every command accepts `--json`.
 
 ## Environments repository
 
@@ -96,9 +96,11 @@ allow_network: [jitpack.io]          # hosts to allow
 deny_network: [gist.github.com]      # hosts to block
 ```
 
-Unknown fields are errors. Anything that touches the host (environment
-variables, mounted caches, logins, network rules) needs `unibox approve`,
-and again whenever it changes.
+Unknown fields are errors. The profile is yours and nothing asks you to
+approve it: when what it asks of the host changes (environment variables,
+mounted caches, logins, services, network rules), the next start says what
+changed and what it leads to - an image built, a sandbox recreated, or rules
+applied to the running sandbox live.
 
 ## Agents
 
@@ -144,6 +146,14 @@ service rm` takes one out.
 
 The profile stays yours: what these commands write is ordinary YAML, and a
 hand edit is as valid.
+
+## Network
+
+`unibox network allow|deny <profile> <host...>` lets a profile's sandboxes
+reach hosts the runtime's policy refuses, or refuses ones it allows; `rm`
+takes hosts back to the policy and `ls` lists the rules with the hosts the
+services need. The change is written into the profile and applied to its
+running sandboxes at once - sbx changes rules live, so nothing is recreated.
 
 Sign copilot in by `token`, not `command`: `command` stores sbx's built-in
 `github` secret, and with it sbx signs every request to github.com in itself -

@@ -48,7 +48,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 		o.manager = m
 		return m.RefreshPlugin()
 	}
-	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.approveCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.loginCommand(), o.serviceCommand())
+	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.loginCommand(), o.serviceCommand(), o.networkCommand())
 	for _, name := range []string{"check", "prepare", "run"} {
 		root.AddCommand(o.taskCommand(name))
 	}
@@ -232,22 +232,6 @@ func (o *options) runtimesCommand() *cobra.Command {
 			rows = append(rows, map[string]any{"name": name, "enabled": o.manager.Config.Enabled(name), "available": reason == "", "error": reason, "capabilities": r.Capabilities()})
 		}
 		return o.write(map[string]any{"api_version": api.Version, "runtimes": rows})
-	}}
-}
-func (o *options) approveCommand() *cobra.Command {
-	return &cobra.Command{Use: "approve profile", Args: cobra.ExactArgs(1), Short: "Explicitly approve a profile's current host access", RunE: func(cmd *cobra.Command, args []string) error {
-		before, after, err := o.manager.Approval(args[0])
-		if err != nil {
-			return err
-		}
-		if !o.json {
-			b, _ := json.MarshalIndent(map[string]any{"previous": before, "approved": after}, "", "  ")
-			fmt.Fprintln(o.output, string(b))
-		}
-		if err = o.manager.Approve(args[0]); err != nil {
-			return err
-		}
-		return o.success("profile approved")
 	}}
 }
 func (o *options) buildCommand() *cobra.Command {

@@ -166,7 +166,7 @@ func TestCheckSaysWhichNamedSecretIsMissing(t *testing.T) {
 	dir, _ := fakeSecretTools(t)
 	m, _ := managerFixture(t)
 	write(t, filepath.Join(m.Config.Environments, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices: {gitlab: {git: true, host: gitlab.com, user: oauth2, command: 'secret:gitlab'}}\n")
-	if err := m.Approve("node"); err != nil {
+	if err := m.RecordAccess("node"); err != nil {
 		t.Fatal(err)
 	}
 	missing := func() bool {

@@ -261,7 +261,7 @@ func (o *options) loginCommand() *cobra.Command {
 				fmt.Fprintf(o.log, "stored %s's %s login in %s\n", id, method, r.Name())
 			}
 		}
-		return o.success(fmt.Sprintf("profile %s signs its agents in; unibox approve %s if it changed", p.Name, p.Name))
+		return o.success(fmt.Sprintf("profile %s signs its agents in", p.Name))
 	}}
 	c.Flags().BoolVar(&renew, "renew", false, "Ask for every token again, replacing the stored ones")
 	c.Flags().StringVar(&rt, "runtime", "", "Runtime that keeps the logins (default: the configured one)")
@@ -373,7 +373,7 @@ func (o *options) serviceCommand() *cobra.Command {
 		if s.Git {
 			where = "git at " + strings.Join(s.GitURLs(), ", ")
 		}
-		return o.success(fmt.Sprintf("profile %s signs %s in to %s; unibox approve %s, then the next start applies it", profile, name, where, profile))
+		return o.success(fmt.Sprintf("profile %s signs %s in to %s; the next start applies it", profile, name, where))
 	}}
 	f := add.Flags()
 	f.StringVar(&kind, "kind", "", "github, gitlab, artifactory or generic (default: from the name)")
@@ -475,4 +475,104 @@ func (o *options) serviceCommand() *cobra.Command {
 	rm.Flags().BoolVar(&keep, "keep-secret", false, "Keep the stored token")
 	c.AddCommand(rm)
 	return c
+}
+
+// networkCommand changes a profile's network rules and applies them to its
+// sandboxes at once - live where the runtime can, and by a recreation,
+// asked for first, where it cannot.
+func (o *options) networkCommand() *cobra.Command {
+	c := &cobra.Command{Use: "network", Short: "Allow or deny hosts for a profile's sandboxes, applied to the running ones"}
+	change := func(use, short string, edit func(allow, deny []string, hosts []string) ([]string, []string)) *cobra.Command {
+		return &cobra.Command{Use: use + " profile host...", Args: cobra.MinimumNArgs(2), Short: short, RunE: func(cmd *cobra.Command, args []string) error {
+			profile, hosts := args[0], args[1:]
+			p, err := o.manager.Profile(profile)
+			if err != nil {
+				return err
+			}
+			allow, deny := edit(slices.Clone(p.AllowNetwork), slices.Clone(p.DenyNetwork), hosts)
+			if err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
+				unibox.SetStringList(doc, "allow_network", allow)
+				unibox.SetStringList(doc, "deny_network", deny)
+				return nil
+			}); err != nil {
+				return err
+			}
+			recreate, err := o.manager.ApplyNetwork(cmd.Context(), p.Name)
+			if err != nil {
+				return err
+			}
+			for _, name := range recreate {
+				if err := o.confirm("Runtime of sandbox " + name + " cannot change network rules live; recreate it to apply them?"); err != nil {
+					fmt.Fprintf(o.log, "sandbox %s keeps its old rules until it is recreated\n", name)
+					continue
+				}
+				if err := o.manager.Recreate(cmd.Context(), name, false); err != nil {
+					return err
+				}
+			}
+			return o.success(fmt.Sprintf("profile %s allows %s and denies %s", p.Name, orNone(allow), orNone(deny)))
+		}}
+	}
+	without := func(list, hosts []string) []string {
+		return slices.DeleteFunc(list, func(h string) bool { return slices.Contains(hosts, h) })
+	}
+	with := func(list, hosts []string) []string {
+		for _, h := range hosts {
+			if !slices.Contains(list, h) {
+				list = append(list, h)
+			}
+		}
+		return list
+	}
+	c.AddCommand(change("allow", "Let the sandboxes reach hosts the runtime's policy refuses", func(allow, deny, hosts []string) ([]string, []string) {
+		return with(allow, hosts), without(deny, hosts)
+	}))
+	c.AddCommand(change("deny", "Refuse hosts the runtime's policy allows", func(allow, deny, hosts []string) ([]string, []string) {
+		return without(allow, hosts), with(deny, hosts)
+	}))
+	c.AddCommand(change("rm", "Take hosts out of the profile's rules, back to the runtime's policy", func(allow, deny, hosts []string) ([]string, []string) {
+		return without(allow, hosts), without(deny, hosts)
+	}))
+	c.AddCommand(&cobra.Command{Use: "ls profile", Args: cobra.ExactArgs(1), Short: "List a profile's network rules, with its services' hosts", RunE: func(cmd *cobra.Command, args []string) error {
+		p, err := o.manager.Profile(args[0])
+		if err != nil {
+			return err
+		}
+		services := map[string]string{}
+		for name, s := range p.Services {
+			for _, h := range s.ProxyHosts() {
+				services[h] = name
+			}
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "profile": p.Name, "allow": p.AllowNetwork, "deny": p.DenyNetwork, "services": services})
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "RULE\tHOST\tFROM")
+		for _, h := range p.AllowNetwork {
+			fmt.Fprintf(w, "allow\t%s\tprofile\n", h)
+		}
+		hosts := []string{}
+		for h := range services {
+			hosts = append(hosts, h)
+		}
+		slices.Sort(hosts)
+		for _, h := range hosts {
+			if !slices.Contains(p.AllowNetwork, h) {
+				fmt.Fprintf(w, "allow\t%s\tservice %s\n", h, services[h])
+			}
+		}
+		for _, h := range p.DenyNetwork {
+			fmt.Fprintf(w, "deny\t%s\tprofile\n", h)
+		}
+		return w.Flush()
+	}})
+	return c
+}
+
+func orNone(list []string) string {
+	if len(list) == 0 {
+		return "nothing more"
+	}
+	return strings.Join(list, ", ")
 }

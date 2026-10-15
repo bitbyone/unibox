@@ -77,6 +77,23 @@ type SessionEnver interface {
 	SessionEnv(p Profile, agent string) []string
 }
 
+// NetworkUpdater is a runtime that changes a running sandbox's network
+// rules in place, so a change of them needs no recreation. It touches the
+// rules it is told of and no others.
+type NetworkUpdater interface {
+	UpdateNetwork(ctx context.Context, sandbox string, change NetworkChange, log io.Writer) error
+}
+
+// NetworkChange is the difference between the rules a sandbox has and the
+// profile's.
+type NetworkChange struct {
+	AddAllow, RemoveAllow, AddDeny, RemoveDeny []string
+}
+
+func (c NetworkChange) Empty() bool {
+	return len(c.AddAllow)+len(c.RemoveAllow)+len(c.AddDeny)+len(c.RemoveDeny) == 0
+}
+
 // Child processes receive only the host context they need. In particular, an
 // installed runtime must not discover an unrelated token or SSH agent by accident.
 func HostEnvironment() []string {

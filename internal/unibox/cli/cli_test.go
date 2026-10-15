@@ -94,32 +94,27 @@ func TestJSONListsAreSingleVersionedObjects(t *testing.T) {
 	}
 }
 
-func TestYesDoesNotApproveHostAccessAndJSONDoesNotPrompt(t *testing.T) {
+func TestAChangedProfileIsNotAskedAboutAndJSONDoesNotPrompt(t *testing.T) {
 	t.Parallel()
 	paths, _ := cliFixture(t)
 	var out, log bytes.Buffer
 	c := New(paths, strings.NewReader("yes\n"), &out, &log)
-	c.SetArgs([]string{"create", "dev", "--profile", "node", "--yes", "--json"})
+	c.SetArgs([]string{"create", "dev", "--profile", "node", "--json"})
+	// The profile asks for host access; what stops this is the runtime
+	// missing here, not a question about the profile.
 	err := c.Execute()
-	if err == nil || !strings.Contains(err.Error(), "unapproved") {
+	if err == nil || strings.Contains(err.Error(), "approve") || strings.Contains(err.Error(), "unapproved") {
 		t.Fatalf("%v", err)
-	}
-	s, err := paths.ReadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(s.Approvals) != 0 {
-		t.Fatal("--yes approved access")
 	}
 	if strings.Contains(log.String(), "[y/N]") {
 		t.Fatal("JSON prompted")
 	}
 }
 
-func TestExplicitApprovalAndStrictConfig(t *testing.T) {
+func TestStrictConfig(t *testing.T) {
 	t.Parallel()
 	paths, _ := cliFixture(t)
-	for _, args := range [][]string{{"approve", "node", "--json"}, {"config", "set", "runtimes.sbx.stop_idle", "false"}, {"config", "set", "default_runtime", "sbx"}} {
+	for _, args := range [][]string{{"config", "set", "runtimes.sbx.stop_idle", "false"}, {"config", "set", "default_runtime", "sbx"}} {
 		c := New(paths, strings.NewReader(""), io.Discard, io.Discard)
 		c.SetArgs(args)
 		if err := c.Execute(); err != nil {

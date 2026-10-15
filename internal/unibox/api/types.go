@@ -1,7 +1,10 @@
 // Package api is the versioned command-line contract shared with unibox clients.
 package api
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const Version = 1
 
@@ -49,6 +52,13 @@ type Sandbox struct {
 	Memory              string   `json:"memory,omitempty"`
 	Tasks               []Task   `json:"tasks"`
 	Runs                []Run    `json:"runs"`
+	// Image and Settings are what the sandbox was created from, so a
+	// recreation can say what changed. NetworkAllow and NetworkDeny are
+	// the rules unibox applied to it; a change of them is applied live.
+	Image        string          `json:"image,omitempty"`
+	Settings     json.RawMessage `json:"settings,omitempty"`
+	NetworkAllow []string        `json:"network_allow,omitempty"`
+	NetworkDeny  []string        `json:"network_deny,omitempty"`
 }
 
 type Profile struct {

@@ -334,7 +334,7 @@ A profile says how each agent signs in (`auth`); it says the same, the
 same way, for the host-facing services the sandbox needs - a git forge,
 an Artifactory, a package registry, anything the host authenticates to
 and the agent must reach. These are `services` in `HostAccess` (a change
-asks for `unibox approve` again, as any host access does), a map from a
+is told at the next start, as any change of host access is), a map from a
 name to a host or hosts, how the secret is fetched on the host, and the
 header the proxy sets with it:
 
@@ -464,7 +464,7 @@ Built (2026-10-15): `unibox secret set|ls|rm`, `unibox login`, `unibox
 service add|ls|rm`, `secret:<name>` references, the keychain and Secret
 Service stores, and the profile edited as a node tree. Not yet: applying
 a network change to a running sandbox (below, in the network rules) and
-the change to approval under discussion.
+the change to approval, which is decided: told, not asked (Trust).
 
 The user's decision (2026-10-15): everything a profile needs can be set
 up through unibox's command line, so signing something in needs no hand
@@ -475,8 +475,8 @@ and writes no YAML of its own. **The file stays the user's**: a hand
 edit is as valid as unibox's, for whatever unibox does not know - a
 token from HashiCorp Vault (`command: vault kv get -field=token
 secret/ci/gitlab`), 1Password, a helper of one's own. unibox then only
-validates it, as it validates every profile, and the approval covers
-it as it covers the rest.
+validates it, as it validates every profile, and tells the change at
+the next start as it tells the rest.
 
 This moves one thing: **unibox may now hold a token in its memory**, on
 its way from the user's terminal to the platform's store - unibox is
@@ -517,7 +517,7 @@ state or the profile, and a test holds each of these.
   and `rm` complete it.
 - **Writing the profile.** unibox edits `sandbox.yaml` as a YAML node
   tree, so the user's comments and order stay, and each change is host
-  access: the next start asks for `unibox approve` as for a hand edit.
+  access, applied at the next start.
   The environments repository stays the user's to commit.
 - **unagit** builds on these commands: its Settings drive `unibox login`,
   `unibox service add` and `unibox secret set`, and a token it mints from
@@ -641,7 +641,7 @@ auth:                         # how each agent signs in
   policy does not list (403 from the proxy) and already allows the usual
   registries; an allow is added to the sandbox's own policy after
   creation, a deny is given at creation, and a deny wins where both match.
-  Both are host access, approved with the rest.
+  Both are host access, and a change of them is applied live (below).
 - **sbx changes a running sandbox's network rules live.** Checked on a
   throwaway sandbox: `sbx policy allow network --sandbox` let a refused
   host through at once (403 to 200), `sbx policy deny network
@@ -662,11 +662,11 @@ auth:                         # how each agent signs in
   keychain above). sbx stores the command as a custom secret; claude sees
   a placeholder in `CLAUDE_CODE_OAUTH_TOKEN`, the proxy sends the token to
   api.anthropic.com, and the login outlives a recreated sandbox.
-- `auth` is host access and is approved with the rest. The runtime keeps
+- `auth` is host access like the rest. The runtime keeps
   the logins on the host; unibox only checks that each is there, and
   before a start stores what is missing. A `token` or `command` login is
   stored without a question: its host command is in the profile the user
-  approved, so unibox tells sbx the source and sbx runs it. An OAuth
+  wrote, so unibox tells sbx the source and sbx runs it. An OAuth
   login or a key is offered instead - sbx asks for it on the terminal
   (`sbx secret set ...`, the browser for an OAuth login). Either way the
   value never passes through unibox. sbx stores locally only ChatGPT's
@@ -753,7 +753,7 @@ it would be committed. So:
   chose one, or a service's author never shows. `co_author` has no flag
   and wins over `git.co_author`. Under several services each field comes
   from the most specific URL that sets it, as git picks its `http.<url>`
-  settings. Services are host access, so the user approves the identity
+  settings. Services are host access; a change of the identity is told
   with the rest. The task's record holds the result, so changing it on a
   prepared task asks for another task name, as a changed `--author` does.
 - **A clone the agent makes itself** gets its service's author too: the
@@ -811,18 +811,28 @@ BASE=docker/sandbox-templates:shell
 
 ### Trust
 
-The environments repository is the user's choice, so it is trusted - but a
-pull can bring a teammate's change, and some fields reach the host: the
-caches (host paths mounted), `env` (host values passed in) and the network
-rules. A change to those must be approved before the profile runs, as
-`direnv allow` does:
+The environments repository is the user's: their choice, in their git,
+edited by them or through unibox's commands, and no agent edits it on its
+own. So a change of a profile is **told, not asked about** (the user's
+decision, 2026-10-15; it replaced a `direnv allow`-like approval, which
+only got in the way):
 
-- agentbox's state keeps, per profile, a hash of its host-facing fields as
-  last approved. A new profile starts unapproved.
-- `agentbox check` reports a profile whose fields differ, with the
-  difference of those fields alone; `agentbox approve <profile>` records
-  them. unagit shows the difference and asks, then approves; agentbox run
-  from a terminal asks itself.
+- unibox's state keeps, per profile, its host-facing fields as last seen.
+  `check` names what changed as a warning (`profile_changed`); the next
+  start says it once - `profile web changed what it asks of the host:
+  services + github, allow_network + jitpack.io` - and goes on. A change
+  made through unibox's own commands is not told again.
+- What the change leads to is said too: an image built from changed
+  inputs is built without a question (with the diff since its last
+  build), and a sandbox made from changed settings is recreated, naming
+  them - `recreating sandbox web-1: services, the image was rebuilt`.
+  The checks for unpushed work and running sessions still stand before a
+  recreation.
+- What the runtime can change live is applied live instead: each adapter
+  says what it can (`NetworkUpdater` for network rules), and what it
+  cannot is part of the settings a recreation makes. `unibox network
+  allow|deny|rm` changes a profile's rules and applies them to its
+  sandboxes at once, asking only where a recreation would be needed.
 - The worked-on repositories still choose nothing: they give the bootstrap
   script, which runs inside the VM.
 
@@ -967,7 +977,7 @@ never asks: what stands in the way is an answer, not a prompt.
 | `agentbox profiles [--json]` | profiles: name, agents, image state per runtime, approval, error, last commit |
 | `agentbox instructions <profile>` | the instructions as the agent gets them |
 | `agentbox diff <profile>` | what changed since the last build, a unified diff |
-| `agentbox approve <profile>` | records the host-facing fields as approved |
+| `unibox login <profile> [agent...]`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
 | `agentbox build <profile> [--runtime R]` | builds, checks the agents, loads |
 | `agentbox check …  --json` | what stands in the way of a start: default branch, uncommitted, approval, image |
 | `agentbox prepare …` | the VM and the task, ready; JSON of both at the end |
@@ -984,7 +994,7 @@ never asks: what stands in the way is an answer, not a prompt.
 `--repo <dir>=<clone URL>` (repeated; or directories, as without unagit),
 `--author "Name <email>"`.
 
-Exit codes say what kind of failure: 2 not approved, 3 image outdated or
+Exit codes say what kind of failure: 3 image outdated or
 not built, 4 refused (a default branch, a branch the forge lacks), 1 any
 other error. Errors are lower case and say what to do: `sbx is not signed
 in - run sbx login`.

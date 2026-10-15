@@ -122,7 +122,7 @@ func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
 	m, _ := managerFixture(t)
 	root := m.Config.Environments
 	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices: {artifactory: {host: a.example, scheme: bearer, env: ART_TOKEN, command: true}}\n")
-	if err := m.Approve("node"); err != nil {
+	if err := m.RecordAccess("node"); err != nil {
 		t.Fatal(err)
 	}
 	check, err := m.Check(context.Background(), Request{NewSandbox: "dev", Profile: "node", Runtime: "fake"})

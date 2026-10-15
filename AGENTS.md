@@ -60,9 +60,14 @@ about it. Keep command output short: pipe through `head`, `tail` or
   each agent signs in and what it may reach; an adapter (`sbx.go`,
   `sbx_kit.go`, `sbx_auth.go`) turns that into the runtime's own means.
   Nothing above the adapter names sbx.
-- **Host access is approved.** Environment, caches, network rules and
-  `auth` are `HostAccess`; a change asks for `unibox approve` again. A new
-  field of it is `omitempty` in JSON, or every existing approval breaks.
+- **A profile change is told, not approved.** Environment, caches,
+  network rules, `auth` and `services` are `HostAccess`; a change of them
+  is said at the next start, with what it leads to (a build, a
+  recreation naming why, rules applied live). A new field of it is
+  `omitempty` in JSON, or every profile reads as changed.
+- **Each adapter says what it can change live**, by an optional
+  interface (`NetworkUpdater`, `Authenticator`, `SessionEnver`); what it
+  cannot is part of the settings a recreation makes.
 - **Several agents mean a generated v3 kit.** sbx injects a kit's
   credentials only with a binding in `~/.config/sbx/credentials.yaml`,
   which unibox writes; it wires one OAuth login per sandbox, from the

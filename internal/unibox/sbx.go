@@ -269,3 +269,51 @@ func (r *SBX) Build(ctx context.Context, p Profile, tag string, log io.Writer) (
 	}
 	return strings.TrimSpace(string(b)), nil
 }
+
+// UpdateNetwork changes a running sandbox's rules in place: sbx applies a
+// sandbox's policy live (checked: an allow, a deny and their removal took
+// effect without a restart). Removals go first, since sbx refuses a deny
+// for a host an allow of the sandbox names exactly. Only the rules named
+// are touched; one the user added with sbx stays.
+func (r *SBX) UpdateNetwork(ctx context.Context, sandbox string, change NetworkChange, log io.Writer) error {
+	if len(change.RemoveAllow)+len(change.RemoveDeny) > 0 {
+		b, err := commandOutput(hostCommand(ctx, "sbx", "policy", "ls", "--json"))
+		if err != nil {
+			return err
+		}
+		var list struct {
+			Rules []struct {
+				ID           string   `json:"id"`
+				SandboxID    string   `json:"sandbox_id"`
+				ResourceType string   `json:"resource_type"`
+				Decision     string   `json:"decision"`
+				Resources    []string `json:"resources"`
+			} `json:"rules"`
+		}
+		if err = json.Unmarshal(b, &list); err != nil {
+			return fmt.Errorf("sbx policy ls answered in a form unibox does not know; upgrade unibox: %w", err)
+		}
+		for decision, hosts := range map[string][]string{"allow": change.RemoveAllow, "deny": change.RemoveDeny} {
+			for _, h := range hosts {
+				for _, rule := range list.Rules {
+					if rule.SandboxID == sandbox && rule.ResourceType == "network" && rule.Decision == decision && len(rule.Resources) == 1 && rule.Resources[0] == h {
+						if err := runQuiet(hostCommand(ctx, "sbx", "policy", "rm", "network", "--id", rule.ID, "--sandbox", sandbox, "--force")); err != nil {
+							return fmt.Errorf("sbx did not remove the %s rule for %s: %w", decision, h, err)
+						}
+					}
+				}
+			}
+		}
+	}
+	if len(change.AddDeny) > 0 {
+		if err := runQuiet(hostCommand(ctx, "sbx", "policy", "deny", "network", "--sandbox", sandbox, strings.Join(change.AddDeny, ","))); err != nil {
+			return fmt.Errorf("sbx did not add the deny rules: %w", err)
+		}
+	}
+	if len(change.AddAllow) > 0 {
+		if err := runQuiet(hostCommand(ctx, "sbx", "policy", "allow", "network", "--sandbox", sandbox, strings.Join(change.AddAllow, ","))); err != nil {
+			return fmt.Errorf("sbx did not add the allow rules: %w", err)
+		}
+	}
+	return nil
+}

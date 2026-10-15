@@ -153,3 +153,33 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	}
 	_ = io.Discard
 }
+
+func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
+	t.Parallel()
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.WriteFile(file, []byte("image: example/image\nagents: [claude]\nallow_network: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, log, err := run(t, paths, "", "network", "allow", "node", "maven.google.com"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	// Denying an allowed host moves it: sbx refuses both at once.
+	if _, log, err := run(t, paths, "", "network", "deny", "node", "jitpack.io", "gist.github.com"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), "allow_network: [maven.google.com] # Kotlin") || !strings.Contains(string(data), "deny_network: [jitpack.io, gist.github.com]") {
+		t.Fatalf("%s", data)
+	}
+	out, _, err := run(t, paths, "", "network", "ls", "node")
+	if err != nil || !strings.Contains(out, "deny   gist.github.com") || !strings.Contains(out, "allow  maven.google.com") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "network", "rm", "node", "jitpack.io", "gist.github.com", "maven.google.com"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "_network") {
+		t.Fatalf("emptied lists stayed:\n%s", data)
+	}
+}

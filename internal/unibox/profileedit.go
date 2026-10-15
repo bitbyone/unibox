@@ -11,8 +11,7 @@ import (
 
 // EditProfile changes a profile's sandbox.yaml as a node tree, so the user's
 // comments and order stay, and keeps the change only if the profile still
-// loads - a command that writes the profile never leaves it broken. The
-// change is host access like a hand edit: the next start asks to approve.
+// loads - a command that writes the profile never leaves it broken.
 func (m *Manager) EditProfile(name string, edit func(doc *yaml.Node) error) error {
 	p, err := m.profile(name)
 	if err != nil {
@@ -55,7 +54,9 @@ func (m *Manager) EditProfile(name string, edit func(doc *yaml.Node) error) erro
 		}
 		return fmt.Errorf("the change would break profile %s, so it was not kept: %w", name, err)
 	}
-	return nil
+	// The command that made the change has said what it did; the next start
+	// need not tell it again.
+	return m.RecordAccess(name)
 }
 
 func mapValue(m *yaml.Node, key string) *yaml.Node {
@@ -159,4 +160,21 @@ func RemoveService(profile *yaml.Node, name string) bool {
 		deleteMapKey(profile, "services")
 	}
 	return true
+}
+
+// SetStringList writes a list of the profile, on one line as the scaffold
+// writes them, and takes the key out when it is empty.
+func SetStringList(profile *yaml.Node, key string, values []string) {
+	if len(values) == 0 {
+		deleteMapKey(profile, key)
+		return
+	}
+	list := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	if old := mapValue(profile, key); old != nil && old.Kind == yaml.SequenceNode {
+		list.Style = old.Style
+	}
+	for _, v := range values {
+		list.Content = append(list.Content, scalarNode(v))
+	}
+	setMapValue(profile, key, list)
 }
