@@ -152,6 +152,12 @@ git:
 agent_config:
   claude: _data/c.json
   copilot.theme: _data/c.json
+# How each agent signs in: unibox login node writes this
+# auth:
+#   codex: oauth
+# deny_network: [gist.github.com]
+# Mine, after.
+instructions: [unibox]
 `)
 	report, err := Init(root, "node", nil, 2, "1g")
 	if err != nil {
@@ -165,10 +171,13 @@ agent_config:
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	for _, want := range []string{"version: 1\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user"} {
+	for _, want := range []string{"version: 1\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after."} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("no %q in\n%s", want, data)
 		}
+	}
+	if strings.Contains(string(data), "How each agent signs in") {
+		t.Fatalf("%s", data)
 	}
 	if !slices.Equal(p.Agents, []string{"claude", "copilot"}) || p.Auth["claude"].Method != AuthToken {
 		t.Fatalf("%+v", p)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -156,5 +157,31 @@ func migrateFrom0(profile *yaml.Node) (notes []string) {
 		return true
 	})
 	deleteMapKey(profile, "agent_config")
+	dropTemplate0(profile)
 	return notes
+}
+
+// dropTemplate0 takes out the commented-out sections format 0's init wrote
+// under a profile, in each of its wordings: from "# How each agent signs
+// in:" to its last line, "# deny_network: ...". Format 1 keeps such hints
+// in a footer it rewrites, so the old ones would only repeat it, wrongly.
+func dropTemplate0(n *yaml.Node) {
+	for _, c := range []*string{&n.HeadComment, &n.LineComment, &n.FootComment} {
+		lines := strings.Split(*c, "\n")
+		start := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "# How each agent signs in:") })
+		if start < 0 {
+			continue
+		}
+		end := len(lines)
+		for i := start; i < len(lines); i++ {
+			if strings.HasPrefix(lines[i], "# deny_network:") {
+				end = i + 1
+				break
+			}
+		}
+		*c = strings.TrimSpace(strings.Join(append(lines[:start:start], lines[end:]...), "\n"))
+	}
+	for _, child := range n.Content {
+		dropTemplate0(child)
+	}
 }
