@@ -442,9 +442,17 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 			exclusive.Close()
 		}
 	}()
-	_, exists, err := m.findBox(ctx, r, *b)
+	box, exists, err := m.findBox(ctx, r, *b)
 	if err != nil {
 		return err
+	}
+	// Ports switched for a sandbox last while it runs; it starts with the
+	// profile's.
+	if (!exists || box.State != "running") && len(b.PortSwitches) > 0 {
+		b.PortSwitches = nil
+		if err = m.saveBox(*b); err != nil {
+			return err
+		}
 	}
 	if force || !exists || b.Revision != revision {
 		exclusive, err = m.usage(b.Name, false)
@@ -502,14 +510,18 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 		b.InstructionRevision = ""
 		b.Memory = p.Memory
 		b.Image, b.Settings = build.Image, settings
-		// Create applied the profile's rules.
+		// Create applied the profile's rules; its ports are published below.
 		b.NetworkAllow, b.NetworkDeny = networkRules(p)
+		b.Ports, b.PortSwitches = nil, nil
 		b.State = "running"
 		if err = m.saveBox(*b); err != nil {
 			return err
 		}
 	}
 	if err = m.syncNetwork(ctx, b, r, p); err != nil {
+		return err
+	}
+	if err = m.syncPorts(ctx, b, r, p); err != nil {
 		return err
 	}
 	if b.InstructionRevision != instructionRevision && exclusive == nil {

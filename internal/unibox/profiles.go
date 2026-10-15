@@ -50,12 +50,9 @@ func (p Profile) CoAuthor(agent string) string {
 }
 
 type HostAccess struct {
-	Env         []string `yaml:"env" json:"env"`
-	Caches      []Cache  `yaml:"caches" json:"caches"`
-	DenyNetwork []string `yaml:"deny_network" json:"deny_network"`
-	// AllowNetwork widens the runtime's egress policy for the sandbox;
-	// deny_network wins where both match.
-	AllowNetwork []string `yaml:"allow_network" json:"allow_network,omitempty"`
+	Env     []string `yaml:"env" json:"env"`
+	Caches  []Cache  `yaml:"caches" json:"caches"`
+	Network `yaml:"network"`
 	// Auth is how each agent signs in. It is host access: the runtime keeps
 	// the logins on the host, and a command runs there to fetch a token.
 	Auth map[string]AgentAuth `yaml:"-" json:"auth,omitempty"`
@@ -63,6 +60,20 @@ type HostAccess struct {
 	// forge, an Artifactory, a registry. Like Auth, the token lives on the
 	// host and reaches the sandbox only as a placeholder the proxy swaps.
 	Services map[string]Service `yaml:"services" json:"services,omitempty"`
+}
+
+// Network is what a sandbox may reach and what of it the host reaches.
+// It is embedded with no JSON name, so its rules read as the fields they
+// were before network grouped them, in the same order, and what unibox
+// recorded of a profile stays comparable. It must not have a MarshalJSON:
+// one would be promoted to HostAccess and Profile.
+type Network struct {
+	// DenyNetwork narrows the runtime's egress policy for the sandbox, and
+	// wins over AllowNetwork, which widens it.
+	DenyNetwork  []string `yaml:"deny" json:"deny_network"`
+	AllowNetwork []string `yaml:"allow" json:"allow_network,omitempty"`
+	// Ports are published on the host's loopback, by name.
+	Ports map[string]Port `yaml:"ports" json:"ports,omitempty"`
 }
 
 // Service is a host-facing endpoint the sandbox authenticates to by a token
@@ -275,7 +286,7 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 // ProfileFormat is the form of sandbox.yaml this unibox reads. A profile
 // says its own in version; one of an older form is not read until unibox
 // init migrates it (migrations.go).
-const ProfileFormat = 2
+const ProfileFormat = 3
 
 type Profile struct {
 	Version    int    `yaml:"version" json:"-"`
@@ -444,6 +455,9 @@ func LoadProfile(root, name string) (Profile, error) {
 				return p, fmt.Errorf("profile %s: %s is denied, but service %s needs it", name, h, svc)
 			}
 		}
+	}
+	if err = validatePorts(p.Ports); err != nil {
+		return p, fmt.Errorf("profile %s: %w", name, err)
 	}
 	for id, a := range p.Auth {
 		if !seen[id] {
@@ -716,7 +730,7 @@ func (p Profile) AccessHash() string  { return digest(p.HostAccess) }
 // environment value, a cache mount, a network rule, a login. A change of
 // that is what a start tells the user.
 func (p Profile) HostFacing() bool {
-	return len(p.Env)+len(p.Caches)+len(p.DenyNetwork)+len(p.AllowNetwork)+len(p.Auth)+len(p.Services) > 0
+	return len(p.Env)+len(p.Caches)+len(p.DenyNetwork)+len(p.AllowNetwork)+len(p.Ports)+len(p.Auth)+len(p.Services) > 0
 }
 
 // SecretRefs are the secrets unibox keeps that the profile names, each once.

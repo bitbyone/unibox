@@ -59,6 +59,30 @@ type Sandbox struct {
 	Settings     json.RawMessage `json:"settings,omitempty"`
 	NetworkAllow []string        `json:"network_allow,omitempty"`
 	NetworkDeny  []string        `json:"network_deny,omitempty"`
+	// Ports are what unibox published of the sandbox, by name - a profile's
+	// port, or a spec switched on for the sandbox alone - and PortSwitches
+	// what was switched for it until it next starts.
+	Ports        map[string]string `json:"ports,omitempty"`
+	PortSwitches map[string]bool   `json:"port_switches,omitempty"`
+}
+
+// PublishedPort is a sandbox port published on the host, as the runtime
+// lists it.
+type PublishedPort struct {
+	HostIP      string `json:"host_ip"`
+	HostPort    int    `json:"host_port"`
+	SandboxPort int    `json:"sandbox_port"`
+	Protocol    string `json:"protocol"`
+}
+
+// Port is one of a sandbox's ports, as unibox port lists it.
+type Port struct {
+	Name      string          `json:"name"`
+	Port      string          `json:"port"`
+	Default   bool            `json:"default"`
+	Named     bool            `json:"named"`
+	On        bool            `json:"on"`
+	Published []PublishedPort `json:"published"`
 }
 
 type Profile struct {

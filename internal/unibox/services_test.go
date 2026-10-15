@@ -15,7 +15,7 @@ import (
 func TestProfilesSayWhichServicesTheSandboxReaches(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    scheme: basic\n    user: x-access-token\n    command: gh auth token\n  artifactory:\n    host: [\"artifactory.example.com\", \"*.jfrog.io\"]\n    scheme: bearer\n    env: ARTIFACTORY_TOKEN\n    command: op read op://vault/artifactory/token\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    scheme: basic\n    user: x-access-token\n    command: gh auth token\n  artifactory:\n    host: [\"artifactory.example.com\", \"*.jfrog.io\"]\n    scheme: bearer\n    env: ARTIFACTORY_TOKEN\n    command: op read op://vault/artifactory/token\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestCreateProvisionsServicesAndAllowsTheirHosts(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	r := &SBX{Cache: t.TempDir()}
 	acc := HostAccess{
-		AllowNetwork: []string{"jitpack.io"},
+		Network: Network{AllowNetwork: []string{"jitpack.io"}},
 		Services: map[string]Service{
 			"github": {Git: true, Host: HostList{"github.com"}, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token", Refresh: "10m"},
 		},
@@ -121,7 +121,7 @@ func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)
 	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices: {artifactory: {host: a.example, scheme: bearer, env: ART_TOKEN, command: true}}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices: {artifactory: {host: a.example, scheme: bearer, env: ART_TOKEN, command: true}}\n")
 	if err := m.RecordAccess("node"); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
 
 func TestOwnersOnOneForgeUseTokensOfTheirOwn(t *testing.T) {
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    user: x-access-token\n    command: security find-generic-password -s gh-me -w\n  github-acme:\n    git: true\n    host: github.com/acme\n    user: x-access-token\n    command: security find-generic-password -s gh-acme -w\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    user: x-access-token\n    command: security find-generic-password -s gh-me -w\n  github-acme:\n    git: true\n    host: github.com/acme\n    user: x-access-token\n    command: security find-generic-password -s gh-acme -w\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)

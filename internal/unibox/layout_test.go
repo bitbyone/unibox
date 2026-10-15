@@ -29,7 +29,7 @@ func TestAProfileIsLaidOutTheSameWhoeverWroteIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := m.EditProfile("web", func(doc *yaml.Node) error {
-		SetStringList(doc, "allow_network", []string{"jitpack.io"})
+		SetNetworkList(doc, "allow", []string{"jitpack.io"})
 		SetService(doc, "github", Service{Git: true, Host: HostList{"github.com"}, User: "x-access-token", Command: "secret:github"})
 		return nil
 	}); err != nil {
@@ -38,12 +38,12 @@ func TestAProfileIsLaidOutTheSameWhoeverWroteIt(t *testing.T) {
 	data, _ := os.ReadFile(file)
 	s := string(data)
 	tail = strings.Index(s, footerMarker)
-	for _, key := range []string{"\nservices:", "\nallow_network: [jitpack.io]"} {
+	for _, key := range []string{"\nservices:", "\nnetwork:\n  allow: [jitpack.io]"} {
 		if i := strings.Index(s, key); i < 0 || i > tail {
 			t.Fatalf("%q is not above the examples:\n%s", key, s)
 		}
 	}
-	if strings.Contains(s[tail:], "# services:") || strings.Contains(s[tail:], "# allow_network:") || !strings.Contains(s[tail:], "# deny_network:") {
+	if strings.Contains(s[tail:], "# services:") || strings.Contains(s[tail:], "# network:") || !strings.Contains(s[tail:], "# env:") {
 		t.Fatalf("the examples were not recomputed:\n%s", s)
 	}
 	if !strings.Contains(s, "# Mine.\ninstructions:") || strings.Count(s, footerMarker) != 1 {
@@ -61,7 +61,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "mine.json"), `{"theme": "light"}`)
-	write(t, file, "version: 2\n# Mine, from before.\ndockerfile: Dockerfile\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\nallow_network: [jitpack.io] # Kotlin\n")
+	write(t, file, "version: 3\n# Mine, from before.\ndockerfile: Dockerfile\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\nnetwork:\n  allow: [jitpack.io] # Kotlin\n")
 	// A repository init laid out already, as a real one is.
 	if _, err := Init(root, "", nil, "0", ""); err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 		t.Fatalf("init changed what the profile says: %s %s %v", p.CPUs, p.Memory, p.Agents)
 	}
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "# Mine, from before.") || !strings.Contains(string(data), "allow_network: [jitpack.io] # Kotlin") || !strings.Contains(string(data), footerMarker) {
+	if !strings.Contains(string(data), "# Mine, from before.") || !strings.Contains(string(data), "  allow: [jitpack.io] # Kotlin") || !strings.Contains(string(data), footerMarker) {
 		t.Fatalf("%s", data)
 	}
 	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "_data", "claude", ".claude.json")); err == nil {
@@ -120,10 +120,10 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	for version, want := range map[string]string{
-		"":             "is of format none and this unibox reads format 2; run unibox init node to migrate it",
-		"version: 0\n": "is of format 0 and this unibox reads format 2; run unibox init node",
-		"version: 1\n": "is of format 1 and this unibox reads format 2; run unibox init node",
-		"version: 3\n": "is of format 3, newer than the 2 this unibox reads; upgrade unibox",
+		"":             "is of format none and this unibox reads format 3; run unibox init node to migrate it",
+		"version: 0\n": "is of format 0 and this unibox reads format 3; run unibox init node",
+		"version: 2\n": "is of format 2 and this unibox reads format 3; run unibox init node",
+		"version: 4\n": "is of format 4, newer than the 3 this unibox reads; upgrade unibox",
 	} {
 		// An older form fails on its version, not on a field it has.
 		write(t, file, version+"dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\nauth: {claude: oauth}\n")
@@ -132,7 +132,7 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 		}
 	}
 	// A newer one init leaves alone.
-	write(t, file, "version: 3\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\n")
+	write(t, file, "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\n")
 	if _, err := Init(root, "node", nil, "2", "1g"); err == nil || !strings.Contains(err.Error(), "upgrade unibox") {
 		t.Fatalf("%v", err)
 	}
@@ -169,7 +169,7 @@ instructions: [unibox]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 2|auth codex left out|agent_config copilot.theme left out" {
+	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 3|auth codex left out|agent_config copilot.theme left out" {
 		t.Fatalf("%q", report.Migrated)
 	}
 	p, err := LoadProfile(root, "node")
@@ -177,7 +177,7 @@ instructions: [unibox]
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	for _, want := range []string{"version: 2\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after.", "settings.json: _data/claude/settings.json", "resources: {cpus: 6, memory: 8g} # mine"} {
+	for _, want := range []string{"version: 3\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after.", "settings.json: _data/claude/settings.json", "resources: {cpus: 6, memory: 8g} # mine"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("no %q in\n%s", want, data)
 		}
@@ -210,7 +210,7 @@ instructions: [unibox]
 	if _, err := Init(root, "fresh", []string{"claude"}, "2", "1g"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 2\n") {
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 3\n") {
 		t.Fatalf("%s", data)
 	}
 }

@@ -34,7 +34,7 @@ func TestSBXUsesOnlyApprovedMountsAndEnvironment(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "fake-ssh-socket")
 	t.Setenv("BUILD_MODE", "test")
 	r := &SBX{}
-	err := r.Create(context.Background(), Spec{Name: "unibox-dev", Image: "unibox/node:abc", Resources: Resources{CPUs: "2", Memory: "1g"}, Access: HostAccess{Env: []string{"BUILD_MODE"}, Caches: []Cache{{Host: "/approved/cache", Env: "CACHE_HOME"}}, DenyNetwork: []string{"private.example"}}}, io.Discard)
+	err := r.Create(context.Background(), Spec{Name: "unibox-dev", Image: "unibox/node:abc", Resources: Resources{CPUs: "2", Memory: "1g"}, Access: HostAccess{Env: []string{"BUILD_MODE"}, Caches: []Cache{{Host: "/approved/cache", Env: "CACHE_HOME"}}, Network: Network{DenyNetwork: []string{"private.example"}}}}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestTheStoredOAuthLoginIsDeclaredFirst(t *testing.T) {
 func TestProfilesSayHowEachAgentSignsIn(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -406,7 +406,7 @@ func TestAllowedHostsJoinTheSandboxesPolicy(t *testing.T) {
 	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\necho \"$*\" >> "+Quote(calls)+"\n"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	r := &SBX{Cache: t.TempDir()}
-	acc := HostAccess{AllowNetwork: []string{"jitpack.io", "*.jetbrains.team"}, DenyNetwork: []string{"gist.github.com"}}
+	acc := HostAccess{Network: Network{AllowNetwork: []string{"jitpack.io", "*.jetbrains.team"}, DenyNetwork: []string{"gist.github.com"}}}
 	if err := r.Create(context.Background(), Spec{Name: "unibox-home", Image: "x", Agent: "codex", Agents: []string{"codex"}, Access: acc}, io.Discard); err != nil {
 		t.Fatal(err)
 	}

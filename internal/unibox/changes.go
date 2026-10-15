@@ -42,8 +42,8 @@ func accessChanges(old, now HostAccess) []string {
 		return out
 	}
 	list("caches", caches(old.Caches), caches(now.Caches))
-	list("allow_network", old.AllowNetwork, now.AllowNetwork)
-	list("deny_network", old.DenyNetwork, now.DenyNetwork)
+	list("network.allow", old.AllowNetwork, now.AllowNetwork)
+	list("network.deny", old.DenyNetwork, now.DenyNetwork)
 	keyed := func(name string, a, b map[string]string) {
 		keys := []string{}
 		for k := range a {
@@ -68,6 +68,14 @@ func accessChanges(old, now HostAccess) []string {
 			}
 		}
 	}
+	ports := func(ps map[string]Port) map[string]string {
+		out := map[string]string{}
+		for name, p := range ps {
+			out[name] = fmt.Sprintf("%s %v", p.Spec, p.Default)
+		}
+		return out
+	}
+	keyed("network.ports", ports(old.Ports), ports(now.Ports))
 	digests := func(v any) map[string]string {
 		out := map[string]string{}
 		b, _ := json.Marshal(v)
@@ -97,6 +105,9 @@ func settingsSnapshot(p Profile, r Runtime) json.RawMessage {
 	s.AgentConfig = nil
 	if _, live := r.(NetworkUpdater); live {
 		s.AllowNetwork, s.DenyNetwork = nil, nil
+	}
+	if _, live := r.(PortPublisher); live {
+		s.Ports = nil
 	}
 	b, _ := json.Marshal(s)
 	return b

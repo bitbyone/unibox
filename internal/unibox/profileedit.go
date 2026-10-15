@@ -205,6 +205,58 @@ func SetStringList(profile *yaml.Node, key string, values []string) {
 	setMapValue(profile, key, list)
 }
 
+// SetNetworkList writes network.allow or network.deny, and takes network
+// out when nothing is left in it.
+func SetNetworkList(profile *yaml.Node, key string, values []string) {
+	network := mapValue(profile, "network")
+	if network == nil || network.Kind != yaml.MappingNode {
+		if len(values) == 0 {
+			return
+		}
+		network = childMap(profile, "network")
+	}
+	SetStringList(network, key, values)
+	dropEmptyNetwork(profile)
+}
+
+// SetPort writes one of the profile's ports: its spec alone when it is on
+// at start, {port, default: off} when not.
+func SetPort(profile *yaml.Node, name string, port Port) {
+	ports := childMap(childMap(profile, "network"), "ports")
+	spec := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Style: yaml.SingleQuotedStyle, Value: port.Spec}
+	if port.Default {
+		setMapValue(ports, name, spec)
+		return
+	}
+	setMapValue(ports, name, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle, Content: []*yaml.Node{
+		scalarNode("port"), spec, scalarNode("default"), scalarNode("off"),
+	}})
+}
+
+// RemovePort takes a port out of the profile; false when it had none of
+// that name.
+func RemovePort(profile *yaml.Node, name string) bool {
+	network := mapValue(profile, "network")
+	if network == nil {
+		return false
+	}
+	ports := mapValue(network, "ports")
+	if ports == nil || !deleteMapKey(ports, name) {
+		return false
+	}
+	if len(ports.Content) == 0 {
+		deleteMapKey(network, "ports")
+	}
+	dropEmptyNetwork(profile)
+	return true
+}
+
+func dropEmptyNetwork(profile *yaml.Node) {
+	if network := mapValue(profile, "network"); network != nil && network.Kind == yaml.MappingNode && len(network.Content) == 0 {
+		deleteMapKey(profile, "network")
+	}
+}
+
 // SetCoAuthor writes how an agent is credited; an empty value takes it
 // out.
 func SetCoAuthor(profile *yaml.Node, agent, coAuthor string) {

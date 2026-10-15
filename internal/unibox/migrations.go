@@ -19,6 +19,7 @@ import (
 var migrations = []func(profile *yaml.Node) (moves []seedMove, notes []string){
 	0: migrateFrom0,
 	1: migrateFrom1,
+	2: migrateFrom2,
 }
 
 // seedMove is a file of a profile a migration renames, both relative to
@@ -256,5 +257,36 @@ func migrateFrom1(profile *yaml.Node) (moves []seedMove, notes []string) {
 	if len(line) > 0 {
 		resources.LineComment = "# " + strings.Join(line, "; ")
 	}
+	return nil, nil
+}
+
+// format2NetworkComment is what format 2's layout wrote above its network
+// rules; it does not travel into network, which has its own.
+const format2NetworkComment = "# Hosts beyond the runtime's policy, and hosts refused; applied live -\n# unibox network allow|deny."
+
+// migrateFrom2 moves format 2's allow_network and deny_network under
+// network, as allow and deny, with the user's own comments.
+func migrateFrom2(profile *yaml.Node) (moves []seedMove, notes []string) {
+	var pairs []*yaml.Node
+	for _, old := range []string{"allow_network", "deny_network"} {
+		for i := 0; i+1 < len(profile.Content); i += 2 {
+			k := profile.Content[i]
+			if k.Value != old {
+				continue
+			}
+			if k.HeadComment == format2NetworkComment {
+				k.HeadComment = ""
+			}
+			k.Value = strings.TrimSuffix(old, "_network")
+			pairs = append(pairs, k, profile.Content[i+1])
+		}
+	}
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	deleteMapKey(profile, "allow")
+	deleteMapKey(profile, "deny")
+	network := childMap(profile, "network")
+	network.Content = append(network.Content, pairs...)
 	return nil, nil
 }

@@ -643,15 +643,19 @@ runtime**. It describes the environment; where it runs is chosen at the
 start.
 
 ```yaml
-version: 2                    # the format; see below
+version: 3                    # the format; see below
 dockerfile: Dockerfile        # relative to the profile; or image: <ref>
 resources: {cpus: 8, memory: 50%} # fixed, or a share of the host's
 env: [SPRING_PROFILES_ACTIVE] # names; values from the environment
 caches:
   - host: ~/.gradle/caches
     env: GRADLE_RO_DEP_CACHE
-allow_network: [jitpack.io]  # hosts the runtime's policy would refuse
-deny_network: [gist.github.com] # hosts it would allow; deny wins
+network:
+  allow: [jitpack.io]         # hosts the runtime's policy would refuse
+  deny: [gist.github.com]     # hosts it would allow; deny wins
+  ports:                      # published on the host's loopback, by name
+    fe: '3000:3000'           # at every start
+    devtools: {port: '9333:9222', default: off} # when switched on
 agents:                       # what the image has, in order; a list of
   claude:                     # names will do, or for each agent:
     auth: {token: secret:claude}  # how it signs in
@@ -729,7 +733,7 @@ git:
 - **The image is the environment.** Everything static - JDK, Node, the
   agents' CLIs, certificates - goes into the Dockerfile. What depends on
   the checkout belongs to the worked-on repository's bootstrap.
-- `allow_network` and `deny_network` are one pattern each - a host,
+- `network.allow` and `network.deny` are one pattern each - a host,
   `*.domain`, an IP or a CIDR, with an optional port. sbx refuses what its
   policy does not list (403 from the proxy) and already allows the usual
   registries; an allow is added to the sandbox's own policy after
@@ -742,13 +746,33 @@ git:
   `sbx policy rm network --id <rule> --sandbox <name> --force` undid
   either, all without a restart. sbx refuses a deny for a host an allow
   rule of the sandbox names exactly; the allow goes first. So a change
-  of `allow_network` or `deny_network` needs no recreate: unibox can
-  apply the difference to the running sandbox, keeping the rules it
-  added by id, and recreate only for what cannot change live - the
-  image, environment, caches, agents. Today any change of the profile
-  recreates; a `unibox network allow|deny|rm` that edits the profile and
-  applies it live is planned, asking before a recreate only when one is
-  needed.
+  of `network.allow` or `network.deny` needs no recreate: unibox applies
+  the difference to the running sandbox, removing the rules it added by
+  id, and recreates only for what cannot change live - the image,
+  environment, caches, agents.
+- **Ports are published by name** (format 3, the user's call): a profile
+  names each port, says whether a sandbox starts with it, and `unibox
+  port <sandbox> name:on|off` switches it while the sandbox runs without
+  writing the profile. Checked on a throwaway sandbox (`sbx ports`, sbx
+  0.47): a port is published live on the host's loopback, tcp4 when no
+  protocol is named; `--json` lists `host_ip`, `host_port`,
+  `sandbox_port`, `protocol`; a host port taken already is a 409; and
+  published ports survive a stop - listed as none while stopped, back at
+  the start, an ephemeral one with a new host port. `--unpublish` takes a
+  port back only by its exact host port and does nothing, quietly, for
+  another. So unibox records what it published by name and spec, finds
+  the runtime's entries by the spec (any host port for an ephemeral one),
+  unpublishes them by what sbx lists, and leaves a port it did not
+  publish alone. Switches last while a sandbox runs: a start that finds
+  it stopped drops them and publishes the profile's defaults, since sbx
+  would otherwise bring back whatever was on. A switch on a stopped
+  sandbox is refused, as publishing would start it. Ports are not part of
+  what makes a sandbox: a change of them is applied live, at once to
+  running sandboxes when made through unibox and at the next start when
+  the profile is edited by hand. A browser for an agent belongs in the
+  image (Chrome for Testing and chrome-devtools-mcp), its DevTools port
+  published to look on; an agent driving the host's browser would have
+  its cookies, sessions and files.
 - `token` is for claude beside codex: sbx signs one agent of a sandbox in
   by OAuth, so claude's subscription goes through a long-lived token from
   `claude setup-token`, kept on the host where the command reads it (the
@@ -929,7 +953,7 @@ only got in the way):
 - unibox's state keeps, per profile, its host-facing fields as last seen.
   `check` names what changed as a warning (`profile_changed`); the next
   start says it once - `profile web changed what it asks of the host:
-  services + github, allow_network + jitpack.io` - and goes on. A change
+  services + github, network.allow + jitpack.io` - and goes on. A change
   made through unibox's own commands is not told again.
 - What the change leads to is said too: an image built from changed
   inputs is built without a question (with the diff since its last
@@ -1090,13 +1114,14 @@ contract's own version, apart from it.
 | `unibox instructions <profile>` | the instructions as the agent gets them |
 | `unibox diff <profile>` | what changed since the last build, a unified diff |
 | `unibox build <profile> [--runtime R]` | builds, checks the agents, loads |
-| `unibox agent login\|co-author\|ls`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
+| `unibox agent login\|co-author\|ls`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|port\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
 | `unibox check … --json` | what stands in the way of a start, as `needs` with a `code` each |
 | `unibox prepare …` | the sandbox and the task, ready; JSON of both at the end |
 | `unibox run …` | the agent, in this terminal; prepares first if needed |
 | `unibox resume <task> [--agent A]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox add-repo <task> --repo …` | one more clone into a task, also while its agent runs |
 | `unibox ls [--json]`, `unibox tasks [<sandbox>] [--json]`, `unibox inspect <sandbox>` | sandboxes, their tasks, a sandbox's record |
+| `unibox port <sandbox> [name:on\|off...]` | a sandbox's ports and their URLs; switched while it runs, the profile untouched |
 | `unibox shell <sandbox>`, `stop`, `recreate`, `rm`, `rm-task` | as named; removal checks for sessions and unpushed work |
 | `unibox config get\|set\|unset <key> [<value>]` | its configuration |
 | `unibox runtimes` | the adapters and what each isolates |
@@ -1152,7 +1177,9 @@ How a profile becomes flags:
 | `dockerfile` | the built template, `-t unibox/<profile>:<tree>` |
 | `image` | `-t <image>` |
 | `resources` | `--cpus`, `--memory`; a share resolved by the adapter (below) |
-| `deny_network` | `--deny-network` |
+| `network.deny` | `--deny-network`; changes by `sbx policy` live |
+| `network.allow` | `sbx policy allow network --sandbox`, live |
+| `network.ports` | `sbx ports --publish\|--unpublish`, live |
 | `env` | `-e NAME` |
 | `caches` | `<host>:ro` as an extra workspace, `-e <env>=<host>` |
 | `start` | run by `sbx exec` when the VM's `boot_id` is new |

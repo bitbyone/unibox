@@ -46,6 +46,7 @@ unibox init web --agents claude,codex             # add profile "web" (or: unibo
 unibox agent login web                            # sign its agents in
 unibox service add web github                     # sign its git in to a forge
 unibox network allow web jitpack.io               # reach a host the policy refuses, applied live
+unibox network port web fe 3000:3000              # publish a port on localhost at every start
 unibox build web                                  # build its image now (run builds when needed)
 
 # create sandbox "web-1" from profile "web", clone this repo, run claude
@@ -92,7 +93,7 @@ my-envs/
 one, format by format, best effort: what it cannot carry over it names.
 
 ```yaml
-version: 2
+version: 3
 dockerfile: Dockerfile
 resources: {cpus: 4, memory: 50%}    # fixed, or a share of the host's
 agents:                              # or a list: [claude, codex]
@@ -107,8 +108,12 @@ agents:                              # or a list: [claude, codex]
     config:
       config.toml: _data/codex/config.toml
 instructions: [unibox]               # from instructions/
-allow_network: [jitpack.io]          # hosts to allow
-deny_network: [gist.github.com]      # hosts to block
+network:
+  allow: [jitpack.io]                # hosts to allow
+  deny: [gist.github.com]            # hosts to block
+  ports:                             # published on the host's loopback, by name
+    fe: '3000:3000'                  # at every start
+    devtools: {port: '9333:9222', default: off}  # only when switched on
 ```
 
 Unknown fields are errors. The profile is yours and nothing asks you to
@@ -197,6 +202,18 @@ reach hosts the runtime's policy refuses, or refuses ones it allows; `rm`
 takes hosts back to the policy and `ls` lists the rules with the hosts the
 services need. The change is written into the profile and applied to its
 running sandboxes at once - sbx changes rules live, so nothing is recreated.
+
+`unibox network port <profile> <name> <spec> [--off]` publishes a sandbox
+port on the host's loopback by name; the spec is
+`[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`, `3000` taking any free
+host port. A port is published when a sandbox starts unless `--off`, and
+running sandboxes get a change at once; `unibox network rm <profile>
+<name>` takes it out. `unibox port <sandbox>` lists a sandbox's ports with
+their URLs, and `unibox port <sandbox> fe:off devtools:on 8080:5173:on`
+switches them while it runs, by name or by a spec the profile does not
+name, without touching the profile: the next start goes back to the
+profile's defaults. A port published with sbx's own command is left
+alone.
 
 Sign copilot in by `token`, not `command`: `command` stores sbx's built-in
 `github` secret, and with it sbx signs every request to github.com in itself -

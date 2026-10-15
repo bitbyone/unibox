@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
 type SBX struct {
@@ -351,4 +353,38 @@ func sbxResources(r Resources, h Host, log io.Writer) (cpus, memory string, err 
 		memory = capped
 	}
 	return cpus, memory, nil
+}
+
+func (r *SBX) PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "ports", sandbox, "--json"))
+	if err != nil {
+		return nil, err
+	}
+	var ports []api.PublishedPort
+	if err = json.Unmarshal(b, &ports); err != nil {
+		return nil, fmt.Errorf("sbx ports answered in a form unibox does not know; upgrade unibox: %w", err)
+	}
+	return ports, nil
+}
+
+func (r *SBX) PublishPort(ctx context.Context, sandbox, spec string, log io.Writer) error {
+	if err := runQuiet(hostCommand(ctx, "sbx", "ports", sandbox, "--publish", spec)); err != nil {
+		return fmt.Errorf("sbx did not publish it: %w", err)
+	}
+	return nil
+}
+
+// UnpublishPort names the port as sbx published it: sbx takes it back
+// only by its host port, which it picks anew for an ephemeral port at
+// each start, and quietly does nothing for another.
+func (r *SBX) UnpublishPort(ctx context.Context, sandbox string, p api.PublishedPort, log io.Writer) error {
+	ip := p.HostIP
+	if strings.Contains(ip, ":") {
+		ip = "[" + ip + "]"
+	}
+	spec := fmt.Sprintf("%s:%d:%d/%s", ip, p.HostPort, p.SandboxPort, p.Protocol)
+	if err := runQuiet(hostCommand(ctx, "sbx", "ports", sandbox, "--unpublish", spec)); err != nil {
+		return fmt.Errorf("sbx did not unpublish %s: %w", spec, err)
+	}
+	return nil
 }

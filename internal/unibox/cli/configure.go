@@ -532,7 +532,7 @@ func (o *options) serviceCommand() *cobra.Command {
 // sandboxes at once - live where the runtime can, and by a recreation,
 // asked for first, where it cannot.
 func (o *options) networkCommand() *cobra.Command {
-	c := &cobra.Command{Use: "network", Short: "Allow or deny hosts for a profile's sandboxes, applied to the running ones"}
+	c := &cobra.Command{Use: "network", Short: "Allow or deny hosts and publish ports for a profile's sandboxes, applied to the running ones"}
 	change := func(use, short string, edit func(allow, deny []string, hosts []string) ([]string, []string)) *cobra.Command {
 		return &cobra.Command{Use: use + " profile host...", Args: cobra.MinimumNArgs(2), Short: short, RunE: func(cmd *cobra.Command, args []string) error {
 			profile, hosts := args[0], args[1:]
@@ -542,8 +542,8 @@ func (o *options) networkCommand() *cobra.Command {
 			}
 			allow, deny := edit(slices.Clone(p.AllowNetwork), slices.Clone(p.DenyNetwork), hosts)
 			if err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
-				unibox.SetStringList(doc, "allow_network", allow)
-				unibox.SetStringList(doc, "deny_network", deny)
+				unibox.SetNetworkList(doc, "allow", allow)
+				unibox.SetNetworkList(doc, "deny", deny)
 				return nil
 			}); err != nil {
 				return err
@@ -581,9 +581,66 @@ func (o *options) networkCommand() *cobra.Command {
 	c.AddCommand(change("deny", "Refuse hosts the runtime's policy allows", func(allow, deny, hosts []string) ([]string, []string) {
 		return without(allow, hosts), with(deny, hosts)
 	}))
-	c.AddCommand(change("rm", "Take hosts out of the profile's rules, back to the runtime's policy", func(allow, deny, hosts []string) ([]string, []string) {
+	rmHosts := change("rm", "", func(allow, deny, hosts []string) ([]string, []string) {
 		return without(allow, hosts), without(deny, hosts)
-	}))
+	})
+	c.AddCommand(&cobra.Command{Use: "rm profile host|port...", Args: cobra.MinimumNArgs(2), Short: "Take hosts out of the profile's rules, back to the runtime's policy, or ports out by name", RunE: func(cmd *cobra.Command, args []string) error {
+		p, err := o.manager.Profile(args[0])
+		if err != nil {
+			return err
+		}
+		hosts, ports := []string{}, []string{}
+		for _, a := range args[1:] {
+			if _, ok := p.Ports[a]; ok {
+				ports = append(ports, a)
+			} else {
+				hosts = append(hosts, a)
+			}
+		}
+		if len(ports) > 0 {
+			if err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
+				for _, name := range ports {
+					unibox.RemovePort(doc, name)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err = o.manager.ApplyPorts(cmd.Context(), p.Name); err != nil {
+				return err
+			}
+			if len(hosts) == 0 {
+				return o.success(fmt.Sprintf("took port %s out of profile %s", strings.Join(ports, ", "), p.Name))
+			}
+		}
+		return rmHosts.RunE(cmd, append([]string{p.Name}, hosts...))
+	}})
+	var off bool
+	port := &cobra.Command{Use: "port profile name spec", Args: cobra.ExactArgs(3), Short: "Publish a sandbox port on the host's loopback by name, at every start unless --off", Long: "Publish a sandbox port on the host's loopback by name. The spec is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any free host port, 8080:3000 host port 8080. A port is published when a sandbox starts unless --off; unibox port <sandbox> name:on|off switches it while the sandbox runs. Running sandboxes get the change at once.", RunE: func(cmd *cobra.Command, args []string) error {
+		p, err := o.manager.Profile(args[0])
+		if err != nil {
+			return err
+		}
+		if _, err = unibox.ParsePortSpec(args[2]); err != nil {
+			return err
+		}
+		if err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
+			unibox.SetPort(doc, args[1], unibox.Port{Spec: args[2], Default: !off})
+			return nil
+		}); err != nil {
+			return err
+		}
+		if err = o.manager.ApplyPorts(cmd.Context(), p.Name); err != nil {
+			return err
+		}
+		when := "at every start"
+		if off {
+			when = "when switched on (unibox port <sandbox> " + args[1] + ":on)"
+		}
+		return o.success(fmt.Sprintf("profile %s publishes port %s (%s) %s", p.Name, args[1], args[2], when))
+	}}
+	port.Flags().BoolVar(&off, "off", false, "Publish it only when switched on, not at start")
+	c.AddCommand(port)
 	c.AddCommand(&cobra.Command{Use: "ls profile", Args: cobra.ExactArgs(1), Short: "List a profile's network rules, with its services' hosts", RunE: func(cmd *cobra.Command, args []string) error {
 		p, err := o.manager.Profile(args[0])
 		if err != nil {
@@ -596,7 +653,7 @@ func (o *options) networkCommand() *cobra.Command {
 			}
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "profile": p.Name, "allow": p.AllowNetwork, "deny": p.DenyNetwork, "services": services})
+			return o.write(map[string]any{"api_version": api.Version, "profile": p.Name, "allow": p.AllowNetwork, "deny": p.DenyNetwork, "services": services, "ports": p.Ports})
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "RULE\tHOST\tFROM")
@@ -615,6 +672,24 @@ func (o *options) networkCommand() *cobra.Command {
 		}
 		for _, h := range p.DenyNetwork {
 			fmt.Fprintf(w, "deny\t%s\tprofile\n", h)
+		}
+		if err = w.Flush(); err != nil || len(p.Ports) == 0 {
+			return err
+		}
+		fmt.Fprintln(o.output)
+		w = tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "PORT\tSPEC\tAT START")
+		names := []string{}
+		for n := range p.Ports {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		for _, n := range names {
+			at := "on"
+			if !p.Ports[n].Default {
+				at = "off"
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\n", n, p.Ports[n].Spec, at)
 		}
 		return w.Flush()
 	}})
@@ -726,4 +801,83 @@ func (o *options) agentCommand() *cobra.Command {
 		return w.Flush()
 	}})
 	return c
+}
+
+// portCommand lists a sandbox's ports, and switches them while it runs
+// without touching the profile.
+func (o *options) portCommand() *cobra.Command {
+	return &cobra.Command{Use: "port sandbox [name|spec:on|off...]", Args: cobra.MinimumNArgs(1), Short: "List a sandbox's ports, or switch them on or off while it runs", Long: "List a sandbox's ports, or switch them while it runs: fe:on, devtools:off by the profile's names, or a spec the profile does not name, 8080:3000:on. The profile stays as it is, and the sandbox's next start goes back to its defaults; unibox network port changes those.", RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		if len(args) > 1 {
+			switches := map[string]bool{}
+			for _, a := range args[1:] {
+				i := strings.LastIndex(a, ":")
+				on, ok := false, false
+				if i > 0 {
+					switch a[i+1:] {
+					case "on":
+						on, ok = true, true
+					case "off":
+						ok = true
+					}
+				}
+				if !ok {
+					return fmt.Errorf("say a port as name:on or name:off, not %s", a)
+				}
+				switches[a[:i]] = on
+			}
+			if err := o.manager.SwitchPorts(cmd.Context(), name, switches); err != nil {
+				return err
+			}
+		}
+		ports, running, err := o.manager.SandboxPorts(cmd.Context(), name)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			out := []api.Port{}
+			for _, p := range ports {
+				published := p.Published
+				if published == nil {
+					published = []api.PublishedPort{}
+				}
+				out = append(out, api.Port{Name: p.Name, Port: p.Spec, Default: p.Default, Named: p.Named, On: p.On, Published: published})
+			}
+			return o.write(map[string]any{"api_version": api.Version, "sandbox": name, "running": running, "ports": out})
+		}
+		if len(ports) == 0 {
+			fmt.Fprintf(o.output, "sandbox %s publishes no ports; add one with unibox network port <profile> <name> <spec>\n", name)
+			return nil
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "PORT\tSPEC\tAT START\tNOW\tURL")
+		for _, p := range ports {
+			at := "off"
+			if p.Default {
+				at = "on"
+			}
+			if !p.Named {
+				at = "-"
+			}
+			now := "off"
+			if p.On {
+				now = "on"
+			}
+			if !running {
+				now = "stopped"
+			}
+			urls := []string{}
+			for _, q := range p.Published {
+				if strings.HasPrefix(q.Protocol, "tcp") {
+					host := q.HostIP
+					if strings.Contains(host, ":") {
+						host = "[" + host + "]"
+					}
+					urls = append(urls, fmt.Sprintf("http://%s:%d", host, q.HostPort))
+				}
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.Spec, at, now, strings.Join(urls, " "))
+		}
+		return w.Flush()
+	}}
 }

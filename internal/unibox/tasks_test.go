@@ -230,7 +230,7 @@ func TestAgentConfigSeedMergesAndKeepsAgentState(t *testing.T) {
 	m, f := managerFixture(t)
 	root := m.Config.Environments
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "claude.json"), `{"theme": "dark", "hasCompletedOnboarding": true, "nested": {"a": 1}}`)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 2\ndockerfile: Dockerfile\nagents: {claude: {config: {.claude.json: _data/claude.json}}, codex: null}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: {claude: {config: {.claude.json: _data/claude.json}}, codex: null}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
 	ctx := context.Background()
 	if err := m.Build(ctx, "node", "fake", false); err != nil {
 		t.Fatal(err)

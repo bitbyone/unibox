@@ -91,7 +91,7 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 2\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 3\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, log, err := run(t, paths, "glpat-tokenvalue\n", "service", "add", "node", "gitlab-2n", "--host", "gitlab.2n.cz", "--author", "Jan Tobola <jan@2n.example>")
@@ -143,7 +143,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 2\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "agent", "login", "node", "claude")
@@ -170,7 +170,7 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 2\nimage: example/image\nagents: [claude]\nallow_network: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [claude]\nnetwork:\n  allow: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, log, err := run(t, paths, "", "network", "allow", "node", "maven.google.com"); err != nil {
@@ -181,7 +181,7 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "allow_network: [maven.google.com] # Kotlin") || !strings.Contains(string(data), "deny_network: [jitpack.io, gist.github.com]") {
+	if !strings.Contains(string(data), "  allow: [maven.google.com] # Kotlin") || !strings.Contains(string(data), "  deny: [jitpack.io, gist.github.com]") {
 		t.Fatalf("%s", data)
 	}
 	out, _, err := run(t, paths, "", "network", "ls", "node")
@@ -191,8 +191,32 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	if _, _, err = run(t, paths, "", "network", "rm", "node", "jitpack.io", "gist.github.com", "maven.google.com"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\nallow_network:") || strings.Contains(string(data), "\ndeny_network:") {
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\nnetwork:") {
 		t.Fatalf("emptied lists stayed:\n%s", data)
+	}
+
+	// Ports by name, on at start or only when switched on.
+	if _, log, err := run(t, paths, "", "network", "port", "node", "fe", "3000:3000"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if _, log, err := run(t, paths, "", "network", "port", "node", "devtools", "9333:9222", "--off"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if _, _, err := run(t, paths, "", "network", "port", "node", "be", "x:1"); err == nil {
+		t.Fatal("a bad spec was written")
+	}
+	data, _ = os.ReadFile(file)
+	if !strings.Contains(string(data), "  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n") {
+		t.Fatalf("%s", data)
+	}
+	if out, _, err = run(t, paths, "", "network", "ls", "node"); err != nil || !strings.Contains(out, "devtools  9333:9222  off") || !strings.Contains(out, "fe        3000:3000  on") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "network", "rm", "node", "fe", "devtools"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\nnetwork:") {
+		t.Fatalf("emptied ports stayed:\n%s", data)
 	}
 }
 
@@ -261,7 +285,7 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 2\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// gh not signed in: --gh says what to do.
@@ -298,7 +322,7 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 2\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out, _, err := run(t, paths, "", "agent", "co-author", "node")
