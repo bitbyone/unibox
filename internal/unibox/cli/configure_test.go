@@ -183,3 +183,52 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 		t.Fatalf("emptied lists stayed:\n%s", data)
 	}
 }
+
+func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
+	t.Parallel()
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	// Nothing configured: init without --dir refuses and says how.
+	if _, _, err := run(t, paths, "", "init", "web"); err == nil || !strings.Contains(err.Error(), "unibox init --dir") {
+		t.Fatalf("%v", err)
+	}
+	if _, log, err := run(t, paths, "", "profiles"); err != nil || !strings.Contains(log, "unibox init --dir") {
+		t.Fatalf("%v %s", err, log)
+	}
+	if _, log, err := run(t, paths, "", "ls"); err != nil || !strings.Contains(log, "no environments repository is configured") {
+		t.Fatalf("%v %s", err, log)
+	}
+	// init --dir lays the repository out and configures it, with no profile.
+	root := filepath.Join(t.TempDir(), "envs")
+	out, log, err := run(t, paths, "", "init", "--dir", root)
+	if err != nil || !strings.Contains(out, "environments repository: "+root+" (configured)") || !strings.Contains(out, "add a profile with unibox init <profile>") {
+		t.Fatalf("%v\n%s\n%s", err, out, log)
+	}
+	if _, err := os.Stat(filepath.Join(root, "_shared", ".install")); err != nil {
+		t.Fatal("the repository was not laid out")
+	}
+	// A profile goes into the configured one, which init names.
+	if out, _, err = run(t, paths, "", "init", "web", "--agents", "claude"); err != nil || !strings.Contains(out, "environments repository: "+root+"\n") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	// Unset forgets it and leaves the files.
+	if _, _, err = run(t, paths, "", "config", "unset", "environments"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Environments != "" {
+		t.Fatal(cfg.Environments)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "web")); err != nil {
+		t.Fatal("unset removed the repository")
+	}
+	// A configured repository that is gone is named.
+	gone := filepath.Join(t.TempDir(), "gone")
+	if _, _, err = run(t, paths, "", "config", "set", "environments", gone); err != nil {
+		t.Fatal(err)
+	}
+	if _, log, err = run(t, paths, "", "profiles"); err != nil || !strings.Contains(log, gone+" does not exist") {
+		t.Fatalf("%v %s", err, log)
+	}
+}

@@ -275,7 +275,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		return p, err
 	}
 	if root == "" {
-		return p, fmt.Errorf("no environments repository configured; run unibox config set environments <path>")
+		return p, fmt.Errorf("no environments repository is configured; start with unibox init --dir <path>, or unibox init -i to be asked")
 	}
 	abs, err := ExpandPath(root)
 	if err != nil {

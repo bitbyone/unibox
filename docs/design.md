@@ -587,12 +587,23 @@ configuration) and reads the working tree - what the user sees in their
 editor is what runs. In unagit, Settings picks it **from the list of
 repositories** (instance and project path), which keeps unagit's
 config.yaml portable; unagit finds its main clone on this machine and
-hands agentbox the path (`agentbox config set environments <path>`) at
-every start and whenever the choice changes, if agentbox's differs. With
-nothing chosen in unagit, agentbox's own setting is left as it is.
+hands unibox the path (`unibox config set environments <path>`) at
+every start and whenever the choice changes, if unibox's differs. With
+nothing chosen in unagit, unibox's own setting is left as it is.
 
-Neither program edits a profile. The Sandboxes tab shows them read-only,
-parsed, and opens a profile's directory or file in the editor.
+Without unagit the first command lays the repository out and configures
+it: `unibox init --dir <path>`, or `unibox init -i`, which asks where
+(here by default) when nothing is configured. With nothing configured,
+`ls` and `profiles` say so and how to start, and init without `--dir`
+refuses rather than guess; once configured, init names the repository it
+writes into. `unibox config unset environments` forgets it and leaves
+the files.
+
+A profile is edited by hand or through unibox's commands (`login`,
+`service`, `network`), which write it as a node tree and keep its
+comments; unagit drives those commands and writes no YAML itself. The
+Sandboxes tab shows profiles parsed, and opens a profile's directory or
+file in the editor.
 
 ### The format
 

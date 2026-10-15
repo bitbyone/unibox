@@ -89,17 +89,54 @@ func (o *options) initCommand() *cobra.Command {
 	var interactive bool
 	var agents []string
 	var cpus int
-	var memory string
-	c := &cobra.Command{Use: "init [profile]", Args: cobra.MaximumNArgs(1), Short: "Lay out the environments repository and add a profile", RunE: func(cmd *cobra.Command, args []string) error {
+	var memory, dir string
+	c := &cobra.Command{Use: "init [profile]", Args: cobra.MaximumNArgs(1), Short: "Lay out the environments repository, and add a profile to it", RunE: func(cmd *cobra.Command, args []string) error {
 		name := ""
 		if len(args) == 1 {
 			name = args[0]
 		}
+		// Where the repository goes: --dir says it and records it; without
+		// it the configured one is used, and with none -i asks, defaulting
+		// to here. Init always says which it writes into.
+		root := o.manager.Config.Environments
+		previous := root
+		var reader *bufio.Reader
 		if interactive {
 			if o.json || !o.interactive {
 				return fmt.Errorf("interactive init needs a terminal; pass the profile and flags instead")
 			}
-			reader := bufio.NewReader(o.input)
+			reader = bufio.NewReader(o.input)
+		}
+		switch {
+		case dir != "":
+			abs, err := unibox.ExpandPath(dir)
+			if err != nil {
+				return err
+			}
+			if abs, err = filepath.Abs(abs); err != nil {
+				return err
+			}
+			root = abs
+		case root == "" && interactive:
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(o.log, "No environments repository is configured yet; it holds your profiles and is yours to keep in git.")
+			v, err := o.prompt(reader, "Environments repository", wd)
+			if err != nil {
+				return err
+			}
+			if root, err = unibox.ExpandPath(v); err != nil {
+				return err
+			}
+			if root, err = filepath.Abs(root); err != nil {
+				return err
+			}
+		case root == "":
+			return fmt.Errorf("no environments repository is configured; say where with unibox init --dir <path>, or be asked with unibox init -i")
+		}
+		if interactive {
 			if name == "" {
 				v, err := o.prompt(reader, "Profile name", "dev")
 				if err != nil {
@@ -127,33 +164,30 @@ func (o *options) initCommand() *cobra.Command {
 				return err
 			}
 		}
-		if name == "" {
-			return fmt.Errorf("name the profile: unibox init <profile>, or ask the questions with -i")
-		}
-		root := o.manager.Config.Environments
-		recorded := false
-		if root == "" {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			root = wd
-			cfg := o.manager.Config
-			cfg.Environments = root
-			if err := o.paths.SaveConfig(cfg); err != nil {
-				return err
-			}
-			recorded = true
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return err
 		}
 		report, err := unibox.Init(root, name, agents, cpus, memory)
 		if err != nil {
 			return err
 		}
+		if root != previous {
+			cfg := o.manager.Config
+			cfg.Environments = root
+			if err := o.paths.SaveConfig(cfg); err != nil {
+				return err
+			}
+		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept})
 		}
-		if recorded {
-			fmt.Fprintf(o.output, "environments repository recorded: %s\n", root)
+		switch {
+		case previous == "":
+			fmt.Fprintf(o.output, "environments repository: %s (configured)\n", root)
+		case root != previous:
+			fmt.Fprintf(o.output, "environments repository: %s (configured; was %s)\n", root, previous)
+		default:
+			fmt.Fprintf(o.output, "environments repository: %s\n", root)
 		}
 		for _, rel := range report.Written {
 			fmt.Fprintln(o.output, "wrote", rel)
@@ -161,10 +195,15 @@ func (o *options) initCommand() *cobra.Command {
 		for _, rel := range report.Kept {
 			fmt.Fprintln(o.output, "kept", rel)
 		}
+		if name == "" {
+			fmt.Fprintln(o.output, "add a profile with unibox init <profile>, or be asked with unibox init -i")
+			return nil
+		}
 		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox login %s, add forges with unibox service add %s <name>, then unibox run builds and starts it\n", name, name, name)
 		return nil
 	}}
-	c.Flags().BoolVarP(&interactive, "interactive", "i", false, "Ask for the profile's name, agents and resources")
+	c.Flags().StringVar(&dir, "dir", "", "The environments repository to lay out and configure (default: the configured one)")
+	c.Flags().BoolVarP(&interactive, "interactive", "i", false, "Ask for the repository when none is configured, and the profile's name, agents and resources")
 	c.Flags().StringSliceVar(&agents, "agents", []string{"copilot"}, "Agents the profile declares and installs")
 	c.Flags().IntVar(&cpus, "cpus", 4, "CPUs for the profile's sandboxes")
 	c.Flags().StringVar(&memory, "memory", "8g", "Memory for the profile's sandboxes")

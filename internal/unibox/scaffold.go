@@ -18,26 +18,28 @@ type InitReport struct {
 	Written, Kept []string
 }
 
-// Init lays the environments repository's mandatory structure into root and
-// adds one profile: the shared runner and its installation scripts, the
-// unibox instructions text, and the profile's own files with the chosen
-// agents installed. It writes only what is missing - a file already there is
-// kept word for word - so it is safe on a repository in use.
+// Init lays the environments repository's mandatory structure into root and,
+// given a name, adds one profile: the shared runner and its installation
+// scripts, the unibox instructions text, and the profile's own files with the
+// chosen agents installed. It writes only what is missing - a file already
+// there is kept word for word - so it is safe on a repository in use.
 func Init(root, name string, agents []string, cpus int, memory string) (InitReport, error) {
 	report := InitReport{Root: root}
-	if err := ValidName(name); err != nil {
-		return report, err
-	}
-	if len(agents) == 0 {
-		return report, fmt.Errorf("choose at least one agent for the profile")
-	}
-	for _, id := range agents {
-		if _, err := FindAgent(id); err != nil {
+	if name != "" {
+		if err := ValidName(name); err != nil {
 			return report, err
 		}
-	}
-	if memory != "" && !memoryPattern.MatchString(memory) {
-		return report, fmt.Errorf("invalid memory %q; use e.g. 8g", memory)
+		if len(agents) == 0 {
+			return report, fmt.Errorf("choose at least one agent for the profile")
+		}
+		for _, id := range agents {
+			if _, err := FindAgent(id); err != nil {
+				return report, err
+			}
+		}
+		if memory != "" && !memoryPattern.MatchString(memory) {
+			return report, fmt.Errorf("invalid memory %q; use e.g. 8g", memory)
+		}
 	}
 	place := func(rel string, data []byte, mode os.FileMode) error {
 		path := filepath.Join(root, filepath.FromSlash(rel))
@@ -72,6 +74,12 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 	})
 	if err != nil {
 		return report, err
+	}
+	if name == "" {
+		if err := os.MkdirAll(filepath.Join(root, "sandboxes"), 0o755); err != nil {
+			return report, err
+		}
+		return report, CheckLayout(root)
 	}
 	dir := "sandboxes/" + name
 	lines := []string{"base", "tools/nvm"}

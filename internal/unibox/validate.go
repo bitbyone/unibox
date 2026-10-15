@@ -19,7 +19,7 @@ type Problem struct {
 // subject keeps room for several sources later, a team's beside the user's.
 func Validate(root string) ([]Problem, error) {
 	if root == "" {
-		return nil, fmt.Errorf("no environments repository configured; run unibox config set environments <path> or unibox init")
+		return nil, fmt.Errorf("no environments repository is configured; start with unibox init --dir <path>, or unibox init -i to be asked")
 	}
 	abs, err := ExpandPath(root)
 	if err != nil {

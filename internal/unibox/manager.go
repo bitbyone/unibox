@@ -66,6 +66,19 @@ func (m *Manager) profile(name string) (Profile, error) {
 	return LoadProfile(m.Config.Environments, name)
 }
 
+// Environments says where the environments repository is, or, when there is
+// none to use, what to do about it.
+func (m *Manager) Environments() (string, error) {
+	root := m.Config.Environments
+	if root == "" {
+		return "", fmt.Errorf("no environments repository is configured; start with unibox init --dir <path>, or unibox init -i to be asked")
+	}
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		return root, fmt.Errorf("environments repository %s does not exist; unibox init --dir %s lays it out again, or unibox config unset environments forgets it", root, root)
+	}
+	return root, nil
+}
+
 // Profile loads a profile of the environments repository.
 func (m *Manager) Profile(name string) (Profile, error) { return m.profile(name) }
 

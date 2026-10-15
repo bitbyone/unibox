@@ -41,8 +41,8 @@ make install            # → ~/.local/bin/unibox
 ## Use
 
 ```sh
-unibox config set environments ~/my-envs          # your environments repo
-unibox init web --agents claude,codex             # create profile "web"
+unibox init --dir ~/my-envs                       # lay out your environments repo and use it
+unibox init web --agents claude,codex             # add profile "web" (or: unibox init -i)
 unibox login web                                  # sign its agents in
 unibox service add web github                     # sign its git in to a forge
 unibox network allow web jitpack.io               # reach a host the policy refuses, applied live

@@ -181,6 +181,39 @@ func (o *options) configCommand() *cobra.Command {
 		}
 		return o.success("configuration updated")
 	}})
+	c.AddCommand(&cobra.Command{Use: "unset key", Args: cobra.ExactArgs(1), Short: "Forget a setting, back to its default", RunE: func(cmd *cobra.Command, args []string) error {
+		cfg := o.manager.Config
+		key := args[0]
+		switch key {
+		case "environments":
+			// The repository itself stays; unibox only stops using it.
+			cfg.Environments = ""
+		case "default_runtime":
+			cfg.DefaultRuntime = ""
+		default:
+			parts := strings.Split(key, ".")
+			if len(parts) != 3 || parts[0] != "runtimes" {
+				return fmt.Errorf("unknown configuration key %q", key)
+			}
+			r, ok := cfg.Runtimes[parts[1]]
+			if !ok {
+				return o.success("configuration updated")
+			}
+			switch parts[2] {
+			case "on":
+				r.On = nil
+			case "stop_idle":
+				r.StopIdle = nil
+			default:
+				return fmt.Errorf("unknown configuration key %q", key)
+			}
+			cfg.Runtimes[parts[1]] = r
+		}
+		if err := o.paths.SaveConfig(cfg); err != nil {
+			return err
+		}
+		return o.success("configuration updated")
+	}})
 	return c
 }
 func configValue(c unibox.Config, key string) (any, error) {
@@ -206,6 +239,14 @@ func configValue(c unibox.Config, key string) (any, error) {
 
 func (o *options) profilesCommand() *cobra.Command {
 	return &cobra.Command{Use: "profiles", Args: cobra.NoArgs, Short: "List profiles, agents and builds", RunE: func(cmd *cobra.Command, args []string) error {
+		// Without a repository there is nothing to list; say how to start.
+		if _, err := o.manager.Environments(); err != nil {
+			if o.json {
+				return o.write(map[string]any{"api_version": api.Version, "profiles": []api.Profile{}, "error": err.Error()})
+			}
+			fmt.Fprintln(o.log, err)
+			return nil
+		}
 		rows, err := o.manager.Profiles(cmd.Context())
 		if err != nil {
 			return err
@@ -317,6 +358,9 @@ func (o *options) listCommand() *cobra.Command {
 		boxes, err := o.manager.List(cmd.Context())
 		if err != nil {
 			return err
+		}
+		if _, err := o.manager.Environments(); err != nil && !o.json {
+			fmt.Fprintln(o.log, err)
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "sandboxes": boxes})
