@@ -36,6 +36,12 @@ func (l *FileLock) Close() error {
 	if l == nil || l.f == nil {
 		return nil
 	}
+	// A flock belongs to the open file description, and a process forked
+	// meanwhile - any git or sbx another goroutine starts - holds a copy of
+	// it until its exec closes it. Closing ours alone would leave the lock
+	// held for that moment, and the next try of it would find it busy.
+	// Unlocking releases it for every copy at once.
+	_ = syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
 	err := l.f.Close()
 	l.f = nil
 	return err

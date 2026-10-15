@@ -318,8 +318,14 @@ func TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u1, _ := m.usage("dev", true)
-	u2, _ := m.usage("dev", true)
+	u1, err := m.usage("dev", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u2, err := m.usage("dev", true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	r1, l1, err := m.recordRun(b, api.Task{ID: "first"}, "claude")
 	if err != nil {
 		t.Fatal(err)

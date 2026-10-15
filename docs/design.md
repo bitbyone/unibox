@@ -1328,11 +1328,12 @@ Facts the implementation stands on:
   services the sandbox reaches); the `services` profile field and its sbx
   wiring are the remaining implementation. Confirm the custom-secret env
   var reaches a non-git tool in a real unibox kit before shipping one.
-- Two session-lock tests flake under full parallel load
-  (TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox,
-  TestActiveSessionsBlockRecreateButNotAnotherTask, and the usage lock in
-  TestInstructionChangesWaitWithoutRebuildingOrRecreating), one failure in a few
-  runs, present before the kit work; alone they always pass. Find the
-  flock race in the fixture.
+- The session-lock tests that failed one run in a few under full parallel
+  load were a real race, now fixed: a flock belongs to the open file
+  description, and a process another goroutine forked holds a copy of it
+  until its exec, so closing the lock's file left it held for that moment
+  and the next non-blocking try found it busy (or, with the error
+  ignored, took nothing and stopped a sandbox in use). FileLock.Close
+  unlocks first, which releases every copy.
 - unibox ls could hint at a missing sandbox's row that recreate restores
   it and rm removes the record.

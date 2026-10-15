@@ -28,9 +28,9 @@ gofmt -l . && go vet ./...
 ```
 
 Everything must be gofmt-clean, vet-clean and race-clean before a commit.
-Three tests that hold session and usage locks fail one run in a few under
-full parallel load and never alone (see Follow-ups in docs/design.md);
-rerun before suspecting a change, and fix the race when there is time.
+A test that fails one run in a few is a bug to find, not to rerun: the
+lock tests did, until FileLock.Close unlocked before closing (a forked
+child holds a copy of the descriptor, and with it the flock).
 
 Commit and push every finished change without waiting to be asked. Never
 force-push. Commit messages are a sentence in the imperative, then a

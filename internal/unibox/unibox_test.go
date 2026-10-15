@@ -574,7 +574,10 @@ func TestInstructionChangesWaitWithoutRebuildingOrRecreating(t *testing.T) {
 	}
 	b, _ = m.sandbox("dev")
 	p, _ := m.profile("node")
-	usage, _ := m.usage("dev", true)
+	usage, err := m.usage("dev", true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err = m.ensure(ctx, &b, f, p, false, false); err == nil {
 		t.Fatal("instructions changed under running agent")
 	}
