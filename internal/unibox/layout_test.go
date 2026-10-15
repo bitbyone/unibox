@@ -3,6 +3,7 @@ package unibox
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -114,13 +115,13 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	}
 }
 
-func TestAProfileOfAnotherFormatIsMadeAgainNotRead(t *testing.T) {
+func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	for version, want := range map[string]string{
-		"":             "is of format none and this unibox reads format 1; make it again",
-		"version: 0\n": "is of format 0 and this unibox reads format 1; make it again",
+		"":             "is of format none and this unibox reads format 1; run unibox init node to migrate it",
+		"version: 0\n": "is of format 0 and this unibox reads format 1; run unibox init node",
 		"version: 2\n": "is of format 2, newer than the 1 this unibox reads; upgrade unibox",
 	} {
 		// An older form fails on its version, not on a field it has.
@@ -129,11 +130,64 @@ func TestAProfileOfAnotherFormatIsMadeAgainNotRead(t *testing.T) {
 			t.Fatalf("%q: %v", version, err)
 		}
 	}
-	// init does not carry an older form over either; it says to make it again.
-	write(t, file, "dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\n")
-	if _, err := Init(root, "node", nil, 2, "1g"); err == nil || !strings.Contains(err.Error(), "make it again") {
+	// A newer one init leaves alone.
+	write(t, file, "version: 2\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\n")
+	if _, err := Init(root, "node", nil, 2, "1g"); err == nil || !strings.Contains(err.Error(), "upgrade unibox") {
 		t.Fatalf("%v", err)
 	}
+
+	// init migrates format 0: what it said in three sections moves under
+	// each agent, comments stay, and what has no place is said.
+	write(t, filepath.Join(root, "sandboxes", "node", "_data", "c.json"), "{}\n")
+	write(t, file, `# Node work.
+dockerfile: Dockerfile
+start: start.sh
+agents: [claude, copilot]
+auth:
+  claude: {token: secret:claude} # mine
+  codex: oauth
+git:
+  author: user
+  co_authors: {claude: C <c@example.com>, copilot: Cop <>}
+agent_config:
+  claude: _data/c.json
+  copilot.theme: _data/c.json
+`)
+	report, err := Init(root, "node", nil, 2, "1g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 1|auth codex left out|agent_config copilot.theme left out" {
+		t.Fatalf("%q", report.Migrated)
+	}
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(file)
+	for _, want := range []string{"version: 1\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("no %q in\n%s", want, data)
+		}
+	}
+	if !slices.Equal(p.Agents, []string{"claude", "copilot"}) || p.Auth["claude"].Method != AuthToken {
+		t.Fatalf("%+v", p)
+	}
+	// Migrated once, it is of this format.
+	if report, err = Init(root, "node", nil, 2, "1g"); err != nil || len(report.Migrated) != 0 {
+		t.Fatalf("%v %q", err, report.Migrated)
+	}
+
+	// What does not load after migrating is not kept.
+	broken := "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nmemmory: 1g\n"
+	write(t, file, broken)
+	if _, err := Init(root, "node", nil, 2, "1g"); err == nil || !strings.Contains(err.Error(), "did not migrate") {
+		t.Fatalf("%v", err)
+	}
+	if data, _ := os.ReadFile(file); string(data) != broken {
+		t.Fatalf("%s", data)
+	}
+
 	// What init writes is of this format.
 	if _, err := Init(root, "fresh", []string{"claude"}, 2, "1g"); err != nil {
 		t.Fatal(err)

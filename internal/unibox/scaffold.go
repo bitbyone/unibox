@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
@@ -23,6 +24,9 @@ type InitReport struct {
 	Written, Kept []string
 	// Completed are files init brought up to date, adding what they lacked.
 	Completed []string
+	// Migrated says a profile was brought from an older format, then what
+	// of it could not be carried over.
+	Migrated []string
 }
 
 // Init lays the environments repository's mandatory structure into root and,
@@ -218,7 +222,19 @@ func agentSeeds(agents []string) ([]agentSeed, error) {
 // the profile says already - a seed of its own, a co-author, any section -
 // stays as it is. Its agents are its own; init does not change them.
 func completeProfile(root, name string, agents []string, report InitReport, place func(string, []byte, os.FileMode) error) (InitReport, error) {
+	from, notes, err := migrateProfile(root, name)
+	if err != nil {
+		return report, err
+	}
+	if from < ProfileFormat {
+		report.Migrated = append(report.Migrated, fmt.Sprintf("sandboxes/%s/sandbox.yaml from format %d to %d", name, from, ProfileFormat))
+		report.Migrated = append(report.Migrated, notes...)
+	}
 	p, err := LoadProfile(root, name)
+	var other formatError
+	if errors.As(err, &other) {
+		return report, err
+	}
 	if err != nil {
 		return report, fmt.Errorf("profile %s exists but does not load; repair it before init completes it: %w", name, err)
 	}

@@ -185,7 +185,7 @@ func (o *options) initCommand() *cobra.Command {
 			}
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed})
+			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed, "migrated": report.Migrated})
 		}
 		switch {
 		case previous == "":
@@ -194,6 +194,13 @@ func (o *options) initCommand() *cobra.Command {
 			fmt.Fprintf(o.output, "environments repository: %s (configured; was %s)\n", root, previous)
 		default:
 			fmt.Fprintf(o.output, "environments repository: %s\n", root)
+		}
+		for i, line := range report.Migrated {
+			if i == 0 {
+				fmt.Fprintln(o.output, "migrated", line)
+			} else {
+				fmt.Fprintln(o.output, "  not carried over:", line)
+			}
 		}
 		for _, rel := range report.Written {
 			fmt.Fprintln(o.output, "wrote", rel)

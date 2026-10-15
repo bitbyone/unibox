@@ -958,13 +958,19 @@ func checkFormat(name string, text []byte) error {
 		return nil
 	}
 	if n, err := strconv.Atoi(version); err == nil && n > ProfileFormat {
-		return fmt.Errorf("profile %s is of format %d, newer than the %d this unibox reads; upgrade unibox", name, n, ProfileFormat)
+		return formatError(fmt.Sprintf("profile %s is of format %d, newer than the %d this unibox reads; upgrade unibox", name, n, ProfileFormat))
 	}
 	if version == "" {
 		version = "none"
 	}
-	return fmt.Errorf("profile %s is of format %s and this unibox reads format %d; make it again - move sandboxes/%s aside, run unibox init %s, and carry its settings over", name, version, ProfileFormat, name, name)
+	return formatError(fmt.Sprintf("profile %s is of format %s and this unibox reads format %d; run unibox init %s to migrate it", name, version, ProfileFormat, name))
 }
+
+// formatError says a profile is of another format, which no repair of a
+// field fixes.
+type formatError string
+
+func (e formatError) Error() string { return string(e) }
 
 // parseSeed reads a seed as its file is written: TOML or JSON, an object.
 func parseSeed(f AgentFile, data []byte) (map[string]any, error) {

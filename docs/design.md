@@ -663,12 +663,15 @@ git:
 ```
 
 - **A profile says its format** (the user's call): `version` is the
-  first key, `ProfileFormat` is the one this unibox reads, and `unibox
-  --version` shows it. A profile without it or of an older format is
-  refused with "make it again" (move it aside, `unibox init`, carry the
-  settings over), a newer one with "upgrade unibox". unibox keeps no
-  migration code: a format change bumps the number, and old profiles are
-  generated anew. `init` on an older profile fails the same way.
+  first key (none is format 0), `ProfileFormat` is the one this unibox
+  reads, and `unibox --version` shows it. Loading never migrates: a
+  profile of an older format is refused with "run unibox init <profile>
+  to migrate it", a newer one with "upgrade unibox". `init` migrates on
+  the YAML, one format at a time (`migrations.go`, indexed by the format
+  a step starts from), keeping comments; it is best effort, so what has
+  no place in the new format is left out and named, and a result that
+  does not load is not kept. A released migration is frozen: it names the
+  files of its own time, not today's agent table.
 - **Everything about an agent is under it** (the user's call, 2026-10-15):
   `auth`, `co_author` and `config` sat in three sections before
   (`auth`, `git.co_authors`, `agent_config` keyed `<agent>.<file>`); that

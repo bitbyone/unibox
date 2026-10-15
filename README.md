@@ -88,8 +88,8 @@ my-envs/
 
 `sandboxes/<profile>/sandbox.yaml`. It does not mention the runtime.
 `version` is the profile's format; a unibox reads one format (`unibox
---version` shows it) and refuses another, saying to make the profile again
-with `unibox init` - there is no migration.
+--version` shows it) and refuses another. `unibox init <profile>` migrates an older
+one, format by format, best effort: what it cannot carry over it names.
 
 ```yaml
 version: 1
