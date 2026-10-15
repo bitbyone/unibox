@@ -2,6 +2,7 @@ package unibox
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -88,13 +89,32 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 		lines = append(lines, "agents/"+id)
 		declared = append(declared, id)
 	}
+	// Each agent's first questions - a theme, onboarding, whether to trust a
+	// folder - would come in every new sandbox; its seed answers them once.
+	agentConfig := ""
+	seeds := map[string][]byte{}
+	for _, id := range agents {
+		a, _ := FindAgent(id)
+		if a.Config == "" || a.Seed == nil {
+			continue
+		}
+		data, err := json.MarshalIndent(a.Seed, "", "  ")
+		if err != nil {
+			return report, err
+		}
+		seeds[id] = append(data, '\n')
+		agentConfig += "  " + id + ": _data/" + id + ".json\n"
+	}
+	if agentConfig != "" {
+		agentConfig = "# Merged into each agent's own configuration before every session: its\n# first questions answered, and left to work unasked. Edit them in _data.\nagent_config:\n" + agentConfig
+	}
 	yaml := fmt.Sprintf(`# %s: describe the environment here.
 dockerfile: Dockerfile
 cpus: %d
 memory: %s
 agents: [%s]
 instructions: [unibox]
-# How each agent signs in: unibox login %[1]s writes this, keeping each token
+%[5]s# How each agent signs in: unibox login %[1]s writes this, keeping each token
 # in the platform's store as secret:<name>. sbx signs one agent of a sandbox
 # in by OAuth.
 # auth:
@@ -129,7 +149,7 @@ instructions: [unibox]
 # Egress beyond the runtime's policy, and hosts to refuse; deny wins.
 # allow_network: [jitpack.io]
 # deny_network: [gist.github.com]
-`, name, cpus, memory, strings.Join(declared, ", "))
+`, name, cpus, memory, strings.Join(declared, ", "), agentConfig)
 	dockerfile := fmt.Sprintf(`# The image is composed by _shared/install: list the installation scripts,
 # one per line. The sbx build passes BASE=docker/sandbox-templates:shell
 # (.sbx/build.args); the default keeps this buildable by hand.
@@ -160,6 +180,11 @@ WORKDIR /home/agent
 		{dir + "/.sbx/build.args", "BASE=docker/sandbox-templates:shell\n", 0o644},
 	} {
 		if err := place(f.rel, []byte(f.data), f.mode); err != nil {
+			return report, err
+		}
+	}
+	for _, id := range sortedKeys(seeds) {
+		if err := place(dir+"/_data/"+id+".json", seeds[id], 0o644); err != nil {
 			return report, err
 		}
 	}

@@ -528,8 +528,10 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 }
 
 // mergeJSON lays the seed over the current configuration: a key the seed
-// names wins, maps merge recursively, and everything else - the agent's own
-// state, projects, paths - stays as it is.
+// names wins, maps merge recursively, a list keeps what the agent added to
+// it - a folder trusted during a session - with the seed's items joined,
+// and everything else - the agent's own state, projects, paths - stays as
+// it is.
 func mergeJSON(current, seed map[string]any) map[string]any {
 	for key, value := range seed {
 		if sm, ok := value.(map[string]any); ok {
@@ -538,9 +540,32 @@ func mergeJSON(current, seed map[string]any) map[string]any {
 				continue
 			}
 		}
+		if sl, ok := value.([]any); ok {
+			if cl, ok := current[key].([]any); ok {
+				for _, item := range sl {
+					if !slices.ContainsFunc(cl, func(c any) bool { return fmt.Sprint(c) == fmt.Sprint(item) }) {
+						cl = append(cl, item)
+					}
+				}
+				current[key] = cl
+				continue
+			}
+		}
 		current[key] = value
 	}
 	return current
+}
+
+// splitJSONComments takes the leading // lines off a configuration - copilot
+// heads its config.json with them - so the rest parses as JSON and they can
+// be put back as they were.
+func splitJSONComments(text string) (head, body string) {
+	lines := strings.SplitAfter(text, "\n")
+	i := 0
+	for i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), "//") {
+		i++
+	}
+	return strings.Join(lines[:i], ""), strings.Join(lines[i:], "")
 }
 
 func (m *Manager) seedAgentConfigs(ctx context.Context, b api.Sandbox, r Runtime, p Profile) error {
@@ -573,7 +598,11 @@ func (m *Manager) mergeAgentConfig(ctx context.Context, b api.Sandbox, r Runtime
 		return err
 	}
 	current := map[string]any{}
-	if out != "" {
+	head, out := splitJSONComments(out)
+	if strings.TrimSpace(head) != "" {
+		head = strings.TrimRight(head, "\n") + "\n"
+	}
+	if strings.TrimSpace(out) != "" {
 		if err = json.Unmarshal([]byte(out), &current); err != nil {
 			return fmt.Errorf("agent %s configuration in sandbox %s is not valid JSON; repair or remove ~/%s before seeding it", a.ID, b.Name, a.Config)
 		}
@@ -588,7 +617,8 @@ func (m *Manager) mergeAgentConfig(ctx context.Context, b api.Sandbox, r Runtime
 	if err != nil {
 		return err
 	}
-	script := "set -eu\nmkdir -p \"$HOME/" + path.Dir(a.Config) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString(append(merged, '\n'))) + " | base64 -d > \"$HOME/" + a.Config + "\"\n"
+	merged = append([]byte(head), append(merged, '\n')...)
+	script := "set -eu\nmkdir -p \"$HOME/" + path.Dir(a.Config) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString(merged)) + " | base64 -d > \"$HOME/" + a.Config + "\"\n"
 	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(script)}), m.Log)
 }
 

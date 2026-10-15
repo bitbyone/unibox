@@ -634,22 +634,33 @@ instructions:                 # names of instructions/*.md, or .md paths
   - unibox                    # relative to sandbox.yaml; the profile's own
   - review-style              # instructions.md attaches itself
 agent_config:                 # JSON seeds merged into an agent's own
-  claude: claude.json         # configuration in the VM home; seed keys win,
-                              # the agent's state - projects, paths - stays
+  claude: _data/claude.json   # configuration in the VM home; seed keys win,
+  copilot: _data/copilot.json # the agent's state - projects, paths - stays,
+                              # a list keeps what the agent added to it
 git:
   author: user                # the user's identity, from the host's git config
   co_author: true             # a Co-Authored-By trailer naming the agent
 auth:                         # how each agent signs in
   codex: oauth                # the provider's login, kept by the runtime
-  claude: {token: security find-generic-password -s claude-code-oauth-token -w}
-                              # a long-lived login token a host command prints
-  copilot: {token: security find-generic-password -s unibox-copilot-token -w}
-                              # a token for copilot alone, not sbx's github secret
+  claude: {token: secret:claude}   # a long-lived token unibox keeps
+  copilot: {token: secret:copilot} # a token for copilot alone
 ```
 
 - An unknown field is an error naming it, never skipped: a misspelt
   `memmory` must not quietly change the environment. A profile that does
   not parse is listed with the error and cannot be started.
+- **Agents start unasked.** `unibox init` writes each agent's seed from
+  unibox's table into `_data/<agent>.json` and names it in
+  `agent_config`, so a new sandbox does not stop at an agent's first
+  questions: claude's onboarding and theme (`hasCompletedOnboarding`,
+  `theme`, `bypassPermissionsModeAccepted`), copilot trusting `/work`
+  (`trustedFolders`, kept beside what it trusts later), opencode allowed
+  to edit, run and fetch (`permission`, `autoupdate: false`). codex keeps
+  TOML, so its setup writes `approval_policy = "never"` and
+  `sandbox_mode = "danger-full-access"` before every session, and a
+  codex started by hand is as free as one unibox runs. The image fixes
+  each version, so claude's updater is off (`DISABLE_AUTOUPDATER`).
+  Copilot heads its config.json with `//` lines; the merge keeps them.
 - **The image is the environment.** Everything static - JDK, Node, the
   agents' CLIs, certificates - goes into the Dockerfile. What depends on
   the checkout belongs to the worked-on repository's bootstrap.

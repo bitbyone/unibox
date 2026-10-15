@@ -225,6 +225,14 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); err != nil {
 		t.Fatal(err)
 	}
+	// Claude's onboarding is answered once, in a seed the profile names.
+	seed, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude.json"))
+	if err != nil || !strings.Contains(string(seed), `"hasCompletedOnboarding": true`) {
+		t.Fatalf("%v %s", err, seed)
+	}
+	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), "claude: _data/claude.json") {
+		t.Fatalf("%s", profile)
+	}
 	// Unset forgets it and leaves the files.
 	if _, _, err = run(t, paths, "", "config", "unset", "environments"); err != nil {
 		t.Fatal(err)

@@ -205,7 +205,7 @@ func TestCodexIsSignedInByTheSandboxProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := filepath.Join(codex, "config.toml")
-	user := "model = \"gpt-5\"\nmodel_provider = \"mine\"\n\n[tui]\nmodel_provider = \"kept\"\n"
+	user := "model = \"gpt-5\"\nmodel_provider = \"mine\"\napproval_policy = \"on-request\"\n\n[tui]\nmodel_provider = \"kept\"\n"
 	if err := os.WriteFile(cfg, []byte(user), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -240,8 +240,13 @@ func TestCodexIsSignedInByTheSandboxProxy(t *testing.T) {
 		t.Fatalf("%s %s", c, a)
 	}
 	c, a = run("none")
-	if strings.Contains(c, "unibox") || strings.Contains(c, "forced_login_method") || a != "" {
+	if strings.Contains(c, "sandboxd") || strings.Contains(c, "forced_login_method") || a != "" {
 		t.Fatalf("none kept the proxy's login:\n%s %s", c, a)
+	}
+	// Whatever the login, codex works unasked; the user's own top-level
+	// choice of it gives way rather than clash with unibox's.
+	if strings.Count(c, "approval_policy = \"never\"") != 1 || strings.Count(c, "sandbox_mode = \"danger-full-access\"") != 1 {
+		t.Fatalf("%s", c)
 	}
 	// A login the user made in the sandbox is not the proxy's to take away.
 	if err := os.WriteFile(filepath.Join(codex, "auth.json"), []byte(`{"tokens":{}}`), 0o600); err != nil {
