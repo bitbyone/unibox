@@ -1,18 +1,19 @@
-# Sandboxed agents: agentbox
+# Sandboxed agents: unibox
 
 ## Where it stands
 
-Designed (2026-10-12), nothing built. This is the brief for whoever
-implements it; the reasoning is here so that the decisions are not undone
-by accident. It replaces "Agents in a container" in unagit's docs/herdr.md,
-and wins wherever the two disagree: that plan mounted the worktree and the
-main clone's `.git` into a Docker container, and its launcher for herdr is
-not used either.
+Built and in daily use (2026-10-15): profiles of format 2, sbx as the one
+runtime, tasks, the agents' logins, services and network rules, the herdr
+plugin. This began as unagit's plan - it replaced "Agents in a container"
+in unagit's docs/herdr.md - and keeps its reasoning, so that the decisions
+are not undone by accident. What unagit builds over unibox is unagit's
+plan, in its docs/sandboxes.md and docs/sandbox-credentials.md; what the
+two agree on is [the boundary](#the-boundary), and what comes next for
+both is [the order of work](#order-of-work).
 
-Checked so far: `sbx` 0.47.0 on macOS (Apple Silicon) - its commands and
-flags below come from its `--help`; `sbx ls --json` answers
-`{"sandboxes": []}`, `sbx template ls --json` `{"images": []}`. Everything
-marked **spike** has not been tried. `agentbox` is a working name.
+Checked against `sbx` 0.47 on macOS (Apple Silicon): its commands and
+flags below come from its `--help` and from use. What is still marked
+**spike** was not written back after it was tried.
 
 ## What it is for
 
@@ -25,35 +26,32 @@ shares a VM with others or gets one of its own.
 
 ## Two programs
 
-The sandboxing is **agentbox**, a program of its own, usable without
-unagit; **unagit is a UI over it** and one of its users.
+The sandboxing is **unibox**, a program and a repository of its own,
+usable without unagit; **unagit is a UI over it** and one of its users.
 
-- agentbox lives in this repository for now, but is built as its own
-  binary (`cmd/agentbox`, `make build` makes both) with its own home, its
-  own configuration and its own runtimes. Moving it to a repository of its
-  own later - as incomm is - is moving directories.
-- `make install` builds and installs both binaries in one invocation, under
-  the same `PREFIX`. It compares each built binary with its installed copy
-  and installs only one whose contents differ (or which is missing). Go's
-  build cache avoids recompiling unchanged packages; modification times
-  alone do not decide whether to replace an installed binary.
-- unagit drives it as it drives herdr or Zellij: through its command line,
-  `--json` for what it reads. It never imports agentbox's code, beyond the
-  package of the JSON types (see [the boundary](#the-boundary)).
-- unagit also **configures** agentbox: what the user chooses in unagit's
-  Settings (the environments repository picked from the list of
-  repositories, the runtimes) is handed to agentbox as its configuration.
+- They share no code. unibox imports nothing of unagit's; unagit runs the
+  unibox binary and reads its `--json`, whose types are
+  `internal/unibox/api`, versioned by `api_version` in every object.
+- unagit drives it as it drives herdr or Zellij: through its command
+  line, `--json` for what it reads and `--yes` where a question would
+  come.
+- unagit also **configures** it, and only through its commands: the
+  environments repository picked in unagit's Settings and the runtimes
+  with `unibox config set`, a profile's logins, services and network
+  rules with `unibox agent|service|network|secret`, an older profile with
+  `unibox init <profile>`. unagit writes no YAML.
 
-| agentbox | unagit |
+| unibox | unagit |
 | --- | --- |
-| its home: configuration, state, cache | Integrations: agentbox on or off |
-| the environments repository: profiles, build, the agents' check, approvals | which worktree, which repositories, which branch |
+| its home: configuration, state, cache | Integrations: unibox on or off |
+| the environments repository: profiles, their format and its migration, build, the agents' check | which worktree, which repositories, which branch |
 | the runtimes: sbx now, Podman later | pushing the branch, with the vault's token |
-| VMs and tasks: create, start, stop, remove | clone URLs from the forge's API |
-| a task's preparation: clones, author, co-author hook, instructions, `start`, bootstrap | the Sandboxes tab, the pickers, Activity |
-| running the agent, stopping an idle VM | the questions: approve, build, commit first |
+| sandboxes and tasks: create, start, stop, remove | clone URLs from the forge's API |
+| a task's preparation: clones, author, co-author hook, instructions, seeds, `start`, bootstrap | the Sandboxes tab, the pickers, Activity |
+| the tokens a profile names, in the platform's store (`unibox secret`), reaching a sandbox as placeholders | its vault; later a source of short-lived tokens for a service's `command:` |
+| running the agent, stopping an idle sandbox | the questions: build, sign in, migrate, commit first |
 | its herdr plugin | the commit dialog's warning, the pull |
-| refusing a default branch | picking the environments repository from the list, handing agentbox its path |
+| refusing a default branch | picking the environments repository from the list, handing unibox its path |
 
 ## The picture
 
@@ -65,32 +63,32 @@ The parts:
 |  +------------------+ +------------------+ +------------+ +----------------+ |
 |  | Sandboxes tab [6]| | Open in Sandboxed| | Activity   | | Settings [5]   | |
 |  | Profiles         | | Agent...         | |            | | Integrations:  | |
-|  | Sandboxes (VMs)  | | agent > profile  | |            | | agentbox, env  | |
+|  | Sandboxes (VMs)  | | agent > profile  | |            | | unibox, env    | |
 |  | Tasks            | | > sandbox > place| |            | | repo, runtimes | |
 |  +--------+---------+ +--------+---------+ +-----+------+ +-------+--------+ |
 |           |                    |                 |                |          |
 |           +--------------------+--------+--------+----------------+          |
-|                                         | agentbox ... --json                |
-|  workspace, gitx: push the branch, pull | (and agentbox config set ...)      |
+|                                         | unibox ... --json                  |
+|  workspace, gitx: push the branch, pull | (and unibox config set ...)        |
 +---------+-------------------------------+------------------------------------+
           |                               |
           |                               v
-          |      +------------------- agentbox (host) ---------------------+
-          |      | ~/.config/agentbox/config.yaml, state.json              |
-          |      | profiles: parse, tree hash, build, agents' check, trust |
-          |      | tasks: manifest, instructions, author, hook             |
+          |      +-------------------- unibox (host) ----------------------+
+          |      | ~/.config/unibox/config.yaml, state.json                |
+          |      | profiles: format, migrate, build, agents' check, edits  |
+          |      | tasks: clones, instructions, author, hook, seeds        |
           |      | Runtime: Available List Images Build Create Exec Stop   |
           |      |          Remove                                         |
           |      |   +----------------+      +----------------+            |
           |      |   | sbx adapter    |      | podman adapter |            |
           |      |   |                |      | (later)        |            |
           |      |   +-------+--------+      +----------------+            |
-          |      | herdr plugin: agentbox herdr observe                    |
+          |      | herdr plugin: unibox herdr observe                      |
           |      +-----------+---------------------------------------------+
           |                  | sbx CLI
           | push, pull       v
           v           +--------------------------------------+
-   +-------------+    | sbx microVM  ab-<profile>[-<task>]   |
+   +-------------+    | sbx microVM  unibox-<sandbox>        |
    | forge       |<-->|  template = the profile's image      |
    | GitLab,     |    |  /work/<task>/<repo>   git clones    |
    | GitHub      |    |  the agents (claude, codex, ...)     |
@@ -98,31 +96,32 @@ The parts:
    | branches    |    |  GRADLE_USER_HOME (the VM's own)     |
    +-------------+    |  ~/.gradle/caches :ro <- host        |
      clone, push:     +--------------------------------------+
-     the VM's own
-     narrow token
+     a narrow token,
+     a placeholder the
+     proxy swaps
 ```
 
 Where each kind of setting lives:
 
 ```
- environments repository         ~/.config/agentbox/         unagit
+ environments repository         ~/.config/unibox/           unagit
  (git, the user's or a team's)                               config.yaml
  +--------------------------+   +-----------------------+   +----------------------+
  | kotlin/                  |   | config.yaml           |   | integrations:        |
- |   Dockerfile             |<--+   environments: <path>|<--+   agentbox:          |
- |   profile.yaml           |   |   runtimes:           |   |     on: true         |
+ |   Dockerfile             |<--+   environments: <path>|<--+   unibox:            |
+ |   sandbox.yaml           |   |   runtimes:           |   |     on: true         |
  |   start.sh               |   |     sbx: {on, stop_   |   |     environments:    |
  |   instructions.md        |   |           idle}       |   |       gl/team/envs   |
- |   .sbx/build.args         |   | state.json            |   +----------------------+
- | instructions/*.md        |   |   approvals, VMs,     |    the user's choices,
- +------------+-------------+   |   tasks, agents run   |    handed to agentbox
+ |   .sbx/build.args        |   | state.json            |   +----------------------+
+ | instructions/*.md        |   |   access seen, builds,|    the user's choices,
+ +------------+-------------+   |   sandboxes, tasks    |    handed to unibox
               |                 +-----------------------+
-  what the    |                  agentbox's own
+  what the    |                  unibox's own
   environment v
   is      +--------------------------------------+
           | generated just before a start        |
-          | ~/.cache/agentbox/sbx/               |
-          |   agentbox/kotlin:<tree>  template   |
+          | ~/.cache/unibox/sbx/                 |
+          |   unibox/kotlin:<tree>    template   |
           |   flags: --cpus -m -e --deny-network |
           +--------------------------------------+
             a cache: never edited, regenerated
@@ -131,20 +130,20 @@ Where each kind of setting lives:
 A start from unagit:
 
 ```
- user              unagit                     agentbox            sbx, VM        forge
+ user              unagit                     unibox              sbx, VM        forge
   | Open in          |                          |                    |             |
   | Sandboxed Agent  |                          |                    |             |
   +----------------->| profiles, VMs --json --->|                    |             |
   | agent, profile,  |                          |                    |             |
   | sandbox, place   |                          |                    |             |
-  +----------------->| check --json ------------>| approved? built?   |             |
-  |<- approve? build?|<-- needs: build ---------+                    |             |
+  +----------------->| check --json ------------>| built? signed in?  |             |
+  |<- build? sign in?|<-- needs: build ---------+                    |             |
   +-- yes ---------->| build (log) ------------>| docker build, load>|             |
   |                  | push the branch ---------+--------------------+------------>|
   |                  | prepare (log) ---------->| create/start, ---->| clone ----->|
   |                  |                          | start.sh, clones   |             |
   |                  | the place runs:          |                    |             |
-  |                  |   agentbox run --------->| sbx exec -it ----->| the agent   |
+  |                  |   unibox run ----------->| sbx exec -it ----->| the agent   |
   |                  |                          |                    | push ------>|
   | Pull ----------->| fetch, fast-forward <----+--------------------+-------------+
 ```
@@ -156,7 +155,7 @@ What crosses the line between the machine and the VM:
    | host: home, ~/.ssh, unagit's vault |       | VM: the agent, sudo,|
    | main clones, the user's worktrees  | <-X-- | its clones, its     |
    | the configurations, the            |       | Docker              |
-   | environments repository (approved) |       |                     |
+   | environments repository (trusted)  |       |                     |
    +-----------------+------------------+       +----------+----------+
                      | only:                               ^ | only:
                      |  ~/.gradle/caches  :ro  ------------+ |
@@ -215,7 +214,7 @@ Considered and rejected:
 - **`sbx run --clone`**: sbx's own clone inside the VM, of the host
   repository mounted read-only. One repository per sandbox, and how its
   commits come back is undocumented (the docs' git-workflow page is a 404).
-- **Podman**: not now. agentbox's runtimes are neutral so that it can be
+- **Podman**: not now. unibox's runtimes are neutral so that it can be
   added without touching unagit.
 
 ## Sandboxes and VMs
@@ -227,21 +226,21 @@ runs another process in the same environment, like `docker exec`.
 
 Both arrangements are offered, and the user picks at the start:
 
-- **A shared VM** per profile (`ab-<profile>`): tasks are directories
+- **A shared sandbox** (named for its profile unless `--new-sandbox` names it): tasks are directories
   `/work/<task>`, agents are processes side by side. Memory, the Gradle
   cache and Docker images are paid once. Between the agents there is no
   isolation at all - one user with sudo, one filesystem, one Docker, one
   set of ports (two `docker compose` Postgreses on 5432 collide). The
   picker says so.
-- **A VM of its own** (`ab-<profile>-<task>`): nothing it does reaches
+- **A sandbox of its own** for one task (`--new-sandbox <name>`): nothing it does reaches
   another task.
 
 Both persist when the agent ends, for their caches; removing is the user's
-action. A VM in which the last agent agentbox started has ended is
+action. A VM in which the last agent unibox started has ended is
 **stopped** (`sbx stop`), so idle VMs hold no memory; its disk, caches and
 tasks stay, and the next start boots it again (and runs the profile's
-`start`). agentbox's configuration can turn the stopping off
-(`runtimes.sbx.stop_idle`). It stops only VMs it made (`ab-` names), and
+`start`). unibox's configuration can turn the stopping off
+(`runtimes.sbx.stop_idle`). It stops only sandboxes it made (`unibox-` names), and
 only when no agent it started is left in them.
 
 `<task>` is the worktree's folder name and a short hash of its host path,
@@ -257,35 +256,41 @@ there):
 
 1. **Open in Sandboxed Agent…** asks, each picker skipped when it has one
    item and ordered by use: the agent, the profile, the sandbox, the place
-   (the existing `agentPlaces`). The pickers are filled from `agentbox
-   profiles --json` and `agentbox ls --json`. The sandbox picker is also
-   where the runtime is chosen: the profile's VMs of every runtime, each
-   carrying its own, then New Sandbox in <runtime>… for each runtime
-   agentbox has on - plain New Sandbox… while there is one.
-2. `agentbox check --json` with the profile, runtime, branch and
-   directories. It answers what stands in the way, and unagit asks about
-   each in its own dialogs: a default branch (refused: "make a worktree with
-   a branch first"), uncommitted changes (they will not reach the VM, which
-   clones from the forge - Commit… or go on without them), a profile not
-   approved (Approve…, see [trust](#trust)), an image outdated or not built
-   (Build…, with the profile's diff).
+   (the existing `agentPlaces`). The pickers are filled from `unibox
+   profiles --json` and `unibox ls --json`. The sandbox picker is also
+   where the runtime is chosen: the profile's sandboxes of every runtime,
+   each carrying its own, then New Sandbox in <runtime>… for each runtime
+   unibox has on - plain New Sandbox… while there is one.
+2. `unibox check --json` with the profile, sandbox, agent, branch and
+   repositories. It answers with `needs`, each a `code` unagit asks about
+   in its own dialogs: `default_branch` (refused: "make a worktree with a
+   branch first"), `uncommitted` and `local_commits` (they will not reach
+   the sandbox, which clones from the forge - Commit… or go on without
+   them), `branch_not_pushed` (the push of step 3), `image_required`
+   (Build…, with the profile's diff), `login_required` and
+   `secret_missing` (Sign In…: `unibox agent login` or `unibox secret
+   set`, on a terminal of their own, since unibox takes the value), and
+   the warnings `profile_changed` and `service_overridden`, shown and not
+   asked about. A profile of an older format does not load: unagit offers
+   Migrate…, which runs `unibox init <profile>` and shows what it says.
 3. unagit **pushes the branch** of every repository of the worktree that
    has no upstream or is ahead of it - from the host, with its own
    credentials, through the path `P` uses. A branch origin has moved past
    stops the start with the reason; nothing is forced.
-4. `agentbox prepare` with the repositories' clone URLs **from the forge's
-   API** (the project's http URL), never from a local remote, which can
-   carry a token (a chezmoi origin, AGENTS.md); https always - the VM has
-   no SSH key. A `runTask` log of its output; it prints the VM and the task
-   as JSON at the end.
-5. The place chosen runs `agentbox run …` for the task - This Terminal,
-   Zellij, Ghostty or herdr, as for any agent.
-6. unagit's session record (`<config>/sessions/`) gets the VM and the task
-   beside the pane, so Activity lists the agent with them.
+4. `unibox prepare --json` with the repositories' clone URLs **from the
+   forge's API** (`--repo <dir>=<https URL>`, the project's http URL),
+   never from a local remote, which can carry a token (a chezmoi origin,
+   AGENTS.md); https always - the sandbox has no SSH key. A `runTask` log
+   of its output; it prints the sandbox and the task as JSON at the end.
+5. The place chosen runs `unibox run --task <task>` - This Terminal,
+   Zellij, Ghostty or herdr, as for any agent; `unibox resume <task>
+   --agent <id>` runs a task again, with any of the profile's agents.
+6. unagit's session record (`<config>/sessions/`) gets the sandbox and the
+   task beside the pane, so Activity lists the agent with them.
 
-### What agentbox does
+### What unibox does
 
-`agentbox prepare` (and `run`, when not prepared):
+`unibox prepare` (and `run`, when not prepared):
 
 1. Creates the VM if new (`sbx create`, see [runtime](#the-runtime)) or
    starts it, and runs the profile's `start` if the VM booted since it last
@@ -298,12 +303,12 @@ there):
    home, and runs the profile's bootstrap script from each repository that
    has one.
 
-`agentbox run` then runs the agent: `sbx exec -it -w /work/<task> <vm>
+`unibox run` then runs the agent: `sbx exec -it -w /work/<task> <vm>
 <agent command>` as its child - not `exec`'d, so that when the agent ends
 it can stop an idle VM and update its records. It passes the terminal,
 signals and the window size through, and exits with the agent's status.
 
-Without unagit, agentbox takes what unagit would give it from where it is
+Without unagit, unibox takes what unagit would give it from where it is
 run: the repositories and the branch from the current directory or the
 directories named, their clone URLs from `origin` (credentials stripped,
 an ssh URL turned into https where the host is plain). It never pushes on
@@ -312,12 +317,17 @@ unless `--push` asks it to run the user's own `git push -u`.
 
 ## Credentials
 
-- **unagit's tokens never go into a VM**, nor into agentbox, in any form
-  (AGENTS.md, the hard rule). The push before a start is unagit's, from
-  the host; everything after it is the VM's own.
-- **The VM pushes with a token of its own**, issued by the user for this,
-  stored by sbx (`sbx secret set`, its keychain and proxy). Neither
-  program sees it. Narrow: a GitLab project or group access token with
+- **unagit's tokens never go into a sandbox.** The push before a start is
+  unagit's, from the host; everything after it is the sandbox's own.
+- **The tokens a profile names are unibox's to keep** (the user's call,
+  2026-10-14): `unibox secret set` takes one on a terminal, holds it in
+  memory on its way to the platform's store (the login keychain, the
+  Secret Service), and a profile names it as `secret:<name>`. A sandbox
+  sees only placeholders the proxy swaps on the host. A service's
+  `command:` can name any other host source instead - unagit's, once it
+  is one (unagit's docs/sandbox-credentials.md).
+- **The sandbox pushes with a token of its own**, issued by the user for
+  this and wired as a git service (`unibox service add`). Narrow: a GitLab project or group access token with
   Developer on the projects concerned; a GitHub fine-grained token on the
   repositories, contents write.
 - **The forge is now the boundary.** The agent can push to any branch the
@@ -325,8 +335,10 @@ unless `--push` asks it to run the user's own `git push -u`.
   forge, and if possible restrict the token to the work branches (GitLab
   push rules and protected branches, GitHub rulesets). The README says so
   where it explains the feature.
-- The agents' own logins (Claude, Codex) are sbx's service secrets
-  ([below](#one-image-several-agents)).
+- The agents' own logins are sbx's (OAuth, `sbx secret set`) or tokens
+  unibox keeps (`unibox agent login`); see
+  [one image, several agents](#one-image-several-agents) and the kits
+  below.
 
 ### Host services the sandbox reaches
 
@@ -588,7 +600,7 @@ profile's `sandbox.yaml`, its `instructions.md` and its agent configuration
 seeds are not image inputs: they change nothing of the image and force no
 rebuild.
 
-agentbox knows the repository by its path (`environments` in its
+unibox knows the repository by its path (`environments` in its
 configuration) and reads the working tree - what the user sees in their
 editor is what runs. In unagit, Settings picks it **from the list of
 repositories** (instance and project path), which keeps unagit's
@@ -626,7 +638,7 @@ file in the editor.
 
 ### The format
 
-`profile.yaml` is agentbox's own format, kept small, and **knows no
+`sandbox.yaml` is unibox's own format, kept small, and **knows no
 runtime**. It describes the environment; where it runs is chosen at the
 start.
 
@@ -766,7 +778,7 @@ git:
   consistency while the host writes the cache - at worst a build in the VM
   fails and runs again. A mount is at the host's absolute path, as sbx
   mounts everything.
-- Considered: devcontainer.json (a standard, but agentbox would honour a
+- Considered: devcontainer.json (a standard, but unibox would honour a
   fraction of it and the rest would silently not work; the read-only cache
   and the network rules do not map onto it) and sbx's `sbxenv.yaml`
   (sbx's alone, and experimental).
@@ -783,8 +795,8 @@ Each at its own moment, all running inside the VM:
 
 - **`start` runs once per boot, whoever booted the VM.** A VM can be
   started by something else (`sbx exec` from a terminal, sbx's TUI), so
-  before every agent agentbox compares the kernel's `boot_id` with a mark
-  it left in the VM (`/var/lib/agentbox/started`) and runs the script only
+  before every agent unibox compares the kernel's `boot_id` with a mark
+  it left in the VM (`/var/lib/unibox/started`) and runs the script only
   when they differ, by `sbx exec`, its output in the preparation's output.
   A failure stops the start.
 - Nothing runs once when the VM is made: what should happen once is static
@@ -874,7 +886,7 @@ it would be committed. So:
 
 ### What differs between runtimes
 
-`profile.yaml` says nothing about a runtime, but an image may have to be
+`sandbox.yaml` says nothing about a runtime, but an image may have to be
 built a little differently for one - another `FROM`, a step only one of
 them needs. That is said with Docker's own means, build arguments, from a
 subdirectory named after the runtime:
@@ -883,10 +895,10 @@ subdirectory named after the runtime:
 ARG BASE=ubuntu:24.04
 FROM ${BASE}
 
-ARG AGENTBOX_RUNTIME
+ARG UNIBOX_RUNTIME
 USER root
 RUN apt-get update && apt-get install -y openjdk-21-jdk git curl
-RUN if [ "$AGENTBOX_RUNTIME" = sbx ]; then echo "sbx alone"; fi
+RUN if [ "$UNIBOX_RUNTIME" = sbx ]; then echo "sbx alone"; fi
 ```
 
 ```
@@ -894,8 +906,8 @@ RUN if [ "$AGENTBOX_RUNTIME" = sbx ]; then echo "sbx alone"; fi
 BASE=docker/sandbox-templates:shell
 ```
 
-- Building for runtime X, agentbox always passes `--build-arg
-  AGENTBOX_RUNTIME=X`, so a condition needs no file, and every `KEY=VALUE`
+- Building for runtime X, unibox always passes `--build-arg
+  UNIBOX_RUNTIME=X`, so a condition needs no file, and every `KEY=VALUE`
   line of `X/build.args` as a `--build-arg`. No `X/` means the `ARG`
   defaults, which also keep the Dockerfile buildable by hand.
 - Larger differences can be a stage per runtime (`FROM common AS sbx`,
@@ -947,7 +959,7 @@ from the other.
 - **A kit** is a declarative package laid over a sandbox: files, an
   install hook, a startup hook, network rules, credential bindings,
   instructions for the agent. The built-in agents are kits; a *mixin* kit
-  adds to one (`--kit`). Kits v3 are Early Access. **agentbox neither
+  adds to one (`--kit`). Kits v3 are Early Access. **unibox neither
   writes nor takes kits**: everything a profile says is expressible as
   flags and `sbx exec`, and a format still moving is not one to build on.
   If the spike finds something only a kit can do - the credential for
@@ -1001,7 +1013,7 @@ declaration against the image:
 - **Declared**, so what to offer is known before anything is built, for an
   `image:` too without pulling it.
 - **Checked**: after a build, before the image is loaded into the runtime,
-  agentbox runs `docker run --rm <image> sh -c 'command -v …'` for the
+  unibox runs `docker run --rm <image> sh -c 'command -v …'` for the
   declared agents' commands. One missing fails the build, naming it
   ("profile kotlin declares codex, but the image has no codex - install it
   in the Dockerfile"), so the declaration cannot quietly stop being true.
@@ -1013,7 +1025,7 @@ declaration against the image:
   lists the agents of every profile, the profile picker then the profiles
   that have the one chosen, skipped when there is one.
 
-agentbox has its own table of agents - id, command, its instructions file,
+unibox has its own table of agents - id, command, its instructions file,
 its co-author line, sbx's name for it - and never reads unagit's
 `agents.All`; the ids are the same, so unagit maps them.
 
@@ -1025,10 +1037,10 @@ its co-author line, sbx's name for it - and never reads unagit's
   with uncommitted changes is marked so, and builds as it is, tagged
   `<tree>-dirty`.
 - For sbx: `docker build` with the build arguments, the agents' check,
-  `docker save`, `sbx template load`, tagged `agentbox/<profile>:<tree>`.
+  `docker save`, `sbx template load`, tagged `unibox/<profile>:<tree>`.
   A local build is for this machine's architecture, which is all a local
   sandbox needs.
-- **A build shows what it is about to build.** `agentbox diff <profile>`
+- **A build shows what it is about to build.** `unibox diff <profile>`
   prints what changed in the profile's directory since its image last
   built (the tree is in the tag) as a unified diff. unagit's Build…
   question draws it in unagit's own differ - the one the Changes dialog
@@ -1037,19 +1049,20 @@ its co-author line, sbx's name for it - and never reads unagit's
   `RUN --mount` and build secrets can reach out, so the user sees it
   first. No approval of its own beyond that question.
 
-## agentbox
+## unibox
 
 ### Its home
 
 ```
-~/.config/agentbox/config.yaml   the user's choices
-~/.config/agentbox/state.json    what use taught: approvals, VMs, tasks,
-                                 the agents it runs, the boot marks
-~/.cache/agentbox/               generated: tars, never edited
+~/.config/unibox/config.yaml   the user's choices
+~/.config/unibox/state.json    what use taught: host access last seen per
+                               profile, builds, sandboxes, tasks, runs
+~/.cache/unibox/               generated: kits, image tars; never edited
 ```
 
 ```yaml
-environments: ~/workspace/bitbyone/sandbox-envs
+environments: ~/workspace/team/agent-sandboxes
+default_runtime: sbx
 runtimes:
   sbx:
     on: true
@@ -1057,48 +1070,54 @@ runtimes:
 ```
 
 A runtime not named is on when installed. unagit writes this file only
-through `agentbox config set`, never by hand, and only what the user chose
+through `unibox config set`, never by hand, and only what the user chose
 in unagit's Settings.
 
 ### The command line
 
 The contract unagit is written against. Everything a list shows has
 `--json`; a long operation prints its progress as lines, for a log.
-Called by unagit (`--json`, or `--yes` where a question would come) it
-never asks: what stands in the way is an answer, not a prompt.
+Called with `--json` or `--yes` it never asks: what stands in the way is
+an answer, not a prompt. `unibox --version` names the profile format it
+reads (`0.1.0 (profile format 2)`); `api_version` in the JSON is the
+contract's own version, apart from it.
 
 | command | does |
 | --- | --- |
-| `agentbox init <profile> [-i]` | lays out the environments repository and adds a profile; -i asks |
-| `agentbox validate [--json]` | the repository's layout, every profile, every attachable text |
-| `agentbox profiles [--json]` | profiles: name, agents, image state per runtime, approval, error, last commit |
-| `agentbox instructions <profile>` | the instructions as the agent gets them |
-| `agentbox diff <profile>` | what changed since the last build, a unified diff |
+| `unibox init [<profile>] [-i] [--dir D]` | lays out the environments repository and adds a profile; on an existing one completes it, and migrates an older format |
+| `unibox validate [--json]` | the repository's layout, every profile, every attachable text |
+| `unibox profiles [--json]` | profiles: name, agents, image state per runtime, error, last commit |
+| `unibox instructions <profile>` | the instructions as the agent gets them |
+| `unibox diff <profile>` | what changed since the last build, a unified diff |
+| `unibox build <profile> [--runtime R]` | builds, checks the agents, loads |
 | `unibox agent login\|co-author\|ls`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
-| `agentbox build <profile> [--runtime R]` | builds, checks the agents, loads |
-| `agentbox check …  --json` | what stands in the way of a start: default branch, uncommitted, approval, image |
-| `agentbox prepare …` | the VM and the task, ready; JSON of both at the end |
-| `agentbox run …` | the agent, in this terminal; prepares first if needed |
-| `agentbox ls [--json]` | VMs: runtime, profile, state, memory, tasks |
-| `agentbox tasks <vm> [--json]` | tasks: directory on the host, repositories, branch, agents |
-| `agentbox shell <vm>` | a shell in the VM |
-| `agentbox stop <vm>`, `rm <vm>`, `rm-task <vm> <task>` | as named |
-| `agentbox config get/set <key> [<value>]` | its configuration |
-| `agentbox herdr install-plugin`, `uninstall-plugin`, `status [--json]` | [herdr](#herdr) |
+| `unibox check … --json` | what stands in the way of a start, as `needs` with a `code` each |
+| `unibox prepare …` | the sandbox and the task, ready; JSON of both at the end |
+| `unibox run …` | the agent, in this terminal; prepares first if needed |
+| `unibox resume <task> [--agent A]` | a prepared task's agent again, in the sandbox that holds it |
+| `unibox add-repo <task> --repo …` | one more clone into a task, also while its agent runs |
+| `unibox ls [--json]`, `unibox tasks [<sandbox>] [--json]`, `unibox inspect <sandbox>` | sandboxes, their tasks, a sandbox's record |
+| `unibox shell <sandbox>`, `stop`, `recreate`, `rm`, `rm-task` | as named; removal checks for sessions and unpushed work |
+| `unibox config get\|set\|unset <key> [<value>]` | its configuration |
+| `unibox runtimes` | the adapters and what each isolates |
+| `unibox herdr install-plugin`, `uninstall-plugin`, `status [--json]` | [herdr](#herdr) |
 
-`check`, `prepare` and `run` take the same task: `--profile`,
-`--agent`, `--runtime`, `--vm <name>` or `--new-vm`, `--branch`,
-`--repo <dir>=<clone URL>` (repeated; or directories, as without unagit),
-`--author "Name <email>"`.
+`check`, `prepare` and `run` take the same task: `--profile`, `--agent`,
+`--runtime`, `--sandbox <name>` or `--new-sandbox <name>`, `--task`,
+`--branch`, `--repo [<dir>=]<path or https URL>` (repeated; or the
+current directory, as without unagit), `--author "Name <email>"`,
+`--instructions`, `--push`, `--ignore-local`.
 
-Exit codes say what kind of failure: 3 image outdated or
-not built, 4 refused (a default branch, a branch the forge lacks), 1 any
-other error. Errors are lower case and say what to do: `sbx is not signed
-in - run sbx login`.
+Exit codes say what kind of failure: 3 an image to build first, 4
+refused (`unpushed_work`, `guest_busy`, `confirmation_required`,
+`host_access`), the agent's own status after a session, 1 any other
+error. Under `--json` a failure is `{"api_version", "code", "message"}`.
+Errors are lower case and say what to do: `sbx is not signed in - run sbx
+login`.
 
 ### The runtime
 
-agentbox's neutral vocabulary; nothing above it says sbx.
+unibox's neutral vocabulary; nothing above it says sbx.
 
 ```go
 type Runtime interface {
@@ -1130,7 +1149,7 @@ How a profile becomes flags:
 
 | profile | sbx |
 | --- | --- |
-| `dockerfile` | the built template, `-t agentbox/<profile>:<tree>` |
+| `dockerfile` | the built template, `-t unibox/<profile>:<tree>` |
 | `image` | `-t <image>` |
 | `resources` | `--cpus`, `--memory`; a share resolved by the adapter (below) |
 | `deny_network` | `--deny-network` |
@@ -1143,7 +1162,7 @@ Spike questions about it:
 
 - `sbx create` takes an agent and mounts the current directory when given
   no path. A VM must be created with no repository mounted: give it a
-  directory of agentbox's own (`~/.cache/agentbox/vms/<vm>`, empty,
+  directory of unibox's own (`~/.cache/unibox/vms/<vm>`, empty,
   read-only) as its workspace, unless sbx can do without one.
 - Does `sbx exec` take `-w`?
 - Do read-only mounts of host directories outside the workspace work
@@ -1155,21 +1174,21 @@ Spike questions about it:
 ### herdr
 
 herdr recognises an agent by its pane's foreground process, and an agent
-behind `sbx exec` is not one it knows: no agent, no state. agentbox fills
+behind `sbx exec` is not one it knows: no agent, no state. unibox fills
 that in with **a herdr plugin of its own**. It is the one way; there is no
 launcher and no third-party plugin to choose instead.
 
 What it does, as long as herdr runs - unagit open or not:
 
-- `agentbox run` started in a herdr pane records the pane
-  (`HERDR_PANE_ID`), the agent and the VM in agentbox's state. For every
-  pane so recorded whose `agentbox run` is alive, the plugin reads the
+- `unibox run` started in a herdr pane records the pane
+  (`HERDR_PANE_ID`), the agent and the VM in unibox's state. For every
+  pane so recorded whose `unibox run` is alive, the plugin reads the
   screen (`pane.read`), has herdr classify it by herdr's own rules for that
   agent (`herdr agent explain --file … --agent <kind> --json`), and reports
   the state (`pane.report_agent`, `pane.release_agent` when the agent is
   gone), with the VM's name as the pane's metadata
   (`pane.report_metadata`). It reports only on a change.
-- It never parses argv: agentbox started the agent and wrote it down.
+- It never parses argv: unibox started the agent and wrote it down.
 - unagit's Activity matches herdr's agents by pane, so the state arrives
   there with no change to it.
 
@@ -1178,9 +1197,9 @@ The idea, and the herdr calls, come from
 0.1.0). It has no licence, so none of its code is taken.
 
 **The plugin is a manifest and nothing to build.** `herdr-plugin.toml`, its
-commands calling the agentbox binary: a startup command and the
-`pane.created` / `pane.focused` events run `agentbox herdr ensure`, which
-starts one `agentbox herdr observe` per herdr socket (a lock in
+commands calling the unibox binary: a startup command and the
+`pane.created` / `pane.focused` events run `unibox herdr ensure`, which
+starts one `unibox herdr observe` per herdr socket (a lock in
 `HERDR_PLUGIN_STATE_DIR`, so a second ensure does nothing), detached, its
 log in that directory. Both are hidden commands that refuse to run outside
 herdr (no `HERDR_SOCKET_PATH`).
@@ -1188,14 +1207,14 @@ herdr (no `HERDR_SOCKET_PATH`).
 **Installed only with the user's consent**, never quietly - it changes
 herdr's configuration and leaves a process running with herdr:
 
-- `agentbox herdr install-plugin` asks unless `--yes`; it writes the
-  manifest, embedded in the binary, to `~/.config/agentbox/herdr-plugin/`
-  with the absolute path of the running agentbox, then `herdr plugin link
+- `unibox herdr install-plugin` asks unless `--yes`; it writes the
+  manifest, embedded in the binary, to `~/.config/unibox/herdr-plugin/`
+  with the absolute path of the running unibox, then `herdr plugin link
   <dir>` and `enable`. `uninstall-plugin` undoes it.
-- unagit's Settings › Integrations, in herdr's block, shows `agentbox herdr
+- unagit's Settings › Integrations, in herdr's block, shows `unibox herdr
   status --json` and offers Install herdr Plugin… (and Uninstall) behind
   its own question, then calls the command with `--yes`.
-- The path changes when agentbox is upgraded or moved. Every agentbox
+- The path changes when unibox is upgraded or moved. Every unibox
   command that finds the plugin installed compares the linked manifest
   with what it would write and rewrites it if it differs - the user
   consented to the plugin, not to a path.
@@ -1215,72 +1234,20 @@ directory, and that a plugin's commands get `HERDR_SOCKET_PATH` and
 
 ### The boundary
 
-- agentbox's code is `cmd/agentbox` and `internal/agentbox/...`. It
-  imports nothing of unagit's packages; a test (`go list -deps
-  ./cmd/agentbox`) fails if it does, as `TestSharedFieldsAreTheOnlyWayToMakeThem`
-  fails on a stray widget.
-- unagit imports nothing of agentbox but `internal/agentbox/api`, the JSON
-  types of its command line; a test fails on anything else. unagit runs
-  the binary, found through `a.executable("agentbox")` like any program.
-- agentbox follows the repository's rules - gofmt, vet, race, the
-  testenv isolation, the hard rule on tokens - as any package here.
-
-## In unagit
-
-**An integration**, in Settings › Integrations: agentbox on or off
-(unset, on when installed), and its block:
-
-- the environments repository, picked from the list of repositories and
-  handed to agentbox as a path (see [where they live](#where-they-live));
-- the runtimes agentbox has, each on or off, and stopping idle VMs -
-  written to agentbox's configuration with `agentbox config set`;
-- in herdr's block, agentbox's herdr plugin.
-
-unagit's config.yaml keeps only what it must to be portable: whether
-agentbox is on, and the environments repository as a repository of the
-list. The rest is agentbox's.
-
-**A Sandboxes tab**, `6`, after Settings (`5` stays, as the messages that
-point at `Settings [5]` do). Three parts, each a list made the way the
-other screens' are (`pane.go`, its actions as `uiAction`s), filled from
-agentbox's `--json`:
-
-| part | rows | actions |
-| --- | --- | --- |
-| **Profiles** | name, image state per runtime, approval, agents, last commit to its directory; a pane with its instructions as the agent gets them | Open in Editor…, Edit Instructions…, Build…, Approve…, Open in Sandboxed Agent… |
-| **Sandboxes** | VM: runtime, profile, state, memory, tasks | Shell… (`agentbox shell` in a place), Stop, Remove (a question naming its tasks) |
-| **Tasks** | in the VM under the cursor: worktree, agent, its state | Open Worktree, Remove Task |
-
-Without agentbox installed or an environments repository chosen, the tab
-says what is missing and where to set it. Activity still lists every
-agent, sandboxed ones with their VM: Activity is what runs, the Sandboxes
-tab is what it runs in.
-
-Elsewhere:
-
-- **Open in Sandboxed Agent…** on repositories with a worktree, worktrees,
-  groups, merge requests with a branch worktree. Alt picks again what use
-  would skip (the profile and the sandbox, even when one).
-- **Pull** of a worktree or a group is what brings the agent's work; it
-  exists already for branches with an upstream, check it covers a group in
-  one go.
-- **A worktree whose branch an agent works on in a VM** (agentbox's tasks
-  name the host directory) wears a mark in the lists, and the commit
-  dialog on it warns before a commit: "an agent works on this branch in
-  <vm> - pull first". Nothing is forbidden; two commits apart on one
-  branch only end in a conflict at the pull.
-- Deleting a worktree or a group with a task in a VM offers to remove the
-  task (`agentbox rm-task`) and, for a VM of its own, the VM. The default
-  keeps the VM.
-- What unagit learns from use - the order of the profile and sandbox
-  pickers - goes to its `state.json`, as the place picker's does.
-- Help rows for the tab and the new keys; the README explains the
-  feature, agentbox, the environments repository and the forge-side
-  protection.
-
-Later, not in the first version: following the branch on the forge
-(`internal/watch`) to say when the agent pushed, and pulling on request
-from that news.
+- unibox's code is `cmd/unibox` and `internal/unibox/...`, in its own
+  repository with its own AGENTS.md. It imports nothing of unagit's.
+- unagit imports nothing of unibox's. It runs the binary, found through
+  `a.executable("unibox")` like any program, and decodes `--json` into
+  types of its own, written against `internal/unibox/api` and refusing an
+  `api_version` it does not know.
+- Two versions, kept apart: `api_version` is the JSON contract's, and
+  changes only when a field unagit reads changes meaning or goes; the
+  profile format is the YAML's, and unagit never reads YAML, so it learns
+  of it only as a profile that does not load until it is migrated.
+- unagit's side of the integration - Settings, the Sandboxes tab, Open in
+  Sandboxed Agent…, the commit warning, removal with a worktree - is
+  unagit's plan, in its docs/sandboxes.md; credentials from unagit's vault
+  in its docs/sandbox-credentials.md.
 
 ## Tests
 
@@ -1292,7 +1259,7 @@ that change only unibox. The unagit suite is not run for those changes.
 changes across the boundary or to shared build machinery. The binary and
 package name agreed after the original design is `unibox`.
 
-agentbox:
+unibox:
 
 - A stand-in `sbx` and a stand-in `docker` on their own PATH
   (`testenv.WriteExecutable`), answering `ls --json` and `template ls
@@ -1302,60 +1269,56 @@ agentbox:
   make.
 - Profiles: parsing (an unknown field, a missing instructions file are
   errors), the tree hash and the image state, the build arguments
-  (`AGENTBOX_RUNTIME` always, `build.args` of the runtime alone), the
+  (`UNIBOX_RUNTIME` always, `build.args` of the runtime alone), the
   generated flags, the agents' check failing a build that lacks one, the
-  approval refusing a changed cache or `env` and passing a changed `cpus`,
+  change of host access told once and a changed seed recreating nothing,
   the instructions put together in order, the author and the trailer added
   by the hook once.
-- The command line: `--json` shapes against `internal/agentbox/api`, the
+- The command line: `--json` shapes against `internal/unibox/api`, the
   exit codes, no question asked under `--json` or `--yes`; without unagit,
   URLs from `origin` with credentials stripped, a branch the forge lacks
   refused.
-- No token in any argv or environment agentbox builds.
+- No token in any argv or environment unibox builds.
 - The herdr plugin: the manifest written with the binary's path and
   rewritten when it moves; `observe` against a stand-in `herdr` reporting a
-  state on a change only and releasing a pane whose `agentbox run` ended;
+  state on a change only and releasing a pane whose `unibox run` ended;
   the install asking first. A real herdr only in `make integration`.
-- A real sbx only opt-in by a variable on macOS (`AGENTBOX_SBX_TEST=1`), as
+- A real sbx only opt-in by a variable on macOS (`UNIBOX_SBX_TEST=1`), as
   Ghostty and the keychain are - sbx needs a hypervisor, not the Docker
   image of `make integration`.
 
-unagit:
-
-- A stand-in `agentbox` on its own PATH answering the `--json` commands
-  from files and logging its argv: the order check → (approve, build) →
-  push → prepare → run; the clone URLs from the forge, never from a
-  remote; the environments repository handed over as a path; no token in
-  any argv or environment unagit gives it.
-- The questions on what `check` reports: a default branch refused,
-  uncommitted changes named, Approve… and Build… drawing their diffs.
-- The commit dialog's warning on a branch an agent works on.
-- UI: the Sandboxes tab and the pickers at several terminal sizes,
-  `assertLegible`, agentbox's block in Integrations, help rows,
-  `TestEveryActionIsNamedAndExplained`, `TestNoTwoActionsShareAKey`.
-- The boundary tests of [the boundary](#the-boundary).
+unagit's tests are its own plan's (unagit's docs/sandboxes.md).
 
 ## Order of work
 
-1. **Spike by hand**, everything marked so above, written back into this
-   file: a VM with no repository mounted, a clone and a push from it to
-   the user's GitLab with an sbx secret, an agent by `sbx exec` in a shell
-   VM with its login, `-w`, the read-only Gradle cache, `sbx template load`
-   of a `docker save`, what a template needs beyond `:shell`, the herdr
-   plugin API.
-2. agentbox's core: the runtime with sbx, profiles, the build and the
-   agents' check, approvals, its stand-ins and tests.
-3. agentbox's tasks: `check`, `prepare`, `run`, the instructions, the
-   author and hook, `start`, stopping idle VMs; usable from a terminal
-   without unagit.
-4. unagit's integration: Settings and the configuration handed over, Open
-   in Sandboxed Agent… for one repository's worktree in This Terminal; then
-   groups; then every place.
-5. The Sandboxes tab, the removal with a worktree, the commit warning,
-   Activity.
-6. agentbox's herdr plugin and its install from Integrations.
-7. AGENTS.md's map gains `cmd/agentbox` and `internal/agentbox`; the
-   README its section, and one of agentbox's own.
+Built, in this order: the spike by hand; unibox's core (the runtime with
+sbx, profiles, the build and the agents' check); tasks (`check`,
+`prepare`, `run`, `resume`, instructions, author and hook, `start`,
+stopping idle sandboxes), usable from a terminal without unagit; kits for
+several agents; services, secrets and network rules configured through
+unibox; agents' seeds; the herdr plugin; the versioned profile format.
+
+Next, for unagit to build on:
+
+1. **The contract, before unagit reads it** (unibox):
+   - `profiles --json` drops `approved`, left from the approval this
+     replaced, and says a profile's `format` with a code for one of an
+     older format (`profile_format`), so unagit can offer Migrate…
+     without parsing an error's text. `api_version` 2, since a field
+     goes.
+   - `init --json` reports what a migration did (`migrated`), as it now
+     does, under that version.
+   - Decide `--new-sandbox` against `--sandbox` (one flag that makes the
+     sandbox when it does not exist) before unagit passes either.
+2. **unagit's integration**, in unagit's plan: Settings and the
+   configuration handed over; Open in Sandboxed Agent… for one
+   repository's worktree in This Terminal, then groups, then every place.
+3. The Sandboxes tab with its configuration actions (Build…, Sign In…,
+   Services…, Network…, Migrate…), removal with a worktree, the commit
+   warning, Activity.
+4. The herdr plugin's install from Integrations.
+5. unagit as a source of tokens (its docs/sandbox-credentials.md):
+   `stored` grants first, then GitLab's minted ones.
 
 ## Kits v3: multi-agent credentials (validated 2026-10-13)
 
