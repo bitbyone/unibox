@@ -608,8 +608,8 @@ func (p Profile) ApprovalKey() string { return digest([]string{p.Root, p.Name}) 
 func (p Profile) AccessHash() string  { return digest(p.HostAccess) }
 
 // HostFacing says whether the profile asks for anything of the host - an
-// environment value, a cache mount, a network rule. A profile asking for
-// nothing has nothing to approve: nothing of it crosses the boundary.
+// environment value, a cache mount, a network rule, a login. A change of
+// that is what a start tells the user.
 func (p Profile) HostFacing() bool {
 	return len(p.Env)+len(p.Caches)+len(p.DenyNetwork)+len(p.AllowNetwork)+len(p.Auth)+len(p.Services) > 0
 }

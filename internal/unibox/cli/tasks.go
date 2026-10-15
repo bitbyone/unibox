@@ -111,7 +111,7 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 				changed = true
 			case "login_required":
 				// A token or command sign-in needs nothing typed: the host
-				// command is in the profile the user just approved, so the
+				// command is in the profile the user wrote, so the
 				// runtime is told its source without asking again. An OAuth
 				// login or a key still needs the user at the terminal.
 				_, _, p, err := o.manager.Definition(*r)

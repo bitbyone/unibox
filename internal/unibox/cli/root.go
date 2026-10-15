@@ -39,7 +39,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	root.SetOut(out)
 	root.SetErr(errout)
 	root.PersistentFlags().BoolVar(&o.json, "json", false, "Write versioned JSON without prompting")
-	root.PersistentFlags().BoolVarP(&o.yes, "yes", "y", false, "Accept operation prompts (does not approve host access or discard work)")
+	root.PersistentFlags().BoolVarP(&o.yes, "yes", "y", false, "Accept operation prompts (never discards work)")
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		m, err := unibox.Open(paths, errout)
 		if err != nil {
@@ -205,7 +205,7 @@ func configValue(c unibox.Config, key string) (any, error) {
 }
 
 func (o *options) profilesCommand() *cobra.Command {
-	return &cobra.Command{Use: "profiles", Args: cobra.NoArgs, Short: "List profiles, agents, builds and approval", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "profiles", Args: cobra.NoArgs, Short: "List profiles, agents and builds", RunE: func(cmd *cobra.Command, args []string) error {
 		rows, err := o.manager.Profiles(cmd.Context())
 		if err != nil {
 			return err
@@ -214,9 +214,9 @@ func (o *options) profilesCommand() *cobra.Command {
 			return o.write(map[string]any{"api_version": api.Version, "profiles": rows})
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "PROFILE\tAGENTS\tIMAGE\tAPPROVED\tERROR")
+		fmt.Fprintln(w, "PROFILE\tAGENTS\tIMAGE\tERROR")
 		for _, p := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%v\t%t\t%s\n", p.Name, strings.Join(p.Agents, ","), p.Images, p.Approved, p.Error)
+			fmt.Fprintf(w, "%s\t%s\t%v\t%s\n", p.Name, strings.Join(p.Agents, ","), p.Images, p.Error)
 		}
 		return w.Flush()
 	}}

@@ -161,7 +161,7 @@ func (o *options) initCommand() *cobra.Command {
 		for _, rel := range report.Kept {
 			fmt.Fprintln(o.output, "kept", rel)
 		}
-		fmt.Fprintf(o.output, "profile %s is ready to approve and build: unibox approve %s && unibox build %s\n", name, name, name)
+		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox login %s, add forges with unibox service add %s <name>, then unibox run builds and starts it\n", name, name, name)
 		return nil
 	}}
 	c.Flags().BoolVarP(&interactive, "interactive", "i", false, "Ask for the profile's name, agents and resources")
