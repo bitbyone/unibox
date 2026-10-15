@@ -167,7 +167,13 @@ func (o *options) initCommand() *cobra.Command {
 		if err := os.MkdirAll(root, 0o755); err != nil {
 			return err
 		}
-		report, err := unibox.Init(root, name, agents, cpus, memory)
+		// A profile that exists keeps its agents: init completes it, and
+		// takes --agents only to check they are the profile's.
+		chosen := agents
+		if !interactive && !cmd.Flags().Changed("agents") {
+			chosen = nil
+		}
+		report, err := unibox.Init(root, name, chosen, cpus, memory)
 		if err != nil {
 			return err
 		}
@@ -179,7 +185,7 @@ func (o *options) initCommand() *cobra.Command {
 			}
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept})
+			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed})
 		}
 		switch {
 		case previous == "":
@@ -194,6 +200,9 @@ func (o *options) initCommand() *cobra.Command {
 		}
 		for _, rel := range report.Kept {
 			fmt.Fprintln(o.output, "kept", rel)
+		}
+		for _, rel := range report.Completed {
+			fmt.Fprintln(o.output, "completed", rel)
 		}
 		if name == "" {
 			fmt.Fprintln(o.output, "add a profile with unibox init <profile>, or be asked with unibox init -i")

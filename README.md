@@ -64,6 +64,11 @@ have, and what changed in the profile. `run` fixes what it can. Every command ac
 
 ## Environments repository
 
+`unibox init <profile>` on a profile that exists completes it to what init
+writes today - the seeds and `agent_config` entries of its agents, how each
+is credited, the layout - and changes nothing it already says; its agents
+stay its own.
+
 A git repository of yours holding the profiles. `unibox init` creates:
 
 ```

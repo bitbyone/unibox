@@ -605,6 +605,14 @@ refuses rather than guess; once configured, init names the repository it
 writes into. `unibox config unset environments` forgets it and leaves
 the files.
 
+`unibox init <profile>` on a profile that exists completes it rather
+than skipping it: the seeds and `agent_config` entries of its agents and
+how each is credited, where it lacks them, and the layout. What it says
+already - a seed of its own, a co-author, any section, its resources -
+stays, and its agents are its own: `--agents` that differ are refused.
+The seeds are not the image's inputs, so completing a profile rebuilds
+nothing.
+
 A profile is edited by hand or through unibox's commands (`agent`,
 `service`, `network`), which write it as a node tree and keep its
 comments. Every write - init's too - lays it out the same way

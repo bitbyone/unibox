@@ -54,3 +54,62 @@ func TestAProfileIsLaidOutTheSameWhoeverWroteIt(t *testing.T) {
 		t.Fatalf("%v\n%s\n---\n%s", err, s, again)
 	}
 }
+
+func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	write(t, filepath.Join(root, "sandboxes", "node", "_data", "mine.json"), `{"theme": "light"}`)
+	write(t, file, "# Mine, from before.\ndockerfile: Dockerfile\nagents: [claude, codex]\ncpus: 2\nmemory: 1g\nstart: start.sh\nagent_config: {claude: _data/mine.json}\ngit: {co_authors: {codex: Codex Bot <bot@example.com>}}\nallow_network: [jitpack.io] # Kotlin\n")
+	// A repository init laid out already, as a real one is.
+	if _, err := Init(root, "", nil, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	before, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Init(root, "node", []string{"copilot"}, 2, "1g"); err == nil || !strings.Contains(err.Error(), "does not change a profile's agents") {
+		t.Fatalf("%v", err)
+	}
+	report, err := Init(root, "node", nil, 4, "8g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Completed) != 1 {
+		t.Fatalf("%+v", report)
+	}
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Its own seed and co-author stay; what it lacked is added.
+	if p.AgentConfig["claude"] != "_data/mine.json" || p.AgentConfig["claude.settings"] != "_data/claude.settings.json" {
+		t.Fatalf("%v", p.AgentConfig)
+	}
+	if p.Git.CoAuthors["codex"] != "Codex Bot <bot@example.com>" || p.Git.CoAuthors["claude"] != "Claude <noreply@anthropic.com>" {
+		t.Fatalf("%v", p.Git.CoAuthors)
+	}
+	if p.CPUs != 2 || p.Memory != "1g" || len(p.Agents) != 2 {
+		t.Fatalf("init changed what the profile says: %d %s %v", p.CPUs, p.Memory, p.Agents)
+	}
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), "# Mine, from before.") || !strings.Contains(string(data), "allow_network: [jitpack.io] # Kotlin") || !strings.Contains(string(data), footerMarker) {
+		t.Fatalf("%s", data)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "_data", "claude.json")); err == nil {
+		t.Fatal("a seed the profile does not name was written")
+	}
+	// Seeds are not the image's inputs: nothing to rebuild.
+	if p.Revision != before.Revision {
+		t.Fatal("completing the profile outdated its image")
+	}
+	// Complete already: a second init changes nothing.
+	again, err := Init(root, "node", nil, 4, "8g")
+	if err != nil || len(again.Completed) != 0 {
+		t.Fatalf("%+v %v", again, err)
+	}
+	if after, _ := os.ReadFile(file); string(after) != string(data) {
+		t.Fatal("a second init changed the profile")
+	}
+}

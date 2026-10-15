@@ -233,6 +233,10 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), "claude: _data/claude.json") || !strings.Contains(string(profile), "co_authors:\n    claude: Claude <noreply@anthropic.com>") {
 		t.Fatalf("%s", profile)
 	}
+	// Again on the profile it made: complete already, kept, agents its own.
+	if out, _, err = run(t, paths, "", "init", "web"); err != nil || !strings.Contains(out, "kept sandboxes/web/sandbox.yaml") {
+		t.Fatalf("%v\n%s", err, out)
+	}
 	// Unset forgets it and leaves the files.
 	if _, _, err = run(t, paths, "", "config", "unset", "environments"); err != nil {
 		t.Fatal(err)
