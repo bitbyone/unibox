@@ -37,8 +37,20 @@ clear) rm -f "$store/unibox-$5" ;;
 search) for f in "$store"/unibox-*; do [ -f "$f" ] && echo "attribute.name = ${f##*/unibox-}"; done ;;
 esac`)
 	write("sbx", `[ "$1 $2" = "secret ls" ] && echo '{"secrets":[],"custom_secrets":[]}'`)
+	// gh is signed in when the store holds a marker; ghSignedIn puts it.
+	write("gh", `[ "$1 $2" = "auth status" ] && { [ -f "$store/gh" ] || exit 1; }`)
+	ghDirs[argv] = dir
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return argv
+}
+
+var ghDirs = map[string]string{}
+
+func ghSignedIn(t *testing.T, argv string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(ghDirs[argv], "gh"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func run(t *testing.T, paths unibox.Paths, stdin string, args ...string) (string, string, error) {
@@ -230,5 +242,42 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	}
 	if _, log, err = run(t, paths, "", "profiles"); err != nil || !strings.Contains(log, gone+" does not exist") {
 		t.Fatalf("%v %s", err, log)
+	}
+}
+
+func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
+	argv := fakeHostTools(t)
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.WriteFile(file, []byte("image: example/image\nagents: [copilot]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// gh not signed in: --gh says what to do.
+	if _, _, err := run(t, paths, "", "login", "node", "copilot", "--gh"); err == nil || !strings.Contains(err.Error(), "gh auth login") {
+		t.Fatalf("%v", err)
+	}
+	ghSignedIn(t, argv)
+	_, log, err := run(t, paths, "", "login", "node", "copilot", "--gh")
+	if err != nil || !strings.Contains(log, "your whole gh login") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if _, _, err = run(t, paths, "", "service", "add", "node", "github", "--gh"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), "copilot: {token: gh auth token}") || !strings.Contains(string(data), "command: gh auth token") || !strings.Contains(string(data), "user: x-access-token") {
+		t.Fatalf("%s", data)
+	}
+	// Copilot's token login keeps gh's token off github.com, and nothing
+	// was stored of unibox's own.
+	recorded, _ := os.ReadFile(argv)
+	if !strings.Contains(string(recorded), "set-custom --env COPILOT_GITHUB_TOKEN") || !strings.Contains(string(recorded), "--command gh auth token") || strings.Contains(string(recorded), "secret set github") {
+		t.Fatalf("%s", recorded)
+	}
+	if out, _, _ := run(t, paths, "", "secret", "ls"); strings.TrimSpace(out) != "no secrets in the login keychain" && strings.TrimSpace(out) != "no secrets in the Secret Service" {
+		t.Fatalf("%q", out)
+	}
+	if _, _, err = run(t, paths, "", "service", "add", "node", "gitlab", "--gh"); err == nil {
+		t.Fatal("--gh was taken for gitlab")
 	}
 }

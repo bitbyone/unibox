@@ -70,6 +70,29 @@ func (o *options) openPage(page string) {
 	}
 }
 
+// GHCommand is the host command that prints the token of the user's gh
+// login, for copilot or a GitHub service to use instead of a token of their
+// own.
+const GHCommand = "gh auth token"
+
+// useGH says whether to sign in through the user's gh login: --gh says so;
+// at a terminal, with gh signed in and no token of its own stored yet,
+// the user is asked. It says what that gives away.
+func (o *options) useGH(cmd *cobra.Command, flag bool, what string, stored bool) (bool, error) {
+	signedIn := exec.CommandContext(cmd.Context(), "gh", "auth", "status", "--hostname", "github.com").Run() == nil
+	if flag {
+		if !signedIn {
+			return false, fmt.Errorf("gh is not signed in to github.com; run gh auth login, or leave out --gh for a token of its own")
+		}
+	} else if stored || !signedIn || !o.interactive || o.json {
+		return false, nil
+	} else if !o.ask("  gh is signed in here; sign " + what + " in through it (gh auth token) instead of a token of its own?") {
+		return false, nil
+	}
+	fmt.Fprintf(o.log, "  %s signs in through gh auth token: your whole gh login, every repository and scope it has; a token of its own is narrower\n", what)
+	return true, nil
+}
+
 func (o *options) secretStore() (unibox.SecretStore, error) {
 	return unibox.PlatformSecrets()
 }
@@ -153,7 +176,7 @@ func (o *options) ensureSecret(cmd *cobra.Command, store unibox.SecretStore, nam
 }
 
 func (o *options) loginCommand() *cobra.Command {
-	var renew bool
+	var renew, viaGH bool
 	var rt string
 	c := &cobra.Command{Use: "login profile [agent...]", Args: cobra.MinimumNArgs(1), Short: "Sign a profile's agents in: tokens into the platform's store, the profile's auth written", RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
@@ -201,7 +224,18 @@ func (o *options) loginCommand() *cobra.Command {
 				}
 				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "claude"}
 			case "copilot":
-				err := o.ensureSecret(cmd, store, "copilot", renew, []string{
+				stored, _ := store.Has(ctx, "copilot")
+				gh, err := o.useGH(cmd, viaGH, "copilot", stored && !renew)
+				if err != nil {
+					return err
+				}
+				if gh {
+					// A token login, so copilot's hosts alone get it; the
+					// github secret of command would take github.com over.
+					auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: GHCommand}
+					continue
+				}
+				err = o.ensureSecret(cmd, store, "copilot", renew, []string{
 					"make a fine-grained token on GitHub: no repositories, Account permissions > Copilot Requests: Read-only, nothing else",
 					"it signs copilot in alone; git reaches GitHub through the profile's services",
 				}, "https://github.com/settings/personal-access-tokens/new")
@@ -264,6 +298,7 @@ func (o *options) loginCommand() *cobra.Command {
 		return o.success(fmt.Sprintf("profile %s signs its agents in", p.Name))
 	}}
 	c.Flags().BoolVar(&renew, "renew", false, "Ask for every token again, replacing the stored ones")
+	c.Flags().BoolVar(&viaGH, "gh", false, "Sign copilot in through your gh login (gh auth token) instead of a token of its own")
 	c.Flags().StringVar(&rt, "runtime", "", "Runtime that keeps the logins (default: the configured one)")
 	return c
 }
@@ -299,7 +334,7 @@ func (o *options) serviceCommand() *cobra.Command {
 	c := &cobra.Command{Use: "service", Short: "Sign a profile's sandboxes in to forges and other host services"}
 	var kind, user, scheme, env, author, refresh, command string
 	var hosts []string
-	var git, noCoAuthor, renew bool
+	var git, noCoAuthor, renew, viaGH bool
 	add := &cobra.Command{Use: "add profile name", Args: cobra.ExactArgs(2), Short: "Store a service's token and write its entry into the profile", RunE: func(cmd *cobra.Command, args []string) error {
 		profile, name := args[0], args[1]
 		if err := unibox.ValidName(name); err != nil {
@@ -343,7 +378,22 @@ func (o *options) serviceCommand() *cobra.Command {
 		if len(s.Host) == 0 {
 			return fmt.Errorf("give %s its host with --host", name)
 		}
-		if command != "" {
+		gh := false
+		if kind == "github" && command == "" {
+			stored := false
+			if store, err := o.secretStore(); err == nil {
+				stored, _ = store.Has(cmd.Context(), name)
+			}
+			var err error
+			if gh, err = o.useGH(cmd, viaGH, name, stored && !renew); err != nil {
+				return err
+			}
+		} else if viaGH {
+			return fmt.Errorf("--gh is for a github service; %s is %s", name, kind)
+		}
+		if gh {
+			s.Command = GHCommand
+		} else if command != "" {
 			// A store unibox does not know - Vault, 1Password - is the
 			// user's command, run by the runtime as it is.
 			s.Command = command
@@ -387,6 +437,7 @@ func (o *options) serviceCommand() *cobra.Command {
 	f.StringVar(&refresh, "refresh", "", "How often the runtime fetches the token again, e.g. 10m")
 	f.StringVar(&command, "command", "", "A host command printing the token, for a store unibox does not keep (Vault, 1Password)")
 	f.BoolVar(&renew, "renew", false, "Ask for the token again, replacing the stored one")
+	f.BoolVar(&viaGH, "gh", false, "Sign a github service in through your gh login (gh auth token)")
 	c.AddCommand(add)
 
 	c.AddCommand(&cobra.Command{Use: "ls profile", Args: cobra.ExactArgs(1), Short: "List a profile's services and whether their tokens are stored", RunE: func(cmd *cobra.Command, args []string) error {

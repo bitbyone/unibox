@@ -119,6 +119,11 @@ Service on Linux - where the profile names it as `secret:<name>`. It never
 enters a sandbox: the runtime reads it on the host and the sandbox sees a
 placeholder its proxy swaps. `unibox secret set|ls|rm` keeps any other.
 
+Copilot can sign in through your gh login instead (`--gh`, or the question
+unibox asks at a terminal when gh is signed in): `copilot: {token: gh auth
+token}`. It is your whole gh login, every repository and scope it has, but
+as a token login it reaches only Copilot's hosts, not github.com.
+
 A missing `token` or `command` login is stored in the runtime on `run`
 without asking; an OAuth login or a key is asked for in your terminal.
 
@@ -140,7 +145,8 @@ in the platform's store and writes the `services` entry. It knows `github`,
 `gitlab` and `artifactory` (from the name, or `--kind`), anything else is
 `--kind generic` with `--host`, `--git` or `--env`. `--host github.com/<owner>`
 gives one owner on a forge a token of its own; `--author` and `--no-co-author`
-say who commits; `--command` takes a store unibox does not keep. `unibox
+say who commits; `--command` takes a store unibox does not keep; `--gh` signs a `github`
+service in through your gh login, which reaches every owner it can at once. `unibox
 service ls <profile>` shows each and whether its token is stored, `unibox
 service rm` takes one out.
 

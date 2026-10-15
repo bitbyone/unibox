@@ -507,6 +507,12 @@ state or the profile, and a test holds each of these.
   prompt; copilot - opens the page for a fine-grained token, says what to
   grant (Copilot Requests alone), then the hidden prompt. Each writes the
   agent's `auth` into the profile.
+- **The user's gh login** can stand in for a GitHub token: `login --gh`
+  writes `copilot: {token: gh auth token}` and `service add github --gh`
+  a service with `command: gh auth token`; at a terminal with gh signed
+  in and nothing of the service's own stored, unibox asks. It says what
+  that gives away - the whole gh login - and copilot keeps it as a token
+  login, on Copilot's hosts alone, so github.com stays the services'.
 - **Services.** `unibox service add <profile> <name>` asks for, or takes
   by flags, the forge or the kind of service, its host and path, the user
   the forge expects, the author and co-author, then the token on the
