@@ -34,7 +34,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	if f, ok := in.(*os.File); ok {
 		o.interactive = term.IsTerminal(int(f.Fd()))
 	}
-	root := &cobra.Command{Use: "unibox", Short: "Run coding agents in independent sandbox environments", SilenceErrors: true, SilenceUsage: true, Version: "0.1.0"}
+	root := &cobra.Command{Use: "unibox", Short: "Run coding agents in independent sandbox environments", SilenceErrors: true, SilenceUsage: true, Version: fmt.Sprintf("0.1.0 (profile format %d)", unibox.ProfileFormat)}
 	root.SetIn(in)
 	root.SetOut(out)
 	root.SetErr(errout)

@@ -60,7 +60,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "mine.json"), `{"theme": "light"}`)
-	write(t, file, "# Mine, from before.\ndockerfile: Dockerfile\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\ncpus: 2\nmemory: 1g\nstart: start.sh\nallow_network: [jitpack.io] # Kotlin\n")
+	write(t, file, "version: 1\n# Mine, from before.\ndockerfile: Dockerfile\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\ncpus: 2\nmemory: 1g\nstart: start.sh\nallow_network: [jitpack.io] # Kotlin\n")
 	// A repository init laid out already, as a real one is.
 	if _, err := Init(root, "", nil, 0, ""); err != nil {
 		t.Fatal(err)
@@ -111,5 +111,34 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(file); string(after) != string(data) {
 		t.Fatal("a second init changed the profile")
+	}
+}
+
+func TestAProfileOfAnotherFormatIsMadeAgainNotRead(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	for version, want := range map[string]string{
+		"":             "is of format none and this unibox reads format 1; make it again",
+		"version: 0\n": "is of format 0 and this unibox reads format 1; make it again",
+		"version: 2\n": "is of format 2, newer than the 1 this unibox reads; upgrade unibox",
+	} {
+		// An older form fails on its version, not on a field it has.
+		write(t, file, version+"dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\nauth: {claude: oauth}\n")
+		if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%q: %v", version, err)
+		}
+	}
+	// init does not carry an older form over either; it says to make it again.
+	write(t, file, "dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\n")
+	if _, err := Init(root, "node", nil, 2, "1g"); err == nil || !strings.Contains(err.Error(), "make it again") {
+		t.Fatalf("%v", err)
+	}
+	// What init writes is of this format.
+	if _, err := Init(root, "fresh", []string{"claude"}, 2, "1g"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 1\n") {
+		t.Fatalf("%s", data)
 	}
 }

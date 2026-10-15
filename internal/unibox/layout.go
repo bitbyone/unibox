@@ -24,6 +24,7 @@ type profileSection struct {
 // profileSections is the order of a profile's top-level keys, with what
 // each says above it and how it reads when absent. %s is the profile.
 var profileSections = []profileSection{
+	{key: "version"},
 	{key: "dockerfile"},
 	{key: "image"},
 	{key: "cpus"},

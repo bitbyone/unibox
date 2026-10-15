@@ -115,7 +115,7 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 	// The profile is built as a node tree and laid out by the arrangement
 	// every change of it gets, so it reads the same written by init or by
 	// a later command: each agent with how it is credited and its seeds.
-	raw := fmt.Sprintf("# %s: describe the environment here.\ndockerfile: Dockerfile\ncpus: %d\nmemory: %s\nagents: [%s]\ninstructions: [unibox]\n", name, cpus, memory, strings.Join(declared, ", "))
+	raw := fmt.Sprintf("# %s: describe the environment here. version is the profile's format;\n# a unibox of another one asks for the profile to be made again.\nversion: %d\ndockerfile: Dockerfile\ncpus: %d\nmemory: %s\nagents: [%s]\ninstructions: [unibox]\n", name, ProfileFormat, cpus, memory, strings.Join(declared, ", "))
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
 		return report, err

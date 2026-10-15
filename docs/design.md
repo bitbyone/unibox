@@ -631,6 +631,7 @@ runtime**. It describes the environment; where it runs is chosen at the
 start.
 
 ```yaml
+version: 1                    # the format; see below
 dockerfile: Dockerfile        # relative to the profile; or image: <ref>
 cpus: 8
 memory: 12g
@@ -661,10 +662,17 @@ git:
   co_author: true             # a Co-Authored-By trailer naming the agent
 ```
 
+- **A profile says its format** (the user's call): `version` is the
+  first key, `ProfileFormat` is the one this unibox reads, and `unibox
+  --version` shows it. A profile without it or of an older format is
+  refused with "make it again" (move it aside, `unibox init`, carry the
+  settings over), a newer one with "upgrade unibox". unibox keeps no
+  migration code: a format change bumps the number, and old profiles are
+  generated anew. `init` on an older profile fails the same way.
 - **Everything about an agent is under it** (the user's call, 2026-10-15):
   `auth`, `co_author` and `config` sat in three sections before
-  (`auth`, `git.co_authors`, `agent_config` keyed `<agent>.<file>`); a
-  profile using them is refused with how to write it now. The order of
+  (`auth`, `git.co_authors`, `agent_config` keyed `<agent>.<file>`); that
+  form is format 0 and is no longer read. The order of
   `agents` is read from the YAML, as sbx signs in by the OAuth of the
   first agent declaring one. A `config` key is the file's own name, which
   unibox maps to its path in the guest home from its table, allowing only

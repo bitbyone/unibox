@@ -314,7 +314,7 @@ func TestTheStoredOAuthLoginIsDeclaredFirst(t *testing.T) {
 func TestProfilesSayHowEachAgentSignsIn(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 1\ndockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)

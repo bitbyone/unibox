@@ -56,6 +56,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
 
 ## Decisions worth knowing
 
+- **A profile has a format version.** Changing what sandbox.yaml may say
+  in a way an existing profile no longer reads bumps `ProfileFormat`;
+  there is no migration code, an older profile is refused and made again
+  with `unibox init`.
 - **A profile knows no runtime.** It says what the environment is, how
   each agent signs in and what it may reach; an adapter (`sbx.go`,
   `sbx_kit.go`, `sbx_auth.go`) turns that into the runtime's own means.

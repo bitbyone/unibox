@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -271,7 +272,13 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 	return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", n.Line)
 }
 
+// ProfileFormat is the form of sandbox.yaml this unibox reads. A profile
+// says its own in version; one of another form is not read at all - it is
+// made again with unibox init - so no unibox carries code for older forms.
+const ProfileFormat = 1
+
 type Profile struct {
+	Version    int    `yaml:"version" json:"-"`
 	Dockerfile string `yaml:"dockerfile" json:"dockerfile"`
 	Image      string `yaml:"image" json:"image"`
 	CPUs       int    `yaml:"cpus" json:"cpus"`
@@ -369,8 +376,8 @@ func LoadProfile(root, name string) (Profile, error) {
 	if err != nil {
 		return p, err
 	}
-	if err = movedSections(b); err != nil {
-		return p, fmt.Errorf("profile %s: %w", name, err)
+	if err = checkFormat(name, b); err != nil {
+		return p, err
 	}
 	if err = DecodeYAML(b, &p); err != nil {
 		return p, fmt.Errorf("profile %s: %w", name, err)
@@ -936,24 +943,27 @@ func decodeStrict(n *yaml.Node, v any) error {
 	return DecodeYAML(b, v)
 }
 
-// movedSections names the sections that moved under each agent, so an older
-// profile is told how to read now rather than that a field is unknown.
-func movedSections(text []byte) error {
+// checkFormat reads a profile's version before anything else of it, so a
+// profile of another form is named as such rather than for a field it has
+// or lacks.
+func checkFormat(name string, text []byte) error {
 	var doc yaml.Node
-	if yaml.Unmarshal(text, &doc) != nil || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+	version := ""
+	if yaml.Unmarshal(text, &doc) == nil && len(doc.Content) == 1 && doc.Content[0].Kind == yaml.MappingNode {
+		if v := mapValue(doc.Content[0], "version"); v != nil {
+			version = v.Value
+		}
+	}
+	if version == fmt.Sprint(ProfileFormat) {
 		return nil
 	}
-	m := doc.Content[0]
-	if mapValue(m, "auth") != nil {
-		return fmt.Errorf("auth moved under each agent: agents: {<agent>: {auth: ...}}")
+	if n, err := strconv.Atoi(version); err == nil && n > ProfileFormat {
+		return fmt.Errorf("profile %s is of format %d, newer than the %d this unibox reads; upgrade unibox", name, n, ProfileFormat)
 	}
-	if mapValue(m, "agent_config") != nil {
-		return fmt.Errorf("agent_config moved under each agent: agents: {<agent>: {config: {<file>: _data/...}}}")
+	if version == "" {
+		version = "none"
 	}
-	if git := mapValue(m, "git"); git != nil && git.Kind == yaml.MappingNode && mapValue(git, "co_authors") != nil {
-		return fmt.Errorf("git.co_authors moved under each agent: agents: {<agent>: {co_author: Name <email>}}")
-	}
-	return nil
+	return fmt.Errorf("profile %s is of format %s and this unibox reads format %d; make it again - move sandboxes/%s aside, run unibox init %s, and carry its settings over", name, version, ProfileFormat, name, name)
 }
 
 // parseSeed reads a seed as its file is written: TOML or JSON, an object.

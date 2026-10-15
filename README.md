@@ -87,8 +87,12 @@ my-envs/
 ## Profile
 
 `sandboxes/<profile>/sandbox.yaml`. It does not mention the runtime.
+`version` is the profile's format; a unibox reads one format (`unibox
+--version` shows it) and refuses another, saying to make the profile again
+with `unibox init` - there is no migration.
 
 ```yaml
+version: 1
 dockerfile: Dockerfile
 cpus: 4
 memory: 8g
