@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -254,5 +255,20 @@ func TestATOMLSeedKeepsWhatCodexAndUniboxWrote(t *testing.T) {
 	// Nothing to change: nothing written.
 	if again, err := mergeTOML(got, map[string]any{"approval_policy": "never"}); err != nil || again != nil {
 		t.Fatalf("%v %s", err, again)
+	}
+}
+
+func TestEveryAgentStartsWithAllPermissions(t *testing.T) {
+	t.Parallel()
+	want := map[string]string{
+		"claude":   "--dangerously-skip-permissions",
+		"codex":    "--dangerously-bypass-approvals-and-sandbox",
+		"copilot":  "--allow-all",
+		"opencode": "--auto",
+	}
+	for _, a := range Agents {
+		if !slices.Contains(a.Args, want[a.ID]) {
+			t.Errorf("%s starts with %v, not %s", a.ID, a.Args, want[a.ID])
+		}
 	}
 }

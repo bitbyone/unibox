@@ -105,7 +105,9 @@ var Agents = []Agent{
 			}},
 			{Name: "config.json", Path: ".copilot/config.json"},
 		}},
-	{ID: "opencode", Command: "opencode", Instructions: ".config/opencode/AGENTS.md", CoAuthor: "opencode <noreply@opencode.ai>",
+	// --auto approves what the seed does not name either, as the other
+	// agents' flags do; the sandbox is the boundary.
+	{ID: "opencode", Command: "opencode", Instructions: ".config/opencode/AGENTS.md", CoAuthor: "opencode <noreply@opencode.ai>", Args: []string{"--auto"},
 		Configs: []AgentFile{
 			{Name: "opencode.json", Path: ".config/opencode/opencode.json", Seed: map[string]any{"$schema": "https://opencode.ai/config.json", "autoupdate": false, "permission": map[string]any{"edit": "allow", "bash": "allow", "webfetch": "allow"}}},
 		}},
