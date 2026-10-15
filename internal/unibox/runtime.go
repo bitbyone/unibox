@@ -24,9 +24,10 @@ type Image struct {
 }
 type Spec struct {
 	Name, Image string
-	CPUs        int
-	Memory      string
-	Access      HostAccess
+	// Resources are as the profile says them; the adapter turns a share of
+	// the host's into what its runtime takes.
+	Resources Resources
+	Access    HostAccess
 	// Agent is the runtime's own kind for the sandbox. sbx binds its stored
 	// service credentials by this kind, so a profile with one agent gets the
 	// proxy-managed login; empty means a plain shell sandbox. Agents names

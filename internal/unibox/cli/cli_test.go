@@ -60,7 +60,7 @@ func cliFixture(t *testing.T) (unibox.Paths, string) {
 	if err := os.MkdirAll(filepath.Join(root, "sandboxes", "node"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), []byte("version: 1\nimage: example/image\nagents: [claude]\nenv: [BUILD_MODE]\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), []byte("version: 2\nimage: example/image\nagents: [claude]\nenv: [BUILD_MODE]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := paths.SaveConfig(unibox.Config{Environments: root, Runtimes: map[string]unibox.RuntimeConfig{}}); err != nil {
@@ -180,8 +180,8 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(second.Agents, []string{"claude", "codex"}) || second.CPUs != 2 || second.Memory != "4g" {
-		t.Fatalf("%v %d %s", second.Agents, second.CPUs, second.Memory)
+	if !reflect.DeepEqual(second.Agents, []string{"claude", "codex"}) || second.CPUs != "2" || second.Memory != "4g" {
+		t.Fatalf("%v %s %s", second.Agents, second.CPUs, second.Memory)
 	}
 	c = New(paths, strings.NewReader(""), io.Discard, io.Discard)
 	c.SetArgs([]string{"init", "bad", "--agents", "nonsense"})

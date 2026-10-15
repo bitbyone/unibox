@@ -631,10 +631,9 @@ runtime**. It describes the environment; where it runs is chosen at the
 start.
 
 ```yaml
-version: 1                    # the format; see below
+version: 2                    # the format; see below
 dockerfile: Dockerfile        # relative to the profile; or image: <ref>
-cpus: 8
-memory: 12g
+resources: {cpus: 8, memory: 50%} # fixed, or a share of the host's
 env: [SPRING_PROFILES_ACTIVE] # names; values from the environment
 caches:
   - host: ~/.gradle/caches
@@ -662,6 +661,18 @@ git:
   co_author: true             # a Co-Authored-By trailer naming the agent
 ```
 
+- **Resources are fixed or a share of the host's** (format 2, the
+  user's call): `resources: {cpus, memory}`, each `4`/`8g` or `1%`-`100%`.
+  The profile and the manager pass them as written; the adapter turns a
+  share into what its runtime takes, as a runtime may know no shares.
+  For sbx: a share of CPUs is a count rounded, at least one, and `100%` is
+  `--cpus 0`, sbx's own "all host CPUs"; a share of memory is MiB of the
+  host's (`sysctl hw.memsize`, `/proc/meminfo`). sbx refuses more than
+  75% of the host's memory (`sbx create --help`), so the adapter caps
+  memory there and says so, rather than fail a start; CPUs are shared by
+  time, so all of them takes nothing from the host's own work but
+  priority. A share is resolved when a sandbox is created, and the
+  recorded settings keep the share, so another host is no recreation.
 - **A profile says its format** (the user's call): `version` is the
   first key (none is format 0), `ProfileFormat` is the one this unibox
   reads, and `unibox --version` shows it. Loading never migrates: a
@@ -1121,7 +1132,7 @@ How a profile becomes flags:
 | --- | --- |
 | `dockerfile` | the built template, `-t agentbox/<profile>:<tree>` |
 | `image` | `-t <image>` |
-| `cpus`, `memory` | `--cpus`, `--memory` |
+| `resources` | `--cpus`, `--memory`; a share resolved by the adapter (below) |
 | `deny_network` | `--deny-network` |
 | `env` | `-e NAME` |
 | `caches` | `<host>:ro` as an extra workspace, `-e <env>=<host>` |

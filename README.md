@@ -92,10 +92,9 @@ my-envs/
 one, format by format, best effort: what it cannot carry over it names.
 
 ```yaml
-version: 1
+version: 2
 dockerfile: Dockerfile
-cpus: 4
-memory: 8g
+resources: {cpus: 4, memory: 50%}    # fixed, or a share of the host's
 agents:                              # or a list: [claude, codex]
   claude:
     auth: {token: secret:claude}     # unibox agent login

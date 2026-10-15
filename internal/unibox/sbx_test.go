@@ -34,7 +34,7 @@ func TestSBXUsesOnlyApprovedMountsAndEnvironment(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "fake-ssh-socket")
 	t.Setenv("BUILD_MODE", "test")
 	r := &SBX{}
-	err := r.Create(context.Background(), Spec{Name: "unibox-dev", Image: "unibox/node:abc", CPUs: 2, Memory: "1g", Access: HostAccess{Env: []string{"BUILD_MODE"}, Caches: []Cache{{Host: "/approved/cache", Env: "CACHE_HOME"}}, DenyNetwork: []string{"private.example"}}}, io.Discard)
+	err := r.Create(context.Background(), Spec{Name: "unibox-dev", Image: "unibox/node:abc", Resources: Resources{CPUs: "2", Memory: "1g"}, Access: HostAccess{Env: []string{"BUILD_MODE"}, Caches: []Cache{{Host: "/approved/cache", Env: "CACHE_HOME"}}, DenyNetwork: []string{"private.example"}}}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestSeveralAgentsCreateFromAGeneratedKit(t *testing.T) {
 	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+Quote(log)+"\n"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	r := &SBX{Cache: t.TempDir()}
-	spec := Spec{Name: "unibox-home", Image: "unibox/personal:abc", CPUs: 2, Agents: []string{"claude", "codex", "copilot"}}
+	spec := Spec{Name: "unibox-home", Image: "unibox/personal:abc", Resources: Resources{CPUs: "2"}, Agents: []string{"claude", "codex", "copilot"}}
 	if err := r.Create(context.Background(), spec, io.Discard); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestTheStoredOAuthLoginIsDeclaredFirst(t *testing.T) {
 func TestProfilesSayHowEachAgentSignsIn(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 1\ndockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -488,5 +488,31 @@ printf '%s\n' "$@" > `+Quote(argv)+`
 	approved, _ := os.ReadFile(bindings)
 	if strings.Contains(string(approved), "github") {
 		t.Fatalf("github was approved:\n%s", approved)
+	}
+}
+
+func TestSbxGetsResourcesAsItTakesThem(t *testing.T) {
+	t.Parallel()
+	host := Host{CPUs: 10, Memory: 32 << 30}
+	for _, c := range []struct {
+		in           Resources
+		cpus, memory string
+		capped       bool
+	}{
+		{Resources{}, "", "", false},
+		{Resources{CPUs: "4", Memory: "8g"}, "4", "8g", false},
+		{Resources{CPUs: "50%", Memory: "50%"}, "5", "16384m", false},
+		// All the host's CPUs is sbx's 0; all its memory more than sbx gives.
+		{Resources{CPUs: "100%", Memory: "100%"}, "0", "24576m", true},
+		{Resources{CPUs: "1%", Memory: "64g"}, "1", "24576m", true},
+	} {
+		var log strings.Builder
+		cpus, memory, err := sbxResources(c.in, host, &log)
+		if err != nil || cpus != c.cpus || memory != c.memory || (log.Len() > 0) != c.capped {
+			t.Errorf("%+v: %q %q %v %q", c.in, cpus, memory, err, log.String())
+		}
+	}
+	if _, _, err := sbxResources(Resources{Memory: "50%"}, Host{CPUs: 4}, io.Discard); err == nil {
+		t.Error("a share of memory the host's size of is unknown was taken")
 	}
 }

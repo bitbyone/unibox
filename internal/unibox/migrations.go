@@ -18,6 +18,7 @@ import (
 // later change to the agent table does not alter what it does.
 var migrations = []func(profile *yaml.Node) (moves []seedMove, notes []string){
 	0: migrateFrom0,
+	1: migrateFrom1,
 }
 
 // seedMove is a file of a profile a migration renames, both relative to
@@ -220,4 +221,40 @@ func dropTemplate0(n *yaml.Node) {
 	for _, child := range n.Content {
 		dropTemplate0(child)
 	}
+}
+
+// migrateFrom1 groups format 1's top-level cpus and memory under resources,
+// on one line; their comments go to resources.
+func migrateFrom1(profile *yaml.Node) (moves []seedMove, notes []string) {
+	resources := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle}
+	var head, line []string
+	for i := 0; i+1 < len(profile.Content); i += 2 {
+		k, v := profile.Content[i], profile.Content[i+1]
+		if k.Value != "cpus" && k.Value != "memory" {
+			continue
+		}
+		for _, c := range []string{k.HeadComment, v.HeadComment} {
+			if c != "" {
+				head = append(head, c)
+			}
+		}
+		for _, c := range []string{k.LineComment, v.LineComment, k.FootComment, v.FootComment} {
+			if c != "" {
+				line = append(line, strings.TrimPrefix(c, "# "))
+			}
+		}
+		resources.Content = append(resources.Content, scalarNode(k.Value), &yaml.Node{Kind: v.Kind, Tag: v.Tag, Value: v.Value, Style: v.Style})
+	}
+	if len(resources.Content) == 0 {
+		return nil, nil
+	}
+	deleteMapKey(profile, "cpus")
+	deleteMapKey(profile, "memory")
+	setMapValue(profile, "resources", resources)
+	key := profile.Content[len(profile.Content)-2]
+	key.HeadComment = strings.Join(head, "\n")
+	if len(line) > 0 {
+		resources.LineComment = "# " + strings.Join(line, "; ")
+	}
+	return nil, nil
 }

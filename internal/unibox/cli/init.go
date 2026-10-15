@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -88,8 +87,7 @@ func (o *options) validateCommand() *cobra.Command {
 func (o *options) initCommand() *cobra.Command {
 	var interactive bool
 	var agents []string
-	var cpus int
-	var memory, dir string
+	var cpus, memory, dir string
 	c := &cobra.Command{Use: "init [profile]", Args: cobra.MaximumNArgs(1), Short: "Lay out the environments repository, and add a profile to it", RunE: func(cmd *cobra.Command, args []string) error {
 		name := ""
 		if len(args) == 1 {
@@ -153,14 +151,10 @@ func (o *options) initCommand() *cobra.Command {
 				return err
 			}
 			agents = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
-			v, err = o.prompt(reader, "CPUs", strconv.Itoa(cpus))
-			if err != nil {
+			if cpus, err = o.prompt(reader, "CPUs (a number, or a share of the host's: 50%)", cpus); err != nil {
 				return err
 			}
-			if cpus, err = strconv.Atoi(v); err != nil {
-				return fmt.Errorf("cpus must be a number")
-			}
-			if memory, err = o.prompt(reader, "Memory", memory); err != nil {
+			if memory, err = o.prompt(reader, "Memory (a size such as 8g, or a share: 50%)", memory); err != nil {
 				return err
 			}
 		}
@@ -221,7 +215,7 @@ func (o *options) initCommand() *cobra.Command {
 	c.Flags().StringVar(&dir, "dir", "", "The environments repository to lay out and configure (default: the configured one)")
 	c.Flags().BoolVarP(&interactive, "interactive", "i", false, "Ask for the repository when none is configured, and the profile's name, agents and resources")
 	c.Flags().StringSliceVar(&agents, "agents", []string{"copilot"}, "Agents the profile declares and installs")
-	c.Flags().IntVar(&cpus, "cpus", 4, "CPUs for the profile's sandboxes")
-	c.Flags().StringVar(&memory, "memory", "8g", "Memory for the profile's sandboxes")
+	c.Flags().StringVar(&cpus, "cpus", "4", "CPUs for the profile's sandboxes, or a share of the host's (50%)")
+	c.Flags().StringVar(&memory, "memory", "8g", "Memory for the profile's sandboxes (8g), or a share of the host's (50%)")
 	return c
 }

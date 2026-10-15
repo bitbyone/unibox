@@ -33,12 +33,12 @@ func TestANetworkChangeIsAppliedLiveWhereTheRuntimeCan(t *testing.T) {
 	m.Runtimes = map[string]Runtime{"fake": live}
 	ctx := context.Background()
 	file := filepath.Join(m.Config.Environments, "sandboxes", "node", "sandbox.yaml")
-	write(t, file, "version: 1\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\nallow_network: [jitpack.io]\n")
+	write(t, file, "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\nallow_network: [jitpack.io]\n")
 	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node", Runtime: "fake"}); err != nil {
 		t.Fatal(err)
 	}
 	creates := f.creates
-	write(t, file, "version: 1\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\nallow_network: [maven.google.com]\ndeny_network: [gist.github.com]\n")
+	write(t, file, "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\nallow_network: [maven.google.com]\ndeny_network: [gist.github.com]\n")
 	needRecreate, err := m.ApplyNetwork(ctx, "node")
 	if err != nil || len(needRecreate) != 0 {
 		t.Fatalf("%v %v", needRecreate, err)
@@ -71,7 +71,7 @@ func TestANetworkChangeRecreatesWhereTheRuntimeCannot(t *testing.T) {
 		t.Fatal(err)
 	}
 	creates := f.creates
-	write(t, file, "version: 1\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\ncpus: 2\nmemory: 1g\nallow_network: [jitpack.io]\n")
+	write(t, file, "version: 2\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\nresources: {cpus: 2, memory: 1g}\nallow_network: [jitpack.io]\n")
 	needRecreate, err := m.ApplyNetwork(ctx, "node")
 	if err != nil || !slices.Equal(needRecreate, []string{"dev"}) {
 		t.Fatalf("%v %v", needRecreate, err)

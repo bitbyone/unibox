@@ -273,16 +273,15 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 }
 
 // ProfileFormat is the form of sandbox.yaml this unibox reads. A profile
-// says its own in version; one of another form is not read at all - it is
-// made again with unibox init - so no unibox carries code for older forms.
-const ProfileFormat = 1
+// says its own in version; one of an older form is not read until unibox
+// init migrates it (migrations.go).
+const ProfileFormat = 2
 
 type Profile struct {
 	Version    int    `yaml:"version" json:"-"`
 	Dockerfile string `yaml:"dockerfile" json:"dockerfile"`
 	Image      string `yaml:"image" json:"image"`
-	CPUs       int    `yaml:"cpus" json:"cpus"`
-	Memory     string `yaml:"memory" json:"memory"`
+	Resources  `yaml:"resources"`
 	HostAccess `yaml:",inline"`
 	Agents     []string `yaml:"-" json:"agents"`
 	// AgentList is how agents reads in YAML; LoadProfile spreads it into
@@ -315,7 +314,6 @@ var envName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 // A network rule is a host, a domain wildcard, an IP or a CIDR prefix, with
 // an optional port: one pattern, never a list or anything with spaces.
 var networkPattern = regexp.MustCompile(`^[A-Za-z0-9.*?\[\]!:/_-]+$`)
-var memoryPattern = regexp.MustCompile(`^[1-9][0-9]*[kKmMgG]?$`)
 var sensitiveEnv = regexp.MustCompile(`(?i)(TOKEN|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL|API_KEY|PRIVATE_KEY|SSH_AUTH|GIT_CONFIG|DOCKER_HOST|DOCKER_CONTEXT|^LD_|^DYLD_)`)
 
 // validCommand is one host command, or a reference to a secret unibox keeps.
@@ -407,11 +405,8 @@ func LoadProfile(root, name string) (Profile, error) {
 	if (p.Dockerfile == "") == (p.Image == "") {
 		return p, fmt.Errorf("profile %s must specify exactly one of dockerfile or image", name)
 	}
-	if p.CPUs < 0 {
-		return p, fmt.Errorf("profile %s: cpus must be positive", name)
-	}
-	if p.Memory != "" && !memoryPattern.MatchString(p.Memory) {
-		return p, fmt.Errorf("profile %s: invalid memory; use e.g. 8g", name)
+	if err = p.Resources.validate(); err != nil {
+		return p, fmt.Errorf("profile %s: %w", name, err)
 	}
 	if len(p.Agents) == 0 {
 		return p, fmt.Errorf("profile %s has no agents; declare the agents installed in its image", name)

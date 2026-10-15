@@ -81,11 +81,15 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 	if len(s.Agents) <= 1 {
 		args = append(args, "--template", s.Image)
 	}
-	if s.CPUs > 0 {
-		args = append(args, "--cpus", fmt.Sprint(s.CPUs))
+	cpus, memory, err := sbxResources(s.Resources, HostResources(), log)
+	if err != nil {
+		return err
 	}
-	if s.Memory != "" {
-		args = append(args, "--memory", s.Memory)
+	if cpus != "" {
+		args = append(args, "--cpus", cpus)
+	}
+	if memory != "" {
+		args = append(args, "--memory", memory)
 	}
 	for _, h := range s.Access.DenyNetwork {
 		args = append(args, "--deny-network", h)
@@ -316,4 +320,35 @@ func (r *SBX) UpdateNetwork(ctx context.Context, sandbox string, change NetworkC
 		}
 	}
 	return nil
+}
+
+// sbxResources turns a profile's resources into sbx create's flags: a
+// share of the host's CPUs into a count, all of them into 0, which sbx reads
+// as every host CPU; memory into MiB, kept within the 75% of the host's sbx
+// gives a sandbox (sbx create --help), so asking for all of it still starts
+// one.
+func sbxResources(r Resources, h Host, log io.Writer) (cpus, memory string, err error) {
+	if r.CPUs.share() == 100 {
+		cpus = "0"
+	} else if r.CPUs != "" {
+		n, _, err := (Resources{CPUs: r.CPUs}).Resolve(h)
+		if err != nil {
+			return "", "", err
+		}
+		cpus = fmt.Sprint(n)
+	}
+	if r.Memory == "" {
+		return cpus, "", nil
+	}
+	_, memory, err = (Resources{Memory: r.Memory}).Resolve(h)
+	if err != nil {
+		return "", "", err
+	}
+	limit := max(h.Memory*3/4, 512<<20)
+	if h.Memory > 0 && memoryBytes(memory) > limit {
+		capped := fmt.Sprintf("%dm", limit>>20)
+		fmt.Fprintf(log, "memory %s is more than sbx gives a sandbox, 75%% of the host's; using %s\n", r.Memory, capped)
+		memory = capped
+	}
+	return cpus, memory, nil
 }
