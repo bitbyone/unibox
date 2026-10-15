@@ -153,7 +153,7 @@ func TestTheCoAuthorHookSaysTheProfilesCoAuthorAlone(t *testing.T) {
 		}
 		return out
 	}
-	gh := "Copilot <223556219+Copilot@users.noreply.github.com>"
+	gh := "Copilot <Copilot@users.noreply.github.com>"
 	own := "Add a file\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n"
 	// Copilot's own trailer gives way to the profile's, whatever it says.
 	if got := trailers(run("Copilot", gh, "on", own)); len(got) != 1 || got[0] != "Co-Authored-By: "+gh {

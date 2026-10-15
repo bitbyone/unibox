@@ -97,7 +97,7 @@ var Agents = []Agent{
 		}},
 	// Its settings.json, per copilot help config; config.json is the state
 	// it keeps itself, seeded only by a profile that wants to.
-	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <223556219+Copilot@users.noreply.github.com>", Args: []string{"--allow-all"}, Env: []string{"COPILOT_ALLOW_ALL=true"},
+	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Args: []string{"--allow-all"}, Env: []string{"COPILOT_ALLOW_ALL=true"},
 		Configs: []AgentFile{
 			{Name: "settings.json", Path: ".copilot/settings.json", Seed: map[string]any{
 				"theme": "default", "includeCoAuthoredBy": false, "autoUpdate": false, "banner": "never", "trustedFolders": []any{"/work"},

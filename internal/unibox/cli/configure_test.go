@@ -302,7 +302,7 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _, err := run(t, paths, "", "agent", "co-author", "node")
-	if err != nil || !strings.Contains(out, "copilot\tCopilot <223556219+Copilot@users.noreply.github.com>\t(default)") {
+	if err != nil || !strings.Contains(out, "copilot\tCopilot <Copilot@users.noreply.github.com>\t(default)") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "GitHub Copilot <copilot@example.com>"); err != nil {
