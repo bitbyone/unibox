@@ -654,7 +654,9 @@ auth:                         # how each agent signs in
   `agent_config`, so a new sandbox does not stop at an agent's first
   questions: claude's onboarding and theme (`hasCompletedOnboarding`,
   `theme`, `bypassPermissionsModeAccepted`), copilot trusting `/work`
-  (`trustedFolders`, kept beside what it trusts later), opencode allowed
+  (`trustedFolders`, kept beside what it trusts later) with its default
+  theme in its second file (`copilot.settings`, an agent's further
+  configuration named `<agent>.<name>` in `agent_config`), opencode allowed
   to edit, run and fetch (`permission`, `autoupdate: false`). codex keeps
   TOML, so its setup writes `approval_policy = "never"` and
   `sandbox_mode = "danger-full-access"` before every session, and a
@@ -798,9 +800,15 @@ it would be committed. So:
 - `co_author: true` adds `Co-Authored-By: <agent>` to every commit, the
   agent's name and address from agentbox's table (Claude Code's
   `Claude <noreply@anthropic.com>`, and so on). It is not left to the
-  agent: agentbox puts a `commit-msg` hook into each clone in the VM that
-  adds the trailer when it is missing. A hook in the VM's own clone is the
-  VM's business; nothing of it reaches the host.
+  agent: unibox puts a `commit-msg` hook into each clone in the VM that
+  adds the trailer when it is missing. The agent is the task's - the one
+  it was prepared with. Agents add their own too, copilot as
+  `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`,
+  so the hook counts any co-author of the agent's name, in any case or
+  address, as the trailer already there; matching the whole line doubled
+  copilot's. Copilot's address in the table is GitHub's own, which shows
+  its avatar. A hook in the VM's own clone is the VM's business; nothing
+  of it reaches the host.
 - Absent, `git` means both as shown.
 
 ### What differs between runtimes

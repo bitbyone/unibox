@@ -549,15 +549,15 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 	}
 	for id, file := range p.AgentConfig {
-		a, err := FindAgent(id)
-		if err != nil {
+		a, _, err := ConfigPath(id)
+		if a.ID == "" {
 			return p, err
 		}
-		if !seen[id] {
-			return p, fmt.Errorf("profile %s seeds configuration for %s but does not declare it in agents", name, id)
+		if !seen[a.ID] {
+			return p, fmt.Errorf("profile %s seeds configuration for %s but does not declare it in agents", name, a.ID)
 		}
-		if a.Config == "" {
-			return p, fmt.Errorf("profile %s: agent %s keeps no JSON configuration unibox can merge; remove it from agent_config", name, id)
+		if err != nil {
+			return p, fmt.Errorf("profile %s: %w", name, err)
 		}
 		b, err := readInside(p.Root, filepath.Join(p.Dir, file))
 		if err != nil {

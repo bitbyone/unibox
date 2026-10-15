@@ -92,7 +92,7 @@ fi
 			coAuthor = r.CoAuthor
 		}
 		if coAuthor == nil || *coAuthor {
-			hook := "#!/bin/sh\nset -eu\ngit interpret-trailers --in-place --if-exists addIfDifferent --trailer " + Quote("Co-Authored-By: "+a.CoAuthor) + " \"$1\"\n"
+			hook := coAuthorHook(a.CoAuthor)
 			b.WriteString(writeGuest(path.Join(dir, ".git", "unibox-hooks", "commit-msg"), []byte(hook), "700"))
 			fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(path.Join(dir, ".git", "unibox-hooks")))
 		} else {
@@ -151,6 +151,17 @@ func identityScript(p Profile) string {
 	}
 	b.WriteString("git config --global --replace-all include.path \"$ids/index.gitconfig\" 'unibox/identities/index'\n")
 	return b.String()
+}
+
+// coAuthorHook adds the agent's co-author trailer to a commit message unless
+// one naming the agent is there already. Agents add their own - copilot as
+// Co-authored-by: Copilot <223556219+Copilot@...>, claude as unibox does -
+// and a trailer that differed only in case or address doubled the line.
+func coAuthorHook(coAuthor string) string {
+	name, _, _ := strings.Cut(coAuthor, " <")
+	return "#!/bin/sh\nset -eu\n" +
+		"if git interpret-trailers --parse \"$1\" | grep -qiF " + Quote("co-authored-by: "+name+" <") + "; then exit 0; fi\n" +
+		"git interpret-trailers --in-place --trailer " + Quote("Co-Authored-By: "+coAuthor) + " \"$1\"\n"
 }
 
 // A disconnected host process is not proof that its guest process ended.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,6 +29,19 @@ func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
 		if err != nil || json.Unmarshal(data, &seed) != nil {
 			t.Fatalf("%s: %v %s", id, err, data)
 		}
+	}
+	// copilot keeps its theme in a file of its own.
+	if p.AgentConfig["copilot.settings"] != "_data/copilot.settings.json" {
+		t.Fatalf("%v", p.AgentConfig)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "copilot.settings.json")); !strings.Contains(string(data), `"theme": "default"`) {
+		t.Fatalf("%s", data)
+	}
+	if a, path, err := ConfigPath("copilot.settings"); err != nil || a.ID != "copilot" || path != ".copilot/settings.json" {
+		t.Fatalf("%v %s %v", a.ID, path, err)
+	}
+	if _, _, err := ConfigPath("copilot.nothing"); err == nil {
+		t.Fatal("an unknown file of an agent was taken")
 	}
 	// codex keeps TOML, set up before every session instead.
 	if _, ok := p.AgentConfig["codex"]; ok {
@@ -88,5 +102,43 @@ func TestCopilotsCommentedConfigTakesItsSeed(t *testing.T) {
 	}
 	if folders := got["trustedFolders"].([]any); len(folders) != 2 || got["firstLaunchAt"] != "x" {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestTheCoAuthorHookAddsTheAgentOnce(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	hook := filepath.Join(dir, "commit-msg")
+	mustWriteExecutable(t, hook, []byte(coAuthorHook("Copilot <223556219+Copilot@users.noreply.github.com>")))
+	run := func(message string) string {
+		t.Helper()
+		msg := filepath.Join(dir, "MSG")
+		if err := os.WriteFile(msg, []byte(message), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("sh", hook, msg)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, out)
+		}
+		b, _ := os.ReadFile(msg)
+		return string(b)
+	}
+	count := func(s string) int { return strings.Count(strings.ToLower(s), "co-authored-by: copilot") }
+	if got := run("Add a file\n"); count(got) != 1 || !strings.Contains(got, "Co-Authored-By: Copilot <223556219+Copilot@users.noreply.github.com>") {
+		t.Fatalf("%q", got)
+	}
+	// The agent's own trailer, in its own case and address, is enough.
+	if got := run("Add a file\n\nCo-authored-by: Copilot <someone@else.example>\n"); count(got) != 1 {
+		t.Fatalf("doubled: %q", got)
+	}
+	// Another co-author is not the agent.
+	if got := run("Add a file\n\nCo-authored-by: Jan <jan@example.com>\n"); count(got) != 1 || !strings.Contains(got, "Jan <jan@example.com>") {
+		t.Fatalf("%q", got)
+	}
+	// Twice is once.
+	once := run("Add a file\n")
+	if again := run(once); again != once {
+		t.Fatalf("%q\n%q", once, again)
 	}
 }

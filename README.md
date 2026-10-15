@@ -108,12 +108,14 @@ applied to the running sandbox live.
 prompts off - the sandbox is the boundary. `unibox init` writes each one's
 first answers into the profile's `_data/<agent>.json`, named in
 `agent_config` and merged into the agent's own configuration before every
-session: claude's onboarding and theme done, copilot trusting `/work`,
+session: claude's onboarding and theme done, copilot trusting `/work` with
+its default theme (`copilot.settings` for its second file),
 opencode allowed to edit, run and fetch. codex, which keeps TOML, is told
 `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` before
 every session instead. No agent updates itself; the image fixes its version.
-Edit the seeds as you like. Commits carry your git identity and a
-co-author line for the agent.
+Edit the seeds as you like. Commits carry your git identity and one
+co-author line for the task's agent: unibox's hook adds it unless the agent
+already did, under its own name in any case or address.
 
 ## Auth
 

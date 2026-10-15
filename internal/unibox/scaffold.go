@@ -104,6 +104,15 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 		}
 		seeds[id] = append(data, '\n')
 		agentConfig += "  " + id + ": _data/" + id + ".json\n"
+		for _, file := range sortedKeys(a.Files) {
+			key := id + "." + file
+			data, err := json.MarshalIndent(a.Files[file].Seed, "", "  ")
+			if err != nil {
+				return report, err
+			}
+			seeds[key] = append(data, '\n')
+			agentConfig += "  " + key + ": _data/" + key + ".json\n"
+		}
 	}
 	if agentConfig != "" {
 		agentConfig = "# Merged into each agent's own configuration before every session: its\n# first questions answered, and left to work unasked. Edit them in _data.\nagent_config:\n" + agentConfig

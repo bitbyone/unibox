@@ -569,12 +569,12 @@ func splitJSONComments(text string) (head, body string) {
 }
 
 func (m *Manager) seedAgentConfigs(ctx context.Context, b api.Sandbox, r Runtime, p Profile) error {
-	for _, id := range p.Agents {
-		file, ok := p.AgentConfig[id]
-		if !ok {
-			continue
+	for _, key := range sortedKeys(p.AgentConfig) {
+		file := p.AgentConfig[key]
+		a, target, err := ConfigPath(key)
+		if err != nil {
+			return err
 		}
-		a, _ := FindAgent(id)
 		data, err := readInside(p.Root, filepath.Join(p.Dir, file))
 		if err != nil {
 			return fmt.Errorf("profile agent_config: %w", err)
@@ -583,16 +583,22 @@ func (m *Manager) seedAgentConfigs(ctx context.Context, b api.Sandbox, r Runtime
 		if err = json.Unmarshal(data, &seed); err != nil {
 			return fmt.Errorf("agent_config %s must be a JSON object: %v", file, err)
 		}
-		if err = m.mergeAgentConfig(ctx, b, r, a, seed); err != nil {
+		if err = m.mergeConfigFile(ctx, b, r, a.ID, target, seed); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// mergeAgentConfig lays a seed over the agent's JSON configuration in the
-// guest home, writing only when something changes.
+// mergeAgentConfig lays a seed over the agent's main JSON configuration.
 func (m *Manager) mergeAgentConfig(ctx context.Context, b api.Sandbox, r Runtime, a Agent, seed map[string]any) error {
+	return m.mergeConfigFile(ctx, b, r, a.ID, a.Config, seed)
+}
+
+// mergeConfigFile lays a seed over one of an agent's JSON configurations in
+// the guest home, writing only when something changes.
+func (m *Manager) mergeConfigFile(ctx context.Context, b api.Sandbox, r Runtime, agent, file string, seed map[string]any) error {
+	a := Agent{ID: agent, Config: file}
 	out, err := runtimeOutput(ctx, r, b.RuntimeName, "sh", "-c", "cat \"$HOME/"+a.Config+"\" 2>/dev/null || true")
 	if err != nil {
 		return err
