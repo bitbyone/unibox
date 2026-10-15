@@ -30,6 +30,10 @@ func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
 			t.Fatalf("%s: %v %s", id, err, data)
 		}
 	}
+	// claude's own byline is off: unibox's hook says the co-author.
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude.settings.json")); !strings.Contains(string(data), `"includeCoAuthoredBy": false`) {
+		t.Fatalf("%s", data)
+	}
 	// copilot keeps its theme in a file of its own.
 	if p.AgentConfig["copilot.settings"] != "_data/copilot.settings.json" {
 		t.Fatalf("%v", p.AgentConfig)
@@ -105,52 +109,69 @@ func TestCopilotsCommentedConfigTakesItsSeed(t *testing.T) {
 	}
 }
 
-func TestTheCoAuthorHookAddsTheAgentOnce(t *testing.T) {
+func TestTheCoAuthorHookSaysTheProfilesCoAuthorAlone(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	hook := filepath.Join(dir, "commit-msg")
 	mustWriteExecutable(t, hook, []byte(coAuthorHook()))
-	agent := "Copilot <223556219+Copilot@users.noreply.github.com>"
-	run := func(message string) string {
+	run := func(agent, coAuthor, credit, message string) string {
 		t.Helper()
 		msg := filepath.Join(dir, "MSG")
 		if err := os.WriteFile(msg, []byte(message), 0o600); err != nil {
 			t.Fatal(err)
 		}
+		_ = os.Remove(filepath.Join(dir, "credit"))
+		if credit != "" {
+			if err := os.WriteFile(filepath.Join(dir, "credit"), []byte(credit+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
 		cmd := exec.Command("sh", hook, msg)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "UNIBOX_CO_AUTHOR="+agent)
+		cmd.Env = append(os.Environ(), "UNIBOX_AGENT="+agent, "UNIBOX_CO_AUTHOR="+coAuthor)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%v %s", err, out)
 		}
 		b, _ := os.ReadFile(msg)
 		return string(b)
 	}
-	count := func(s string) int { return strings.Count(strings.ToLower(s), "co-authored-by: copilot") }
-	if got := run("Add a file\n"); count(got) != 1 || !strings.Contains(got, "Co-Authored-By: Copilot <223556219+Copilot@users.noreply.github.com>") {
+	trailers := func(s string) []string {
+		out := []string{}
+		for _, l := range strings.Split(s, "\n") {
+			if strings.HasPrefix(strings.ToLower(l), "co-authored-by:") {
+				out = append(out, l)
+			}
+		}
+		return out
+	}
+	gh := "Copilot <223556219+Copilot@users.noreply.github.com>"
+	own := "Add a file\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n"
+	// Copilot's own trailer gives way to the profile's, whatever it says.
+	if got := trailers(run("Copilot", gh, "on", own)); len(got) != 1 || got[0] != "Co-Authored-By: "+gh {
 		t.Fatalf("%q", got)
 	}
-	// The agent's own trailer, in its own case and address, is enough.
-	if got := run("Add a file\n\nCo-authored-by: Copilot <someone@else.example>\n"); count(got) != 1 {
-		t.Fatalf("doubled: %q", got)
-	}
-	// Another co-author is not the agent.
-	if got := run("Add a file\n\nCo-authored-by: Jan <jan@example.com>\n"); count(got) != 1 || !strings.Contains(got, "Jan <jan@example.com>") {
+	if got := trailers(run("Copilot", "Copilot <>", "on", own)); len(got) != 1 || got[0] != "Co-Authored-By: Copilot <>" {
 		t.Fatalf("%q", got)
+	}
+	// A renamed agent: the table's name and the profile's both count.
+	if got := trailers(run("Claude", "Claude Code <cc@example.com>", "on", "Fix\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n")); len(got) != 1 || got[0] != "Co-Authored-By: Claude Code <cc@example.com>" {
+		t.Fatalf("%q", got)
+	}
+	// Crediting off means none, not the agent's own.
+	if got := trailers(run("Copilot", gh, "off", own)); len(got) != 0 {
+		t.Fatalf("%q", got)
+	}
+	// Another co-author is the user's, and stays.
+	if out := run("Copilot", gh, "on", "Fix\n\nCo-authored-by: Jan <jan@example.com>\n"); len(trailers(out)) != 2 {
+		t.Fatalf("%q", out)
 	}
 	// Twice is once.
-	once := run("Add a file\n")
-	if again := run(once); again != once {
+	once := run("Copilot", gh, "on", "Fix\n")
+	if again := run("Copilot", gh, "on", once); again != once {
 		t.Fatalf("%q\n%q", once, again)
 	}
-	// The session's agent is credited: another agent resumed the task.
-	agent = "Claude <noreply@anthropic.com>"
-	if got := run("Add a file\n"); !strings.Contains(got, "Co-Authored-By: Claude <noreply@anthropic.com>") || count(got) != 0 {
-		t.Fatalf("%q", got)
-	}
-	// No agent running - a commit made by hand - credits none.
-	agent = ""
-	if got := run("Add a file\n"); strings.Contains(strings.ToLower(got), "co-authored-by") {
+	// No agent running - a commit made by hand - is left as it is.
+	if got := run("", "", "on", own); got != own {
 		t.Fatalf("%q", got)
 	}
 }

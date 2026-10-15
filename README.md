@@ -116,8 +116,10 @@ every session instead. No agent updates itself; the image fixes its version.
 Edit the seeds as you like. Commits carry your git identity and one
 co-author line for the agent of the session that commits - a task resumed
 with another agent credits that one, a commit you make in `unibox shell`
-none - added by unibox's hook unless the agent already did, under its own
-name in any case or address. `unibox agent co-author <profile> <agent>
+none. unibox alone says it: claude's own byline is off in its seed
+(`includeCoAuthoredBy: false`), and the hook takes out the trailer an agent
+adds of itself - copilot always does - before adding the profile's, or none
+where `co_author: false`. `unibox agent co-author <profile> <agent>
 "Name <email>"` says how an agent is credited (`git.co_authors`, which init
 writes out with the defaults); `Name <>` credits it with no address, linked
 to no account, and `--reset` takes it back to the default. `unibox agent ls

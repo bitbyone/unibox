@@ -133,7 +133,7 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	gitTest(t, clone, "add", "agent.txt")
 	// The agent commits in its session, which names it to the hook.
 	commit := exec.Command("git", "-C", clone, "commit", "-m", "Agent work")
-	commit.Env = append(os.Environ(), "UNIBOX_CO_AUTHOR=Claude <noreply@anthropic.com>")
+	commit.Env = append(os.Environ(), "UNIBOX_AGENT=Claude", "UNIBOX_CO_AUTHOR=Claude <noreply@anthropic.com>")
 	if out, err := commit.CombinedOutput(); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}

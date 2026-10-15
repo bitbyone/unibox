@@ -495,7 +495,8 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	}
 	// The commit hook credits the agent of this session, not the one the
 	// task was prepared with, as the profile names it.
-	env := append(slices.Clone(a.Env), "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
+	name, _, _ := strings.Cut(a.CoAuthor, " <")
+	env := append(slices.Clone(a.Env), "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
 	if s, ok := r.(SessionEnver); ok {
 		env = append(env, s.SessionEnv(p, a.ID)...)
 	}

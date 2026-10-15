@@ -797,28 +797,26 @@ it would be committed. So:
   `user.name`/`user.email`, which outrank the includes. Such a clone has
   no co-author hook and is not in the task's record: what must be kept
   belongs in `unibox add-repo`.
-- `co_author: true` adds `Co-Authored-By: <agent>` to every commit, the
-  agent's name and address from agentbox's table (Claude Code's
-  `Claude <noreply@anthropic.com>`, and so on). It is not left to the
-  agent: unibox puts a `commit-msg` hook into each clone in the VM that
-  adds the trailer when it is missing. The agent is the session's: `run`
-  and `resume` name it to the hook in `UNIBOX_CO_AUTHOR`, so a task
-  resumed with another agent credits that one, and a commit made by hand
-  in `unibox shell`, with no agent running, credits none. The hook is
-  rewritten in every clone before each session, so none keeps an agent
-  fixed in it. `git.co_authors` gives an agent another name and address
-  than the table's (`unibox agent co-author <profile> <agent> "Name <email>"`);
-  init writes the defaults out, so the profile shows them, and `Name <>`
-  credits an agent with no address - a trailer is text, shown though
-  linked to no account. It is read per session, so changing it recreates
-  nothing. Agents add
-  their own too, copilot as
-  `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`,
-  so the hook counts any co-author of the agent's name, in any case or
-  address, as the trailer already there; matching the whole line doubled
-  copilot's. Copilot's address in the table is GitHub's own, which shows
-  its avatar. A hook in the VM's own clone is the VM's business; nothing
-  of it reaches the host.
+- `co_author: true` adds `Co-Authored-By: <agent>` to every commit, and
+  unibox alone says it. A `commit-msg` hook in each clone in the VM takes
+  out any co-author trailer the agent added of itself - copilot always
+  does, as `Co-authored-by: Copilot <223556219+Copilot@...>`, and claude
+  would, but its seed turns its byline off (`includeCoAuthoredBy: false`
+  in `claude.settings`) - and adds the profile's. The agent is the
+  session's: `run` and `resume` name it to the hook (`UNIBOX_AGENT`, as
+  the table calls it, and `UNIBOX_CO_AUTHOR`, as the profile credits
+  it), so a task resumed with another agent credits that one, and a
+  commit made by hand in `unibox shell`, with no agent running, is left
+  as it is. `co_author: false` - the profile's, or a git service's for
+  its repositories - keeps the hook but has it add nothing, so off means
+  no co-author, not the agent's own. The hook is rewritten in every clone
+  before each session. `git.co_authors` gives an agent another name and
+  address than the table's (`unibox agent co-author <profile> <agent>
+  "Name <email>"`); init writes the defaults out, so the profile shows
+  them, and `Name <>` credits an agent with no address - a trailer is
+  text, shown though linked to no account. It is read per session, so
+  changing it recreates nothing. A hook in the VM's own clone is the VM's
+  business; nothing of it reaches the host.
 - Absent, `git` means both as shown.
 
 ### What differs between runtimes

@@ -72,7 +72,9 @@ func claudeTrust(dirs []string) map[string]any {
 var Agents = []Agent{
 	// The image fixes each agent's version, so none updates itself inside.
 	{ID: "claude", Command: "claude", Instructions: ".claude/CLAUDE.md", CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Args: []string{"--dangerously-skip-permissions"}, Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust,
-		Seed: map[string]any{"hasCompletedOnboarding": true, "theme": "dark", "bypassPermissionsModeAccepted": true}},
+		Seed: map[string]any{"hasCompletedOnboarding": true, "theme": "dark", "bypassPermissionsModeAccepted": true},
+		// unibox's commit hook says the co-author; claude's own byline is off.
+		Files: map[string]AgentFile{"settings": {Path: ".claude/settings.json", Seed: map[string]any{"includeCoAuthoredBy": false}}}},
 	{ID: "codex", Command: "codex", Instructions: ".codex/AGENTS.md", CoAuthor: "Codex <noreply@openai.com>", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, Setup: codexSetup},
 	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <223556219+Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Args: []string{"--allow-all"}, Env: []string{"COPILOT_ALLOW_ALL=true"},
 		Seed:  map[string]any{"trustedFolders": []any{"/work"}},

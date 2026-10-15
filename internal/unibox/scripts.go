@@ -95,13 +95,16 @@ fi
 		if r.CoAuthor != nil {
 			coAuthor = r.CoAuthor
 		}
-		if coAuthor == nil || *coAuthor {
-			hook := coAuthorHook()
-			b.WriteString(writeGuest(path.Join(dir, ".git", "unibox-hooks", "commit-msg"), []byte(hook), "700"))
-			fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(path.Join(dir, ".git", "unibox-hooks")))
-		} else {
-			b.WriteString("git -C \"$dir\" config --unset core.hooksPath || true\n")
+		// The hook is there either way: with crediting off it still takes
+		// out the trailer an agent adds of itself, so off means none.
+		credit := "on\n"
+		if coAuthor != nil && !*coAuthor {
+			credit = "off\n"
 		}
+		hooks := path.Join(dir, ".git", "unibox-hooks")
+		b.WriteString(writeGuest(path.Join(hooks, "commit-msg"), []byte(coAuthorHook()), "700"))
+		b.WriteString(writeGuest(path.Join(hooks, "credit"), []byte(credit), "600"))
+		fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(hooks))
 		if p.Bootstrap != "" {
 			fmt.Fprintf(&b, "if [ -f %s ]; then (cd \"$dir\" && /bin/sh %s); fi\n", Quote(path.Join(dir, p.Bootstrap)), Quote(p.Bootstrap))
 		}
@@ -157,20 +160,36 @@ func identityScript(p Profile) string {
 	return b.String()
 }
 
-// coAuthorHook adds the co-author trailer of the agent committing, which
-// the session names in UNIBOX_CO_AUTHOR - so a task resumed with another
-// agent credits that one, and a commit made by hand in unibox shell, with
-// no agent running, credits none. A co-author of the agent's name already
-// there counts, in any case or address: agents add their own - copilot as
-// Co-authored-by: Copilot <223556219+Copilot@...> - and matching the whole
-// line doubled it.
+// coAuthorHook makes a commit's co-author unibox's to say. The session
+// names its agent (UNIBOX_AGENT, as unibox's table calls it) and how the
+// profile credits it (UNIBOX_CO_AUTHOR); the hook takes out any co-author
+// trailer of either name - agents add their own, copilot always, in their
+// own case and address - and, unless the clone's credit file says off,
+// adds the profile's. A commit made by hand in unibox shell, with no agent
+// running, is left as it is.
 func coAuthorHook() string {
 	return `#!/bin/sh
 set -eu
+[ -n "${UNIBOX_AGENT:-}" ] || exit 0
 co="${UNIBOX_CO_AUTHOR:-}"
-[ -n "$co" ] || exit 0
-name="${co%% <*}"
-if git interpret-trailers --parse "$1" | grep -qiF "co-authored-by: $name <"; then exit 0; fi
+names="$UNIBOX_AGENT"
+[ -z "$co" ] || names="$names|${co%% <*}"
+awk -v names="$names" '
+BEGIN { n = split(tolower(names), name, "|") }
+{
+  line = tolower($0)
+  for (i = 1; i <= n; i++) if (index(line, "co-authored-by: " name[i] " <") == 1) next
+  # Blank lines wait for what follows, so none is left at the end where a
+  # taken-out trailer was.
+  if ($0 ~ /^[ \t]*$/) { blank = blank $0 "\n"; next }
+  printf "%s", blank
+  blank = ""
+  print
+}' "$1" > "$1.unibox"
+cat "$1.unibox" > "$1"
+rm -f "$1.unibox"
+credit=$(cat "$(dirname "$0")/credit" 2>/dev/null || echo on)
+[ "$credit" = on ] && [ -n "$co" ] || exit 0
 git interpret-trailers --in-place --trailer "Co-Authored-By: $co" "$1"
 `
 }
