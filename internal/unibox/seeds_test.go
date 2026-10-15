@@ -23,7 +23,7 @@ func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{
-		"claude/.claude.json":    "_data/claude/claude.json",
+		"claude/.claude.json":    "_data/claude/.claude.json",
 		"claude/settings.json":   "_data/claude/settings.json",
 		"codex/config.toml":      "_data/codex/config.toml",
 		"copilot/settings.json":  "_data/copilot/settings.json",
@@ -54,7 +54,7 @@ func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
 		data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", rel))
 		return string(data)
 	}
-	if !strings.Contains(read("_data/claude/settings.json"), `"includeCoAuthoredBy": false`) || !strings.Contains(read("_data/copilot/settings.json"), `"theme": "default"`) || !strings.Contains(read("_data/claude/claude.json"), `"hasCompletedOnboarding": true`) {
+	if !strings.Contains(read("_data/claude/settings.json"), `"includeCoAuthoredBy": false`) || !strings.Contains(read("_data/copilot/settings.json"), `"theme": "default"`) || !strings.Contains(read("_data/claude/.claude.json"), `"hasCompletedOnboarding": true`) {
 		t.Fatal("a seed lacks its defaults")
 	}
 	// codex keeps TOML, and its seed is TOML.

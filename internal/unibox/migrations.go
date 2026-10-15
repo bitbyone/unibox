@@ -16,9 +16,13 @@ import (
 // what it cannot carry over it leaves out and says so. A migration is frozen
 // once released - it describes two past formats, not today's agents - so a
 // later change to the agent table does not alter what it does.
-var migrations = []func(profile *yaml.Node) (notes []string){
+var migrations = []func(profile *yaml.Node) (moves []seedMove, notes []string){
 	0: migrateFrom0,
 }
+
+// seedMove is a file of a profile a migration renames, both relative to
+// the profile's directory.
+type seedMove struct{ from, to string }
 
 // profileVersion is the format a profile's text says it is of: 0 without a
 // version, -1 when the version is not a number.
@@ -63,8 +67,10 @@ func migrateProfile(root, name string) (from int, notes []string, err error) {
 		return from, nil, fmt.Errorf("profile %s is not a YAML mapping; repair sandbox.yaml by hand", name)
 	}
 	profile := doc.Content[0]
+	var moves []seedMove
 	for v := from; v < ProfileFormat; v++ {
-		notes = append(notes, migrations[v](profile)...)
+		m, n := migrations[v](profile)
+		moves, notes = append(moves, m...), append(notes, n...)
 	}
 	setMapValue(profile, "version", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(ProfileFormat)})
 	ArrangeProfile(&doc, name)
@@ -76,10 +82,34 @@ func migrateProfile(root, name string) (from int, notes []string, err error) {
 	if err != nil {
 		return from, notes, err
 	}
+	dir := filepath.Dir(file)
+	var moved []seedMove
+	undo := func() {
+		for _, m := range slices.Backward(moved) {
+			_ = os.Rename(filepath.Join(dir, m.to), filepath.Join(dir, m.from))
+		}
+	}
+	for _, m := range moves {
+		to := filepath.Join(dir, m.to)
+		if _, statErr := os.Stat(to); statErr == nil {
+			notes = append(notes, fmt.Sprintf("%s already there, so %s was left as it was", m.to, m.from))
+			continue
+		}
+		if err = os.MkdirAll(filepath.Dir(to), 0o755); err == nil {
+			err = os.Rename(filepath.Join(dir, m.from), to)
+		}
+		if err != nil {
+			undo()
+			return from, notes, err
+		}
+		moved = append(moved, m)
+	}
 	if err = AtomicWrite(file, out, info.Mode().Perm()); err != nil {
+		undo()
 		return from, notes, err
 	}
 	if _, err = LoadProfile(root, name); err != nil {
+		undo()
 		if restore := AtomicWrite(file, before, info.Mode().Perm()); restore != nil {
 			return from, notes, fmt.Errorf("%w; and the profile could not be restored: %v", err, restore)
 		}
@@ -90,8 +120,9 @@ func migrateProfile(root, name string) (from int, notes []string, err error) {
 
 // migrateFrom0 moves what format 0 said of agents in three sections - auth,
 // git.co_authors and agent_config keyed <agent> or <agent>.settings - under
-// each agent, as format 1 has it.
-func migrateFrom0(profile *yaml.Node) (notes []string) {
+// each agent, as format 1 has it. A seed where format 0's init put it,
+// _data/<key>.json, moves to format 1's place, _data/<agent>/<file name>.
+func migrateFrom0(profile *yaml.Node) (moves []seedMove, notes []string) {
 	declared := map[string]bool{}
 	if agents := mapValue(profile, "agents"); agents != nil {
 		switch agents.Kind {
@@ -153,12 +184,17 @@ func migrateFrom0(profile *yaml.Node) (notes []string) {
 		if !ok || !declared[agent] {
 			return false
 		}
+		if value.Kind == yaml.ScalarNode && value.Value == "_data/"+key+".json" {
+			to := "_data/" + agent + "/" + file
+			moves = append(moves, seedMove{value.Value, to})
+			value = scalarNode(to)
+		}
 		setMapValue(childMap(agentNode(profile, agent), "config"), file, value)
 		return true
 	})
 	deleteMapKey(profile, "agent_config")
 	dropTemplate0(profile)
-	return notes
+	return moves, notes
 }
 
 // dropTemplate0 takes out the commented-out sections format 0's init wrote

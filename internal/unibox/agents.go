@@ -37,9 +37,10 @@ type AgentFile struct {
 // TOML says whether the file is TOML rather than JSON.
 func (f AgentFile) TOML() bool { return strings.HasSuffix(f.Name, ".toml") }
 
-// SeedPath is where init keeps a file's seed in a profile.
+// SeedPath is where init keeps a file's seed in a profile: in the agent's
+// own directory, under the file's own name.
 func (f AgentFile) SeedPath(agent string) string {
-	return "_data/" + agent + "/" + strings.TrimPrefix(f.Name, ".")
+	return "_data/" + agent + "/" + f.Name
 }
 
 // ConfigFile is the file of an agent a profile's config names.

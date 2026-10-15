@@ -98,7 +98,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	if !strings.Contains(string(data), "# Mine, from before.") || !strings.Contains(string(data), "allow_network: [jitpack.io] # Kotlin") || !strings.Contains(string(data), footerMarker) {
 		t.Fatalf("%s", data)
 	}
-	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "_data", "claude", "claude.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "_data", "claude", ".claude.json")); err == nil {
 		t.Fatal("a seed the profile does not name was written")
 	}
 	// Seeds are not the image's inputs: nothing to rebuild.
@@ -139,6 +139,7 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 	// init migrates format 0: what it said in three sections moves under
 	// each agent, comments stay, and what has no place is said.
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "c.json"), "{}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "_data", "claude.settings.json"), "{\"mine\": 1}\n")
 	write(t, file, `# Node work.
 dockerfile: Dockerfile
 start: start.sh
@@ -151,6 +152,7 @@ git:
   co_authors: {claude: C <c@example.com>, copilot: Cop <>}
 agent_config:
   claude: _data/c.json
+  claude.settings: _data/claude.settings.json
   copilot.theme: _data/c.json
 # How each agent signs in: unibox login node writes this
 # auth:
@@ -171,10 +173,13 @@ instructions: [unibox]
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	for _, want := range []string{"version: 1\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after."} {
+	for _, want := range []string{"version: 1\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after.", "settings.json: _data/claude/settings.json"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("no %q in\n%s", want, data)
 		}
+	}
+	if moved, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "_data", "claude", "settings.json")); string(moved) != "{\"mine\": 1}\n" {
+		t.Fatalf("%s", moved)
 	}
 	if strings.Contains(string(data), "How each agent signs in") {
 		t.Fatalf("%s", data)

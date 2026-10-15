@@ -101,7 +101,7 @@ agents:                              # or a list: [claude, codex]
     auth: {token: secret:claude}     # unibox agent login
     co_author: Claude <noreply@anthropic.com>
     config:                          # seeds merged before every session
-      .claude.json: _data/claude/claude.json
+      .claude.json: _data/claude/.claude.json
       settings.json: _data/claude/settings.json
   codex:
     auth: oauth                      # provider login kept by the runtime

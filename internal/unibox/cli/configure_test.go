@@ -226,11 +226,11 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Claude's onboarding is answered once, in a seed the profile names.
-	seed, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude", "claude.json"))
+	seed, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude", ".claude.json"))
 	if err != nil || !strings.Contains(string(seed), `"hasCompletedOnboarding": true`) {
 		t.Fatalf("%v %s", err, seed)
 	}
-	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), ".claude.json: _data/claude/claude.json") || !strings.Contains(string(profile), "  claude:\n    co_author: Claude <noreply@anthropic.com>") {
+	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), ".claude.json: _data/claude/.claude.json") || !strings.Contains(string(profile), "  claude:\n    co_author: Claude <noreply@anthropic.com>") {
 		t.Fatalf("%s", profile)
 	}
 	// Again on the profile it made: complete already, kept, agents its own.

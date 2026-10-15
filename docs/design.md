@@ -646,7 +646,7 @@ agents:                       # what the image has, in order; a list of
     auth: {token: secret:claude}  # how it signs in
     co_author: Claude <noreply@anthropic.com> # how it is credited
     config:                   # seeds merged into its own files before every
-      .claude.json: _data/claude/claude.json # session, by the file's name:
+      .claude.json: _data/claude/.claude.json # session, by the file's name:
       settings.json: _data/claude/settings.json # seed keys win, the agent's
   codex:                      # state stays, a list keeps what it added
     auth: oauth               # the provider's login, kept by the runtime
