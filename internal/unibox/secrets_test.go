@@ -157,7 +157,7 @@ func TestEditingAProfileKeepsItsCommentsAndNeverBreaksIt(t *testing.T) {
 		RemoveService(doc, "github-acme")
 		return nil
 	})
-	if after, _ := os.ReadFile(file); strings.Contains(string(after), "services") {
+	if after, _ := os.ReadFile(file); strings.Contains(string(after), "\nservices:") {
 		t.Fatalf("%s", after)
 	}
 }

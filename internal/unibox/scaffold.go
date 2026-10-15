@@ -95,15 +95,14 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 	seeds := map[string][]byte{}
 	for _, id := range agents {
 		a, _ := FindAgent(id)
-		if a.Config == "" || a.Seed == nil {
-			continue
+		if a.Config != "" && a.Seed != nil {
+			data, err := json.MarshalIndent(a.Seed, "", "  ")
+			if err != nil {
+				return report, err
+			}
+			seeds[id] = append(data, '\n')
+			agentConfig += "  " + id + ": _data/" + id + ".json\n"
 		}
-		data, err := json.MarshalIndent(a.Seed, "", "  ")
-		if err != nil {
-			return report, err
-		}
-		seeds[id] = append(data, '\n')
-		agentConfig += "  " + id + ": _data/" + id + ".json\n"
 		for _, file := range sortedKeys(a.Files) {
 			key := id + "." + file
 			data, err := json.MarshalIndent(a.Files[file].Seed, "", "  ")
@@ -115,56 +114,22 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 		}
 	}
 	if agentConfig != "" {
-		agentConfig = "# Merged into each agent's own configuration before every session: its\n# first questions answered, and left to work unasked. Edit them in _data.\nagent_config:\n" + agentConfig
+		agentConfig = "agent_config:\n" + agentConfig
 	}
 	// How each agent is credited is written out, so the profile shows it.
-	agentConfig += "# How each agent is credited in its commits: unibox agent co-author\n# changes it, and Name <> credits one with no address.\ngit:\n  co_authors:\n"
+	agentConfig += "git:\n  co_authors:\n"
 	for _, id := range agents {
 		a, _ := FindAgent(id)
 		agentConfig += "    " + id + ": " + a.CoAuthor + "\n"
 	}
-	yaml := fmt.Sprintf(`# %s: describe the environment here.
-dockerfile: Dockerfile
-cpus: %d
-memory: %s
-agents: [%s]
-instructions: [unibox]
-%[5]s# How each agent signs in: unibox agent login %[1]s writes this, keeping each token
-# in the platform's store as secret:<name>. sbx signs one agent of a sandbox
-# in by OAuth.
-# auth:
-#   codex: oauth                      # the ChatGPT login sbx keeps
-#   claude: {token: secret:claude}    # from claude setup-token
-#   copilot: {token: secret:copilot}  # a GitHub token for copilot alone
-# Host-facing services the sandbox reaches: unibox service add %[1]s <name>
-# writes these. The token lives on the host and reaches the sandbox only as a
-# placeholder the proxy swaps. A git service wires the sandbox's git; an env
-# service names the variable a tool reads; command: is secret:<name> or any
-# host command (vault, op) for a store unibox does not keep.
-# services:
-#   github:                           # a git forge
-#     git: true
-#     host: github.com
-#     scheme: basic                   # Authorization: Basic base64(user:token)
-#     user: x-access-token
-#     command: secret:github
-#     refresh: 10m                    # optional: fetch again, for short-lived tokens
-#   github-acme:                      # another owner on the same forge
-#     git: true
-#     host: github.com/acme           # a path: its own token for these repositories
-#     user: x-access-token
-#     command: secret:github-acme
-#     author: Jan Novak <jan@acme.example>   # who commits under it, unless --author says otherwise
-#     co_author: false                       # no agent trailer in these repositories
-#   artifactory:                      # any host service
-#     host: [artifactory.example.com, "*.jfrog.io"]
-#     scheme: bearer
-#     env: ARTIFACTORY_TOKEN          # the tool reads the placeholder here
-#     command: op read op://vault/artifactory/token
-# Egress beyond the runtime's policy, and hosts to refuse; deny wins.
-# allow_network: [jitpack.io]
-# deny_network: [gist.github.com]
-`, name, cpus, memory, strings.Join(declared, ", "), agentConfig)
+	// The profile's text is laid out by the same arrangement every change of
+	// it gets, so it reads the same written by init or by a later command.
+	raw := fmt.Sprintf("# %s: describe the environment here.\ndockerfile: Dockerfile\ncpus: %d\nmemory: %s\nagents: [%s]\ninstructions: [unibox]\n%s", name, cpus, memory, strings.Join(declared, ", "), agentConfig)
+	profileText, err := arrangeText([]byte(raw), name)
+	if err != nil {
+		return report, err
+	}
+	yaml := string(profileText)
 	dockerfile := fmt.Sprintf(`# The image is composed by _shared/install: list the installation scripts,
 # one per line. The sbx build passes BASE=docker/sandbox-templates:shell
 # (.sbx/build.args); the default keeps this buildable by hand.

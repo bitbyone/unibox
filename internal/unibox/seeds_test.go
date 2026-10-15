@@ -20,7 +20,7 @@ func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"claude", "copilot", "opencode"} {
+	for _, id := range []string{"claude", "claude.settings", "copilot.settings", "opencode"} {
 		if p.AgentConfig[id] != "_data/"+id+".json" {
 			t.Fatalf("%s is not seeded: %v", id, p.AgentConfig)
 		}
@@ -95,7 +95,7 @@ func TestCopilotsCommentedConfigTakesItsSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ := FindAgent("copilot")
-	if err := m.mergeAgentConfig(context.Background(), b, f, a, a.Seed); err != nil {
+	if err := m.mergeAgentConfig(context.Background(), b, f, a, map[string]any{"trustedFolders": []any{"/work"}}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(home, ".copilot", "config.json"))

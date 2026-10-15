@@ -109,15 +109,16 @@ prompts off - the sandbox is the boundary. `unibox init` writes each one's
 first answers into the profile's `_data/<agent>.json`, named in
 `agent_config` and merged into the agent's own configuration before every
 session: claude's onboarding and theme done, copilot trusting `/work` with
-its default theme (`copilot.settings` for its second file),
+its default theme, no banner and no updates (`copilot.settings`, its
+settings.json),
 opencode allowed to edit, run and fetch. codex, which keeps TOML, is told
 `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` before
 every session instead. No agent updates itself; the image fixes its version.
 Edit the seeds as you like. Commits carry your git identity and one
 co-author line for the agent of the session that commits - a task resumed
 with another agent credits that one, a commit you make in `unibox shell`
-none. unibox alone says it: claude's own byline is off in its seed
-(`includeCoAuthoredBy: false`), and the hook takes out the trailer an agent
+none. unibox alone says it: claude's and copilot's own bylines are off in
+their seeds (`includeCoAuthoredBy: false`), and the hook takes out the trailer an agent
 adds of itself - copilot always does - before adding the profile's, or none
 where `co_author: false`. `unibox agent co-author <profile> <agent>
 "Name <email>"` says how an agent is credited (`git.co_authors`, which init
@@ -168,7 +169,11 @@ service ls <profile>` shows each and whether its token is stored, `unibox
 service rm` takes one out.
 
 The profile stays yours: what these commands write is ordinary YAML, and a
-hand edit is as valid.
+hand edit is as valid. Each write lays it out the same way: the sections it
+has in a fixed order, each under a line on what it does and which command
+changes it, then, commented out, only the sections it does not have yet -
+recomputed every time, so nothing unibox writes lands under examples of
+itself. Your own comment over a section stays.
 
 ## Network
 

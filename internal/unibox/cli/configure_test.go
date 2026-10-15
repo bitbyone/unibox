@@ -191,7 +191,7 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	if _, _, err = run(t, paths, "", "network", "rm", "node", "jitpack.io", "gist.github.com", "maven.google.com"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ = os.ReadFile(file); strings.Contains(string(data), "_network") {
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\nallow_network:") || strings.Contains(string(data), "\ndeny_network:") {
 		t.Fatalf("emptied lists stayed:\n%s", data)
 	}
 }
@@ -330,7 +330,7 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "--reset"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ = os.ReadFile(file); strings.Contains(string(data), "git") {
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\ngit:") {
 		t.Fatalf("an emptied git key stayed:\n%s", data)
 	}
 }

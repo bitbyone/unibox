@@ -77,8 +77,11 @@ var Agents = []Agent{
 		Files: map[string]AgentFile{"settings": {Path: ".claude/settings.json", Seed: map[string]any{"includeCoAuthoredBy": false}}}},
 	{ID: "codex", Command: "codex", Instructions: ".codex/AGENTS.md", CoAuthor: "Codex <noreply@openai.com>", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, Setup: codexSetup},
 	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <223556219+Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Args: []string{"--allow-all"}, Env: []string{"COPILOT_ALLOW_ALL=true"},
-		Seed:  map[string]any{"trustedFolders": []any{"/work"}},
-		Files: map[string]AgentFile{"settings": {Path: ".copilot/settings.json", Seed: map[string]any{"theme": "default"}}}},
+		// Its settings.json, per copilot help config: unibox's commit hook
+		// says the co-author, the image fixes the version, /work is trusted.
+		Files: map[string]AgentFile{"settings": {Path: ".copilot/settings.json", Seed: map[string]any{
+			"theme": "default", "includeCoAuthoredBy": false, "autoUpdate": false, "banner": "never", "trustedFolders": []any{"/work"},
+		}}}},
 	{ID: "opencode", Command: "opencode", Instructions: ".config/opencode/AGENTS.md", CoAuthor: "opencode <noreply@opencode.ai>", Config: ".config/opencode/opencode.json",
 		Seed: map[string]any{"$schema": "https://opencode.ai/config.json", "autoupdate": false, "permission": map[string]any{"edit": "allow", "bash": "allow", "webfetch": "allow"}}},
 }

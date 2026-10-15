@@ -605,9 +605,14 @@ refuses rather than guess; once configured, init names the repository it
 writes into. `unibox config unset environments` forgets it and leaves
 the files.
 
-A profile is edited by hand or through unibox's commands (`login`,
+A profile is edited by hand or through unibox's commands (`agent`,
 `service`, `network`), which write it as a node tree and keep its
-comments; unagit drives those commands and writes no YAML itself. The
+comments. Every write - init's too - lays it out the same way
+(`ArrangeProfile`): the sections it has in a fixed order, each under a
+comment on what it does and the command that changes it, then a
+commented tail of only the sections it lacks, recomputed each time, so a
+section unibox writes never lands below examples of itself; a comment
+the user wrote over a section is theirs and stays; unagit drives those commands and writes no YAML itself. The
 Sandboxes tab shows profiles parsed, and opens a profile's directory or
 file in the editor.
 
@@ -655,8 +660,10 @@ auth:                         # how each agent signs in
   questions: claude's onboarding and theme (`hasCompletedOnboarding`,
   `theme`, `bypassPermissionsModeAccepted`), copilot trusting `/work`
   (`trustedFolders`, kept beside what it trusts later) with its default
-  theme in its second file (`copilot.settings`, an agent's further
-  configuration named `<agent>.<name>` in `agent_config`), opencode allowed
+  theme, no banner, no updates and no byline of its own, all in its
+  settings.json (`copilot.settings`, an agent's further configuration
+  named `<agent>.<name>` in `agent_config`; `copilot help config` lists
+  them), opencode allowed
   to edit, run and fetch (`permission`, `autoupdate: false`). codex keeps
   TOML, so its setup writes `approval_policy = "never"` and
   `sandbox_mode = "danger-full-access"` before every session, and a
@@ -800,9 +807,11 @@ it would be committed. So:
 - `co_author: true` adds `Co-Authored-By: <agent>` to every commit, and
   unibox alone says it. A `commit-msg` hook in each clone in the VM takes
   out any co-author trailer the agent added of itself - copilot always
-  does, as `Co-authored-by: Copilot <223556219+Copilot@...>`, and claude
-  would, but its seed turns its byline off (`includeCoAuthoredBy: false`
-  in `claude.settings`) - and adds the profile's. The agent is the
+  does unless told, as `Co-authored-by: Copilot <223556219+Copilot@...>`,
+  and claude would - but both seeds turn the byline off
+  (`includeCoAuthoredBy: false` in `claude.settings` and
+  `copilot.settings`), the hook covering whatever an agent adds anyway -
+  and adds the profile's. The agent is the
   session's: `run` and `resume` name it to the hook (`UNIBOX_AGENT`, as
   the table calls it, and `UNIBOX_CO_AUTHOR`, as the profile credits
   it), so a task resumed with another agent credits that one, and a

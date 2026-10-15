@@ -32,20 +32,16 @@ func (m *Manager) EditProfile(name string, edit func(doc *yaml.Node) error) erro
 	if err = edit(doc.Content[0]); err != nil {
 		return err
 	}
-	var out bytes.Buffer
-	enc := yaml.NewEncoder(&out)
-	enc.SetIndent(2)
-	if err = enc.Encode(&doc); err != nil {
-		return err
-	}
-	if err = enc.Close(); err != nil {
+	ArrangeProfile(&doc, name)
+	out, err := encodeProfile(&doc)
+	if err != nil {
 		return err
 	}
 	info, err := os.Stat(file)
 	if err != nil {
 		return err
 	}
-	if err = AtomicWrite(file, out.Bytes(), info.Mode().Perm()); err != nil {
+	if err = AtomicWrite(file, out, info.Mode().Perm()); err != nil {
 		return err
 	}
 	if _, err = LoadProfile(m.Config.Environments, name); err != nil {
@@ -201,4 +197,27 @@ func SetCoAuthor(profile *yaml.Node, agent, coAuthor string) {
 	if len(git.Content) == 0 {
 		deleteMapKey(profile, "git")
 	}
+}
+
+func encodeProfile(doc *yaml.Node) ([]byte, error) {
+	var out bytes.Buffer
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// arrangeText lays a profile's text out as ArrangeProfile does.
+func arrangeText(text []byte, name string) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(text, &doc); err != nil {
+		return nil, err
+	}
+	ArrangeProfile(&doc, name)
+	return encodeProfile(&doc)
 }
