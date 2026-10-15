@@ -106,15 +106,45 @@ func scalarNode(value string) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 }
 
+// agentNode is an agent's mapping under agents, made when missing. A short
+// list of names becomes a mapping first, in the same order, so the agent
+// can say more.
+func agentNode(profile *yaml.Node, agent string) *yaml.Node {
+	agents := mapValue(profile, "agents")
+	if agents == nil {
+		agents = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		setMapValue(profile, "agents", agents)
+	}
+	if agents.Kind == yaml.SequenceNode {
+		mapping := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", HeadComment: agents.HeadComment, LineComment: agents.LineComment}
+		for _, c := range agents.Content {
+			mapping.Content = append(mapping.Content, scalarNode(c.Value), &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+		}
+		setMapValue(profile, "agents", mapping)
+		agents = mapping
+	}
+	body := mapValue(agents, agent)
+	if body == nil || body.Kind != yaml.MappingNode {
+		body = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		setMapValue(agents, agent, body)
+	}
+	return body
+}
+
 // SetAgentAuth writes how an agent signs in: the method's name, or
-// {command: ...} and {token: ...} on one line, as the scaffold writes them.
+// {command: ...} and {token: ...} on one line.
 func SetAgentAuth(profile *yaml.Node, agent string, a AgentAuth) {
-	auth := childMap(profile, "auth")
+	body := agentNode(profile, agent)
 	if a.Method == AuthCommand || a.Method == AuthToken {
-		setMapValue(auth, agent, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle, Content: []*yaml.Node{scalarNode(a.Method), scalarNode(a.Command)}})
+		setMapValue(body, "auth", &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle, Content: []*yaml.Node{scalarNode(a.Method), scalarNode(a.Command)}})
 		return
 	}
-	setMapValue(auth, agent, scalarNode(a.Method))
+	setMapValue(body, "auth", scalarNode(a.Method))
+}
+
+// SetAgentConfig names the seed of one of an agent's configuration files.
+func SetAgentConfig(profile *yaml.Node, agent, file, seed string) {
+	setMapValue(childMap(agentNode(profile, agent), "config"), file, scalarNode(seed))
 }
 
 // SetService writes a service's entry, its fields in the order the
@@ -175,28 +205,15 @@ func SetStringList(profile *yaml.Node, key string, values []string) {
 	setMapValue(profile, key, list)
 }
 
-// SetCoAuthor writes how an agent is credited under git.co_authors; an
-// empty value takes it out, and the maps with the last one.
+// SetCoAuthor writes how an agent is credited; an empty value takes it
+// out.
 func SetCoAuthor(profile *yaml.Node, agent, coAuthor string) {
-	if coAuthor != "" {
-		setMapValue(childMap(childMap(profile, "git"), "co_authors"), agent, scalarNode(coAuthor))
+	body := agentNode(profile, agent)
+	if coAuthor == "" {
+		deleteMapKey(body, "co_author")
 		return
 	}
-	git := mapValue(profile, "git")
-	if git == nil || git.Kind != yaml.MappingNode {
-		return
-	}
-	authors := mapValue(git, "co_authors")
-	if authors == nil || authors.Kind != yaml.MappingNode {
-		return
-	}
-	deleteMapKey(authors, agent)
-	if len(authors.Content) == 0 {
-		deleteMapKey(git, "co_authors")
-	}
-	if len(git.Content) == 0 {
-		deleteMapKey(profile, "git")
-	}
+	setMapValue(body, "co_author", scalarNode(coAuthor))
 }
 
 func encodeProfile(doc *yaml.Node) ([]byte, error) {

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
@@ -569,63 +570,130 @@ func splitJSONComments(text string) (head, body string) {
 }
 
 func (m *Manager) seedAgentConfigs(ctx context.Context, b api.Sandbox, r Runtime, p Profile) error {
-	for _, key := range sortedKeys(p.AgentConfig) {
-		file := p.AgentConfig[key]
-		a, target, err := ConfigPath(key)
+	for _, entry := range sortedKeys(p.AgentConfig) {
+		file := p.AgentConfig[entry]
+		agent, name := splitAgentConfigKey(entry)
+		_, f, err := ConfigFile(agent, name)
 		if err != nil {
 			return err
 		}
 		data, err := readInside(p.Root, filepath.Join(p.Dir, file))
 		if err != nil {
-			return fmt.Errorf("profile agent_config: %w", err)
+			return fmt.Errorf("profile %s: config of %s: %w", p.Name, agent, err)
 		}
-		var seed map[string]any
-		if err = json.Unmarshal(data, &seed); err != nil {
-			return fmt.Errorf("agent_config %s must be a JSON object: %v", file, err)
+		seed, err := parseSeed(f, data)
+		if err != nil {
+			return fmt.Errorf("profile %s: config %s of %s: %v", p.Name, file, agent, err)
 		}
-		if err = m.mergeConfigFile(ctx, b, r, a.ID, target, seed); err != nil {
+		if err = m.mergeConfigFile(ctx, b, r, agent, f, seed); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// mergeAgentConfig lays a seed over the agent's main JSON configuration.
+// mergeAgentConfig lays a seed over the JSON file the agent's Trust goes to.
 func (m *Manager) mergeAgentConfig(ctx context.Context, b api.Sandbox, r Runtime, a Agent, seed map[string]any) error {
-	return m.mergeConfigFile(ctx, b, r, a.ID, a.Config, seed)
+	return m.mergeConfigFile(ctx, b, r, a.ID, AgentFile{Name: path.Base(a.Config), Path: a.Config}, seed)
 }
 
-// mergeConfigFile lays a seed over one of an agent's JSON configurations in
-// the guest home, writing only when something changes.
-func (m *Manager) mergeConfigFile(ctx context.Context, b api.Sandbox, r Runtime, agent, file string, seed map[string]any) error {
-	a := Agent{ID: agent, Config: file}
-	out, err := runtimeOutput(ctx, r, b.RuntimeName, "sh", "-c", "cat \"$HOME/"+a.Config+"\" 2>/dev/null || true")
+// mergeConfigFile lays a seed over one of an agent's configuration files in
+// the guest home, JSON or TOML, writing only when something changes.
+func (m *Manager) mergeConfigFile(ctx context.Context, b api.Sandbox, r Runtime, agent string, f AgentFile, seed map[string]any) error {
+	out, err := runtimeOutput(ctx, r, b.RuntimeName, "sh", "-c", "cat \"$HOME/"+f.Path+"\" 2>/dev/null || true")
 	if err != nil {
 		return err
 	}
+	var merged []byte
+	if f.TOML() {
+		merged, err = mergeTOML(out, seed)
+	} else {
+		merged, err = mergeJSONText(out, seed)
+	}
+	if err != nil {
+		return fmt.Errorf("agent %s configuration in sandbox %s: %v; repair or remove ~/%s before seeding it", agent, b.Name, err, f.Path)
+	}
+	if merged == nil {
+		return nil
+	}
+	script := "set -eu\nmkdir -p \"$HOME/" + path.Dir(f.Path) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString(merged)) + " | base64 -d > \"$HOME/" + f.Path + "\"\n"
+	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(script)}), m.Log)
+}
+
+// mergeJSONText lays a seed over a JSON configuration, keeping its leading
+// // lines; nil when nothing changes.
+func mergeJSONText(text string, seed map[string]any) ([]byte, error) {
 	current := map[string]any{}
-	head, out := splitJSONComments(out)
+	head, body := splitJSONComments(text)
 	if strings.TrimSpace(head) != "" {
 		head = strings.TrimRight(head, "\n") + "\n"
 	}
-	if strings.TrimSpace(out) != "" {
-		if err = json.Unmarshal([]byte(out), &current); err != nil {
-			return fmt.Errorf("agent %s configuration in sandbox %s is not valid JSON; repair or remove ~/%s before seeding it", a.ID, b.Name, a.Config)
+	if strings.TrimSpace(body) != "" {
+		if err := json.Unmarshal([]byte(body), &current); err != nil {
+			return nil, fmt.Errorf("not valid JSON")
 		}
 	}
 	before, _ := json.Marshal(current)
 	mergedMap := mergeJSON(current, seed)
 	after, _ := json.Marshal(mergedMap)
 	if bytes.Equal(before, after) {
-		return nil
+		return nil, nil
 	}
 	merged, err := json.MarshalIndent(mergedMap, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	merged = append([]byte(head), append(merged, '\n')...)
-	script := "set -eu\nmkdir -p \"$HOME/" + path.Dir(a.Config) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString(merged)) + " | base64 -d > \"$HOME/" + a.Config + "\"\n"
-	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(script)}), m.Log)
+	return append([]byte(head), append(merged, '\n')...), nil
+}
+
+// mergeTOML lays a seed over a TOML configuration; nil when nothing
+// changes. The blocks between unibox's markers - written before each
+// session by the agent's own setup - are kept where they were: one before
+// any table stays at the top, the rest go after.
+func mergeTOML(text string, seed map[string]any) ([]byte, error) {
+	var top, tail, body strings.Builder
+	inBlock, table := false, false
+	var block *strings.Builder
+	for _, line := range strings.SplitAfter(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "# unibox:begin"):
+			inBlock = true
+			block = &tail
+			if !table {
+				block = &top
+			}
+			block.WriteString(line)
+		case strings.HasPrefix(trimmed, "# unibox:end"):
+			inBlock = false
+			block.WriteString(line)
+			if !strings.HasSuffix(line, "\n") {
+				block.WriteString("\n")
+			}
+		case inBlock:
+			block.WriteString(line)
+		default:
+			if strings.HasPrefix(trimmed, "[") {
+				table = true
+			}
+			body.WriteString(line)
+		}
+	}
+	current := map[string]any{}
+	if err := toml.Unmarshal([]byte(body.String()), &current); err != nil {
+		return nil, fmt.Errorf("not valid TOML")
+	}
+	before, _ := json.Marshal(current)
+	mergedMap := mergeJSON(current, seed)
+	after, _ := json.Marshal(mergedMap)
+	if bytes.Equal(before, after) {
+		return nil, nil
+	}
+	merged, err := toml.Marshal(mergedMap)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(top.String() + string(merged) + tail.String()), nil
 }
 
 func (m *Manager) AttachInstructions(name string, names []string) error {

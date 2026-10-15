@@ -247,10 +247,9 @@ fi
 // as it is, so it is taken away and codex asks. What unibox writes into
 // config.toml sits between markers, rewritten each time; the rest is the
 // user's. Top-level keys go before the first table, or TOML would read
-// them as the table's. codex is left to work unasked - approval_policy
-// never, sandbox_mode danger-full-access - as the VM is the boundary, so a
-// codex started by hand in unibox shell is as free as one unibox runs.
-// Every task directory and repository under /work is
+// them as the table's. How codex works - unasked, by default - is the
+// profile's config.toml seed, merged before this. Every task directory and
+// repository under /work is
 // trusted, so codex does not ask whether to trust what unibox prepared; a
 // directory the user's own part already names is left to it.
 const codexSetup = `home="${CODEX_HOME:-$HOME/.codex}"
@@ -264,21 +263,18 @@ awk -v mode="$mode" '
 /^# unibox:end/ { skip = 0; next }
 skip { next }
 /^[ \t]*\[/ { table = 1 }
-!table && /^[ \t]*(approval_policy|sandbox_mode)[ \t]*=/ { next }
 !table && (mode == "oauth" || mode == "apikey") && /^[ \t]*forced_login_method[ \t]*=/ { next }
 !table && mode == "oauth" && /^[ \t]*model_provider[ \t]*=/ { next }
 { print }' "$cfg" > "$cfg.unibox"
 {
-  echo '# unibox:begin - rewritten before every session; the sandbox is the boundary'
-  echo 'approval_policy = "never"'
-  echo 'sandbox_mode = "danger-full-access"'
   case "$mode" in
     oauth|apikey)
+      echo '# unibox:begin - the sandbox proxy signs codex in; rewritten before every session'
       echo 'forced_login_method = "api"'
       [ "$mode" = oauth ] && echo 'model_provider = "sandboxd"'
+      echo '# unibox:end'
       ;;
   esac
-  echo '# unibox:end'
   cat "$cfg.unibox"
   {
     if [ "$mode" = oauth ]; then

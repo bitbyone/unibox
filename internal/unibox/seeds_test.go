@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
@@ -20,47 +22,51 @@ func TestInitSeedsEveryAgentItCanAndTheProfileNamesThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"claude", "claude.settings", "copilot.settings", "opencode"} {
-		if p.AgentConfig[id] != "_data/"+id+".json" {
-			t.Fatalf("%s is not seeded: %v", id, p.AgentConfig)
+	want := map[string]string{
+		"claude/.claude.json":    "_data/claude/claude.json",
+		"claude/settings.json":   "_data/claude/settings.json",
+		"codex/config.toml":      "_data/codex/config.toml",
+		"copilot/settings.json":  "_data/copilot/settings.json",
+		"opencode/opencode.json": "_data/opencode/opencode.json",
+	}
+	for entry, seed := range want {
+		if p.AgentConfig[entry] != seed {
+			t.Fatalf("%s is not seeded as %s: %v", entry, seed, p.AgentConfig)
 		}
-		data, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", id+".json"))
-		var seed map[string]any
-		if err != nil || json.Unmarshal(data, &seed) != nil {
-			t.Fatalf("%s: %v %s", id, err, data)
+		agent, name := splitAgentConfigKey(entry)
+		_, f, err := ConfigFile(agent, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", seed))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parseSeed(f, data); err != nil {
+			t.Fatalf("%s: %v %s", seed, err, data)
 		}
 	}
-	// claude's own byline is off: unibox's hook says the co-author.
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude.settings.json")); !strings.Contains(string(data), `"includeCoAuthoredBy": false`) {
-		t.Fatalf("%s", data)
+	// copilot's config.json is its own state: known, not seeded.
+	if _, ok := p.AgentConfig["copilot/config.json"]; ok {
+		t.Fatal("copilot's state was seeded")
 	}
-	// copilot keeps its theme in a file of its own.
-	if p.AgentConfig["copilot.settings"] != "_data/copilot.settings.json" {
-		t.Fatalf("%v", p.AgentConfig)
+	read := func(rel string) string {
+		data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", rel))
+		return string(data)
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "copilot.settings.json")); !strings.Contains(string(data), `"theme": "default"`) {
-		t.Fatalf("%s", data)
+	if !strings.Contains(read("_data/claude/settings.json"), `"includeCoAuthoredBy": false`) || !strings.Contains(read("_data/copilot/settings.json"), `"theme": "default"`) || !strings.Contains(read("_data/claude/claude.json"), `"hasCompletedOnboarding": true`) {
+		t.Fatal("a seed lacks its defaults")
 	}
-	if a, path, err := ConfigPath("copilot.settings"); err != nil || a.ID != "copilot" || path != ".copilot/settings.json" {
-		t.Fatalf("%v %s %v", a.ID, path, err)
+	// codex keeps TOML, and its seed is TOML.
+	if c := read("_data/codex/config.toml"); !strings.Contains(c, "approval_policy = 'never'") && !strings.Contains(c, `approval_policy = "never"`) {
+		t.Fatalf("%s", c)
 	}
-	if _, _, err := ConfigPath("copilot.nothing"); err == nil {
+	if _, _, err := ConfigFile("copilot", "nothing.json"); err == nil {
 		t.Fatal("an unknown file of an agent was taken")
 	}
-	// codex keeps TOML, set up before every session instead.
-	if _, ok := p.AgentConfig["codex"]; ok {
-		t.Fatal("codex was given a JSON seed")
-	}
-	claude, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude.json"))
-	if !strings.Contains(string(claude), `"hasCompletedOnboarding": true`) {
-		t.Fatalf("%s", claude)
-	}
-	// A profile without such agents names none.
-	if _, err := Init(root, "plain", []string{"codex"}, 2, "4g"); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "plain", "sandbox.yaml")); strings.Contains(string(data), "agent_config") {
-		t.Fatalf("%s", data)
+	// Each agent says it all in one place.
+	if profile := read("sandbox.yaml"); !strings.Contains(profile, "  codex:\n    co_author: Codex <noreply@openai.com>\n    config:\n      config.toml: _data/codex/config.toml") {
+		t.Fatalf("%s", profile)
 	}
 }
 
@@ -94,8 +100,11 @@ func TestCopilotsCommentedConfigTakesItsSeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, _ := FindAgent("copilot")
-	if err := m.mergeAgentConfig(context.Background(), b, f, a, map[string]any{"trustedFolders": []any{"/work"}}); err != nil {
+	_, file, err := ConfigFile("copilot", "config.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.mergeConfigFile(context.Background(), b, f, "copilot", file, map[string]any{"trustedFolders": []any{"/work"}}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(home, ".copilot", "config.json"))
@@ -198,7 +207,7 @@ func TestAnOldHookIsRewrittenBeforeASession(t *testing.T) {
 func TestTheSessionCreditsTheAgentAsTheProfileSays(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\ngit:\n  co_authors:\n    claude: Claude Code <claude@example.com>\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {co_author: Claude Code <claude@example.com>}\n  codex:\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -212,8 +221,32 @@ func TestTheSessionCreditsTheAgentAsTheProfileSays(t *testing.T) {
 	if string(settingsSnapshot(p, &fakeRuntime{})) != string(settingsSnapshot(other, &fakeRuntime{})) {
 		t.Fatal("a co-author change would recreate the sandbox")
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\ngit: {co_authors: {copilot: Copilot <c@example.com>}}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {co_author: nobody}\n")
 	if _, err := LoadProfile(root, "node"); err == nil {
-		t.Fatal("an agent the profile lacks was credited")
+		t.Fatal("a co-author without an address was taken")
+	}
+}
+
+func TestATOMLSeedKeepsWhatCodexAndUniboxWrote(t *testing.T) {
+	t.Parallel()
+	current := "# unibox:begin - the sandbox proxy signs codex in\nforced_login_method = \"api\"\n# unibox:end\nmodel = \"gpt-5\"\napproval_policy = \"on-request\"\n\n[tui]\ntheme = \"dark\"\n# unibox:begin\n[projects.\"/work/a\"]\ntrust_level = \"trusted\"\n# unibox:end\n"
+	merged, err := mergeTOML(current, map[string]any{"approval_policy": "never", "sandbox_mode": "danger-full-access"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(merged)
+	var parsed map[string]any
+	if err := toml.Unmarshal(merged, &parsed); err != nil {
+		t.Fatalf("not TOML: %v\n%s", err, got)
+	}
+	if parsed["approval_policy"] != "never" || parsed["sandbox_mode"] != "danger-full-access" || parsed["model"] != "gpt-5" || parsed["forced_login_method"] != "api" {
+		t.Fatalf("%v\n%s", parsed, got)
+	}
+	if !strings.HasPrefix(got, "# unibox:begin - the sandbox proxy signs codex in\n") || !strings.HasSuffix(got, "trust_level = \"trusted\"\n# unibox:end\n") {
+		t.Fatalf("unibox's blocks moved:\n%s", got)
+	}
+	// Nothing to change: nothing written.
+	if again, err := mergeTOML(got, map[string]any{"approval_policy": "never"}); err != nil || again != nil {
+		t.Fatalf("%v %s", err, again)
 	}
 }

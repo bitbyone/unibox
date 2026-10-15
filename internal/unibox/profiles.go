@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,7 +26,7 @@ type GitOptions struct {
 	CoAuthor *bool  `yaml:"co_author" json:"co_author,omitempty"`
 	// CoAuthors says how each agent is credited, as Name <email>, over the
 	// default unibox's table gives it.
-	CoAuthors map[string]string `yaml:"co_authors" json:"co_authors,omitempty"`
+	CoAuthors map[string]string `yaml:"-" json:"co_authors,omitempty"`
 }
 
 // ValidCoAuthor is Name <email>, or Name <> - a trailer is text, and an
@@ -56,7 +57,7 @@ type HostAccess struct {
 	AllowNetwork []string `yaml:"allow_network" json:"allow_network,omitempty"`
 	// Auth is how each agent signs in. It is host access: the runtime keeps
 	// the logins on the host, and a command runs there to fetch a token.
-	Auth map[string]AgentAuth `yaml:"auth" json:"auth,omitempty"`
+	Auth map[string]AgentAuth `yaml:"-" json:"auth,omitempty"`
 	// Services are the host-facing services the sandbox reaches - a git
 	// forge, an Artifactory, a registry. Like Auth, the token lives on the
 	// host and reaches the sandbox only as a placeholder the proxy swaps.
@@ -221,17 +222,69 @@ func (a *AgentAuth) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
+// AgentSpec is what a profile says of one agent: how it signs in, how it is
+// credited in commits, and the seeds of its configuration files by the name
+// the agent gives each.
+type AgentSpec struct {
+	Auth     *AgentAuth        `yaml:"auth"`
+	CoAuthor string            `yaml:"co_author"`
+	Config   map[string]string `yaml:"config"`
+}
+
+// AgentList is a profile's agents in their order - which matters, sbx
+// signing in by the OAuth of the first that declares one: a list of names,
+// or a mapping of names to what the profile says of each.
+type AgentList struct {
+	IDs   []string
+	Specs map[string]AgentSpec
+}
+
+func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
+	l.IDs, l.Specs = []string{}, map[string]AgentSpec{}
+	switch n.Kind {
+	case yaml.SequenceNode:
+		for _, c := range n.Content {
+			if c.Kind != yaml.ScalarNode {
+				return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", c.Line)
+			}
+			l.IDs = append(l.IDs, c.Value)
+		}
+		return nil
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			id, body := n.Content[i].Value, n.Content[i+1]
+			var spec AgentSpec
+			if !(body.Kind == yaml.ScalarNode && body.Tag == "!!null") {
+				if body.Kind != yaml.MappingNode {
+					return fmt.Errorf("line %d: agent %s takes auth, co_author and config", body.Line, id)
+				}
+				// Strict, as the profile is: a misspelt field is named.
+				if err := decodeStrict(body, &spec); err != nil {
+					return fmt.Errorf("agent %s: %w", id, err)
+				}
+			}
+			l.IDs = append(l.IDs, id)
+			l.Specs[id] = spec
+		}
+		return nil
+	}
+	return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", n.Line)
+}
+
 type Profile struct {
-	Dockerfile   string `yaml:"dockerfile" json:"dockerfile"`
-	Image        string `yaml:"image" json:"image"`
-	CPUs         int    `yaml:"cpus" json:"cpus"`
-	Memory       string `yaml:"memory" json:"memory"`
-	HostAccess   `yaml:",inline"`
-	Agents       []string                `yaml:"agents" json:"agents"`
+	Dockerfile string `yaml:"dockerfile" json:"dockerfile"`
+	Image      string `yaml:"image" json:"image"`
+	CPUs       int    `yaml:"cpus" json:"cpus"`
+	Memory     string `yaml:"memory" json:"memory"`
+	HostAccess `yaml:",inline"`
+	Agents     []string `yaml:"-" json:"agents"`
+	// AgentList is how agents reads in YAML; LoadProfile spreads it into
+	// Agents, Auth, Git.CoAuthors and AgentConfig.
+	AgentList    AgentList               `yaml:"agents" json:"-"`
 	Start        string                  `yaml:"start" json:"start"`
 	Bootstrap    string                  `yaml:"bootstrap" json:"bootstrap"`
 	Instructions []string                `yaml:"instructions" json:"instructions"`
-	AgentConfig  map[string]string       `yaml:"agent_config" json:"agent_config,omitempty"`
+	AgentConfig  map[string]string       `yaml:"-" json:"agent_config,omitempty"`
 	Git          GitOptions              `yaml:"git" json:"git"`
 	Name         string                  `yaml:"-" json:"-"`
 	Dir          string                  `yaml:"-" json:"-"`
@@ -316,8 +369,33 @@ func LoadProfile(root, name string) (Profile, error) {
 	if err != nil {
 		return p, err
 	}
+	if err = movedSections(b); err != nil {
+		return p, fmt.Errorf("profile %s: %w", name, err)
+	}
 	if err = DecodeYAML(b, &p); err != nil {
 		return p, fmt.Errorf("profile %s: %w", name, err)
+	}
+	p.Agents = p.AgentList.IDs
+	for _, id := range p.AgentList.IDs {
+		spec := p.AgentList.Specs[id]
+		if spec.Auth != nil {
+			if p.Auth == nil {
+				p.Auth = map[string]AgentAuth{}
+			}
+			p.Auth[id] = *spec.Auth
+		}
+		if spec.CoAuthor != "" {
+			if p.Git.CoAuthors == nil {
+				p.Git.CoAuthors = map[string]string{}
+			}
+			p.Git.CoAuthors[id] = spec.CoAuthor
+		}
+		for file, seed := range spec.Config {
+			if p.AgentConfig == nil {
+				p.AgentConfig = map[string]string{}
+			}
+			p.AgentConfig[agentConfigKey(id, file)] = seed
+		}
 	}
 	if (p.Dockerfile == "") == (p.Image == "") {
 		return p, fmt.Errorf("profile %s must specify exactly one of dockerfile or image", name)
@@ -458,7 +536,7 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile %s: git.co_authors names %s, which is not among its agents", name, id)
 		}
 		if !ValidCoAuthor(c) {
-			return p, fmt.Errorf("profile %s: git.co_authors of %s must be Name <email>, or Name <> for none", name, id)
+			return p, fmt.Errorf("profile %s: co_author of %s must be Name <email>, or Name <> for none", name, id)
 		}
 	}
 	for _, key := range p.Env {
@@ -579,24 +657,18 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile instructions: %w", err)
 		}
 	}
-	for id, file := range p.AgentConfig {
-		a, _, err := ConfigPath(id)
-		if a.ID == "" {
-			return p, err
-		}
-		if !seen[a.ID] {
-			return p, fmt.Errorf("profile %s seeds configuration for %s but does not declare it in agents", name, a.ID)
-		}
+	for entry, file := range p.AgentConfig {
+		agent, fileName := splitAgentConfigKey(entry)
+		_, f, err := ConfigFile(agent, fileName)
 		if err != nil {
 			return p, fmt.Errorf("profile %s: %w", name, err)
 		}
-		b, err := readInside(p.Root, filepath.Join(p.Dir, file))
+		data, err := readInside(p.Root, filepath.Join(p.Dir, file))
 		if err != nil {
-			return p, fmt.Errorf("profile agent_config: %w", err)
+			return p, fmt.Errorf("profile %s: config of %s: %w", name, agent, err)
 		}
-		var seed map[string]any
-		if err = json.Unmarshal(b, &seed); err != nil {
-			return p, fmt.Errorf("profile %s: agent_config %s must be a JSON object: %v", name, file, err)
+		if _, err = parseSeed(f, data); err != nil {
+			return p, fmt.Errorf("profile %s: config %s of %s: %v", name, file, agent, err)
 		}
 	}
 	p.Revision = digest(struct {
@@ -852,4 +924,49 @@ func ProfileNames(root string) ([]string, error) {
 	}
 	slices.Sort(names)
 	return names, nil
+}
+
+// decodeStrict decodes a node as DecodeYAML decodes a document: a field the
+// type lacks is an error naming it.
+func decodeStrict(n *yaml.Node, v any) error {
+	b, err := yaml.Marshal(n)
+	if err != nil {
+		return err
+	}
+	return DecodeYAML(b, v)
+}
+
+// movedSections names the sections that moved under each agent, so an older
+// profile is told how to read now rather than that a field is unknown.
+func movedSections(text []byte) error {
+	var doc yaml.Node
+	if yaml.Unmarshal(text, &doc) != nil || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	m := doc.Content[0]
+	if mapValue(m, "auth") != nil {
+		return fmt.Errorf("auth moved under each agent: agents: {<agent>: {auth: ...}}")
+	}
+	if mapValue(m, "agent_config") != nil {
+		return fmt.Errorf("agent_config moved under each agent: agents: {<agent>: {config: {<file>: _data/...}}}")
+	}
+	if git := mapValue(m, "git"); git != nil && git.Kind == yaml.MappingNode && mapValue(git, "co_authors") != nil {
+		return fmt.Errorf("git.co_authors moved under each agent: agents: {<agent>: {co_author: Name <email>}}")
+	}
+	return nil
+}
+
+// parseSeed reads a seed as its file is written: TOML or JSON, an object.
+func parseSeed(f AgentFile, data []byte) (map[string]any, error) {
+	seed := map[string]any{}
+	if f.TOML() {
+		if err := toml.Unmarshal(data, &seed); err != nil {
+			return nil, fmt.Errorf("not TOML: %v", err)
+		}
+		return seed, nil
+	}
+	if err := json.Unmarshal(data, &seed); err != nil {
+		return nil, fmt.Errorf("not a JSON object: %v", err)
+	}
+	return seed, nil
 }

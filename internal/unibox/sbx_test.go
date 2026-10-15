@@ -243,9 +243,9 @@ func TestCodexIsSignedInByTheSandboxProxy(t *testing.T) {
 	if strings.Contains(c, "sandboxd") || strings.Contains(c, "forced_login_method") || a != "" {
 		t.Fatalf("none kept the proxy's login:\n%s %s", c, a)
 	}
-	// Whatever the login, codex works unasked; the user's own top-level
-	// choice of it gives way rather than clash with unibox's.
-	if strings.Count(c, "approval_policy = \"never\"") != 1 || strings.Count(c, "sandbox_mode = \"danger-full-access\"") != 1 {
+	// How codex works is the profile's config.toml seed, merged before
+	// this; the setup leaves it alone.
+	if strings.Count(c, "approval_policy = \"on-request\"") != 1 || strings.Contains(c, "sandbox_mode") {
 		t.Fatalf("%s", c)
 	}
 	// A login the user made in the sandbox is not the proxy's to take away.
@@ -314,7 +314,7 @@ func TestTheStoredOAuthLoginIsDeclaredFirst(t *testing.T) {
 func TestProfilesSayHowEachAgentSignsIn(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex, copilot]\nauth:\n  codex: oauth\n  claude: {token: security find-generic-password -s claude -w}\n  copilot: {command: gh auth token}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)

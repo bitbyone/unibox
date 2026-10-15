@@ -47,19 +47,22 @@ func TestProfilesRejectUnknownFieldsAndEscapes(t *testing.T) {
 		{"credential", "image: example/image\nagents: [claude]\nenv: [GITHUB_TOKEN]\n"},
 		{"script", "image: example/image\nagents: [claude]\nstart: ../../host.sh\n"},
 		{"documents", "image: example/image\nagents: [claude]\n---\nimage: another\n"},
-		{"seed-undeclared", "image: example/image\nagents: [claude]\nagent_config: {codex: codex.json}\n"},
-		{"seed-no-json-config", "image: example/image\nagents: [claude, codex]\nagent_config: {codex: codex.json}\n"},
-		{"seed-missing-file", "image: example/image\nagents: [claude]\nagent_config: {claude: absent.json}\n"},
-		{"seed-not-an-object", "image: example/image\nagents: [claude]\nagent_config: {claude: start.sh}\n"},
+		{"agent-config-moved", "image: example/image\nagents: [claude]\nagent_config: {claude: c.json}\n"},
+		{"agent-unknown-field", "image: example/image\nagents: {claude: {colour: red}}\n"},
+		{"seed-unknown-file", "image: example/image\nagents: {codex: {config: {codex.json: start.sh}}}\n"},
+		{"seed-missing-file", "image: example/image\nagents: {claude: {config: {.claude.json: absent.json}}}\n"},
+		{"seed-not-an-object", "image: example/image\nagents: {claude: {config: {.claude.json: start.sh}}}\n"},
+		{"seed-not-toml", "image: example/image\nagents: {codex: {config: {config.toml: start.sh}}}\n"},
 		{"allow-list", "image: example/image\nagents: [claude]\nallow_network: [\"a.example,b.example\"]\n"},
 		{"allow-everything-bare", "image: example/image\nagents: [claude]\nallow_network: [\"*\"]\n"},
 		{"deny-space", "image: example/image\nagents: [claude]\ndeny_network: [\"a example\"]\n"},
 		{"allowed-and-denied", "image: example/image\nagents: [claude]\nallow_network: [a.example]\ndeny_network: [a.example]\n"},
 		{"service-host-denied", "image: example/image\nagents: [claude]\ndeny_network: [gitlab.com]\nservices: {gitlab: {git: true, host: gitlab.com, user: oauth2, command: c}}\n"},
-		{"auth-undeclared", "image: example/image\nagents: [claude]\nauth: {codex: oauth}\n"},
-		{"auth-unknown", "image: example/image\nagents: [claude]\nauth: {claude: password}\n"},
-		{"auth-empty-command", "image: example/image\nagents: [claude]\nauth: {claude: {command: ''}}\n"},
-		{"auth-other-key", "image: example/image\nagents: [claude]\nauth: {claude: {script: x}}\n"},
+		{"auth-moved", "image: example/image\nagents: [claude]\nauth: {claude: oauth}\n"},
+		{"co-authors-moved", "image: example/image\nagents: [claude]\ngit: {co_authors: {claude: C <c@example.com>}}\n"},
+		{"auth-unknown", "image: example/image\nagents: {claude: {auth: password}}\n"},
+		{"auth-empty-command", "image: example/image\nagents: {claude: {auth: {command: ''}}}\n"},
+		{"auth-other-key", "image: example/image\nagents: {claude: {auth: {script: x}}}\n"},
 		{"service-no-host", "image: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, command: gh auth token}}\n"},
 		{"service-no-command", "image: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, host: github.com}}\n"},
 		{"service-both-git-env", "image: example/image\nagents: [claude]\nservices: {x: {git: true, env: TOK, host: h.example, command: c, scheme: raw}}\n"},
@@ -193,7 +196,7 @@ func TestOnlyImageInputsTurnTheRevision(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "claude.json"), `{"theme": "dark"}`)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\nagent_config: {claude: _data/claude.json}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nagents: {claude: {config: {.claude.json: _data/claude.json}}}\nstart: start.sh\n")
 	before, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)

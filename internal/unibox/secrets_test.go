@@ -94,7 +94,7 @@ func TestSecretsReachThePlatformsStoreButNeverItsCommandLine(t *testing.T) {
 func TestAProfileNamesASecretAndTheRuntimeGetsThePlatformsLookup(t *testing.T) {
 	fakeSecretTools(t)
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nauth:\n  claude: {token: secret:claude}\nservices:\n  gitlab:\n    git: true\n    host: gitlab.com\n    user: oauth2\n    command: secret:gitlab\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: secret:claude}}\nservices:\n  gitlab:\n    git: true\n    host: gitlab.com\n    user: oauth2\n    command: secret:gitlab\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestAProfileNamesASecretAndTheRuntimeGetsThePlatformsLookup(t *testing.T) {
 	if got, _ := ResolveCommand("vault kv get -field=token secret/ci"); got != "vault kv get -field=token secret/ci" {
 		t.Fatalf("a command of the user's own changed: %q", got)
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nauth:\n  claude: {token: 'secret:Not Valid'}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents:\n  claude: {auth: {token: 'secret:Not Valid'}}\n")
 	if _, err := LoadProfile(root, "node"); err == nil {
 		t.Fatal("an invalid secret name was accepted")
 	}
@@ -119,7 +119,7 @@ func TestEditingAProfileKeepsItsCommentsAndNeverBreaksIt(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)
 	file := filepath.Join(m.Config.Environments, "sandboxes", "node", "sandbox.yaml")
-	write(t, file, "# Node work.\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex] # both\n# How they sign in.\nauth:\n  codex: oauth # the browser\n")
+	write(t, file, "# Node work.\ndockerfile: Dockerfile\nstart: start.sh\nagents: # both\n  claude:\n  # How codex signs in.\n  codex:\n    auth: oauth # the browser\n")
 	no := false
 	err := m.EditProfile("node", func(doc *yaml.Node) error {
 		SetAgentAuth(doc, "claude", AgentAuth{Method: AuthToken, Command: "secret:claude"})
@@ -131,7 +131,7 @@ func TestEditingAProfileKeepsItsCommentsAndNeverBreaksIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	for _, want := range []string{"# Node work.", "# both", "# How they sign in.", "codex: oauth # the browser", "claude: {token: 'secret:claude'}", "host: github.com/acme", "co_author: false", "host: [a.example, '*.jfrog.io']"} {
+	for _, want := range []string{"# Node work.", "# both", "# How codex signs in.", "auth: oauth # the browser", "auth: {token: 'secret:claude'}", "host: github.com/acme", "co_author: false", "host: [a.example, '*.jfrog.io']"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("lacks %q:\n%s", want, data)
 		}

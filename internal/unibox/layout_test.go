@@ -23,7 +23,7 @@ func TestAProfileIsLaidOutTheSameWhoeverWroteIt(t *testing.T) {
 		t.Fatalf("%s", fresh)
 	}
 	// The user's own comment over a section is theirs.
-	text := strings.Replace(string(fresh), "agent_config:", "# Mine.\nagent_config:", 1)
+	text := strings.Replace(string(fresh), "\ninstructions:", "\n# Mine.\ninstructions:", 1)
 	if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestAProfileIsLaidOutTheSameWhoeverWroteIt(t *testing.T) {
 	if strings.Contains(s[tail:], "# services:") || strings.Contains(s[tail:], "# allow_network:") || !strings.Contains(s[tail:], "# deny_network:") {
 		t.Fatalf("the examples were not recomputed:\n%s", s)
 	}
-	if !strings.Contains(s, "# Mine.\nagent_config:") || strings.Count(s, footerMarker) != 1 {
+	if !strings.Contains(s, "# Mine.\ninstructions:") || strings.Count(s, footerMarker) != 1 {
 		t.Fatalf("%s", s)
 	}
 	// Laid out again, it does not change.
@@ -60,7 +60,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "mine.json"), `{"theme": "light"}`)
-	write(t, file, "# Mine, from before.\ndockerfile: Dockerfile\nagents: [claude, codex]\ncpus: 2\nmemory: 1g\nstart: start.sh\nagent_config: {claude: _data/mine.json}\ngit: {co_authors: {codex: Codex Bot <bot@example.com>}}\nallow_network: [jitpack.io] # Kotlin\n")
+	write(t, file, "# Mine, from before.\ndockerfile: Dockerfile\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\ncpus: 2\nmemory: 1g\nstart: start.sh\nallow_network: [jitpack.io] # Kotlin\n")
 	// A repository init laid out already, as a real one is.
 	if _, err := Init(root, "", nil, 0, ""); err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Its own seed and co-author stay; what it lacked is added.
-	if p.AgentConfig["claude"] != "_data/mine.json" || p.AgentConfig["claude.settings"] != "_data/claude.settings.json" {
+	if p.AgentConfig["claude/.claude.json"] != "_data/mine.json" || p.AgentConfig["claude/settings.json"] != "_data/claude/settings.json" || p.AgentConfig["codex/config.toml"] != "_data/codex/config.toml" {
 		t.Fatalf("%v", p.AgentConfig)
 	}
 	if p.Git.CoAuthors["codex"] != "Codex Bot <bot@example.com>" || p.Git.CoAuthors["claude"] != "Claude <noreply@anthropic.com>" {
@@ -97,7 +97,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	if !strings.Contains(string(data), "# Mine, from before.") || !strings.Contains(string(data), "allow_network: [jitpack.io] # Kotlin") || !strings.Contains(string(data), footerMarker) {
 		t.Fatalf("%s", data)
 	}
-	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "_data", "claude.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "_data", "claude", "claude.json")); err == nil {
 		t.Fatal("a seed the profile does not name was written")
 	}
 	// Seeds are not the image's inputs: nothing to rebuild.

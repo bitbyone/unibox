@@ -65,8 +65,8 @@ have, and what changed in the profile. `run` fixes what it can. Every command ac
 ## Environments repository
 
 `unibox init <profile>` on a profile that exists completes it to what init
-writes today - the seeds and `agent_config` entries of its agents, how each
-is credited, the layout - and changes nothing it already says; its agents
+writes today - its agents' seeds and `config` entries, how each is credited,
+the layout - and changes nothing it already says; its agents
 stay its own.
 
 A git repository of yours holding the profiles. `unibox init` creates:
@@ -92,11 +92,18 @@ my-envs/
 dockerfile: Dockerfile
 cpus: 4
 memory: 8g
-agents: [claude, codex, copilot]
+agents:                              # or a list: [claude, codex]
+  claude:
+    auth: {token: secret:claude}     # unibox agent login
+    co_author: Claude <noreply@anthropic.com>
+    config:                          # seeds merged before every session
+      .claude.json: _data/claude/claude.json
+      settings.json: _data/claude/settings.json
+  codex:
+    auth: oauth                      # provider login kept by the runtime
+    config:
+      config.toml: _data/codex/config.toml
 instructions: [unibox]               # from instructions/
-auth:
-  codex: oauth                       # provider login kept by the runtime
-  copilot: {token: security find-generic-password -s unibox-copilot-token -w}
 allow_network: [jitpack.io]          # hosts to allow
 deny_network: [gist.github.com]      # hosts to block
 ```
@@ -111,14 +118,14 @@ applied to the running sandbox live.
 
 `claude`, `codex`, `copilot`, `opencode`, started with their permission
 prompts off - the sandbox is the boundary. `unibox init` writes each one's
-first answers into the profile's `_data/<agent>.json`, named in
-`agent_config` and merged into the agent's own configuration before every
-session: claude's onboarding and theme done, copilot trusting `/work` with
-its default theme, no banner and no updates (`copilot.settings`, its
-settings.json),
-opencode allowed to edit, run and fetch. codex, which keeps TOML, is told
-`approval_policy = "never"` and `sandbox_mode = "danger-full-access"` before
-every session instead. No agent updates itself; the image fixes its version.
+first answers into the profile's `_data/<agent>/<file>`, named under the
+agent's `config` by the file's own name and merged into the agent's
+configuration before every session, JSON or TOML: claude's onboarding and
+theme done, copilot trusting `/work` with its default theme, no banner and
+no updates (its settings.json), codex working unasked (`approval_policy =
+"never"`, `sandbox_mode = "danger-full-access"` in its config.toml), opencode
+allowed to edit, run and fetch. No agent updates itself; the image fixes its
+version.
 Edit the seeds as you like. Commits carry your git identity and one
 co-author line for the agent of the session that commits - a task resumed
 with another agent credits that one, a commit you make in `unibox shell`
@@ -126,8 +133,8 @@ none. unibox alone says it: claude's and copilot's own bylines are off in
 their seeds (`includeCoAuthoredBy: false`), and the hook takes out the trailer an agent
 adds of itself - copilot always does - before adding the profile's, or none
 where `co_author: false`. `unibox agent co-author <profile> <agent>
-"Name <email>"` says how an agent is credited (`git.co_authors`, which init
-writes out with the defaults); `Name <>` credits it with no address, linked
+"Name <email>"` says how an agent is credited (its `co_author`, which init
+writes out with the default); `Name <>` credits it with no address, linked
 to no account, and `--reset` takes it back to the default. `unibox agent ls
 <profile>` shows each agent's sign-in and credit.
 

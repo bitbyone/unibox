@@ -151,7 +151,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "claude: {token: 'secret:claude'}") {
+	if !strings.Contains(string(data), "  claude:\n    auth: {token: 'secret:claude'}") {
 		t.Fatalf("%s", data)
 	}
 	recorded, _ := os.ReadFile(argv)
@@ -226,11 +226,11 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Claude's onboarding is answered once, in a seed the profile names.
-	seed, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude.json"))
+	seed, err := os.ReadFile(filepath.Join(root, "sandboxes", "web", "_data", "claude", "claude.json"))
 	if err != nil || !strings.Contains(string(seed), `"hasCompletedOnboarding": true`) {
 		t.Fatalf("%v %s", err, seed)
 	}
-	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), "claude: _data/claude.json") || !strings.Contains(string(profile), "co_authors:\n    claude: Claude <noreply@anthropic.com>") {
+	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), ".claude.json: _data/claude/claude.json") || !strings.Contains(string(profile), "  claude:\n    co_author: Claude <noreply@anthropic.com>") {
 		t.Fatalf("%s", profile)
 	}
 	// Again on the profile it made: complete already, kept, agents its own.
@@ -277,7 +277,7 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "copilot: {token: gh auth token}") || !strings.Contains(string(data), "command: gh auth token") || !strings.Contains(string(data), "user: x-access-token") {
+	if !strings.Contains(string(data), "auth: {token: gh auth token}") || !strings.Contains(string(data), "command: gh auth token") || !strings.Contains(string(data), "user: x-access-token") {
 		t.Fatalf("%s", data)
 	}
 	// Copilot's token login keeps gh's token off github.com, and nothing
@@ -309,7 +309,8 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "co_authors:") || !strings.Contains(string(data), "copilot: GitHub Copilot <copilot@example.com>") {
+	// The short list became a mapping, so the agent can say more.
+	if !strings.Contains(string(data), "  copilot:\n    co_author: GitHub Copilot <copilot@example.com>") {
 		t.Fatalf("%s", data)
 	}
 	if out, _, _ = run(t, paths, "", "agent", "co-author", "node", "copilot"); !strings.Contains(out, "GitHub Copilot <copilot@example.com>\t(profile)") {
@@ -334,7 +335,7 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "--reset"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\ngit:") {
-		t.Fatalf("an emptied git key stayed:\n%s", data)
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "co_author:") {
+		t.Fatalf("a reset co-author stayed:\n%s", data)
 	}
 }

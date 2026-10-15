@@ -606,7 +606,7 @@ writes into. `unibox config unset environments` forgets it and leaves
 the files.
 
 `unibox init <profile>` on a profile that exists completes it rather
-than skipping it: the seeds and `agent_config` entries of its agents and
+than skipping it: its agents' seeds and `config` entries and
 how each is credited, where it lacks them, and the layout. What it says
 already - a seed of its own, a co-author, any section, its resources -
 stays, and its agents are its own: `--agents` that differ are refused.
@@ -640,42 +640,56 @@ caches:
     env: GRADLE_RO_DEP_CACHE
 allow_network: [jitpack.io]  # hosts the runtime's policy would refuse
 deny_network: [gist.github.com] # hosts it would allow; deny wins
-agents: [claude, codex]       # what the image has
+agents:                       # what the image has, in order; a list of
+  claude:                     # names will do, or for each agent:
+    auth: {token: secret:claude}  # how it signs in
+    co_author: Claude <noreply@anthropic.com> # how it is credited
+    config:                   # seeds merged into its own files before every
+      .claude.json: _data/claude/claude.json # session, by the file's name:
+      settings.json: _data/claude/settings.json # seed keys win, the agent's
+  codex:                      # state stays, a list keeps what it added
+    auth: oauth               # the provider's login, kept by the runtime
+    config:
+      config.toml: _data/codex/config.toml # TOML as well as JSON
 start: start.sh               # in the VM, once per boot of the VM
 bootstrap: .agent/bootstrap.sh # per worked-on repository, if present, in the VM
 instructions:                 # names of instructions/*.md, or .md paths
   - unibox                    # relative to sandbox.yaml; the profile's own
   - review-style              # instructions.md attaches itself
-agent_config:                 # JSON seeds merged into an agent's own
-  claude: _data/claude.json   # configuration in the VM home; seed keys win,
-  copilot: _data/copilot.json # the agent's state - projects, paths - stays,
-                              # a list keeps what the agent added to it
 git:
   author: user                # the user's identity, from the host's git config
   co_author: true             # a Co-Authored-By trailer naming the agent
-auth:                         # how each agent signs in
-  codex: oauth                # the provider's login, kept by the runtime
-  claude: {token: secret:claude}   # a long-lived token unibox keeps
-  copilot: {token: secret:copilot} # a token for copilot alone
 ```
+
+- **Everything about an agent is under it** (the user's call, 2026-10-15):
+  `auth`, `co_author` and `config` sat in three sections before
+  (`auth`, `git.co_authors`, `agent_config` keyed `<agent>.<file>`); a
+  profile using them is refused with how to write it now. The order of
+  `agents` is read from the YAML, as sbx signs in by the OAuth of the
+  first agent declaring one. A `config` key is the file's own name, which
+  unibox maps to its path in the guest home from its table, allowing only
+  files it knows to merge: claude `.claude.json` and `settings.json`,
+  codex `config.toml`, copilot `settings.json` and `config.json` (its
+  state, known but not seeded), opencode `opencode.json`.
 
 - An unknown field is an error naming it, never skipped: a misspelt
   `memmory` must not quietly change the environment. A profile that does
   not parse is listed with the error and cannot be started.
-- **Agents start unasked.** `unibox init` writes each agent's seed from
-  unibox's table into `_data/<agent>.json` and names it in
-  `agent_config`, so a new sandbox does not stop at an agent's first
+- **Agents start unasked.** `unibox init` writes each agent's seeds from
+  unibox's table into `_data/<agent>/<file>` and names them under the
+  agent's `config`, so a new sandbox does not stop at an agent's first
   questions: claude's onboarding and theme (`hasCompletedOnboarding`,
   `theme`, `bypassPermissionsModeAccepted`), copilot trusting `/work`
   (`trustedFolders`, kept beside what it trusts later) with its default
   theme, no banner, no updates and no byline of its own, all in its
-  settings.json (`copilot.settings`, an agent's further configuration
-  named `<agent>.<name>` in `agent_config`; `copilot help config` lists
-  them), opencode allowed
-  to edit, run and fetch (`permission`, `autoupdate: false`). codex keeps
-  TOML, so its setup writes `approval_policy = "never"` and
-  `sandbox_mode = "danger-full-access"` before every session, and a
-  codex started by hand is as free as one unibox runs. The image fixes
+  settings.json (`copilot help config` lists them), opencode allowed to
+  edit, run and fetch (`permission`, `autoupdate: false`), and codex
+  working unasked (`approval_policy = "never"`, `sandbox_mode =
+  "danger-full-access"` in its config.toml seed), so a codex started by
+  hand is as free as one unibox runs. A TOML seed merges as a JSON one
+  does; the blocks between `# unibox:begin` and `# unibox:end` that
+  codex's setup writes before each session - the proxy's login, the
+  trust of /work - stay where they are. The image fixes
   each version, so claude's updater is off (`DISABLE_AUTOUPDATER`).
   Copilot heads its config.json with `//` lines; the merge keeps them.
 - **The image is the environment.** Everything static - JDK, Node, the
@@ -817,8 +831,8 @@ it would be committed. So:
   out any co-author trailer the agent added of itself - copilot always
   does unless told, as `Co-authored-by: Copilot <223556219+Copilot@...>`,
   and claude would - but both seeds turn the byline off
-  (`includeCoAuthoredBy: false` in `claude.settings` and
-  `copilot.settings`), the hook covering whatever an agent adds anyway -
+  (`includeCoAuthoredBy: false` in claude's and copilot's settings.json
+  seeds), the hook covering whatever an agent adds anyway -
   and adds the profile's. The agent is the
   session's: `run` and `resume` name it to the hook (`UNIBOX_AGENT`, as
   the table calls it, and `UNIBOX_CO_AUTHOR`, as the profile credits
@@ -827,7 +841,7 @@ it would be committed. So:
   as it is. `co_author: false` - the profile's, or a git service's for
   its repositories - keeps the hook but has it add nothing, so off means
   no co-author, not the agent's own. The hook is rewritten in every clone
-  before each session. `git.co_authors` gives an agent another name and
+  before each session. An agent's `co_author` gives it another name and
   address than the table's (`unibox agent co-author <profile> <agent>
   "Name <email>"`); init writes the defaults out, so the profile shows
   them, and `Name <>` credits an agent with no address - a trailer is

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 	"io/fs"
 	"os"
@@ -107,31 +108,31 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 	}
 	// Each agent's first questions - a theme, onboarding, whether to trust a
 	// folder - would come in every new sandbox; its seed answers them once.
-	keys, seeds, err := agentSeeds(agents)
+	seeds, err := agentSeeds(agents)
 	if err != nil {
 		return report, err
 	}
-	agentConfig := ""
-	for _, key := range keys {
-		agentConfig += "  " + key + ": _data/" + key + ".json\n"
+	// The profile is built as a node tree and laid out by the arrangement
+	// every change of it gets, so it reads the same written by init or by
+	// a later command: each agent with how it is credited and its seeds.
+	raw := fmt.Sprintf("# %s: describe the environment here.\ndockerfile: Dockerfile\ncpus: %d\nmemory: %s\nagents: [%s]\ninstructions: [unibox]\n", name, cpus, memory, strings.Join(declared, ", "))
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+		return report, err
 	}
-	if agentConfig != "" {
-		agentConfig = "agent_config:\n" + agentConfig
-	}
-	// How each agent is credited is written out, so the profile shows it.
-	agentConfig += "git:\n  co_authors:\n"
 	for _, id := range agents {
 		a, _ := FindAgent(id)
-		agentConfig += "    " + id + ": " + a.CoAuthor + "\n"
+		SetCoAuthor(doc.Content[0], id, a.CoAuthor)
 	}
-	// The profile's text is laid out by the same arrangement every change of
-	// it gets, so it reads the same written by init or by a later command.
-	raw := fmt.Sprintf("# %s: describe the environment here.\ndockerfile: Dockerfile\ncpus: %d\nmemory: %s\nagents: [%s]\ninstructions: [unibox]\n%s", name, cpus, memory, strings.Join(declared, ", "), agentConfig)
-	profileText, err := arrangeText([]byte(raw), name)
+	for _, sd := range seeds {
+		SetAgentConfig(doc.Content[0], sd.agent, sd.file.Name, sd.file.SeedPath(sd.agent))
+	}
+	ArrangeProfile(&doc, name)
+	profileText, err := encodeProfile(&doc)
 	if err != nil {
 		return report, err
 	}
-	yaml := string(profileText)
+	profileYAML := string(profileText)
 	dockerfile := fmt.Sprintf(`# The image is composed by _shared/install: list the installation scripts,
 # one per line. The sbx build passes BASE=docker/sandbox-templates:shell
 # (.sbx/build.args); the default keeps this buildable by hand.
@@ -156,7 +157,7 @@ WORKDIR /home/agent
 		data string
 		mode os.FileMode
 	}{
-		{dir + "/sandbox.yaml", yaml, 0o644},
+		{dir + "/sandbox.yaml", profileYAML, 0o644},
 		{dir + "/Dockerfile", dockerfile, 0o644},
 		{dir + "/instructions.md", instructions, 0o644},
 		{dir + "/.sbx/build.args", "BASE=docker/sandbox-templates:shell\n", 0o644},
@@ -165,8 +166,8 @@ WORKDIR /home/agent
 			return report, err
 		}
 	}
-	for _, id := range sortedKeys(seeds) {
-		if err := place(dir+"/_data/"+id+".json", seeds[id], 0o644); err != nil {
+	for _, sd := range seeds {
+		if err := place(dir+"/"+sd.file.SeedPath(sd.agent), sd.data, 0o644); err != nil {
 			return report, err
 		}
 	}
@@ -176,43 +177,44 @@ WORKDIR /home/agent
 	return report, nil
 }
 
-// agentSeeds are the seeds unibox's table gives the agents, keyed as a
-// profile's agent_config names them: <agent> for the main configuration,
-// <agent>.<name> for a further file.
-func agentSeeds(agents []string) ([]string, map[string][]byte, error) {
-	keys := []string{}
-	seeds := map[string][]byte{}
-	add := func(key string, seed map[string]any) error {
-		data, err := json.MarshalIndent(seed, "", "  ")
-		if err != nil {
-			return err
-		}
-		keys = append(keys, key)
-		seeds[key] = append(data, '\n')
-		return nil
-	}
+// agentSeed is the seed unibox's table gives one configuration file of an
+// agent, encoded as the file is written.
+type agentSeed struct {
+	agent string
+	file  AgentFile
+	data  []byte
+}
+
+func agentSeeds(agents []string) ([]agentSeed, error) {
+	out := []agentSeed{}
 	for _, id := range agents {
 		a, err := FindAgent(id)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		if a.Config != "" && a.Seed != nil {
-			if err := add(id, a.Seed); err != nil {
-				return nil, nil, err
+		for _, f := range a.Configs {
+			if f.Seed == nil {
+				continue
 			}
-		}
-		for _, file := range sortedKeys(a.Files) {
-			if err := add(id+"."+file, a.Files[file].Seed); err != nil {
-				return nil, nil, err
+			var data []byte
+			if f.TOML() {
+				data, err = toml.Marshal(f.Seed)
+			} else {
+				data, err = json.MarshalIndent(f.Seed, "", "  ")
+				data = append(data, '\n')
 			}
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, agentSeed{id, f, data})
 		}
 	}
-	return keys, seeds, nil
+	return out, nil
 }
 
 // completeProfile brings an existing profile up to what init writes today,
-// adding only what it lacks: the seeds of its agents and their
-// agent_config entries, how each agent is credited, and the layout. What
+// adding only what it lacks: the seeds of its agents and their config
+// entries, how each agent is credited, and the layout. What
 // the profile says already - a seed of its own, a co-author, any section -
 // stays as it is. Its agents are its own; init does not change them.
 func completeProfile(root, name string, agents []string, report InitReport, place func(string, []byte, os.FileMode) error) (InitReport, error) {
@@ -239,24 +241,24 @@ func completeProfile(root, name string, agents []string, report InitReport, plac
 		return report, fmt.Errorf("profile %s is not a YAML mapping; repair sandbox.yaml by hand", name)
 	}
 	m := doc.Content[0]
-	keys, seeds, err := agentSeeds(p.Agents)
+	seeds, err := agentSeeds(p.Agents)
 	if err != nil {
 		return report, err
 	}
-	for _, key := range keys {
-		if _, ok := p.AgentConfig[key]; ok {
+	for _, sd := range seeds {
+		if _, ok := p.AgentConfig[agentConfigKey(sd.agent, sd.file.Name)]; ok {
 			continue
 		}
-		dest := "_data/" + key + ".json"
-		if err := place("sandboxes/"+name+"/"+dest, seeds[key], 0o644); err != nil {
+		dest := sd.file.SeedPath(sd.agent)
+		if err := place("sandboxes/"+name+"/"+dest, sd.data, 0o644); err != nil {
 			return report, err
 		}
-		setMapValue(childMap(m, "agent_config"), key, scalarNode(dest))
+		SetAgentConfig(m, sd.agent, sd.file.Name, dest)
 	}
 	for _, id := range p.Agents {
 		if _, ok := p.Git.CoAuthors[id]; !ok {
 			a, _ := FindAgent(id)
-			setMapValue(childMap(childMap(m, "git"), "co_authors"), id, scalarNode(a.CoAuthor))
+			SetCoAuthor(m, id, a.CoAuthor)
 		}
 	}
 	ArrangeProfile(&doc, name)
