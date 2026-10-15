@@ -458,6 +458,63 @@ sandbox, so a narrow, short-lived one is chosen for the weaker boundary.
 The proxy is not sbx's alone to keep; it is the property the hard rule
 leans on, and a runtime that drops it says so to the user's face.
 
+### Configured through unibox (planned)
+
+The user's decision (2026-10-15): everything a profile needs is set up
+through unibox's command line, and nobody edits `sandbox.yaml` by hand to
+sign something in - neither the user nor unagit. unibox offers the
+primitives: it knows the agents, supports particular services, stores
+tokens in each platform's own store, and writes the profile. unagit is a
+UI over the same commands and writes no YAML of its own.
+
+This moves one thing: **unibox may now hold a token in its memory**, on
+its way from the user's terminal to the platform's store - unibox is
+trusted. What stays is the boundary that matters: a token never enters a
+sandbox, which still sees only placeholders the runtime's proxy swaps,
+and a runtime without a proxy degrades only behind a warning. Within
+unibox a value passes through memory alone: never argv (`security -w
+<value>` would show it to `ps`), never the operation log, `--json`, the
+state or the profile, and a test holds each of these.
+
+- **Secrets, per platform.** `unibox secret set <name>` asks for a
+  value on a hidden prompt and stores it where the platform keeps
+  secrets: the login keychain on macOS (`security -i`, the value on
+  stdin), the Secret Service on Linux (`secret-tool store`, on stdin).
+  `unibox secret ls` says which exist, never what they hold; `unibox
+  secret rm` removes one. The store stays the system's, so the user sees,
+  rotates and deletes a token with the system's tools too.
+- **Portable references.** A profile names a secret, not a platform's
+  command: `claude: {token: secret:claude}`, `command: secret:gitlab-2n`.
+  unibox turns the reference into the host command of the platform it
+  runs on, and the runtime runs that - so a profile is shared between
+  macOS and Linux, and survives a move from sbx to podman. A plain
+  command stays allowed, for a store unibox does not know.
+- **Agents.** `unibox login [agent]`, for the agents of the profiles, or
+  one: codex - the runtime's own OAuth login in the browser, as now;
+  claude - `claude setup-token` on the user's terminal, then the hidden
+  prompt; copilot - opens the page for a fine-grained token, says what to
+  grant (Copilot Requests alone), then the hidden prompt. Each writes the
+  agent's `auth` into the profile.
+- **Services.** `unibox service add <profile> <name>` asks for, or takes
+  by flags, the forge or the kind of service, its host and path, the user
+  the forge expects, the author and co-author, then the token on the
+  hidden prompt; stores it, and writes the `services` entry. unibox knows
+  particular services - GitHub, GitLab, an Artifactory - with their
+  defaults (`x-access-token`, `oauth2`, `bearer`) and the page where the
+  token is made; anything else is the generic form. `unibox service ls`
+  and `rm` complete it.
+- **Writing the profile.** unibox edits `sandbox.yaml` as a YAML node
+  tree, so the user's comments and order stay, and each change is host
+  access: the next start asks for `unibox approve` as for a hand edit.
+  The environments repository stays the user's to commit.
+- **unagit** builds on these commands: its Settings drive `unibox login`,
+  `unibox service add` and `unibox secret set`, and a token it mints from
+  its vault reaches the platform's store through `unibox secret set`
+  (stdin), not a file or a flag.
+
+The `services` and `auth` reference, the warnings and the runtime's
+storage are as above; this adds the way in.
+
 ## Profiles
 
 ### Where they live

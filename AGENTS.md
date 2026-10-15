@@ -12,8 +12,10 @@ host (sbx keeps them in the keychain) and reach a sandbox only as
 placeholders the proxy replaces. Never print a token or a secret's value,
 never ask the user to paste one into the conversation, never `cat` an
 auth file - read key names (`jq 'keys'`), whether a value is set, or the
-shape sbx masks it to. unibox itself never handles a value: a missing
-login is taken by the runtime on the user's terminal (`sbx secret set`).
+shape sbx masks it to. The unibox binary may carry a value the user types
+on its way to the platform's store, in memory alone - never argv, a log,
+`--json`, state or a profile (see "Configured through unibox" in
+docs/design.md) - and a token never enters a sandbox.
 
 ## Working here
 
