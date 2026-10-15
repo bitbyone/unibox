@@ -460,12 +460,17 @@ leans on, and a runtime that drops it says so to the user's face.
 
 ### Configured through unibox (planned)
 
-The user's decision (2026-10-15): everything a profile needs is set up
-through unibox's command line, and nobody edits `sandbox.yaml` by hand to
-sign something in - neither the user nor unagit. unibox offers the
-primitives: it knows the agents, supports particular services, stores
-tokens in each platform's own store, and writes the profile. unagit is a
-UI over the same commands and writes no YAML of its own.
+The user's decision (2026-10-15): everything a profile needs can be set
+up through unibox's command line, so signing something in needs no hand
+edit of `sandbox.yaml`. unibox offers the primitives: it knows the
+agents, supports particular services, stores tokens in each platform's
+own store, and writes the profile. unagit is a UI over the same commands
+and writes no YAML of its own. **The file stays the user's**: a hand
+edit is as valid as unibox's, for whatever unibox does not know - a
+token from HashiCorp Vault (`command: vault kv get -field=token
+secret/ci/gitlab`), 1Password, a helper of one's own. unibox then only
+validates it, as it validates every profile, and the approval covers
+it as it covers the rest.
 
 This moves one thing: **unibox may now hold a token in its memory**, on
 its way from the user's terminal to the platform's store - unibox is
@@ -488,7 +493,8 @@ state or the profile, and a test holds each of these.
   unibox turns the reference into the host command of the platform it
   runs on, and the runtime runs that - so a profile is shared between
   macOS and Linux, and survives a move from sbx to podman. A plain
-  command stays allowed, for a store unibox does not know.
+  command stays allowed, written by hand, for a store unibox does not
+  know.
 - **Agents.** `unibox login [agent]`, for the agents of the profiles, or
   one: codex - the runtime's own OAuth login in the browser, as now;
   claude - `claude setup-token` on the user's terminal, then the hidden
