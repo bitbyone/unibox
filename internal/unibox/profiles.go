@@ -23,7 +23,20 @@ type Cache struct {
 type GitOptions struct {
 	Author   string `yaml:"author" json:"author"`
 	CoAuthor *bool  `yaml:"co_author" json:"co_author,omitempty"`
+	// CoAuthors says how each agent is credited, as Name <email>, over the
+	// default unibox's table gives it.
+	CoAuthors map[string]string `yaml:"co_authors" json:"co_authors,omitempty"`
 }
+
+// CoAuthor is how the profile credits an agent in a commit's trailer.
+func (p Profile) CoAuthor(agent string) string {
+	if c := p.Git.CoAuthors[agent]; c != "" {
+		return c
+	}
+	a, _ := FindAgent(agent)
+	return a.CoAuthor
+}
+
 type HostAccess struct {
 	Env         []string `yaml:"env" json:"env"`
 	Caches      []Cache  `yaml:"caches" json:"caches"`
@@ -429,6 +442,14 @@ func LoadProfile(root, name string) (Profile, error) {
 	}
 	if p.Git.Author != "" && p.Git.Author != "user" {
 		return p, fmt.Errorf("profile %s: git.author must be user", name)
+	}
+	for id, c := range p.Git.CoAuthors {
+		if !seen[id] {
+			return p, fmt.Errorf("profile %s: git.co_authors names %s, which is not among its agents", name, id)
+		}
+		if _, _, err := AuthorParts(c); err != nil {
+			return p, fmt.Errorf("profile %s: git.co_authors of %s must be Name <email>", name, id)
+		}
 	}
 	for _, key := range p.Env {
 		if !envName.MatchString(key) || sensitiveEnv.MatchString(key) || key == "HOME" || key == "PATH" {

@@ -178,3 +178,27 @@ func SetStringList(profile *yaml.Node, key string, values []string) {
 	}
 	setMapValue(profile, key, list)
 }
+
+// SetCoAuthor writes how an agent is credited under git.co_authors; an
+// empty value takes it out, and the maps with the last one.
+func SetCoAuthor(profile *yaml.Node, agent, coAuthor string) {
+	if coAuthor != "" {
+		setMapValue(childMap(childMap(profile, "git"), "co_authors"), agent, scalarNode(coAuthor))
+		return
+	}
+	git := mapValue(profile, "git")
+	if git == nil || git.Kind != yaml.MappingNode {
+		return
+	}
+	authors := mapValue(git, "co_authors")
+	if authors == nil || authors.Kind != yaml.MappingNode {
+		return
+	}
+	deleteMapKey(authors, agent)
+	if len(authors.Content) == 0 {
+		deleteMapKey(git, "co_authors")
+	}
+	if len(git.Content) == 0 {
+		deleteMapKey(profile, "git")
+	}
+}

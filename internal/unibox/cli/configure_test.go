@@ -289,3 +289,38 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 		t.Fatal("--gh was taken for gitlab")
 	}
 }
+
+func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
+	t.Parallel()
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.WriteFile(file, []byte("image: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "co-author", "node")
+	if err != nil || !strings.Contains(out, "copilot\tCopilot <223556219+Copilot@users.noreply.github.com>\t(default)") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "co-author", "node", "copilot", "GitHub Copilot <copilot@example.com>"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), "co_authors:") || !strings.Contains(string(data), "copilot: GitHub Copilot <copilot@example.com>") {
+		t.Fatalf("%s", data)
+	}
+	if out, _, _ = run(t, paths, "", "co-author", "node", "copilot"); !strings.Contains(out, "GitHub Copilot <copilot@example.com>\t(profile)") {
+		t.Fatalf("%s", out)
+	}
+	if _, _, err = run(t, paths, "", "co-author", "node", "copilot", "nobody"); err == nil {
+		t.Fatal("an identity without an address was taken")
+	}
+	if _, _, err = run(t, paths, "", "co-author", "node", "codex", "Codex <c@example.com>"); err == nil {
+		t.Fatal("an agent the profile lacks was credited")
+	}
+	if _, _, err = run(t, paths, "", "co-author", "node", "copilot", "--reset"); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ = os.ReadFile(file); strings.Contains(string(data), "git") {
+		t.Fatalf("an emptied git key stayed:\n%s", data)
+	}
+}

@@ -489,13 +489,15 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	a, _ := FindAgent(t.Agent)
 	args := append([]string{a.Command}, a.Args...)
 	args = append(args, extra...)
+	p, err := m.profile(b.Profile)
+	if err != nil {
+		return err
+	}
 	// The commit hook credits the agent of this session, not the one the
-	// task was prepared with.
-	env := append(slices.Clone(a.Env), "UNIBOX_CO_AUTHOR="+a.CoAuthor)
+	// task was prepared with, as the profile names it.
+	env := append(slices.Clone(a.Env), "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
 	if s, ok := r.(SessionEnver); ok {
-		if p, err := m.profile(b.Profile); err == nil {
-			env = append(env, s.SessionEnv(p, a.ID)...)
-		}
+		env = append(env, s.SessionEnv(p, a.ID)...)
 	}
 	if len(env) > 0 {
 		args = append(append([]string{"env"}, env...), args...)

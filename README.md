@@ -117,7 +117,9 @@ Edit the seeds as you like. Commits carry your git identity and one
 co-author line for the agent of the session that commits - a task resumed
 with another agent credits that one, a commit you make in `unibox shell`
 none - added by unibox's hook unless the agent already did, under its own
-name in any case or address.
+name in any case or address. `unibox co-author <profile> <agent> "Name
+<email>"` says how an agent is credited (`git.co_authors`); `--reset` takes
+it back to unibox's default.
 
 ## Auth
 

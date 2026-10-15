@@ -155,6 +155,11 @@ instructions: [unibox]
 #     scheme: bearer
 #     env: ARTIFACTORY_TOKEN          # the tool reads the placeholder here
 #     command: op read op://vault/artifactory/token
+# How each agent is credited in its commits, over unibox's default;
+# unibox co-author %[1]s sets it.
+# git:
+#   co_authors:
+#     copilot: Copilot <223556219+Copilot@users.noreply.github.com>
 # Egress beyond the runtime's policy, and hosts to refuse; deny wins.
 # allow_network: [jitpack.io]
 # deny_network: [gist.github.com]

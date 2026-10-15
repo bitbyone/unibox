@@ -173,3 +173,26 @@ func TestAnOldHookIsRewrittenBeforeASession(t *testing.T) {
 		t.Fatalf("%s", data)
 	}
 }
+
+func TestTheSessionCreditsTheAgentAsTheProfileSays(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\ngit:\n  co_authors:\n    claude: Claude Code <claude@example.com>\n")
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.CoAuthor("claude") != "Claude Code <claude@example.com>" || p.CoAuthor("codex") != "Codex <noreply@openai.com>" {
+		t.Fatalf("%s %s", p.CoAuthor("claude"), p.CoAuthor("codex"))
+	}
+	// Credited at commit time, so a change needs no recreation.
+	other := p
+	other.Git.CoAuthors = nil
+	if string(settingsSnapshot(p, &fakeRuntime{})) != string(settingsSnapshot(other, &fakeRuntime{})) {
+		t.Fatal("a co-author change would recreate the sandbox")
+	}
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "dockerfile: Dockerfile\nstart: start.sh\nagents: [claude, codex]\ngit: {co_authors: {copilot: Copilot <c@example.com>}}\n")
+	if _, err := LoadProfile(root, "node"); err == nil {
+		t.Fatal("an agent the profile lacks was credited")
+	}
+}

@@ -627,3 +627,64 @@ func orNone(list []string) string {
 	}
 	return strings.Join(list, ", ")
 }
+
+// coAuthorCommand says how a profile credits each agent in a commit's
+// trailer, and changes it.
+func (o *options) coAuthorCommand() *cobra.Command {
+	var reset bool
+	c := &cobra.Command{Use: "co-author profile [agent] [\"Name <email>\"]", Args: cobra.RangeArgs(1, 3), Short: "Show or set how a profile credits each agent in its commits", RunE: func(cmd *cobra.Command, args []string) error {
+		p, err := o.manager.Profile(args[0])
+		if err != nil {
+			return err
+		}
+		if len(args) == 1 || (len(args) == 2 && !reset) {
+			agents := p.Agents
+			if len(args) == 2 {
+				agents = []string{args[1]}
+			}
+			rows := map[string]string{}
+			for _, id := range agents {
+				if !slices.Contains(p.Agents, id) {
+					return fmt.Errorf("profile %s does not offer agent %s", p.Name, id)
+				}
+				rows[id] = p.CoAuthor(id)
+			}
+			if o.json {
+				return o.write(map[string]any{"api_version": api.Version, "profile": p.Name, "co_authors": rows})
+			}
+			for _, id := range agents {
+				from := "default"
+				if _, ok := p.Git.CoAuthors[id]; ok {
+					from = "profile"
+				}
+				fmt.Fprintf(o.output, "%s\t%s\t(%s)\n", id, rows[id], from)
+			}
+			return nil
+		}
+		agent, value := args[1], ""
+		if !slices.Contains(p.Agents, agent) {
+			return fmt.Errorf("profile %s does not offer agent %s", p.Name, agent)
+		}
+		if !reset {
+			if len(args) != 3 {
+				return fmt.Errorf("say how to credit %s, as \"Name <email>\", or --reset to its default", agent)
+			}
+			if _, _, err := unibox.AuthorParts(args[2]); err != nil {
+				return fmt.Errorf("a co-author is \"Name <email>\"")
+			}
+			value = args[2]
+		}
+		if err := o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
+			unibox.SetCoAuthor(doc, agent, value)
+			return nil
+		}); err != nil {
+			return err
+		}
+		if p, err = o.manager.Profile(p.Name); err != nil {
+			return err
+		}
+		return o.success(fmt.Sprintf("profile %s credits %s as %s from its next session", p.Name, agent, p.CoAuthor(agent)))
+	}}
+	c.Flags().BoolVar(&reset, "reset", false, "Credit the agent as unibox does by default")
+	return c
+}

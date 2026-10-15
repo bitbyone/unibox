@@ -91,6 +91,8 @@ func accessChanges(old, now HostAccess) []string {
 func settingsSnapshot(p Profile, r Runtime) json.RawMessage {
 	s := p
 	s.Instructions = nil
+	// Read by the commit hook in each session, so no recreation for it.
+	s.Git.CoAuthors = nil
 	if _, live := r.(NetworkUpdater); live {
 		s.AllowNetwork, s.DenyNetwork = nil, nil
 	}

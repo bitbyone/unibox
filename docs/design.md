@@ -806,7 +806,10 @@ it would be committed. So:
   resumed with another agent credits that one, and a commit made by hand
   in `unibox shell`, with no agent running, credits none. The hook is
   rewritten in every clone before each session, so none keeps an agent
-  fixed in it. Agents add their own too, copilot as
+  fixed in it. `git.co_authors` gives an agent another name and address
+  than the table's (`unibox co-author <profile> <agent> "Name <email>"`);
+  it is read per session, so changing it recreates nothing. Agents add
+  their own too, copilot as
   `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`,
   so the hook counts any co-author of the agent's name, in any case or
   address, as the trailer already there; matching the whole line doubled
