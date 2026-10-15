@@ -43,7 +43,7 @@ make install            # → ~/.local/bin/unibox
 ```sh
 unibox init --dir ~/my-envs                       # lay out your environments repo and use it
 unibox init web --agents claude,codex             # add profile "web" (or: unibox init -i)
-unibox login web                                  # sign its agents in
+unibox agent login web                            # sign its agents in
 unibox service add web github                     # sign its git in to a forge
 unibox network allow web jitpack.io               # reach a host the policy refuses, applied live
 unibox build web                                  # build its image now (run builds when needed)
@@ -117,13 +117,15 @@ Edit the seeds as you like. Commits carry your git identity and one
 co-author line for the agent of the session that commits - a task resumed
 with another agent credits that one, a commit you make in `unibox shell`
 none - added by unibox's hook unless the agent already did, under its own
-name in any case or address. `unibox co-author <profile> <agent> "Name
-<email>"` says how an agent is credited (`git.co_authors`); `--reset` takes
-it back to unibox's default.
+name in any case or address. `unibox agent co-author <profile> <agent>
+"Name <email>"` says how an agent is credited (`git.co_authors`, which init
+writes out with the defaults); `Name <>` credits it with no address, linked
+to no account, and `--reset` takes it back to the default. `unibox agent ls
+<profile>` shows each agent's sign-in and credit.
 
 ## Auth
 
-`unibox login <profile> [agent...]` signs agents in and writes their `auth`
+`unibox agent login <profile> [agent...]` signs agents in and writes their `auth`
 into the profile: codex through the runtime's ChatGPT login in the browser,
 claude through `claude setup-token`, copilot through a fine-grained GitHub
 token with Copilot Requests alone. A token is asked for on a hidden prompt

@@ -199,7 +199,7 @@ func (o *options) initCommand() *cobra.Command {
 			fmt.Fprintln(o.output, "add a profile with unibox init <profile>, or be asked with unibox init -i")
 			return nil
 		}
-		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox login %s, add forges with unibox service add %s <name>, then unibox run builds and starts it\n", name, name, name)
+		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox agent login %s, add forges with unibox service add %s <name>, then unibox run builds and starts it\n", name, name, name)
 		return nil
 	}}
 	c.Flags().StringVar(&dir, "dir", "", "The environments repository to lay out and configure (default: the configured one)")

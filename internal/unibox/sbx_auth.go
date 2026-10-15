@@ -190,7 +190,7 @@ func sbxLoginArgs(agent, service string, a AgentAuth) ([]string, error) {
 
 func sbxLoginHint(agent, service string, a AgentAuth) string {
 	if name, ok := SecretRef(a.Command); ok {
-		return "unibox run stores it; unibox login stores the secret " + name + " first if it is missing"
+		return "unibox run stores it; unibox agent login stores the secret " + name + " first if it is missing"
 	}
 	args, err := sbxLoginArgs(agent, service, a)
 	if err != nil {

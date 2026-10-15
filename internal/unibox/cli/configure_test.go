@@ -146,7 +146,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	if err := os.WriteFile(file, []byte("image: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "login", "node", "claude")
+	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "agent", "login", "node", "claude")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
@@ -160,7 +160,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 		t.Fatalf("%s\n%s", recorded, log)
 	}
 	// Signed in already: no question, the token stays.
-	if _, log, err = run(t, paths, "", "login", "node", "claude"); err != nil || !strings.Contains(log, "secret claude is stored") {
+	if _, log, err = run(t, paths, "", "agent", "login", "node", "claude"); err != nil || !strings.Contains(log, "secret claude is stored") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	_ = io.Discard
@@ -230,7 +230,7 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	if err != nil || !strings.Contains(string(seed), `"hasCompletedOnboarding": true`) {
 		t.Fatalf("%v %s", err, seed)
 	}
-	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), "claude: _data/claude.json") {
+	if profile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); !strings.Contains(string(profile), "claude: _data/claude.json") || !strings.Contains(string(profile), "co_authors:\n    claude: Claude <noreply@anthropic.com>") {
 		t.Fatalf("%s", profile)
 	}
 	// Unset forgets it and leaves the files.
@@ -261,11 +261,11 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 		t.Fatal(err)
 	}
 	// gh not signed in: --gh says what to do.
-	if _, _, err := run(t, paths, "", "login", "node", "copilot", "--gh"); err == nil || !strings.Contains(err.Error(), "gh auth login") {
+	if _, _, err := run(t, paths, "", "agent", "login", "node", "copilot", "--gh"); err == nil || !strings.Contains(err.Error(), "gh auth login") {
 		t.Fatalf("%v", err)
 	}
 	ghSignedIn(t, argv)
-	_, log, err := run(t, paths, "", "login", "node", "copilot", "--gh")
+	_, log, err := run(t, paths, "", "agent", "login", "node", "copilot", "--gh")
 	if err != nil || !strings.Contains(log, "your whole gh login") {
 		t.Fatalf("%v\n%s", err, log)
 	}
@@ -297,27 +297,37 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	if err := os.WriteFile(file, []byte("image: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := run(t, paths, "", "co-author", "node")
+	out, _, err := run(t, paths, "", "agent", "co-author", "node")
 	if err != nil || !strings.Contains(out, "copilot\tCopilot <223556219+Copilot@users.noreply.github.com>\t(default)") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, _, err = run(t, paths, "", "co-author", "node", "copilot", "GitHub Copilot <copilot@example.com>"); err != nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "GitHub Copilot <copilot@example.com>"); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
 	if !strings.Contains(string(data), "co_authors:") || !strings.Contains(string(data), "copilot: GitHub Copilot <copilot@example.com>") {
 		t.Fatalf("%s", data)
 	}
-	if out, _, _ = run(t, paths, "", "co-author", "node", "copilot"); !strings.Contains(out, "GitHub Copilot <copilot@example.com>\t(profile)") {
+	if out, _, _ = run(t, paths, "", "agent", "co-author", "node", "copilot"); !strings.Contains(out, "GitHub Copilot <copilot@example.com>\t(profile)") {
 		t.Fatalf("%s", out)
 	}
-	if _, _, err = run(t, paths, "", "co-author", "node", "copilot", "nobody"); err == nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "nobody"); err == nil {
 		t.Fatal("an identity without an address was taken")
 	}
-	if _, _, err = run(t, paths, "", "co-author", "node", "codex", "Codex <c@example.com>"); err == nil {
+	// No address at all is a choice: credited, linked to no account.
+	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "claude", "Claude <>"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, _ = run(t, paths, "", "agent", "ls", "node"); !strings.Contains(out, "Claude <>") {
+		t.Fatalf("%s", out)
+	}
+	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "claude", "--reset"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "codex", "Codex <c@example.com>"); err == nil {
 		t.Fatal("an agent the profile lacks was credited")
 	}
-	if _, _, err = run(t, paths, "", "co-author", "node", "copilot", "--reset"); err != nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "--reset"); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ = os.ReadFile(file); strings.Contains(string(data), "git") {

@@ -28,6 +28,16 @@ type GitOptions struct {
 	CoAuthors map[string]string `yaml:"co_authors" json:"co_authors,omitempty"`
 }
 
+// ValidCoAuthor is Name <email>, or Name <> - a trailer is text, and an
+// agent credited without an address is shown, though linked to no account.
+func ValidCoAuthor(s string) bool {
+	if _, _, err := AuthorParts(s); err == nil {
+		return true
+	}
+	name, ok := strings.CutSuffix(s, " <>")
+	return ok && strings.TrimSpace(name) != "" && !strings.ContainsAny(name, "<>\r\n")
+}
+
 // CoAuthor is how the profile credits an agent in a commit's trailer.
 func (p Profile) CoAuthor(agent string) string {
 	if c := p.Git.CoAuthors[agent]; c != "" {
@@ -447,8 +457,8 @@ func LoadProfile(root, name string) (Profile, error) {
 		if !seen[id] {
 			return p, fmt.Errorf("profile %s: git.co_authors names %s, which is not among its agents", name, id)
 		}
-		if _, _, err := AuthorParts(c); err != nil {
-			return p, fmt.Errorf("profile %s: git.co_authors of %s must be Name <email>", name, id)
+		if !ValidCoAuthor(c) {
+			return p, fmt.Errorf("profile %s: git.co_authors of %s must be Name <email>, or Name <> for none", name, id)
 		}
 	}
 	for _, key := range p.Env {

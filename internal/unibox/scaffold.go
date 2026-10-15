@@ -117,13 +117,19 @@ func Init(root, name string, agents []string, cpus int, memory string) (InitRepo
 	if agentConfig != "" {
 		agentConfig = "# Merged into each agent's own configuration before every session: its\n# first questions answered, and left to work unasked. Edit them in _data.\nagent_config:\n" + agentConfig
 	}
+	// How each agent is credited is written out, so the profile shows it.
+	agentConfig += "# How each agent is credited in its commits: unibox agent co-author\n# changes it, and Name <> credits one with no address.\ngit:\n  co_authors:\n"
+	for _, id := range agents {
+		a, _ := FindAgent(id)
+		agentConfig += "    " + id + ": " + a.CoAuthor + "\n"
+	}
 	yaml := fmt.Sprintf(`# %s: describe the environment here.
 dockerfile: Dockerfile
 cpus: %d
 memory: %s
 agents: [%s]
 instructions: [unibox]
-%[5]s# How each agent signs in: unibox login %[1]s writes this, keeping each token
+%[5]s# How each agent signs in: unibox agent login %[1]s writes this, keeping each token
 # in the platform's store as secret:<name>. sbx signs one agent of a sandbox
 # in by OAuth.
 # auth:
@@ -155,11 +161,6 @@ instructions: [unibox]
 #     scheme: bearer
 #     env: ARTIFACTORY_TOKEN          # the tool reads the placeholder here
 #     command: op read op://vault/artifactory/token
-# How each agent is credited in its commits, over unibox's default;
-# unibox co-author %[1]s sets it.
-# git:
-#   co_authors:
-#     copilot: Copilot <223556219+Copilot@users.noreply.github.com>
 # Egress beyond the runtime's policy, and hosts to refuse; deny wins.
 # allow_network: [jitpack.io]
 # deny_network: [gist.github.com]

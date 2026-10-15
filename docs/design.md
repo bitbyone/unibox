@@ -460,7 +460,7 @@ leans on, and a runtime that drops it says so to the user's face.
 
 ### Configured through unibox
 
-Built (2026-10-15): `unibox secret set|ls|rm`, `unibox login`, `unibox
+Built (2026-10-15): `unibox secret set|ls|rm`, `unibox agent login`, `unibox
 service add|ls|rm`, `secret:<name>` references, the keychain and Secret
 Service stores, and the profile edited as a node tree. Not yet: applying
 a network change to a running sandbox (below, in the network rules) and
@@ -501,7 +501,7 @@ state or the profile, and a test holds each of these.
   macOS and Linux, and survives a move from sbx to podman. A plain
   command stays allowed, written by hand, for a store unibox does not
   know.
-- **Agents.** `unibox login [agent]`, for the agents of the profiles, or
+- **Agents.** `unibox agent login [agent]`, for the agents of the profiles, or
   one: codex - the runtime's own OAuth login in the browser, as now;
   claude - `claude setup-token` on the user's terminal, then the hidden
   prompt; copilot - opens the page for a fine-grained token, says what to
@@ -525,7 +525,7 @@ state or the profile, and a test holds each of these.
   tree, so the user's comments and order stay, and each change is host
   access, applied at the next start.
   The environments repository stays the user's to commit.
-- **unagit** builds on these commands: its Settings drive `unibox login`,
+- **unagit** builds on these commands: its Settings drive `unibox agent login`,
   `unibox service add` and `unibox secret set`, and a token it mints from
   its vault reaches the platform's store through `unibox secret set`
   (stdin), not a file or a flag.
@@ -807,8 +807,11 @@ it would be committed. So:
   in `unibox shell`, with no agent running, credits none. The hook is
   rewritten in every clone before each session, so none keeps an agent
   fixed in it. `git.co_authors` gives an agent another name and address
-  than the table's (`unibox co-author <profile> <agent> "Name <email>"`);
-  it is read per session, so changing it recreates nothing. Agents add
+  than the table's (`unibox agent co-author <profile> <agent> "Name <email>"`);
+  init writes the defaults out, so the profile shows them, and `Name <>`
+  credits an agent with no address - a trailer is text, shown though
+  linked to no account. It is read per session, so changing it recreates
+  nothing. Agents add
   their own too, copilot as
   `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`,
   so the hook counts any co-author of the agent's name, in any case or
@@ -1020,7 +1023,7 @@ never asks: what stands in the way is an answer, not a prompt.
 | `agentbox profiles [--json]` | profiles: name, agents, image state per runtime, approval, error, last commit |
 | `agentbox instructions <profile>` | the instructions as the agent gets them |
 | `agentbox diff <profile>` | what changed since the last build, a unified diff |
-| `unibox login <profile> [agent...]`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
+| `unibox agent login\|co-author\|ls`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
 | `agentbox build <profile> [--runtime R]` | builds, checks the agents, loads |
 | `agentbox check …  --json` | what stands in the way of a start: default branch, uncommitted, approval, image |
 | `agentbox prepare …` | the VM and the task, ready; JSON of both at the end |

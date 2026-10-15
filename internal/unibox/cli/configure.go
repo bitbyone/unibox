@@ -632,7 +632,7 @@ func orNone(list []string) string {
 // trailer, and changes it.
 func (o *options) coAuthorCommand() *cobra.Command {
 	var reset bool
-	c := &cobra.Command{Use: "co-author profile [agent] [\"Name <email>\"]", Args: cobra.RangeArgs(1, 3), Short: "Show or set how a profile credits each agent in its commits", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "co-author profile [agent] [\"Name <email>\"]", Args: cobra.RangeArgs(1, 3), Short: "Show or set how a profile credits each agent in its commits (Name <> for no address)", RunE: func(cmd *cobra.Command, args []string) error {
 		p, err := o.manager.Profile(args[0])
 		if err != nil {
 			return err
@@ -669,8 +669,8 @@ func (o *options) coAuthorCommand() *cobra.Command {
 			if len(args) != 3 {
 				return fmt.Errorf("say how to credit %s, as \"Name <email>\", or --reset to its default", agent)
 			}
-			if _, _, err := unibox.AuthorParts(args[2]); err != nil {
-				return fmt.Errorf("a co-author is \"Name <email>\"")
+			if !unibox.ValidCoAuthor(args[2]) {
+				return fmt.Errorf("a co-author is \"Name <email>\", or \"Name <>\" for none")
 			}
 			value = args[2]
 		}
@@ -686,5 +686,44 @@ func (o *options) coAuthorCommand() *cobra.Command {
 		return o.success(fmt.Sprintf("profile %s credits %s as %s from its next session", p.Name, agent, p.CoAuthor(agent)))
 	}}
 	c.Flags().BoolVar(&reset, "reset", false, "Credit the agent as unibox does by default")
+	return c
+}
+
+// agentCommand groups what is said of a profile's agents: how each signs
+// in, how each is credited in commits.
+func (o *options) agentCommand() *cobra.Command {
+	c := &cobra.Command{Use: "agent", Short: "Sign a profile's agents in and say how they are credited"}
+	c.AddCommand(o.loginCommand(), o.coAuthorCommand())
+	c.AddCommand(&cobra.Command{Use: "ls profile", Args: cobra.ExactArgs(1), Short: "List a profile's agents, how each signs in and is credited", RunE: func(cmd *cobra.Command, args []string) error {
+		p, err := o.manager.Profile(args[0])
+		if err != nil {
+			return err
+		}
+		type row struct {
+			Agent    string `json:"agent"`
+			Auth     string `json:"auth"`
+			CoAuthor string `json:"co_author"`
+		}
+		rows := []row{}
+		for _, id := range p.Agents {
+			auth := "-"
+			if a, ok := p.Auth[id]; ok {
+				auth = a.Method
+				if a.Command != "" {
+					auth += " " + a.Command
+				}
+			}
+			rows = append(rows, row{id, auth, p.CoAuthor(id)})
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "profile": p.Name, "agents": rows})
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "AGENT\tAUTH\tCO-AUTHOR")
+		for _, r := range rows {
+			fmt.Fprintf(w, "%s\t%s\t%s\n", r.Agent, r.Auth, r.CoAuthor)
+		}
+		return w.Flush()
+	}})
 	return c
 }

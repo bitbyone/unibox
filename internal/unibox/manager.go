@@ -328,7 +328,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 				if ok, err := store.Has(ctx, name); err != nil {
 					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: err.Error()})
 				} else if !ok {
-					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: fmt.Sprintf("profile %s names secret %s, which %s does not hold; run unibox login %s or unibox secret set %s", p.Name, name, store.Name(), p.Name, name)})
+					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: fmt.Sprintf("profile %s names secret %s, which %s does not hold; run unibox agent login %s or unibox secret set %s", p.Name, name, store.Name(), p.Name, name)})
 				}
 			}
 		}
