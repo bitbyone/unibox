@@ -86,31 +86,31 @@ cpus: %d
 memory: %s
 agents: [%s]
 instructions: [unibox]
-# How each agent signs in; unibox checks it before a sandbox starts and
-# stores what is missing (a token or command without asking). sbx signs one agent of a sandbox in by
-# OAuth.
+# How each agent signs in: unibox login %[1]s writes this, keeping each token
+# in the platform's store as secret:<name>. sbx signs one agent of a sandbox
+# in by OAuth.
 # auth:
 #   codex: oauth                      # the ChatGPT login sbx keeps
-#   claude: {token: security find-generic-password -s claude-code-oauth-token -w}
-#   copilot: {token: security find-generic-password -s unibox-copilot-token -w}
-#                                     # copilot's own token; {command: gh auth token}
-#                                     # would take github.com over from git services
-# Host-facing services the sandbox reaches: the token lives on the host and
-# reaches the sandbox only as a placeholder the proxy swaps. A git service
-# wires the sandbox's git; an env service names the variable a tool reads.
+#   claude: {token: secret:claude}    # from claude setup-token
+#   copilot: {token: secret:copilot}  # a GitHub token for copilot alone
+# Host-facing services the sandbox reaches: unibox service add %[1]s <name>
+# writes these. The token lives on the host and reaches the sandbox only as a
+# placeholder the proxy swaps. A git service wires the sandbox's git; an env
+# service names the variable a tool reads; command: is secret:<name> or any
+# host command (vault, op) for a store unibox does not keep.
 # services:
 #   github:                           # a git forge
 #     git: true
 #     host: github.com
 #     scheme: basic                   # Authorization: Basic base64(user:token)
 #     user: x-access-token
-#     command: gh auth token          # a host command printing the token
+#     command: secret:github
 #     refresh: 10m                    # optional: fetch again, for short-lived tokens
 #   github-acme:                      # another owner on the same forge
 #     git: true
 #     host: github.com/acme           # a path: its own token for these repositories
 #     user: x-access-token
-#     command: security find-generic-password -s unibox-github-acme-token -w
+#     command: secret:github-acme
 #     author: Jan Novak <jan@acme.example>   # who commits under it, unless --author says otherwise
 #     co_author: false                       # no agent trailer in these repositories
 #   artifactory:                      # any host service

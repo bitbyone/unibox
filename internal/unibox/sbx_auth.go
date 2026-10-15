@@ -33,20 +33,21 @@ var sbxAuthMethods = map[string][]string{
 // profile's git services there. Its placeholder is fixed, not drawn, so
 // unibox can hand it to copilot's session (SessionEnv): the variable is not
 // set in a sandbox created before the secret, and the placeholder is no
-// secret. Copilot takes it, being of a GitHub token's shape.
+// secret. Copilot takes it, being of a GitHub token's shape. Claude's is
+// fixed too, so signing in again updates its secret instead of adding a
+// second one for the same variable.
 var sbxTokens = map[string]struct {
 	Env, Placeholder string
 	Hosts            []string
 }{
-	"claude":  {"CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-{rand}", []string{"api.anthropic.com"}},
+	"claude":  {"CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-unibox0claude0proxy0managed", []string{"api.anthropic.com"}},
 	"copilot": {"COPILOT_GITHUB_TOKEN", "gho_unibox0copilot0proxy0managed0000", []string{"api.github.com", "api.githubcopilot.com", "api.individual.githubcopilot.com", "api.business.githubcopilot.com", "api.enterprise.githubcopilot.com", "copilot.github.com"}},
 }
 
-// SessionEnv hands an agent's session the placeholder of a token login
-// unibox chose itself; a drawn one ({rand}) is sbx's to set.
+// SessionEnv hands an agent's session the placeholder of its token login.
 func (r *SBX) SessionEnv(p Profile, agent string) []string {
 	t, ok := sbxTokens[agent]
-	if !ok || p.Auth[agent].Method != AuthToken || strings.Contains(t.Placeholder, "{rand}") {
+	if !ok || p.Auth[agent].Method != AuthToken {
 		return nil
 	}
 	return []string{t.Env + "=" + t.Placeholder}
@@ -164,7 +165,13 @@ func (r *SBX) AuthNeeds(ctx context.Context, sandbox string, p Profile) []api.Ne
 	return needs
 }
 
-func sbxLoginArgs(agent, service string, a AgentAuth) []string {
+// sbxLoginArgs is the sbx command storing an agent's login. A secret the
+// profile names is looked up by the platform's own command.
+func sbxLoginArgs(agent, service string, a AgentAuth) ([]string, error) {
+	command, err := ResolveCommand(a.Command)
+	if err != nil {
+		return nil, err
+	}
 	switch a.Method {
 	case AuthToken:
 		t := sbxTokens[agent]
@@ -172,17 +179,23 @@ func sbxLoginArgs(agent, service string, a AgentAuth) []string {
 		for _, h := range t.Hosts {
 			args = append(args, "--host", h)
 		}
-		return append(args, "--command", a.Command)
+		return append(args, "--command", command), nil
 	case AuthOAuth:
-		return []string{"secret", "set", service, "--oauth"}
+		return []string{"secret", "set", service, "--oauth"}, nil
 	case AuthCommand:
-		return []string{"secret", "set", service, "--command", a.Command}
+		return []string{"secret", "set", service, "--command", command}, nil
 	}
-	return []string{"secret", "set", service}
+	return []string{"secret", "set", service}, nil
 }
 
 func sbxLoginHint(agent, service string, a AgentAuth) string {
-	args := sbxLoginArgs(agent, service, a)
+	if name, ok := SecretRef(a.Command); ok {
+		return "unibox run stores it; unibox login stores the secret " + name + " first if it is missing"
+	}
+	args, err := sbxLoginArgs(agent, service, a)
+	if err != nil {
+		return err.Error()
+	}
 	if a.Method == AuthCommand || a.Method == AuthToken {
 		args[len(args)-1] = Quote(a.Command)
 	}
@@ -197,7 +210,11 @@ func (r *SBX) Login(ctx context.Context, agent string, a AgentAuth, in io.Reader
 	if !ok {
 		return fmt.Errorf("sbx has no login for agent %s", agent)
 	}
-	cmd := hostCommand(ctx, "sbx", sbxLoginArgs(agent, b.Service, a)...)
+	args, err := sbxLoginArgs(agent, b.Service, a)
+	if err != nil {
+		return err
+	}
+	cmd := hostCommand(ctx, "sbx", args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("sbx did not store the %s login: %w", b.Service, err)

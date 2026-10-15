@@ -65,6 +65,9 @@ func (m *Manager) Runtime(name string) (Runtime, error) {
 func (m *Manager) profile(name string) (Profile, error) {
 	return LoadProfile(m.Config.Environments, name)
 }
+
+// Profile loads a profile of the environments repository.
+func (m *Manager) Profile(name string) (Profile, error) { return m.profile(name) }
 func (m *Manager) Approve(name string) error {
 	p, err := m.profile(name)
 	if err != nil {
@@ -311,6 +314,21 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	}
 	if req.Agent != "" && !slices.Contains(p.Agents, req.Agent) {
 		return result, fmt.Errorf("profile %s does not offer agent %s", p.Name, req.Agent)
+	}
+	// A secret the profile names has to be stored before the runtime can run
+	// the command that reads it, so it is checked before the logins are.
+	if refs := p.SecretRefs(); len(refs) > 0 {
+		if store, err := PlatformSecrets(); err != nil {
+			result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: err.Error()})
+		} else {
+			for _, name := range refs {
+				if ok, err := store.Has(ctx, name); err != nil {
+					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: err.Error()})
+				} else if !ok {
+					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: fmt.Sprintf("profile %s names secret %s, which %s does not hold; run unibox login %s or unibox secret set %s", p.Name, name, store.Name(), p.Name, name)})
+				}
+			}
+		}
 	}
 	if a, ok := r.(Authenticator); ok {
 		result.Needs = append(result.Needs, a.AuthNeeds(ctx, b.RuntimeName, p)...)

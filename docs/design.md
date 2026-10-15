@@ -458,7 +458,13 @@ sandbox, so a narrow, short-lived one is chosen for the weaker boundary.
 The proxy is not sbx's alone to keep; it is the property the hard rule
 leans on, and a runtime that drops it says so to the user's face.
 
-### Configured through unibox (planned)
+### Configured through unibox
+
+Built (2026-10-15): `unibox secret set|ls|rm`, `unibox login`, `unibox
+service add|ls|rm`, `secret:<name>` references, the keychain and Secret
+Service stores, and the profile edited as a node tree. Not yet: applying
+a network change to a running sandbox (below, in the network rules) and
+the change to approval under discussion.
 
 The user's decision (2026-10-15): everything a profile needs can be set
 up through unibox's command line, so signing something in needs no hand
@@ -636,6 +642,20 @@ auth:                         # how each agent signs in
   registries; an allow is added to the sandbox's own policy after
   creation, a deny is given at creation, and a deny wins where both match.
   Both are host access, approved with the rest.
+- **sbx changes a running sandbox's network rules live.** Checked on a
+  throwaway sandbox: `sbx policy allow network --sandbox` let a refused
+  host through at once (403 to 200), `sbx policy deny network
+  --sandbox` shut a host the default policy allows (200 to 403), and
+  `sbx policy rm network --id <rule> --sandbox <name> --force` undid
+  either, all without a restart. sbx refuses a deny for a host an allow
+  rule of the sandbox names exactly; the allow goes first. So a change
+  of `allow_network` or `deny_network` needs no recreate: unibox can
+  apply the difference to the running sandbox, keeping the rules it
+  added by id, and recreate only for what cannot change live - the
+  image, environment, caches, agents. Today any change of the profile
+  recreates; a `unibox network allow|deny|rm` that edits the profile and
+  applies it live is planned, asking before a recreate only when one is
+  needed.
 - `token` is for claude beside codex: sbx signs one agent of a sandbox in
   by OAuth, so claude's subscription goes through a long-lived token from
   `claude setup-token`, kept on the host where the command reads it (the

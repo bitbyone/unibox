@@ -375,7 +375,7 @@ printf '%s\n' "$@" > `+Quote(argv)+`
 	if err := r.Login(ctx, "claude", p.Auth["claude"], strings.NewReader(""), io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(argv); string(data) != "secret\nset-custom\n--env\nCLAUDE_CODE_OAUTH_TOKEN\n--placeholder\nsk-ant-oat01-{rand}\n--host\napi.anthropic.com\n--command\nsecurity find-generic-password -s claude -w\n" {
+	if data, _ := os.ReadFile(argv); string(data) != "secret\nset-custom\n--env\nCLAUDE_CODE_OAUTH_TOKEN\n--placeholder\nsk-ant-oat01-unibox0claude0proxy0managed\n--host\napi.anthropic.com\n--command\nsecurity find-generic-password -s claude -w\n" {
 		t.Fatalf("%q", data)
 	}
 	if needs = r.AuthNeeds(ctx, "unibox-home", p); len(needs) != 0 {
@@ -460,14 +460,13 @@ printf '%s\n' "$@" > `+Quote(argv)+`
 	if strings.Contains(string(data), "--host\ngithub.com\n") {
 		t.Fatal("copilot's token must not reach github.com")
 	}
-	// The session gets the placeholder, being unibox's own; claude's is drawn
-	// by sbx and stays its business.
+	// The session gets the placeholder, being unibox's own - claude's too.
 	if env := r.SessionEnv(p, "copilot"); len(env) != 1 || env[0] != "COPILOT_GITHUB_TOKEN=gho_unibox0copilot0proxy0managed0000" {
 		t.Fatalf("%v", env)
 	}
 	claude := p
 	claude.Auth = map[string]AgentAuth{"claude": {Method: AuthToken, Command: "c"}}
-	if env := r.SessionEnv(claude, "claude"); env != nil {
+	if env := r.SessionEnv(claude, "claude"); len(env) != 1 || env[0] != "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-unibox0claude0proxy0managed" {
 		t.Fatalf("%v", env)
 	}
 	// The generated kit declares no github credential and approves none.

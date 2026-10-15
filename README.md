@@ -43,6 +43,8 @@ make install            # → ~/.local/bin/unibox
 ```sh
 unibox config set environments ~/my-envs          # your environments repo
 unibox init web --agents claude,codex             # create profile "web"
+unibox login web                                  # sign its agents in
+unibox service add web github                     # sign its git in to a forge
 unibox approve web                                # accept what it asks of the host
 unibox build web                                  # build its image
 
@@ -106,10 +108,17 @@ agent.
 
 ## Auth
 
-The runtime stores secrets on the host. A missing `token` or `command`
-login is stored on `run` without asking - its command is in the profile you
-approved; an OAuth login or a key is asked for in your terminal. unibox
-never sees the value.
+`unibox login <profile> [agent...]` signs agents in and writes their `auth`
+into the profile: codex through the runtime's ChatGPT login in the browser,
+claude through `claude setup-token`, copilot through a fine-grained GitHub
+token with Copilot Requests alone. A token is asked for on a hidden prompt
+and kept in the platform's store - the login keychain on macOS, the Secret
+Service on Linux - where the profile names it as `secret:<name>`. It never
+enters a sandbox: the runtime reads it on the host and the sandbox sees a
+placeholder its proxy swaps. `unibox secret set|ls|rm` keeps any other.
+
+A missing `token` or `command` login is stored in the runtime on `run`
+without asking; an OAuth login or a key is asked for in your terminal.
 
 | `auth` value | Meaning |
 | --- | --- |
@@ -117,6 +126,24 @@ never sees the value.
 | `api-key` | an API key |
 | `{command: <cmd>}` | a host command that prints the key, e.g. `gh auth token` |
 | `{token: <cmd>}` | a host command that prints a long-lived login token, e.g. one from `claude setup-token`, or a GitHub token for copilot alone |
+
+`<cmd>` is `secret:<name>` for a secret unibox keeps, or any host command -
+`vault kv get -field=token ...`, `op read ...` - for a store it does not.
+
+## Services
+
+`unibox service add <profile> <name>` signs the sandbox in to a git forge or
+another host service: it shows where the token is made, asks for it, keeps it
+in the platform's store and writes the `services` entry. It knows `github`,
+`gitlab` and `artifactory` (from the name, or `--kind`), anything else is
+`--kind generic` with `--host`, `--git` or `--env`. `--host github.com/<owner>`
+gives one owner on a forge a token of its own; `--author` and `--no-co-author`
+say who commits; `--command` takes a store unibox does not keep. `unibox
+service ls <profile>` shows each and whether its token is stored, `unibox
+service rm` takes one out.
+
+The profile stays yours: what these commands write is ordinary YAML, and a
+hand edit is as valid.
 
 Sign copilot in by `token`, not `command`: `command` stores sbx's built-in
 `github` secret, and with it sbx signs every request to github.com in itself -

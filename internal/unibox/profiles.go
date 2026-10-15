@@ -235,6 +235,14 @@ var networkPattern = regexp.MustCompile(`^[A-Za-z0-9.*?\[\]!:/_-]+$`)
 var memoryPattern = regexp.MustCompile(`^[1-9][0-9]*[kKmMgG]?$`)
 var sensitiveEnv = regexp.MustCompile(`(?i)(TOKEN|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL|API_KEY|PRIVATE_KEY|SSH_AUTH|GIT_CONFIG|DOCKER_HOST|DOCKER_CONTEXT|^LD_|^DYLD_)`)
 
+// validCommand is one host command, or a reference to a secret unibox keeps.
+func validCommand(c string) bool {
+	if name, ok := SecretRef(c); ok {
+		return ValidName(name) == nil
+	}
+	return strings.TrimSpace(c) != "" && !strings.ContainsAny(c, "\n\r")
+}
+
 func safeRelative(path string) bool {
 	return path != "" && !filepath.IsAbs(path) && filepath.Clean(path) != ".." && !strings.HasPrefix(filepath.Clean(path), ".."+string(filepath.Separator))
 }
@@ -328,9 +336,9 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 		switch {
 		case a.Method == AuthOAuth || a.Method == AuthAPIKey:
-		case (a.Method == AuthCommand || a.Method == AuthToken) && strings.TrimSpace(a.Command) != "" && !strings.ContainsAny(a.Command, "\n\r"):
+		case (a.Method == AuthCommand || a.Method == AuthToken) && validCommand(a.Command):
 		default:
-			return p, fmt.Errorf("profile %s: auth of %s must be oauth, api-key, {command: <one host command>} or {token: <one host command>}", name, id)
+			return p, fmt.Errorf("profile %s: auth of %s must be oauth, api-key, {command: <one host command>} or {token: <one host command>}, a command being secret:<name> for one unibox keeps", name, id)
 		}
 	}
 	gitURLs := map[string]string{}
@@ -361,8 +369,8 @@ func LoadProfile(root, name string) (Profile, error) {
 				gitURLs[u] = svc
 			}
 		}
-		if strings.TrimSpace(s.Command) == "" || strings.ContainsAny(s.Command, "\n\r") {
-			return p, fmt.Errorf("profile %s: service %s needs command: one host command that prints its token", name, svc)
+		if !validCommand(s.Command) {
+			return p, fmt.Errorf("profile %s: service %s needs command: one host command that prints its token, or secret:<name> for one unibox keeps", name, svc)
 		}
 		if s.Git == (s.Env != "") {
 			return p, fmt.Errorf("profile %s: service %s is either git: true or env: NAME, not both or neither", name, svc)
@@ -592,6 +600,24 @@ func (p Profile) AccessHash() string  { return digest(p.HostAccess) }
 // nothing has nothing to approve: nothing of it crosses the boundary.
 func (p Profile) HostFacing() bool {
 	return len(p.Env)+len(p.Caches)+len(p.DenyNetwork)+len(p.AllowNetwork)+len(p.Auth)+len(p.Services) > 0
+}
+
+// SecretRefs are the secrets unibox keeps that the profile names, each once.
+func (p Profile) SecretRefs() []string {
+	out := []string{}
+	add := func(c string) {
+		if name, ok := SecretRef(c); ok && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	for _, a := range p.Auth {
+		add(a.Command)
+	}
+	for _, s := range p.Services {
+		add(s.Command)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // ServicePlaceholder is the string a service's token is hidden behind inside

@@ -159,7 +159,12 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 		if svc.Refresh != "" {
 			args = append(args, "--refresh", svc.Refresh)
 		}
-		args = append(args, "--command", serviceSecretCommand(svc))
+		resolved := svc
+		var err error
+		if resolved.Command, err = ResolveCommand(svc.Command); err != nil {
+			return fmt.Errorf("service %s: %w", name, err)
+		}
+		args = append(args, "--command", serviceSecretCommand(resolved))
 		// sbx explains each stored secret at length - a note on commands, a
 		// reminder about variables in running sandboxes that git services
 		// do not read - so its words are kept for a failure, and the
