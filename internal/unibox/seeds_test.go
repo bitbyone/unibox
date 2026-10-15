@@ -109,7 +109,8 @@ func TestTheCoAuthorHookAddsTheAgentOnce(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	hook := filepath.Join(dir, "commit-msg")
-	mustWriteExecutable(t, hook, []byte(coAuthorHook("Copilot <223556219+Copilot@users.noreply.github.com>")))
+	mustWriteExecutable(t, hook, []byte(coAuthorHook()))
+	agent := "Copilot <223556219+Copilot@users.noreply.github.com>"
 	run := func(message string) string {
 		t.Helper()
 		msg := filepath.Join(dir, "MSG")
@@ -118,6 +119,7 @@ func TestTheCoAuthorHookAddsTheAgentOnce(t *testing.T) {
 		}
 		cmd := exec.Command("sh", hook, msg)
 		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "UNIBOX_CO_AUTHOR="+agent)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%v %s", err, out)
 		}
@@ -140,5 +142,34 @@ func TestTheCoAuthorHookAddsTheAgentOnce(t *testing.T) {
 	once := run("Add a file\n")
 	if again := run(once); again != once {
 		t.Fatalf("%q\n%q", once, again)
+	}
+	// The session's agent is credited: another agent resumed the task.
+	agent = "Claude <noreply@anthropic.com>"
+	if got := run("Add a file\n"); !strings.Contains(got, "Co-Authored-By: Claude <noreply@anthropic.com>") || count(got) != 0 {
+		t.Fatalf("%q", got)
+	}
+	// No agent running - a commit made by hand - credits none.
+	agent = ""
+	if got := run("Add a file\n"); strings.Contains(strings.ToLower(got), "co-authored-by") {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestAnOldHookIsRewrittenBeforeASession(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	b, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(f.root, "unibox-dev", "work", "task", "repo", ".git", "unibox-hooks", "commit-msg")
+	write(t, hook, "#!/bin/sh\n# an agent fixed in it\n")
+	p, _ := m.profile("node")
+	if err := m.ensure(ctx, &b, f, p, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(hook); !strings.Contains(string(data), "UNIBOX_CO_AUTHOR") {
+		t.Fatalf("%s", data)
 	}
 }

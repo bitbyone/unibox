@@ -16,6 +16,10 @@ func writeGuest(file string, data []byte, mode string) string {
 
 func initializeScript(p Profile, instructions string) string {
 	s := "set -eu\n" + gitServicesScript(p)
+	// Every clone's co-author hook is rewritten before each session, so one
+	// prepared by an older unibox - with an agent fixed in it - follows the
+	// session's agent too.
+	s += "for d in /work/*/*/.git/unibox-hooks; do\n  [ -d \"$d\" ] || continue\n  printf %s " + Quote(base64.StdEncoding.EncodeToString([]byte(coAuthorHook()))) + " | base64 -d > \"$d/commit-msg\"\n  chmod 700 \"$d/commit-msg\"\ndone\n"
 	for _, id := range p.Agents {
 		a, _ := FindAgent(id)
 		s += "mkdir -p \"$HOME/" + path.Dir(a.Instructions) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString([]byte(instructions))) + " | base64 -d > \"$HOME/" + a.Instructions + "\"\n"
@@ -92,7 +96,7 @@ fi
 			coAuthor = r.CoAuthor
 		}
 		if coAuthor == nil || *coAuthor {
-			hook := coAuthorHook(a.CoAuthor)
+			hook := coAuthorHook()
 			b.WriteString(writeGuest(path.Join(dir, ".git", "unibox-hooks", "commit-msg"), []byte(hook), "700"))
 			fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(path.Join(dir, ".git", "unibox-hooks")))
 		} else {
@@ -153,15 +157,22 @@ func identityScript(p Profile) string {
 	return b.String()
 }
 
-// coAuthorHook adds the agent's co-author trailer to a commit message unless
-// one naming the agent is there already. Agents add their own - copilot as
-// Co-authored-by: Copilot <223556219+Copilot@...>, claude as unibox does -
-// and a trailer that differed only in case or address doubled the line.
-func coAuthorHook(coAuthor string) string {
-	name, _, _ := strings.Cut(coAuthor, " <")
-	return "#!/bin/sh\nset -eu\n" +
-		"if git interpret-trailers --parse \"$1\" | grep -qiF " + Quote("co-authored-by: "+name+" <") + "; then exit 0; fi\n" +
-		"git interpret-trailers --in-place --trailer " + Quote("Co-Authored-By: "+coAuthor) + " \"$1\"\n"
+// coAuthorHook adds the co-author trailer of the agent committing, which
+// the session names in UNIBOX_CO_AUTHOR - so a task resumed with another
+// agent credits that one, and a commit made by hand in unibox shell, with
+// no agent running, credits none. A co-author of the agent's name already
+// there counts, in any case or address: agents add their own - copilot as
+// Co-authored-by: Copilot <223556219+Copilot@...> - and matching the whole
+// line doubled it.
+func coAuthorHook() string {
+	return `#!/bin/sh
+set -eu
+co="${UNIBOX_CO_AUTHOR:-}"
+[ -n "$co" ] || exit 0
+name="${co%% <*}"
+if git interpret-trailers --parse "$1" | grep -qiF "co-authored-by: $name <"; then exit 0; fi
+git interpret-trailers --in-place --trailer "Co-Authored-By: $co" "$1"
+`
 }
 
 // A disconnected host process is not proof that its guest process ended.

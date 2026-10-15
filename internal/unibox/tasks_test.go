@@ -131,7 +131,12 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 		t.Fatal("own edits changed")
 	}
 	gitTest(t, clone, "add", "agent.txt")
-	gitTest(t, clone, "commit", "-m", "Agent work")
+	// The agent commits in its session, which names it to the hook.
+	commit := exec.Command("git", "-C", clone, "commit", "-m", "Agent work")
+	commit.Env = append(os.Environ(), "UNIBOX_CO_AUTHOR=Claude <noreply@anthropic.com>")
+	if out, err := commit.CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
 	message := gitTest(t, clone, "log", "-1", "--format=%B")
 	if strings.Count(message, "Co-Authored-By: Claude <noreply@anthropic.com>") != 1 {
 		t.Fatal(message)
@@ -421,7 +426,8 @@ func TestClaudeTrustsTheTaskItRunsIn(t *testing.T) {
 	url := "https://forge.invalid/team/payments.git"
 	f.remotes[url] = "file://" + remote
 	bin := t.TempDir()
-	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nexit 0\n"))
+	seen := filepath.Join(t.TempDir(), "co-author")
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nprintf '%s' \"$UNIBOX_CO_AUTHOR\" > "+Quote(seen)+"\n"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ctx := context.Background()
 	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
@@ -432,6 +438,10 @@ func TestClaudeTrustsTheTaskItRunsIn(t *testing.T) {
 	req := Request{Sandbox: "dev", Task: "refunds", Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
 	if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
 		t.Fatal(err)
+	}
+	// The session names its agent to the commit hook.
+	if got, _ := os.ReadFile(seen); string(got) != "Claude <noreply@anthropic.com>" {
+		t.Fatalf("the session named %q", got)
 	}
 	data, _ := os.ReadFile(filepath.Join(home, ".claude.json"))
 	var cfg struct {

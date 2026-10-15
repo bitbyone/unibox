@@ -114,8 +114,10 @@ opencode allowed to edit, run and fetch. codex, which keeps TOML, is told
 `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` before
 every session instead. No agent updates itself; the image fixes its version.
 Edit the seeds as you like. Commits carry your git identity and one
-co-author line for the task's agent: unibox's hook adds it unless the agent
-already did, under its own name in any case or address.
+co-author line for the agent of the session that commits - a task resumed
+with another agent credits that one, a commit you make in `unibox shell`
+none - added by unibox's hook unless the agent already did, under its own
+name in any case or address.
 
 ## Auth
 

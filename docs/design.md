@@ -801,8 +801,12 @@ it would be committed. So:
   agent's name and address from agentbox's table (Claude Code's
   `Claude <noreply@anthropic.com>`, and so on). It is not left to the
   agent: unibox puts a `commit-msg` hook into each clone in the VM that
-  adds the trailer when it is missing. The agent is the task's - the one
-  it was prepared with. Agents add their own too, copilot as
+  adds the trailer when it is missing. The agent is the session's: `run`
+  and `resume` name it to the hook in `UNIBOX_CO_AUTHOR`, so a task
+  resumed with another agent credits that one, and a commit made by hand
+  in `unibox shell`, with no agent running, credits none. The hook is
+  rewritten in every clone before each session, so none keeps an agent
+  fixed in it. Agents add their own too, copilot as
   `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`,
   so the hook counts any co-author of the agent's name, in any case or
   address, as the trailer already there; matching the whole line doubled
