@@ -179,7 +179,7 @@ func (o *options) initCommand() *cobra.Command {
 			}
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed, "migrated": report.Migrated, "updated": report.Updated, "removed": report.Removed})
+			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed, "migrated": report.Migrated, "updated": report.Updated, "removed": report.Removed, "relaid": report.Relaid})
 		}
 		switch {
 		case previous == "":
@@ -198,6 +198,9 @@ func (o *options) initCommand() *cobra.Command {
 		}
 		for _, rel := range report.Written {
 			fmt.Fprintln(o.output, "wrote", rel)
+		}
+		for _, line := range report.Relaid {
+			fmt.Fprintln(o.output, "layout:", line)
 		}
 		for _, rel := range report.Updated {
 			fmt.Fprintln(o.output, "updated", rel, "to unibox's own")

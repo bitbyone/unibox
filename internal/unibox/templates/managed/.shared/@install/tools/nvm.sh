@@ -1,6 +1,6 @@
 #!/bin/bash
-# Managed by unibox: init, check and build rewrite it to unibox's own. Put
-# your own installation scripts beside it under another name.
+# Managed by unibox: init, check and build rewrite .shared to unibox's own.
+# Your own scripts go in _shared/@install; one of the same name wins there.
 # nvm - the Node version manager. No Node version is chosen here: pick one in
 # base.sh or in the Dockerfile (nvm install <version>); the agents' scripts
 # fall back to the current LTS when none was picked.

@@ -113,7 +113,7 @@ Where each kind of setting lives:
  |   start.sh               |   |     sbx: {on, stop_   |   |     environments:    |
  |   instructions.md        |   |           idle}       |   |       gl/team/envs   |
  |   .sbx/build.args        |   | state.json            |   +----------------------+
- | instructions/*.md        |   |   access seen, builds,|    the user's choices,
+ | _shared/ .shared/        |   |   access seen, builds,|    the user's choices,
  +------------+-------------+   |   sandboxes, tasks    |    handed to unibox
               |                 +-----------------------+
   what the    |                  unibox's own
@@ -565,56 +565,67 @@ sandbox-envs/
 │   └── node/
 │       ├── sandbox.yaml
 │       └── Dockerfile
-├── instructions/
-│   ├── unibox.md
-│   ├── review-style.md
-│   └── no-migrations.md
 ├── _shared/
-│   └── installations/
-│       ├── claude.sh
-│       └── copilot.sh
+│   ├── @install/
+│   │   └── tools/jdk-certs.sh
+│   └── @instructions/
+│       ├── review-style.md
+│       └── no-migrations.md
+├── .shared/
+│   ├── install.sh
+│   ├── @install/
+│   │   ├── base.sh
+│   │   └── agents/claude.sh
+│   └── @instructions/
+│       └── unibox.md
 └── README.md
 ```
 
 A directory of `sandboxes/` with a `sandbox.yaml` is a profile, named after
-the directory; everything inside it is the profile's own. The layout is held
-to its shape (`CheckLayout`): profiles under `sandboxes/` (every directory
-there must carry a `sandbox.yaml`), attachable markdown under
-`instructions/` (`.md` files alone, none named `instructions.md`), anything
-of the user's own behind an underscore (`_shared` by convention),
-`README.md` and hidden entries - and nothing else; a stray file is a named
-error, never quietly ignored. Runtime directories inside a profile are
+the directory; everything inside it is the profile's own. Only the parts
+unibox reads by name are held to a shape (`CheckLayout`): profiles under
+`sandboxes/` (every directory there must carry a `sandbox.yaml`), and the
+texts of `_shared/@instructions` and `.shared/@instructions` (`.md` files
+alone, none named `instructions.md`). Anything else in the repository is
+the user's to arrange, and a profile names such a file by its path. Runtime directories inside a profile are
 hidden (`.sbx/build.args`), and a profile's root holds only its definition,
 Dockerfile, start script and `instructions.md` - custom files, an agent
 configuration seed say, go under an underscore directory of the profile's
 own, `_data` by convention. `unibox init <profile>` lays the whole shape
 out (interactively with `-i`) and `unibox validate` checks it, every
-profile and every text included. `_shared/` is copied into every profile's
-build
-context, so a Dockerfile composes what it needs
-(its `.install` runner executes `_shared/installations` scripts listed in a
-Dockerfile heredoc), and its contents are part of every
-profile's revision - a change there marks every image outdated. The
+profile and every text included. `.shared/` and `_shared/` are copied into
+every profile's build context, so a Dockerfile composes what it needs: the
+runner `.shared/install.sh` runs the scripts a Dockerfile heredoc names,
+each from `_shared/@install` or else `.shared/@install`. Their contents but
+the instruction texts are part of every profile's revision - a change
+there marks every image outdated. The
 profile's `sandbox.yaml`, its `instructions.md` and its agent configuration
 seeds are not image inputs: they change nothing of the image and force no
 rebuild.
 
 - **What unibox ships it keeps current, and what it writes for the user
-  it never touches again** (the user's call). The runner, the
-  installation scripts and `instructions/unibox.md` are unibox's: `init`,
-  `check`, `build` and a task's start - each once per command, before a
-  profile is read, so an image is built from them - rewrite one that
-  differs, saying so, and remove one a newer unibox dropped, by the list
-  in `_shared/.unibox-managed`; the user's own files beside them are not
-  on it and stay. A repository init did not lay out (no runner, no list)
-  is not written into. A profile's files - `sandbox.yaml`, Dockerfile,
+  it never touches again** (the user's call). `.shared` is unibox's -
+  hidden, as the user does not edit it - and `_shared` the user's, with
+  the same `@install` and `@instructions`; the `@` marks a directory a
+  profile names things from, and the user's of a name wins over unibox's,
+  so a script or text is overridden by putting one in `_shared`, never by
+  editing unibox's. `init`, `check`, `build` and a task's start - each once
+  per command, before a profile is read, so an image is built from them -
+  rewrite `.shared` to this unibox's own where it differs and take out
+  anything else in it, saying so; a repository init did not lay out (no
+  `.shared`) is not written into. `init` writes `_shared` once with an
+  example of each kind. A repository of the older layout (`_shared/.install`,
+  `_shared/installations`, `instructions/`) is refused until `init` moves
+  it: a script or text that is unibox's as it was is dropped, one that
+  differs moves to `_shared` where it wins, and a Dockerfile's generated
+  `RUN` line is rewritten. A profile's files - `sandbox.yaml`, Dockerfile,
   `instructions.md`, `.sbx/build.args`, the seeds - are written once by
   init and are the user's from then on. Both kinds live in the unibox
   repository as files, not strings in the code: `internal/unibox/templates`
-  embeds `managed/` (laid out as in the environments repository),
-  `profile/` (text templates of a new profile) and `seeds/<agent>/<file>`.
-  An update of a managed script outdates every image, as any change under
-  `_shared` does.
+  embeds `managed/` (`.shared` as it is laid out), `user/` (`_shared`'s
+  examples), `profile/` (text templates of a new profile) and
+  `seeds/<agent>/<file>`. An update of a managed script outdates every
+  image, as any change of an installation script does.
 
 unibox knows the repository by its path (`environments` in its
 configuration) and reads the working tree - what the user sees in their
@@ -686,7 +697,7 @@ agents:                       # what the image has, in order; a list of
 start: start.sh               # in the VM, once per boot of the VM
 scripts:                      # in the VM only when asked for, by name
   update-skills: update-skills.sh
-instructions:                 # names of instructions/*.md, or .md paths
+instructions:                 # names of shared texts, or .md paths
   - unibox                    # relative to sandbox.yaml; the profile's own
   - review-style              # instructions.md attaches itself
 git:
@@ -869,11 +880,12 @@ and per profile. None of it may go into the worked-on repository, where
 it would be committed. So:
 
 - **Nothing is fixed in the binary.** Every word the agent gets comes from
-  the environments repository: the texts live in `instructions/`, one `.md`
-  per name, and the former built-in rules are just a text there (`unibox`
-  by convention) a profile lists like any other.
+  the environments repository: the texts live in `_shared/@instructions`
+  (the user's) and `.shared/@instructions` (unibox's, the user's of a name
+  winning), one `.md` per name, and the former built-in rules are just a
+  text there (`unibox`) a profile lists like any other.
 - **The profile's `instructions` are names or paths**: a bare name is a
-  text of `instructions/`, the one namespace a sandbox attaches more from
+  shared text, the one namespace a sandbox attaches more from
   (`--instructions`, `unibox instructions attach`); an entry with a path or
   extension is a `.md` relative to `sandbox.yaml`, confined to the
   repository. The profile's own `instructions.md` attaches itself, after

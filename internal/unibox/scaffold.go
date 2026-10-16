@@ -15,10 +15,11 @@ import (
 )
 
 // templates holds every file unibox puts into an environments repository,
-// as files rather than strings: managed/ mirrors the repository's paths of
-// the files unibox owns and keeps at its own version; profile/ is what init
-// writes once into a new profile, which is the user's from then on; seeds/
-// the agents' configuration seeds, per agent under the file's own name.
+// as files rather than strings: managed/ mirrors .shared, which unibox owns
+// and keeps at its own version; user/ the user's _shared, written once with
+// an example of each kind; profile/ what init writes once into a new
+// profile, the user's from then on; seeds/ the agents' configuration seeds,
+// per agent under the file's own name.
 //
 //go:embed all:templates
 var templatesFS embed.FS
@@ -35,15 +36,12 @@ type InitReport struct {
 	// Migrated says a profile was brought from an older format, then what
 	// of it could not be carried over.
 	Migrated []string
+	// Relaid says what moved from the repository layout of an older unibox.
+	Relaid []string
 }
 
-// managedList names, in the repository, the managed files unibox last
-// wrote, so that one a later unibox no longer has is taken out and the
-// user's own files beside them are not.
-const managedList = "_shared/.unibox-managed"
-
-// managedFiles are the files unibox owns in an environments repository, by
-// their path in it.
+// managedFiles are the files unibox owns in an environments repository,
+// all under .shared, by their path in it.
 func managedFiles() (map[string][]byte, error) {
 	out := map[string][]byte{}
 	err := fs.WalkDir(templatesFS, "templates/managed", func(path string, d fs.DirEntry, err error) error {
@@ -58,27 +56,22 @@ func managedFiles() (map[string][]byte, error) {
 }
 
 func managedMode(rel string) os.FileMode {
-	if strings.HasSuffix(rel, "/.install") || strings.HasSuffix(rel, ".sh") {
+	if strings.HasSuffix(rel, ".sh") {
 		return 0o755
 	}
 	return 0o644
 }
 
-// LaidOut says whether init laid the repository out, so its managed files
-// are unibox's to keep current.
+// LaidOut says whether init laid the repository out, so .shared is
+// unibox's to keep current.
 func LaidOut(root string) bool {
-	for _, rel := range []string{managedList, "_shared/.install"} {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
-			return true
-		}
-	}
-	return false
+	info, err := os.Stat(filepath.Join(root, ".shared"))
+	return err == nil && info.IsDir()
 }
 
-// SyncManaged brings the repository's managed files to this unibox's own:
-// it writes what is missing or differs, whatever was edited in it, and
-// takes out a file it wrote before and no longer has. Anything else under
-// _shared or instructions is the user's and stays.
+// SyncManaged brings .shared to this unibox's own: it writes what is
+// missing or differs, whatever was edited in it, and takes out anything
+// else there - .shared is unibox's alone; the user's own go in _shared.
 func SyncManaged(root string) (written, updated, removed []string, err error) {
 	files, err := managedFiles()
 	if err != nil {
@@ -101,24 +94,155 @@ func SyncManaged(root string) (written, updated, removed []string, err error) {
 			written = append(written, rel)
 		}
 	}
-	list := filepath.Join(root, filepath.FromSlash(managedList))
-	if before, err := os.ReadFile(list); err == nil {
-		for _, rel := range strings.Split(strings.TrimSpace(string(before)), "\n") {
-			if _, still := files[rel]; rel == "" || strings.HasPrefix(rel, "#") || still || !safeRelative(rel) {
-				continue
-			}
-			if err := os.Remove(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
-				removed = append(removed, rel)
-			}
+	shared := filepath.Join(root, ".shared")
+	dirs := []string{}
+	err = filepath.WalkDir(shared, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		rel, _ := filepath.Rel(root, path)
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			if path != shared {
+				dirs = append(dirs, path)
+			}
+			return nil
+		}
+		if _, ours := files[rel]; ours {
+			return nil
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		removed = append(removed, rel)
+		return nil
+	})
+	if err != nil {
+		return nil, nil, nil, err
 	}
-	text := "# The files unibox manages here, rewritten to its own by init, check and\n# build. Leave this list to unibox.\n" + strings.Join(sortedKeys(files), "\n") + "\n"
-	if old, err := os.ReadFile(list); err != nil || string(old) != text {
-		if err = AtomicWrite(list, []byte(text), 0o644); err != nil {
-			return nil, nil, nil, err
-		}
+	// Directories a newer unibox emptied go too, deepest first.
+	for i := len(dirs) - 1; i >= 0; i-- {
+		_ = os.Remove(dirs[i])
 	}
 	return written, updated, removed, nil
+}
+
+// managedHeaders are the lines unibox has put at the top of its scripts,
+// in every wording, so a script from an older layout compares by its body.
+var managedHeaders = []string{
+	"# Managed by unibox: init, check and build rewrite it to unibox's own. Put\n# your own installation scripts beside it under another name.\n",
+	"# Managed by unibox: init, check and build rewrite .shared to unibox's own.\n# Your own scripts go in _shared/install; one of the same name wins there.\n",
+	"# Managed by unibox: init, check and build rewrite .shared to unibox's own.\n# Your own scripts go in _shared/@install; one of the same name wins there.\n",
+}
+
+func withoutHeader(b []byte) string {
+	s := string(b)
+	for _, h := range managedHeaders {
+		s = strings.Replace(s, h, "", 1)
+	}
+	return s
+}
+
+// oldRunLine is the line a Dockerfile init wrote before .shared ran the
+// installation scripts.
+const oldRunLine = "RUN --mount=type=bind,source=_shared,target=/unibox /unibox/.install <<EOF"
+const newRunLine = "RUN --mount=type=bind,target=/unibox /unibox/.shared/install.sh <<EOF"
+
+// relayOut moves a repository from the layout older unibox gave it -
+// _shared/.install, _shared/installations, instructions/ - to .shared and
+// _shared/{install,instructions}. A script or text that is unibox's own is
+// dropped, as .shared has it; one that differs is kept as the user's, where
+// it wins over unibox's. Best effort: what it cannot do it says.
+func relayOut(root string) ([]string, error) {
+	if _, err := os.Stat(filepath.Join(root, "_shared", ".install")); err != nil {
+		return nil, nil
+	}
+	files, err := managedFiles()
+	if err != nil {
+		return nil, err
+	}
+	notes := []string{}
+	move := func(fromDir, toDir, managedDir string) error {
+		from := filepath.Join(root, filepath.FromSlash(fromDir))
+		return filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			rel, _ := filepath.Rel(from, path)
+			rel = filepath.ToSlash(rel)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if ours, ok := files[managedDir+"/"+rel]; ok && withoutHeader(ours) == withoutHeader(data) {
+				return os.Remove(path)
+			}
+			to := filepath.Join(root, filepath.FromSlash(toDir), filepath.FromSlash(rel))
+			if _, err := os.Stat(to); err == nil {
+				notes = append(notes, fmt.Sprintf("%s/%s left where it is: %s/%s is there already", fromDir, rel, toDir, rel))
+				return nil
+			}
+			if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+				return err
+			}
+			if err := os.Rename(path, to); err != nil {
+				return err
+			}
+			note := fmt.Sprintf("moved %s/%s to %s/%s", fromDir, rel, toDir, rel)
+			if _, ok := files[managedDir+"/"+rel]; ok {
+				note += ", which differs from unibox's and now wins over it"
+			}
+			notes = append(notes, note)
+			return nil
+		})
+	}
+	if err := move("_shared/installations", "_shared/@install", ".shared/@install"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return notes, err
+	}
+	if err := move("instructions", "_shared/@instructions", ".shared/@instructions"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return notes, err
+	}
+	for _, dir := range []string{"_shared/installations", "instructions"} {
+		removeEmpty(filepath.Join(root, filepath.FromSlash(dir)))
+	}
+	for _, f := range []string{"_shared/.install", "_shared/.unibox-managed"} {
+		_ = os.Remove(filepath.Join(root, filepath.FromSlash(f)))
+	}
+	profiles, _ := os.ReadDir(filepath.Join(root, "sandboxes"))
+	for _, e := range profiles {
+		file := filepath.Join(root, "sandboxes", e.Name(), "Dockerfile")
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		text := string(data)
+		switch {
+		case strings.Contains(text, oldRunLine):
+			text = strings.ReplaceAll(text, oldRunLine, newRunLine)
+			text = strings.Replace(text, "# The image is composed by _shared/install: list the installation scripts,\n# one per line.", "# The image is composed by .shared/install.sh: list the installation scripts,\n# one per line: each runs from _shared/@install, yours, or .shared/@install,\n# unibox's.", 1)
+			if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
+				return notes, err
+			}
+			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile runs .shared/install.sh")
+		case strings.Contains(text, ".install"):
+			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile still names .install; run the scripts with "+newRunLine)
+		}
+	}
+	return notes, nil
+}
+
+// removeEmpty takes out a directory tree that holds no file.
+func removeEmpty(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			removeEmpty(filepath.Join(dir, e.Name()))
+		}
+	}
+	_ = os.Remove(dir)
 }
 
 // profileTemplate renders one of templates/profile.
@@ -179,12 +303,33 @@ func Init(root, name string, agents []string, cpus, memory string) (InitReport, 
 		report.Written = append(report.Written, rel)
 		return nil
 	}
+	relaid, err := relayOut(root)
+	report.Relaid = relaid
+	if err != nil {
+		return report, err
+	}
 	written, updated, removed, err := SyncManaged(root)
 	if err != nil {
 		return report, err
 	}
 	report.Written = append(report.Written, written...)
 	report.Updated, report.Removed = updated, removed
+	// The user's own shared structure, with an example of each kind, is
+	// written once; from then on it is theirs.
+	err = fs.WalkDir(templatesFS, "templates/user", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := templatesFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel := strings.TrimPrefix(path, "templates/user/")
+		return place(rel, data, managedMode(rel))
+	})
+	if err != nil {
+		return report, err
+	}
 	if name == "" {
 		if err := os.MkdirAll(filepath.Join(root, "sandboxes"), 0o755); err != nil {
 			return report, err

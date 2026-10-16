@@ -1,6 +1,6 @@
 #!/bin/sh
-# Managed by unibox: init, check and build rewrite it to unibox's own. Put
-# your own installation scripts beside it under another name.
+# Managed by unibox: init, check and build rewrite .shared to unibox's own.
+# Your own scripts go in _shared/@install; one of the same name wins there.
 # mise - the polyglot tool version manager, installed where every shell finds
 # it. No versions are chosen here; pick them with mise use or mise install.
 set -eu

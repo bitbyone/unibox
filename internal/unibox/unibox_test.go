@@ -131,8 +131,8 @@ func TestContentRevisionsAndApprovalHaveDifferentInputs(t *testing.T) {
 func TestInstructionsAreSandboxWideAndConfined(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "instructions", "team.md"), "team instructions")
-	write(t, filepath.Join(root, "instructions", "review.md"), "review instructions")
+	write(t, filepath.Join(root, "_shared", "@instructions", "team.md"), "team instructions")
+	write(t, filepath.Join(root, "_shared", "@instructions", "review.md"), "review instructions")
 	p, _ := LoadProfile(root, "node")
 	text, err := p.InstructionText([]string{"team", "review"})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestInstructionsAreSandboxWideAndConfined(t *testing.T) {
 	}
 	outside := filepath.Join(t.TempDir(), "outside")
 	write(t, outside, "private")
-	if err = os.Symlink(outside, filepath.Join(root, "instructions", "escape.md")); err != nil {
+	if err = os.Symlink(outside, filepath.Join(root, "_shared", "@instructions", "escape.md")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = p.InstructionText([]string{"escape"}); err == nil {
@@ -157,11 +157,15 @@ func TestInstructionsAreSandboxWideAndConfined(t *testing.T) {
 func TestProfileInstructionsAreNamesAndAttachOnce(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "instructions", "team.md"), "team instructions")
-	write(t, filepath.Join(root, "instructions", "backend.md"), "backend instructions")
-	write(t, filepath.Join(root, "_shared", "notes.md"), "shared notes")
+	write(t, filepath.Join(root, "_shared", "@instructions", "team.md"), "team instructions")
+	write(t, filepath.Join(root, "_shared", "@instructions", "backend.md"), "backend instructions")
+	// Any directory of the repository holds texts a profile names by path;
+	// a name is the user's text in _shared/@instructions before unibox's.
+	write(t, filepath.Join(root, "my-dir", "notes.md"), "shared notes")
+	write(t, filepath.Join(root, ".shared", "@instructions", "team.md"), "unibox's team text")
+	write(t, filepath.Join(root, ".shared", "@instructions", "unibox.md"), "unibox's own")
 	write(t, filepath.Join(root, "sandboxes", "node", "instructions.md"), "node's own instructions")
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [backend, team, ../../_shared/notes.md]\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [backend, team, unibox, ../../my-dir/notes.md]\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +174,7 @@ func TestProfileInstructionsAreNamesAndAttachOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(text, "team instructions") != 1 || !strings.HasPrefix(text, "backend instructions") {
+	if strings.Count(text, "team instructions") != 1 || !strings.HasPrefix(text, "backend instructions") || strings.Contains(text, "unibox's team text") || !strings.Contains(text, "unibox's own") {
 		t.Fatal(text)
 	}
 	if !strings.Contains(text, "shared notes") || !strings.Contains(text, "node's own instructions") {
@@ -179,7 +183,7 @@ func TestProfileInstructionsAreNamesAndAttachOnce(t *testing.T) {
 	if strings.Index(text, "node's own instructions") < strings.Index(text, "shared notes") {
 		t.Fatal("the profile's own instructions.md must follow its listed texts")
 	}
-	if _, err = p.InstructionText([]string{"../../_shared/notes.md"}); err == nil {
+	if _, err = p.InstructionText([]string{"../../my-dir/notes.md"}); err == nil {
 		t.Fatal("an attached instruction took a path")
 	}
 	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [absent]\n")
@@ -223,11 +227,11 @@ func TestOnlyImageInputsTurnTheRevision(t *testing.T) {
 func TestTheRepositoryLayoutIsHeldToItsShape(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, path, content string }{
-		{"stray-top-level", "notes.txt", "x"},
-		{"stray-dir", "tools/x.sh", "x"},
+		{"old-layout", "_shared/.install", "x"},
 		{"file-in-sandboxes", "sandboxes/readme.txt", "x"},
-		{"non-md-instruction", "instructions/run.sh", "x"},
-		{"reserved-instruction-name", "instructions/instructions.md", "x"},
+		{"non-md-instruction", "_shared/@instructions/run.sh", "x"},
+		{"reserved-instruction-name", "_shared/@instructions/instructions.md", "x"},
+		{"non-md-managed-instruction", ".shared/@instructions/run.sh", "x"},
 		{"unhidden-runtime-dir", "sandboxes/node/sbx/build.args", "BASE=x"},
 		{"stray-profile-file", "sandboxes/node/notes.txt", "x"},
 	} {
@@ -267,20 +271,29 @@ func TestSharedDirectoryJoinsTheBuildContextAndRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	write(t, filepath.Join(root, "_shared", "installations", "claude.sh"), "npm install -g claude\n")
-	p, err := LoadProfile(root, "node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := p.Files["_shared/installations/claude.sh"]; !ok {
-		t.Fatalf("_shared missing from the build context: %v", p.Files)
-	}
-	if p.Revision == before.Revision {
-		t.Fatal("a _shared change left the image current")
-	}
-	write(t, filepath.Join(root, "sandboxes", "node", "_shared", "own.sh"), "x")
-	if _, err = LoadProfile(root, "node"); err == nil {
-		t.Fatal("a profile's own _shared was accepted")
+	for _, shared := range []string{"_shared", ".shared"} {
+		write(t, filepath.Join(root, shared, "@install", "claude.sh"), "npm install -g claude\n")
+		p, err := LoadProfile(root, "node")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := p.Files[shared+"/@install/claude.sh"]; !ok {
+			t.Fatalf("%s missing from the build context: %v", shared, p.Files)
+		}
+		if p.Revision == before.Revision {
+			t.Fatalf("a %s change left the image current", shared)
+		}
+		before = p
+		// Shared texts go to the agent, not into the image.
+		write(t, filepath.Join(root, shared, "@instructions", "team.md"), "team")
+		if p, err = LoadProfile(root, "node"); err != nil || p.Revision != before.Revision {
+			t.Fatalf("a shared text outdated the image: %v", err)
+		}
+		write(t, filepath.Join(root, "sandboxes", "node", shared, "own.sh"), "x")
+		if _, err = LoadProfile(root, "node"); err == nil {
+			t.Fatalf("a profile's own %s was accepted", shared)
+		}
+		_ = os.RemoveAll(filepath.Join(root, "sandboxes", "node", shared))
 	}
 }
 
@@ -571,7 +584,7 @@ func TestInstructionChangesWaitWithoutRebuildingOrRecreating(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	write(t, filepath.Join(m.Config.Environments, "instructions", "team.md"), "new team rules")
+	write(t, filepath.Join(m.Config.Environments, "_shared", "@instructions", "team.md"), "new team rules")
 	if err = m.AttachInstructions("dev", []string{"team"}); err != nil {
 		t.Fatal(err)
 	}

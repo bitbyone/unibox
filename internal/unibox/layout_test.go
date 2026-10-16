@@ -3,6 +3,7 @@ package unibox
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -231,7 +232,7 @@ func TestManagedFilesAreKeptCurrentOnlyWhereInitLaidTheRepositoryOut(t *testing.
 	if _, _, _, err := SyncManaged(root); err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(root, "_shared", "installations", "agents", "claude.sh")
+	file := filepath.Join(root, ".shared", "@install", "agents", "claude.sh")
 	original, _ := os.ReadFile(file)
 	write(t, file, "echo edited\n")
 	again, err := Open(m.Paths, m.Log)
@@ -245,7 +246,70 @@ func TestManagedFilesAreKeptCurrentOnlyWhereInitLaidTheRepositoryOut(t *testing.
 	if b, _ := os.ReadFile(file); string(b) != string(original) {
 		t.Fatalf("%s", b)
 	}
-	if !strings.Contains(m.Log.(interface{ String() string }).String(), "updated _shared/installations/agents/claude.sh to unibox's own") {
-		t.Fatal("the rewrite was not said")
+	if !strings.Contains(m.Log.(interface{ String() string }).String(), "updated .shared/@install/agents/claude.sh to unibox's own") {
+		t.Fatalf("the rewrite was not said: %s", m.Log.(interface{ String() string }).String())
+	}
+}
+
+func TestInitMovesARepositoryFromTheOlderLayout(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	managed, err := managedFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What an older init wrote: the runner, unibox's scripts and text as
+	// they were, one script edited, one of the user's, a text of theirs.
+	write(t, filepath.Join(root, "_shared", ".install"), "#!/bin/sh\n")
+	write(t, filepath.Join(root, "_shared", ".unibox-managed"), "_shared/.install\n")
+	write(t, filepath.Join(root, "_shared", "installations", "base.sh"), withoutHeader(managed[".shared/@install/base.sh"]))
+	write(t, filepath.Join(root, "_shared", "installations", "agents", "claude.sh"), "#!/bin/sh\necho my claude\n")
+	write(t, filepath.Join(root, "_shared", "installations", "tools", "own.sh"), "#!/bin/sh\n")
+	write(t, filepath.Join(root, "instructions", "unibox.md"), string(managed[".shared/@instructions/unibox.md"]))
+	write(t, filepath.Join(root, "instructions", "team.md"), "team")
+	write(t, filepath.Join(root, "sandboxes", "node", "Dockerfile"), "FROM x\n"+oldRunLine+"\nbase\nEOF\n")
+	if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "run unibox init") {
+		t.Fatalf("%v", err)
+	}
+	report, err := Init(root, "", nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, want := range map[string]bool{
+		"_shared/.install": false, "_shared/.unibox-managed": false, "_shared/installations": false, "instructions": false,
+		"_shared/@install/agents/claude.sh": true, "_shared/@install/tools/own.sh": true, "_shared/@install/base.sh": false,
+		"_shared/@instructions/team.md": true, "_shared/@instructions/unibox.md": false, ".shared/install.sh": true,
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); (err == nil) != want {
+			t.Errorf("%s: %v", rel, err)
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "Dockerfile")); !strings.Contains(string(data), newRunLine) {
+		t.Fatalf("%s", data)
+	}
+	joined := strings.Join(report.Relaid, "\n")
+	if !strings.Contains(joined, "moved _shared/installations/agents/claude.sh to _shared/@install/agents/claude.sh, which differs from unibox's and now wins over it") || !strings.Contains(joined, "sandboxes/node/Dockerfile runs .shared/install.sh") {
+		t.Fatalf("%s", joined)
+	}
+	if _, err := LoadProfile(root, "node"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheRunnerPrefersTheUsersScripts(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if _, _, _, err := SyncManaged(root); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, ".shared", "@install", "x.sh"), "echo from unibox\n")
+	write(t, filepath.Join(root, "_shared", "@install", "x.sh"), "echo mine\n")
+	write(t, filepath.Join(root, ".shared", "@install", "only.sh"), "echo only from unibox\n")
+	out, err := exec.Command("sh", filepath.Join(root, ".shared", "install.sh"), "x", "only.sh").CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "mine") || strings.Contains(string(out), "\nfrom unibox") || !strings.Contains(string(out), "only from unibox") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, err = exec.Command("sh", filepath.Join(root, ".shared", "install.sh"), "absent").CombinedOutput(); err == nil || !strings.Contains(string(out), "no installation script absent") {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }

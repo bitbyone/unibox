@@ -12,8 +12,8 @@ profile format, with an adapter per runtime. Today: Docker Sandboxes
  │ sandboxes/<profile>/ │   │ unibox               │   │ /work/<task>/<repo>      │
  │   sandbox.yaml       │──▶│  profile → adapter   │──▶│   fresh clone, own branch│
  │   Dockerfile         │   │                      │   │                          │
- │ instructions/*.md    │   │ runtime (sbx)        │   │ claude / codex / copilot │
- │ _shared/             │   │  logins, proxy,      │◀──│   commits + pushes       │
+ │ _shared/  .shared/   │   │ runtime (sbx)        │   │ claude / codex / copilot │
+ │   @install @instr.   │   │  logins, proxy,      │◀──│   commits + pushes       │
  └──────────────────────┘   │  network policy      │   └──────────────────────────┘
                             └──────────────────────┘             │
                                       │ real tokens added        ▼
@@ -80,20 +80,28 @@ my-envs/
 │       ├── Dockerfile         the image
 │       ├── instructions.md    extra instructions for the agents (optional)
 │       └── _data/             files the profile refers to (optional)
-├── instructions/              reusable instruction texts, attached by name
-├── _shared/installations/     install scripts Dockerfiles compose from
+├── _shared/                   yours
+│   ├── @install/custom.sh     installation scripts, named in a Dockerfile
+│   └── @instructions/custom.md  instruction texts, named in a profile
+├── .shared/                   unibox's, kept at its own version
+│   ├── install.sh             the runner a Dockerfile calls
+│   ├── @install/              base, agents/claude, tools/nvm, ...
+│   └── @instructions/unibox.md
 └── README.md
 ```
 
-unibox owns some of these files and keeps them at its own version: the
-runner `_shared/.install`, the scripts in `_shared/installations/` and
-`instructions/unibox.md`. `init`, `check`, `build` and a start rewrite them
-when they differ - an edit of one is lost, and the command says which it
-rewrote - and take out one a newer unibox no longer has
-(`_shared/.unibox-managed` lists them). Add your own installation scripts
-beside them under another name, and your own texts under `instructions/`;
-those, and everything a profile holds, are yours and stay as you leave
-them.
+The `@` directories are what a profile names things from: a Dockerfile
+lists installation scripts by name (`agents/claude` runs
+`@install/agents/claude.sh`) and a profile's `instructions` names texts
+(`unibox` is `@instructions/unibox.md`). Yours in `_shared` win over
+unibox's in `.shared` of the same name, so overriding one of its scripts
+is putting yours there. `.shared` is unibox's alone: `init`, `check`,
+`build` and a start rewrite it to this unibox's version when it differs,
+take out anything else in it, and say what they changed - an edit there is
+lost. `init` writes `_shared` once, with an example of each kind; from
+then on it is yours, as is everything a profile holds and anything else
+in the repository - a text in a directory of your own is named by its
+path from `sandbox.yaml` (`../../notes/style.md`).
 
 ## Profile
 
@@ -117,7 +125,7 @@ agents:                              # or a list: [claude, codex]
     auth: oauth                      # provider login kept by the runtime
     config:
       config.toml: _data/codex/config.toml
-instructions: [unibox]               # from instructions/
+instructions: [unibox]               # _shared/@instructions, then .shared/@instructions
 start: start.sh                      # in the VM, at every boot of it
 scripts:                             # run only when asked for, by name
   update-skills: update-skills.sh

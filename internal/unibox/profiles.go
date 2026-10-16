@@ -643,14 +643,17 @@ func LoadProfile(root, name string) (Profile, error) {
 	if err = snapshot(p.Dir, ""); err != nil {
 		return p, err
 	}
-	// _shared is part of every profile's build context, so a Dockerfile can
-	// copy one install script from it; its change outdates every image.
-	if _, err := os.Stat(filepath.Join(p.Dir, "_shared")); err == nil {
-		return p, fmt.Errorf("profile %s has a _shared directory of its own; _shared lives at the repository root", name)
-	}
-	if info, err := os.Stat(filepath.Join(p.Root, "_shared")); err == nil && info.IsDir() {
-		if err = snapshot(filepath.Join(p.Root, "_shared"), "_shared/"); err != nil {
-			return p, err
+	// .shared, unibox's, and _shared, the user's, are part of every
+	// profile's build context, so a Dockerfile runs their installation
+	// scripts; a change of them outdates every image.
+	for _, shared := range []string{".shared", "_shared"} {
+		if _, err := os.Stat(filepath.Join(p.Dir, shared)); err == nil {
+			return p, fmt.Errorf("profile %s has a %s directory of its own; %s lives at the repository root", name, shared, shared)
+		}
+		if info, err := os.Stat(filepath.Join(p.Root, shared)); err == nil && info.IsDir() {
+			if err = snapshot(filepath.Join(p.Root, shared), shared+"/"); err != nil {
+				return p, err
+			}
 		}
 	}
 	for _, path := range []string{p.Dockerfile, p.Start} {
@@ -728,6 +731,10 @@ func (p Profile) BuildFiles() map[string]SnapshotFile {
 	}
 	out := make(map[string]SnapshotFile, len(p.Files))
 	for name, file := range p.Files {
+		// The shared instruction texts go to the agent, not into the image.
+		if strings.HasPrefix(name, ".shared/@instructions/") || strings.HasPrefix(name, "_shared/@instructions/") {
+			continue
+		}
 		if !skip[name] {
 			out[name] = file
 		}
@@ -830,17 +837,30 @@ func (p Profile) BuildArgs(runtime string) ([]string, error) {
 }
 
 // instructionFile resolves one instructions entry of a profile: a bare name
-// is a text of the repository's instructions directory; anything with a path
-// or an extension is a markdown file named relative to sandbox.yaml, still
-// confined to the repository when read.
+// is a shared text, the user's in _shared/@instructions before unibox's in
+// .shared/@instructions; anything with a path or an extension is a markdown
+// file named relative to sandbox.yaml, anywhere in the repository and
+// confined to it when read.
 func (p Profile) instructionFile(entry string) (string, error) {
 	if ValidName(entry) == nil {
-		return filepath.Join(p.Root, "instructions", entry+".md"), nil
+		return sharedText(p.Root, entry)
 	}
 	if filepath.IsAbs(entry) || !strings.HasSuffix(entry, ".md") {
-		return "", fmt.Errorf("instruction %q is neither a name of instructions/ nor a relative .md path", entry)
+		return "", fmt.Errorf("instruction %q is neither a name of _shared/@instructions or .shared/@instructions nor a relative .md path", entry)
 	}
 	return filepath.Join(p.Dir, entry), nil
+}
+
+// sharedText is the file of a shared instruction text: the user's when
+// _shared/@instructions has it, else unibox's.
+func sharedText(root, name string) (string, error) {
+	for _, dir := range []string{"_shared", ".shared"} {
+		file := filepath.Join(root, dir, "@instructions", name+".md")
+		if _, err := os.Lstat(file); err == nil {
+			return file, nil
+		}
+	}
+	return "", fmt.Errorf("no instruction text %s in _shared/@instructions or .shared/@instructions", name)
 }
 
 // InstructionText lays the texts together: the profile's entries, its own
@@ -862,9 +882,13 @@ func (p Profile) InstructionText(attached []string) (string, error) {
 	}
 	for _, name := range attached {
 		if err := ValidName(name); err != nil {
-			return "", fmt.Errorf("attached instructions are names of the instructions directory: %w", err)
+			return "", fmt.Errorf("attached instructions are names of shared texts: %w", err)
 		}
-		paths = append(paths, filepath.Join(p.Root, "instructions", name+".md"))
+		path, err := sharedText(p.Root, name)
+		if err != nil {
+			return "", err
+		}
+		paths = append(paths, path)
 	}
 	parts := []string{}
 	used := map[string]bool{}
@@ -883,24 +907,14 @@ func (p Profile) InstructionText(attached []string) (string, error) {
 	return strings.Join(parts, "\n\n") + "\n", nil
 }
 
-// CheckLayout holds the environments repository to its shape: profiles under
-// sandboxes/, attachable markdown under instructions/, anything of the
-// user's own behind an underscore - so a misplaced file is named instead of
-// quietly ignored.
+// CheckLayout holds the environments repository's opinionated parts to
+// their shape - profiles under sandboxes/, shared texts as markdown under
+// _shared/@instructions and .shared/@instructions - so a misplaced file is
+// named instead of quietly ignored. Anything else in the repository is the
+// user's to arrange; a profile names such a file by a relative path.
 func CheckLayout(root string) error {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		name := e.Name()
-		switch {
-		case strings.HasPrefix(name, "."), strings.HasPrefix(name, "_"):
-		case name == "README.md" && !e.IsDir():
-		case (name == "sandboxes" || name == "instructions") && e.IsDir():
-		default:
-			return fmt.Errorf("unexpected %s in the environments repository; profiles go under sandboxes/, attachable texts under instructions/, anything else under an underscore directory such as _shared", name)
-		}
+	if _, err := os.Stat(filepath.Join(root, "_shared", ".install")); err == nil {
+		return fmt.Errorf("the environments repository is laid out as an older unibox did, with _shared/.install; run unibox init to move it to .shared and _shared/@install")
 	}
 	profiles, err := os.ReadDir(filepath.Join(root, "sandboxes"))
 	if err != nil && !os.IsNotExist(err) {
@@ -917,19 +931,21 @@ func CheckLayout(root string) error {
 			return fmt.Errorf("sandboxes/%s has no sandbox.yaml; every profile directory needs one", e.Name())
 		}
 	}
-	texts, err := os.ReadDir(filepath.Join(root, "instructions"))
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	for _, e := range texts {
-		if strings.HasPrefix(e.Name(), ".") {
-			continue
+	for _, dir := range []string{"_shared/@instructions", ".shared/@instructions"} {
+		texts, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
+		if err != nil && !os.IsNotExist(err) {
+			return err
 		}
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			return fmt.Errorf("instructions/%s is not a markdown file; the instructions directory holds attachable .md texts alone", e.Name())
-		}
-		if e.Name() == "instructions.md" {
-			return fmt.Errorf("instructions/instructions.md collides with the profiles' automatic instructions.md; give the text a name of its own")
+		for _, e := range texts {
+			if strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				return fmt.Errorf("%s/%s is not a markdown file; %s holds attachable .md texts alone", dir, e.Name(), dir)
+			}
+			if e.Name() == "instructions.md" {
+				return fmt.Errorf("%s/instructions.md collides with the profiles' automatic instructions.md; give the text a name of its own", dir)
+			}
 		}
 	}
 	return nil

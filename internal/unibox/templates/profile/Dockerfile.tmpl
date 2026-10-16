@@ -1,5 +1,6 @@
-# The image is composed by _shared/install: list the installation scripts,
-# one per line. The sbx build passes BASE=docker/sandbox-templates:shell
+# The image is composed by .shared/install.sh: list the installation scripts,
+# one per line: each runs from _shared/@install, yours, or .shared/@install,
+# unibox's. The sbx build passes BASE=docker/sandbox-templates:shell
 # (.sbx/build.args); the default keeps this buildable by hand.
 ARG BASE=ubuntu:24.04
 FROM ${BASE}
@@ -7,7 +8,7 @@ FROM ${BASE}
 ARG UNIBOX_RUNTIME
 USER root
 
-RUN --mount=type=bind,source=_shared,target=/unibox /unibox/.install <<EOF
+RUN --mount=type=bind,target=/unibox /unibox/.shared/install.sh <<EOF
 {{range .Installations}}{{.}}
 {{end}}EOF
 

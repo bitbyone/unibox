@@ -1,6 +1,6 @@
 #!/bin/bash
-# Managed by unibox: init, check and build rewrite it to unibox's own. Put
-# your own installation scripts beside it under another name.
+# Managed by unibox: init, check and build rewrite .shared to unibox's own.
+# Your own scripts go in _shared/@install; one of the same name wins there.
 # npm comes from the image or from tools/nvm; the Node version is the user's
 # choice - when none was picked, the current LTS serves. link puts the agent
 # and its node where non-login shells and the build check find them, and
@@ -14,7 +14,7 @@ command -v npm >/dev/null 2>&1 || {
     echo 'npm is missing; list tools/nvm before the agents or put node into the image' >&2
     exit 1
 }
-npm install -g @github/copilot
+npm install -g @openai/codex
 link() {
     src="$(command -v "$1" 2>/dev/null || true)"
     if [ -z "$src" ] && [ -x "$(npm prefix -g)/bin/$1" ]; then
@@ -25,4 +25,4 @@ link() {
     fi
 }
 link node
-link copilot
+link codex

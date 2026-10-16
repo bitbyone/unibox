@@ -46,16 +46,18 @@ func Validate(root string) ([]Problem, error) {
 			problems = append(problems, Problem{Subject: "profile " + name, Message: err.Error()})
 		}
 	}
-	texts, err := os.ReadDir(filepath.Join(abs, "instructions"))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	for _, e := range texts {
-		if strings.HasPrefix(e.Name(), ".") {
-			continue
+	for _, dir := range []string{"_shared/@instructions", ".shared/@instructions"} {
+		texts, err := os.ReadDir(filepath.Join(abs, filepath.FromSlash(dir)))
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
 		}
-		if _, err := readInside(abs, filepath.Join(abs, "instructions", e.Name())); err != nil {
-			problems = append(problems, Problem{Subject: "instructions/" + e.Name(), Message: err.Error()})
+		for _, e := range texts {
+			if strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			if _, err := readInside(abs, filepath.Join(abs, filepath.FromSlash(dir), e.Name())); err != nil {
+				problems = append(problems, Problem{Subject: dir + "/" + e.Name(), Message: err.Error()})
+			}
 		}
 	}
 	return problems, nil

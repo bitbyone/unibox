@@ -145,7 +145,7 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if err := c.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{"_shared/.install", "_shared/installations/base.sh", "_shared/installations/agents/copilot.sh", "instructions/unibox.md", "sandboxes/my2n/sandbox.yaml", "sandboxes/my2n/Dockerfile", "sandboxes/my2n/instructions.md", "sandboxes/my2n/.sbx/build.args"} {
+	for _, rel := range []string{".shared/install.sh", ".shared/@install/base.sh", ".shared/@install/agents/copilot.sh", ".shared/@instructions/unibox.md", "_shared/@install/custom.sh", "_shared/@instructions/custom.md", "sandboxes/my2n/sandbox.yaml", "sandboxes/my2n/Dockerfile", "sandboxes/my2n/instructions.md", "sandboxes/my2n/.sbx/build.args"} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
@@ -160,28 +160,29 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if text, err := p.InstructionText(nil); err != nil || !strings.Contains(text, "Unibox sandbox") {
 		t.Fatalf("%v %q", err, text)
 	}
-	if info, _ := os.Stat(filepath.Join(root, "_shared", ".install")); info.Mode().Perm()&0o100 == 0 {
+	if info, _ := os.Stat(filepath.Join(root, ".shared", "install.sh")); info.Mode().Perm()&0o100 == 0 {
 		t.Fatal("the runner is not executable")
 	}
 	// A second init adds a profile, keeps the user's files as they are and
 	// brings unibox's managed ones back to its own: an edited one rewritten,
 	// one this unibox no longer has taken out, the user's beside them kept.
-	original, _ := os.ReadFile(filepath.Join(root, "_shared", "installations", "base.sh"))
+	original, _ := os.ReadFile(filepath.Join(root, ".shared", "@install", "base.sh"))
 	if !strings.Contains(string(original), "Managed by unibox") {
 		t.Fatalf("%s", original)
 	}
-	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "installations", "base.sh"), []byte("#!/bin/sh\necho mine\n")); err != nil {
+	if err := testenv.WriteExecutable(filepath.Join(root, ".shared", "@install", "base.sh"), []byte("#!/bin/sh\necho mine\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "installations", "tools", "mine.sh"), []byte("#!/bin/sh\n")); err != nil {
+	if err := testenv.WriteExecutable(filepath.Join(root, ".shared", "@install", "tools", "gone.sh"), []byte("#!/bin/sh\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "installations", "tools", "gone.sh"), []byte("#!/bin/sh\n")); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "_shared", "@install", "tools"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	list := filepath.Join(root, "_shared", ".unibox-managed")
-	listed, _ := os.ReadFile(list)
-	if err := os.WriteFile(list, append(listed, "_shared/installations/tools/gone.sh\n"...), 0o644); err != nil {
+	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "@install", "tools", "mine.sh"), []byte("#!/bin/sh\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "@install", "custom.sh"), []byte("#!/bin/sh\necho my custom\n")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "sandboxes", "my2n", "instructions.md"), []byte("mine\n"), 0o644); err != nil {
@@ -193,18 +194,20 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if err := c.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(root, "_shared", "installations", "base.sh")); string(b) != string(original) {
+	if b, _ := os.ReadFile(filepath.Join(root, ".shared", "@install", "base.sh")); string(b) != string(original) {
 		t.Fatal("init kept an edited managed file")
 	}
-	for rel, want := range map[string]bool{"_shared/installations/tools/mine.sh": true, "_shared/installations/tools/gone.sh": false} {
+	for rel, want := range map[string]bool{"_shared/@install/tools/mine.sh": true, ".shared/@install/tools/gone.sh": false} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); (err == nil) != want {
 			t.Fatalf("%s: %v", rel, err)
 		}
 	}
-	if b, _ := os.ReadFile(filepath.Join(root, "sandboxes", "my2n", "instructions.md")); string(b) != "mine\n" {
-		t.Fatal("init rewrote a profile's own file")
+	for rel, want := range map[string]string{"sandboxes/my2n/instructions.md": "mine\n", "_shared/@install/custom.sh": "#!/bin/sh\necho my custom\n"} {
+		if b, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel))); string(b) != want {
+			t.Fatalf("init rewrote the user's %s", rel)
+		}
 	}
-	if !strings.Contains(second.String(), "updated _shared/installations/base.sh to unibox's own") || !strings.Contains(second.String(), "removed _shared/installations/tools/gone.sh") {
+	if !strings.Contains(second.String(), "updated .shared/@install/base.sh to unibox's own") || !strings.Contains(second.String(), "removed .shared/@install/tools/gone.sh") {
 		t.Fatalf("%s", second.String())
 	}
 	personal, err := unibox.LoadProfile(root, "personal")
@@ -226,13 +229,17 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if err := c.Execute(); err != nil {
 		t.Fatalf("%v: %s", err, report.String())
 	}
+	// The user's own files anywhere else are theirs to arrange.
 	if err := os.WriteFile(filepath.Join(root, "stray.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "_shared", "@instructions", "notes.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	report.Reset()
 	c = New(paths, strings.NewReader(""), &report, io.Discard)
 	c.SetArgs([]string{"validate"})
-	if err := c.Execute(); err == nil || !strings.Contains(report.String(), "stray.txt") {
+	if err := c.Execute(); err == nil || !strings.Contains(report.String(), "_shared/@instructions/notes.txt") || strings.Contains(report.String(), "stray.txt") {
 		t.Fatalf("%v: %s", err, report.String())
 	}
 }
