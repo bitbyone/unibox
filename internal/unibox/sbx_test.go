@@ -516,3 +516,30 @@ func TestSbxGetsResourcesAsItTakesThem(t *testing.T) {
 		t.Error("a share of memory the host's size of is unknown was taken")
 	}
 }
+
+func TestSbxForwardingReadsPastWhatSbxSaysFirst(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for answer, want := range map[string]string{
+		"A new version of sbx is available\n{\"key\": \"ssh.agentForwardingEnabled\", \"value\": false}\n": "",
+		"{\"value\": true}\n":  "forwards",
+		"daemon is starting\n": "which answered \"daemon is starting\"",
+	} {
+		mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nprintf '%s' "+Quote(answer)+"\n"))
+		forwarding, err := sbxForwarding(context.Background())
+		switch want {
+		case "":
+			if err != nil || forwarding {
+				t.Errorf("%q: %v %v", answer, forwarding, err)
+			}
+		case "forwards":
+			if err != nil || !forwarding {
+				t.Errorf("%q: %v %v", answer, forwarding, err)
+			}
+		default:
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%q: %v", answer, err)
+			}
+		}
+	}
+}

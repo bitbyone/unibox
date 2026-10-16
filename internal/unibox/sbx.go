@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tobola/unibox/internal/unibox/api"
 )
@@ -23,21 +25,45 @@ type SBX struct {
 
 func (r *SBX) Name() string               { return "sbx" }
 func (r *SBX) Capabilities() Capabilities { return Capabilities{"vm", true, true, true} }
+
+// sbxForwarding reads whether sbx forwards the host's SSH agent. It takes
+// the JSON from its first brace, past any line sbx says before it, and asks
+// once more if the answer does not read - a daemon starting can answer
+// oddly once - naming what sbx answered if it still does not.
+func sbxForwarding(ctx context.Context) (bool, error) {
+	var answer []byte
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Second)
+		}
+		b, err := commandOutput(hostCommand(ctx, "sbx", "settings", "get", "ssh.agentForwardingEnabled", "--json"))
+		if err != nil {
+			return false, err
+		}
+		answer = b
+		var setting struct {
+			Value *bool `json:"value"`
+		}
+		if i := bytes.IndexByte(b, '{'); i >= 0 && json.Unmarshal(b[i:], &setting) == nil && setting.Value != nil {
+			return *setting.Value, nil
+		}
+	}
+	said := strings.TrimSpace(string(answer))
+	if len(said) > 300 {
+		said = said[:300] + "..."
+	}
+	return false, fmt.Errorf("cannot determine sbx SSH forwarding from sbx settings get ssh.agentForwardingEnabled --json, which answered %q; update sbx or retry", said)
+}
+
 func (r *SBX) Available(ctx context.Context) error {
 	if _, err := exec.LookPath("sbx"); err != nil {
 		return fmt.Errorf("sbx is not installed; install Docker Sandboxes and run sbx login")
 	}
-	b, err := commandOutput(hostCommand(ctx, "sbx", "settings", "get", "ssh.agentForwardingEnabled", "--json"))
+	forwarding, err := sbxForwarding(ctx)
 	if err != nil {
 		return err
 	}
-	var setting struct {
-		Value *bool `json:"value"`
-	}
-	if err = json.Unmarshal(b, &setting); err != nil || setting.Value == nil {
-		return fmt.Errorf("cannot determine sbx SSH forwarding; update sbx and retry")
-	}
-	if *setting.Value {
+	if forwarding {
 		return Fail(4, "host_access", "sbx forwards the host SSH agent; run sbx settings set ssh.agentForwardingEnabled false, then sbx daemon restart")
 	}
 	_, err = r.List(ctx)
