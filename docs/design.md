@@ -1112,6 +1112,18 @@ its co-author line, sbx's name for it - and never reads unagit's
 
 ### Building
 
+- **Old images go** (the user's call). The tag carries the revision, so
+  each build of a profile is an image of its own, gigabytes each, and
+  sbx makes one more per kit of a sandbox (`sbx-kit-src:<sandbox's runtime
+  name>-<digest>`). Checked on a throwaway sandbox: `sbx template rm
+  --force` removes a template a sandbox was made from, and the sandbox
+  starts and runs as before - it needs its image only to be made. So a
+  build removes the profile's other builds, from sbx's store and Docker
+  (`ImagePruner`); making a sandbox removes its older kit images, the
+  newest kept for a recreation to reuse; and `unibox prune` removes the
+  images of profiles and sandboxes that are gone. A profile that does not
+  load keeps its builds, as which is current cannot be told.
+
 - `<tree>` is the git tree hash of the profile's directory at HEAD, so
   whether the image is current is a comparison with `sbx template ls
   --json`, per runtime: **built**, **outdated**, **not built**. A profile
@@ -1182,6 +1194,7 @@ contract's own version, apart from it.
 | `unibox script <sandbox> [name...]` | the profile's scripts, or run them in the sandbox now |
 | `unibox port <sandbox> [name:on\|off...]` | a sandbox's ports and their URLs; switched while it runs, the profile untouched |
 | `unibox shell <sandbox>`, `stop`, `recreate`, `rm`, `rm-task` | as named; removal checks for sessions and unpushed work |
+| `unibox prune` | removes the images unibox no longer needs |
 | `unibox config get\|set\|unset <key> [<value>]` | its configuration |
 | `unibox runtimes` | the adapters and what each isolates |
 | `unibox herdr install-plugin`, `uninstall-plugin`, `status [--json]` | [herdr](#herdr) |

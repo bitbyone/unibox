@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/tobola/unibox/internal/unibox/api"
 )
@@ -76,6 +77,21 @@ type Authenticator interface {
 // own - placeholders its proxy swaps for a login, never a value.
 type SessionEnver interface {
 	SessionEnv(p Profile, agent string) []string
+}
+
+// ImagePruner is a runtime whose images unibox can list and remove, so old
+// ones do not pile up: a sandbox does not need the image it was made from
+// once it exists.
+type ImagePruner interface {
+	UniboxImages(ctx context.Context) ([]RuntimeImage, error)
+	RemoveImage(ctx context.Context, ref string) error
+}
+
+// RuntimeImage is an image unibox made in a runtime: a build of a profile,
+// or one the runtime made for a sandbox (sbx's kit image).
+type RuntimeImage struct {
+	Ref, Profile, Sandbox string
+	Created               time.Time
 }
 
 // NetworkUpdater is a runtime that changes a running sandbox's network

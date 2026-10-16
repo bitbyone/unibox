@@ -184,7 +184,11 @@ func (m *Manager) Build(ctx context.Context, name, rt string, force bool) error 
 	if err != nil {
 		return err
 	}
-	return m.Paths.State(func(s *State) error { s.Builds[buildKey(p, r)] = BuildRecord{p.Revision, id, p.Files}; return nil })
+	if err = m.Paths.State(func(s *State) error { s.Builds[buildKey(p, r)] = BuildRecord{p.Revision, id, p.Files}; return nil }); err != nil {
+		return err
+	}
+	m.pruneBuilds(ctx, r, p)
+	return nil
 }
 
 func (m *Manager) Profiles(ctx context.Context) ([]api.Profile, error) {
@@ -537,6 +541,7 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 			return fmt.Errorf("runtime did not list the new sandbox; inspect it with its own CLI")
 		}
 		b.RuntimeID = box.ID
+		m.pruneKits(ctx, r, b.RuntimeName)
 		cmd := r.Exec(ctx, b.RuntimeName, Command{User: "root", Args: []string{"sh", "-c", "set -eu; mkdir -p /work /var/lib/unibox/runs; chown -R agent:agent /work /var/lib/unibox"}})
 		if err = runLogged(cmd, m.Log); err != nil {
 			return err

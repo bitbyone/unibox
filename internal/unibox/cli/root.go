@@ -48,7 +48,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 		o.manager = m
 		return m.RefreshPlugin()
 	}
-	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand())
+	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand())
 	for _, name := range []string{"check", "prepare", "run"} {
 		root.AddCommand(o.taskCommand(name))
 	}
@@ -488,5 +488,28 @@ func (o *options) removeCommand(task bool) *cobra.Command {
 			return err
 		}
 		return o.success("removed")
+	}}
+}
+
+// pruneCommand removes images unibox no longer needs; each can be built or
+// made again, so it asks nothing.
+func (o *options) pruneCommand() *cobra.Command {
+	return &cobra.Command{Use: "prune", Args: cobra.NoArgs, Short: "Remove the images unibox no longer needs: older builds, and those of profiles and sandboxes that are gone", RunE: func(cmd *cobra.Command, args []string) error {
+		removed, err := o.manager.Prune(cmd.Context())
+		if err != nil {
+			return err
+		}
+		if o.json {
+			if removed == nil {
+				removed = []string{}
+			}
+			return o.write(map[string]any{"api_version": api.Version, "removed": removed})
+		}
+		if len(removed) == 0 {
+			fmt.Fprintln(o.output, "nothing to remove")
+			return nil
+		}
+		fmt.Fprintf(o.output, "removed %d images\n", len(removed))
+		return nil
 	}}
 }

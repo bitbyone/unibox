@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -445,4 +446,67 @@ func writeInstallContext(dir string, files map[string]SnapshotFile) error {
 		}
 		return os.Chmod(path, 0o755)
 	})
+}
+
+// sbxKitTag is the tag sbx gives the image it makes of a sandbox's kit:
+// the kit directory's name, which unibox names after the sandbox, and a
+// digest of the kit.
+var sbxKitTag = regexp.MustCompile(`^(unibox-.+)-[0-9a-f]{12}$`)
+
+// UniboxImages lists unibox's images in sbx's store - each profile's
+// builds and each sandbox's kit images - and the builds left in Docker,
+// where a build makes them first.
+func (r *SBX) UniboxImages(ctx context.Context) ([]RuntimeImage, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "template", "ls", "--json"))
+	if err != nil {
+		return nil, err
+	}
+	var list struct {
+		Images []struct {
+			Repository string    `json:"repository"`
+			Tag        string    `json:"tag"`
+			Created    time.Time `json:"created_at"`
+		} `json:"images"`
+	}
+	if err = json.Unmarshal(b, &list); err != nil {
+		return nil, fmt.Errorf("sbx template ls answered in a form unibox does not know; upgrade unibox: %w", err)
+	}
+	seen := map[string]bool{}
+	out := []RuntimeImage{}
+	for _, im := range list.Images {
+		repo := strings.TrimPrefix(strings.TrimPrefix(im.Repository, "docker.io/"), "library/")
+		ref := repo + ":" + im.Tag
+		switch {
+		case strings.HasPrefix(repo, "unibox/"):
+			out = append(out, RuntimeImage{Ref: ref, Profile: strings.TrimPrefix(repo, "unibox/"), Created: im.Created})
+		case repo == "sbx-kit-src":
+			if m := sbxKitTag.FindStringSubmatch(im.Tag); m != nil {
+				out = append(out, RuntimeImage{Ref: ref, Sandbox: m[1], Created: im.Created})
+			}
+		default:
+			continue
+		}
+		seen[ref] = true
+	}
+	// Docker keeps a build's image too; one already gone from sbx's store
+	// is listed for removal all the same.
+	if d, err := commandOutput(hostCommand(ctx, "docker", "image", "ls", "--filter", "reference=unibox/*", "--format", "{{.Repository}}:{{.Tag}}")); err == nil {
+		for _, ref := range strings.Fields(string(d)) {
+			if repo, _, ok := strings.Cut(ref, ":"); ok && !seen[ref] {
+				out = append(out, RuntimeImage{Ref: ref, Profile: strings.TrimPrefix(repo, "unibox/")})
+				seen[ref] = true
+			}
+		}
+	}
+	return out, nil
+}
+
+// RemoveImage removes an image from sbx's store and from Docker. A sandbox
+// made from it is not affected: checked, it keeps working without it.
+func (r *SBX) RemoveImage(ctx context.Context, ref string) error {
+	errSbx := runQuiet(hostCommand(ctx, "sbx", "template", "rm", "--force", ref))
+	if strings.HasPrefix(ref, "unibox/") && runQuiet(hostCommand(ctx, "docker", "image", "rm", ref)) == nil {
+		return nil
+	}
+	return errSbx
 }

@@ -272,6 +272,13 @@ Adding a runtime means implementing one Go interface (create, exec, stop,
 build, and optionally store logins). Profiles do not change.
 `unibox runtimes` shows what is installed.
 
+An image is tagged with its profile's revision (`unibox/dev:1508ba9b...`),
+so unibox tells a current one from an outdated one. A build removes the
+profile's older images, and making a sandbox the older images sbx made of
+its kit; a sandbox does not need the image it was made from once it
+exists. `unibox prune` removes the rest unibox no longer needs: the images
+of profiles and sandboxes that are gone.
+
 sbx limits that show through: only one agent per sandbox can use `oauth`,
 and changes to network rules or logins apply when a sandbox is recreated.
 
