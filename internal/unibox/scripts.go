@@ -105,9 +105,6 @@ fi
 		b.WriteString(writeGuest(path.Join(hooks, "commit-msg"), []byte(coAuthorHook()), "700"))
 		b.WriteString(writeGuest(path.Join(hooks, "credit"), []byte(credit), "600"))
 		fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(hooks))
-		if p.Bootstrap != "" {
-			fmt.Fprintf(&b, "if [ -f %s ]; then (cd \"$dir\" && /bin/sh %s); fi\n", Quote(path.Join(dir, p.Bootstrap)), Quote(p.Bootstrap))
-		}
 	}
 	return b.String()
 }

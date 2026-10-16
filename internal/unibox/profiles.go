@@ -286,7 +286,7 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 // ProfileFormat is the form of sandbox.yaml this unibox reads. A profile
 // says its own in version; one of an older form is not read until unibox
 // init migrates it (migrations.go).
-const ProfileFormat = 3
+const ProfileFormat = 4
 
 type Profile struct {
 	Version    int    `yaml:"version" json:"-"`
@@ -297,9 +297,13 @@ type Profile struct {
 	Agents     []string `yaml:"-" json:"agents"`
 	// AgentList is how agents reads in YAML; LoadProfile spreads it into
 	// Agents, Auth, Git.CoAuthors and AgentConfig.
-	AgentList    AgentList               `yaml:"agents" json:"-"`
-	Start        string                  `yaml:"start" json:"start"`
-	Bootstrap    string                  `yaml:"bootstrap" json:"bootstrap"`
+	AgentList AgentList `yaml:"agents" json:"-"`
+	Start     string    `yaml:"start" json:"start"`
+	// Bootstrap is always empty: format 3 ran a script the worked-on
+	// repository had to carry, which none did, and format 4 has none. It
+	// stays in JSON so the settings recorded of a sandbox before then
+	// compare equal, and do not recreate it.
+	Bootstrap    string                  `yaml:"-" json:"bootstrap"`
 	Instructions []string                `yaml:"instructions" json:"instructions"`
 	AgentConfig  map[string]string       `yaml:"-" json:"agent_config,omitempty"`
 	Git          GitOptions              `yaml:"git" json:"git"`
@@ -432,7 +436,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 		seen[id] = true
 	}
-	for _, path := range []string{p.Dockerfile, p.Start, p.Bootstrap} {
+	for _, path := range []string{p.Dockerfile, p.Start} {
 		if path != "" && !safeRelative(path) {
 			return p, fmt.Errorf("profile %s: script and dockerfile paths must stay inside their directory", name)
 		}

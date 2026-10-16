@@ -89,7 +89,7 @@ func TestPortsArePublishedByTheProfileAndSwitchedWhileASandboxRuns(t *testing.T)
 	m.Runtimes = map[string]Runtime{"fake": live}
 	ctx := context.Background()
 	file := filepath.Join(m.Config.Environments, "sandboxes", "node", "sandbox.yaml")
-	profile := "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n"
+	profile := "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n"
 	write(t, file, profile)
 	if err := m.Build(ctx, "node", "fake", false); err != nil {
 		t.Fatal(err)
@@ -152,7 +152,7 @@ func TestPortsArePublishedByTheProfileAndSwitchedWhileASandboxRuns(t *testing.T)
 	live.setState("unibox-dev", "running")
 
 	// A change of the profile's ports is applied live to a running sandbox.
-	write(t, file, "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3100:3000'\n")
+	write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3100:3000'\n")
 	if err := m.ApplyPorts(ctx, "node"); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestAPortIsASpecOrASpecWithItsDefault(t *testing.T) {
 	}
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	write(t, file, "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n    api: {port: 8080}\n")
+	write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n    api: {port: 8080}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestAPortIsASpecOrASpecWithItsDefault(t *testing.T) {
 		"ports: {fe: {port: '3000', colour: red}}":    "not colour",
 		"ports: {fe: {port: '3000', default: maybe}}": "on or off",
 	} {
-		write(t, file, "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork: {"+body+"}\n")
+		write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork: {"+body+"}\n")
 		if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", body, err)
 		}
@@ -217,7 +217,7 @@ func TestFormat2NetworkRulesMoveUnderNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Migrated) != 1 || report.Migrated[0] != "sandboxes/node/sandbox.yaml from format 2 to 3" {
+	if len(report.Migrated) != 1 || report.Migrated[0] != "sandboxes/node/sandbox.yaml from format 2 to 4" {
 		t.Fatalf("%q", report.Migrated)
 	}
 	p, err := LoadProfile(root, "node")
@@ -231,5 +231,26 @@ func TestFormat2NetworkRulesMoveUnderNetwork(t *testing.T) {
 	s := string(data)
 	if !strings.Contains(s, "network:\n  allow: [jitpack.io] # Kotlin\n  # Mine.\n  deny: [gist.github.com]\n") || strings.Contains(s, "Hosts beyond the runtime's policy") {
 		t.Fatalf("%s", s)
+	}
+}
+
+func TestFormat3BootstrapIsDroppedAndSaidSo(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	write(t, file, "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nbootstrap: .agent/bootstrap.sh\nagents: [claude]\n")
+	report, err := Init(root, "node", nil, "2", "1g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Migrated) != 2 || !strings.HasPrefix(report.Migrated[1], "bootstrap .agent/bootstrap.sh left out") {
+		t.Fatalf("%q", report.Migrated)
+	}
+	if data, _ := os.ReadFile(file); strings.Contains(string(data), "bootstrap") {
+		t.Fatalf("%s", data)
+	}
+	write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nbootstrap: x.sh\nagents: [claude]\n")
+	if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "bootstrap") {
+		t.Fatalf("format 4 took bootstrap: %v", err)
 	}
 }

@@ -91,7 +91,7 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 3\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 4\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, log, err := run(t, paths, "glpat-tokenvalue\n", "service", "add", "node", "gitlab-2n", "--host", "gitlab.2n.cz", "--author", "Jan Tobola <jan@2n.example>")
@@ -143,7 +143,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 4\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "agent", "login", "node", "claude")
@@ -170,7 +170,7 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [claude]\nnetwork:\n  allow: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 4\nimage: example/image\nagents: [claude]\nnetwork:\n  allow: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, log, err := run(t, paths, "", "network", "allow", "node", "maven.google.com"); err != nil {
@@ -285,7 +285,7 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 4\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// gh not signed in: --gh says what to do.
@@ -322,7 +322,7 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 3\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 4\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out, _, err := run(t, paths, "", "agent", "co-author", "node")

@@ -33,7 +33,7 @@ func write(t *testing.T, path, text string) {
 func profileFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [claude, codex]\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude, codex]\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
 	write(t, filepath.Join(root, "sandboxes", "node", "Dockerfile"), "FROM example/shell\n")
 	write(t, filepath.Join(root, "sandboxes", "node", "start.sh"), "echo started >> \"$HOME/start-count\"\n")
 	return root
@@ -42,45 +42,45 @@ func profileFixture(t *testing.T) string {
 func TestProfilesRejectUnknownFieldsAndEscapes(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, body string }{
-		{"typo", "version: 3\ndockerfile: Dockerfile\nagents: [claude]\nmemmory: 1g\n"},
-		{"both", "version: 3\ndockerfile: Dockerfile\nimage: example/image\nagents: [claude]\n"},
-		{"credential", "version: 3\nimage: example/image\nagents: [claude]\nenv: [GITHUB_TOKEN]\n"},
-		{"script", "version: 3\nimage: example/image\nagents: [claude]\nstart: ../../host.sh\n"},
-		{"documents", "version: 3\nimage: example/image\nagents: [claude]\n---\nimage: another\n"},
-		{"agent-config-moved", "version: 3\nimage: example/image\nagents: [claude]\nagent_config: {claude: c.json}\n"},
-		{"agent-unknown-field", "version: 3\nimage: example/image\nagents: {claude: {colour: red}}\n"},
-		{"seed-unknown-file", "version: 3\nimage: example/image\nagents: {codex: {config: {codex.json: start.sh}}}\n"},
-		{"seed-missing-file", "version: 3\nimage: example/image\nagents: {claude: {config: {.claude.json: absent.json}}}\n"},
-		{"seed-not-an-object", "version: 3\nimage: example/image\nagents: {claude: {config: {.claude.json: start.sh}}}\n"},
-		{"seed-not-toml", "version: 3\nimage: example/image\nagents: {codex: {config: {config.toml: start.sh}}}\n"},
-		{"allow-list", "version: 3\nimage: example/image\nagents: [claude]\nnetwork: {allow: [\"a.example,b.example\"]}\n"},
-		{"allow-everything-bare", "version: 3\nimage: example/image\nagents: [claude]\nnetwork: {allow: [\"*\"]}\n"},
-		{"deny-space", "version: 3\nimage: example/image\nagents: [claude]\nnetwork: {deny: [\"a example\"]}\n"},
-		{"allowed-and-denied", "version: 3\nimage: example/image\nagents: [claude]\nnetwork: {allow: [a.example], deny: [a.example]}\n"},
-		{"service-host-denied", "version: 3\nimage: example/image\nagents: [claude]\nnetwork: {deny: [gitlab.com]}\nservices: {gitlab: {git: true, host: gitlab.com, user: oauth2, command: c}}\n"},
-		{"auth-moved", "version: 3\nimage: example/image\nagents: [claude]\nauth: {claude: oauth}\n"},
-		{"co-authors-moved", "version: 3\nimage: example/image\nagents: [claude]\ngit: {co_authors: {claude: C <c@example.com>}}\n"},
-		{"auth-unknown", "version: 3\nimage: example/image\nagents: {claude: {auth: password}}\n"},
-		{"auth-empty-command", "version: 3\nimage: example/image\nagents: {claude: {auth: {command: ''}}}\n"},
-		{"auth-other-key", "version: 3\nimage: example/image\nagents: {claude: {auth: {script: x}}}\n"},
-		{"service-no-host", "version: 3\nimage: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, command: gh auth token}}\n"},
-		{"service-no-command", "version: 3\nimage: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, host: github.com}}\n"},
-		{"service-both-git-env", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, env: TOK, host: h.example, command: c, scheme: raw}}\n"},
-		{"service-neither-git-env", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {host: h.example, command: c, scheme: raw}}\n"},
-		{"service-basic-no-user", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c}}\n"},
-		{"service-env-basic", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example, command: c, scheme: basic, user: u}}\n"},
-		{"service-bad-scheme", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: digest, user: u}}\n"},
-		{"service-user-without-basic", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: bearer, user: u}}\n"},
-		{"service-bad-env-name", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {env: lower, host: h.example, command: c, scheme: bearer}}\n"},
-		{"service-host-star", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*', command: c, user: u}}\n"},
-		{"service-bad-refresh", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: soon}}\n"},
-		{"service-author-on-env", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example, command: c, scheme: bearer, author: 'A <a@example.com>'}}\n"},
-		{"service-bad-author", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, author: nobody}}\n"},
-		{"service-path-on-env", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example/org, command: c, scheme: bearer}}\n"},
-		{"service-path-escapes", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example/org/../other, command: c, user: u}}\n"},
-		{"service-git-wildcard", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*.example.com', command: c, user: u}}\n"},
-		{"service-git-same-url", "version: 3\nimage: example/image\nagents: [claude]\nservices: {a: {git: true, host: h.example/org, command: c, user: u}, b: {git: true, host: h.example/org/, command: c, user: u}}\n"},
-		{"service-refresh-too-short", "version: 3\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: 5s}}\n"},
+		{"typo", "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nmemmory: 1g\n"},
+		{"both", "version: 4\ndockerfile: Dockerfile\nimage: example/image\nagents: [claude]\n"},
+		{"credential", "version: 4\nimage: example/image\nagents: [claude]\nenv: [GITHUB_TOKEN]\n"},
+		{"script", "version: 4\nimage: example/image\nagents: [claude]\nstart: ../../host.sh\n"},
+		{"documents", "version: 4\nimage: example/image\nagents: [claude]\n---\nimage: another\n"},
+		{"agent-config-moved", "version: 4\nimage: example/image\nagents: [claude]\nagent_config: {claude: c.json}\n"},
+		{"agent-unknown-field", "version: 4\nimage: example/image\nagents: {claude: {colour: red}}\n"},
+		{"seed-unknown-file", "version: 4\nimage: example/image\nagents: {codex: {config: {codex.json: start.sh}}}\n"},
+		{"seed-missing-file", "version: 4\nimage: example/image\nagents: {claude: {config: {.claude.json: absent.json}}}\n"},
+		{"seed-not-an-object", "version: 4\nimage: example/image\nagents: {claude: {config: {.claude.json: start.sh}}}\n"},
+		{"seed-not-toml", "version: 4\nimage: example/image\nagents: {codex: {config: {config.toml: start.sh}}}\n"},
+		{"allow-list", "version: 4\nimage: example/image\nagents: [claude]\nnetwork: {allow: [\"a.example,b.example\"]}\n"},
+		{"allow-everything-bare", "version: 4\nimage: example/image\nagents: [claude]\nnetwork: {allow: [\"*\"]}\n"},
+		{"deny-space", "version: 4\nimage: example/image\nagents: [claude]\nnetwork: {deny: [\"a example\"]}\n"},
+		{"allowed-and-denied", "version: 4\nimage: example/image\nagents: [claude]\nnetwork: {allow: [a.example], deny: [a.example]}\n"},
+		{"service-host-denied", "version: 4\nimage: example/image\nagents: [claude]\nnetwork: {deny: [gitlab.com]}\nservices: {gitlab: {git: true, host: gitlab.com, user: oauth2, command: c}}\n"},
+		{"auth-moved", "version: 4\nimage: example/image\nagents: [claude]\nauth: {claude: oauth}\n"},
+		{"co-authors-moved", "version: 4\nimage: example/image\nagents: [claude]\ngit: {co_authors: {claude: C <c@example.com>}}\n"},
+		{"auth-unknown", "version: 4\nimage: example/image\nagents: {claude: {auth: password}}\n"},
+		{"auth-empty-command", "version: 4\nimage: example/image\nagents: {claude: {auth: {command: ''}}}\n"},
+		{"auth-other-key", "version: 4\nimage: example/image\nagents: {claude: {auth: {script: x}}}\n"},
+		{"service-no-host", "version: 4\nimage: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, command: gh auth token}}\n"},
+		{"service-no-command", "version: 4\nimage: example/image\nagents: [claude]\nservices: {github: {git: true, user: u, host: github.com}}\n"},
+		{"service-both-git-env", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, env: TOK, host: h.example, command: c, scheme: raw}}\n"},
+		{"service-neither-git-env", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {host: h.example, command: c, scheme: raw}}\n"},
+		{"service-basic-no-user", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c}}\n"},
+		{"service-env-basic", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example, command: c, scheme: basic, user: u}}\n"},
+		{"service-bad-scheme", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: digest, user: u}}\n"},
+		{"service-user-without-basic", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, scheme: bearer, user: u}}\n"},
+		{"service-bad-env-name", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {env: lower, host: h.example, command: c, scheme: bearer}}\n"},
+		{"service-host-star", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*', command: c, user: u}}\n"},
+		{"service-bad-refresh", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: soon}}\n"},
+		{"service-author-on-env", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example, command: c, scheme: bearer, author: 'A <a@example.com>'}}\n"},
+		{"service-bad-author", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, author: nobody}}\n"},
+		{"service-path-on-env", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {env: TOK, host: h.example/org, command: c, scheme: bearer}}\n"},
+		{"service-path-escapes", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example/org/../other, command: c, user: u}}\n"},
+		{"service-git-wildcard", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: '*.example.com', command: c, user: u}}\n"},
+		{"service-git-same-url", "version: 4\nimage: example/image\nagents: [claude]\nservices: {a: {git: true, host: h.example/org, command: c, user: u}, b: {git: true, host: h.example/org/, command: c, user: u}}\n"},
+		{"service-refresh-too-short", "version: 4\nimage: example/image\nagents: [claude]\nservices: {x: {git: true, host: h.example, command: c, user: u, refresh: 5s}}\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -113,7 +113,7 @@ func TestContentRevisionsAndApprovalHaveDifferentInputs(t *testing.T) {
 	if third.Revision == changed.Revision {
 		t.Fatal("two dirty versions shared a revision")
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [claude, codex]\nresources: {cpus: 8, memory: 12g}\nstart: start.sh\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude, codex]\nresources: {cpus: 8, memory: 12g}\nstart: start.sh\n")
 	resource, _ := LoadProfile(root, "node")
 	if resource.Revision != third.Revision {
 		t.Fatal("resource-only change rebuilt image")
@@ -121,7 +121,7 @@ func TestContentRevisionsAndApprovalHaveDifferentInputs(t *testing.T) {
 	if resource.AccessHash() != third.AccessHash() {
 		t.Fatal("resource-only change changed approval")
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [claude, codex]\nenv: [BUILD_MODE]\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude, codex]\nenv: [BUILD_MODE]\n")
 	access, _ := LoadProfile(root, "node")
 	if access.AccessHash() == resource.AccessHash() {
 		t.Fatal("new host environment access kept approval")
@@ -161,7 +161,7 @@ func TestProfileInstructionsAreNamesAndAttachOnce(t *testing.T) {
 	write(t, filepath.Join(root, "instructions", "backend.md"), "backend instructions")
 	write(t, filepath.Join(root, "_shared", "notes.md"), "shared notes")
 	write(t, filepath.Join(root, "sandboxes", "node", "instructions.md"), "node's own instructions")
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [backend, team, ../../_shared/notes.md]\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [backend, team, ../../_shared/notes.md]\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -182,11 +182,11 @@ func TestProfileInstructionsAreNamesAndAttachOnce(t *testing.T) {
 	if _, err = p.InstructionText([]string{"../../_shared/notes.md"}); err == nil {
 		t.Fatal("an attached instruction took a path")
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [absent]\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [absent]\n")
 	if _, err = LoadProfile(root, "node"); err == nil {
 		t.Fatal("missing instruction name accepted")
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [../../_shared/absent.md]\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\ninstructions: [../../_shared/absent.md]\n")
 	if _, err = LoadProfile(root, "node"); err == nil {
 		t.Fatal("missing instruction path accepted")
 	}
@@ -196,7 +196,7 @@ func TestOnlyImageInputsTurnTheRevision(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "claude.json"), `{"theme": "dark"}`)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: {claude: {config: {.claude.json: _data/claude.json}}}\nstart: start.sh\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: {claude: {config: {.claude.json: _data/claude.json}}}\nstart: start.sh\n")
 	before, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -601,7 +601,7 @@ func TestAChangedProfileIsToldNotAskedAbout(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)
 	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nenv: [BUILD_MODE]\nnetwork: {allow: [jitpack.io]}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nenv: [BUILD_MODE]\nnetwork: {allow: [jitpack.io]}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -638,7 +638,7 @@ func TestASingleAgentProfileCreatesItsKindOfSandbox(t *testing.T) {
 	t.Parallel()
 	m, f := managerFixture(t)
 	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "solo", "sandbox.yaml"), "version: 3\ndockerfile: Dockerfile\nagents: [copilot]\n")
+	write(t, filepath.Join(root, "sandboxes", "solo", "sandbox.yaml"), "version: 4\ndockerfile: Dockerfile\nagents: [copilot]\n")
 	write(t, filepath.Join(root, "sandboxes", "solo", "Dockerfile"), "FROM example/shell\n")
 	ctx := context.Background()
 	if err := m.Build(ctx, "solo", "fake", false); err != nil {

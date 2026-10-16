@@ -47,7 +47,7 @@ usable without unagit; **unagit is a UI over it** and one of its users.
 | the environments repository: profiles, their format and its migration, build, the agents' check | which worktree, which repositories, which branch |
 | the runtimes: sbx now, Podman later | pushing the branch, with the vault's token |
 | sandboxes and tasks: create, start, stop, remove | clone URLs from the forge's API |
-| a task's preparation: clones, author, co-author hook, instructions, seeds, `start`, bootstrap | the Sandboxes tab, the pickers, Activity |
+| a task's preparation: clones, author, co-author hook, instructions, seeds, `start` | the Sandboxes tab, the pickers, Activity |
 | the tokens a profile names, in the platform's store (`unibox secret`), reaching a sandbox as placeholders | its vault; later a source of short-lived tokens for a service's `command:` |
 | running the agent, stopping an idle sandbox | the questions: build, sign in, migrate, commit first |
 | its herdr plugin | the commit dialog's warning, the pull |
@@ -300,8 +300,7 @@ there):
    already.
 3. Sets the author and the co-author hook ([commits](#commits)), writes
    the agent's [instructions](#instructions-for-the-agent) into the VM's
-   home, and runs the profile's bootstrap script from each repository that
-   has one.
+   home.
 
 `unibox run` then runs the agent: `sbx exec -it -w /work/<task> <vm>
 <agent command>` as its child - not `exec`'d, so that when the agent ends
@@ -643,7 +642,7 @@ runtime**. It describes the environment; where it runs is chosen at the
 start.
 
 ```yaml
-version: 3                    # the format; see below
+version: 4                    # the format; see below
 dockerfile: Dockerfile        # relative to the profile; or image: <ref>
 resources: {cpus: 8, memory: 50%} # fixed, or a share of the host's
 env: [SPRING_PROFILES_ACTIVE] # names; values from the environment
@@ -668,7 +667,6 @@ agents:                       # what the image has, in order; a list of
     config:
       config.toml: _data/codex/config.toml # TOML as well as JSON
 start: start.sh               # in the VM, once per boot of the VM
-bootstrap: .agent/bootstrap.sh # per worked-on repository, if present, in the VM
 instructions:                 # names of instructions/*.md, or .md paths
   - unibox                    # relative to sandbox.yaml; the profile's own
   - review-style              # instructions.md attaches itself
@@ -732,7 +730,8 @@ git:
   Copilot heads its config.json with `//` lines; the merge keeps them.
 - **The image is the environment.** Everything static - JDK, Node, the
   agents' CLIs, certificates - goes into the Dockerfile. What depends on
-  the checkout belongs to the worked-on repository's bootstrap.
+  the checkout - a project's dependencies, generated code - is the
+  agent's to do, told by its instructions.
 - `network.allow` and `network.deny` are one pattern each - a host,
   `*.domain`, an IP or a CIDR, with an optional port. sbx refuses what its
   policy does not list (403 from the proxy) and already allows the usual
@@ -807,7 +806,7 @@ git:
   and the network rules do not map onto it) and sbx's `sbxenv.yaml`
   (sbx's alone, and experimental).
 
-### Three scripts
+### Two scripts
 
 Each at its own moment, all running inside the VM:
 
@@ -815,7 +814,6 @@ Each at its own moment, all running inside the VM:
 | --- | --- | --- | --- |
 | `Dockerfile` | the profile | when the image is built | everything static: toolchains, tools, certificates |
 | `start` | the profile | once per boot of the VM | services and daemons (a shared `docker compose`), configuration from the environment |
-| `bootstrap` | the worked-on repository | after a task's clone or fetch | the project's dependencies, generated code |
 
 - **`start` runs once per boot, whoever booted the VM.** A VM can be
   started by something else (`sbx exec` from a terminal, sbx's TUI), so
@@ -823,6 +821,10 @@ Each at its own moment, all running inside the VM:
   it left in the VM (`/var/lib/unibox/started`) and runs the script only
   when they differ, by `sbx exec`, its output in the preparation's output.
   A failure stops the start.
+- **No script comes from the worked-on repositories** (the user's call,
+  format 4). A `bootstrap` named a script each worked-on repository was
+  to carry, run after its clone; no repository would carry one for
+  unibox, so it is gone, and the migration says so.
 - Nothing runs once when the VM is made: what should happen once is static
   and belongs in the Dockerfile. If that proves wrong, `setup:` comes the
   same way.
@@ -966,8 +968,7 @@ only got in the way):
   cannot is part of the settings a recreation makes. `unibox network
   allow|deny|rm` changes a profile's rules and applies them to its
   sandboxes at once, asking only where a recreation would be needed.
-- The worked-on repositories still choose nothing: they give the bootstrap
-  script, which runs inside the VM.
+- The worked-on repositories choose nothing of the sandbox.
 
 ### sbx's templates and kits
 
@@ -1183,7 +1184,6 @@ How a profile becomes flags:
 | `env` | `-e NAME` |
 | `caches` | `<host>:ro` as an extra workspace, `-e <env>=<host>` |
 | `start` | run by `sbx exec` when the VM's `boot_id` is new |
-| `bootstrap` | run by `sbx exec` after the clones |
 
 Spike questions about it:
 

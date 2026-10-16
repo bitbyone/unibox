@@ -20,6 +20,7 @@ var migrations = []func(profile *yaml.Node) (moves []seedMove, notes []string){
 	0: migrateFrom0,
 	1: migrateFrom1,
 	2: migrateFrom2,
+	3: migrateFrom3,
 }
 
 // seedMove is a file of a profile a migration renames, both relative to
@@ -289,4 +290,14 @@ func migrateFrom2(profile *yaml.Node) (moves []seedMove, notes []string) {
 	network := childMap(profile, "network")
 	network.Content = append(network.Content, pairs...)
 	return nil, nil
+}
+
+// migrateFrom3 drops bootstrap: a script the worked-on repository had to
+// carry, which format 4 no longer runs.
+func migrateFrom3(profile *yaml.Node) (moves []seedMove, notes []string) {
+	if v := mapValue(profile, "bootstrap"); v != nil {
+		deleteMapKey(profile, "bootstrap")
+		notes = append(notes, "bootstrap "+v.Value+" left out: unibox no longer runs a script from the worked-on repositories")
+	}
+	return nil, notes
 }
