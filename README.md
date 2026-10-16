@@ -40,6 +40,7 @@ your machine from its tagged commit:
 
 ```sh
 brew tap bitbyone/unibox https://github.com/bitbyone/unibox
+brew trust bitbyone/unibox     # Homebrew loads a third-party tap only once trusted
 brew install unibox
 ```
 

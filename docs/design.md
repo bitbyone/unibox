@@ -314,7 +314,7 @@ there):
    never from a local remote, which can carry a token (a chezmoi origin,
    AGENTS.md); https always - the sandbox has no SSH key. A `runTask` log
    of its output; it prints the sandbox and the task as JSON at the end.
-5. The place chosen runs `unibox run --task <task>` - This Terminal,
+5. The place chosen runs `unibox resume <task>`, the task `prepare` made - This Terminal,
    Zellij, Ghostty or herdr, as for any agent; `unibox resume <task>
    --agent <id>` runs a task again, with any of the profile's agents.
 6. unagit's session record (`<config>/sessions/`) gets the sandbox and the
