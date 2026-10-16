@@ -156,7 +156,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	}
 	recorded, _ := os.ReadFile(argv)
 	// The runtime is told where the token is, never the token.
-	if !strings.Contains(string(recorded), "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN") || !strings.Contains(string(recorded), "unibox-claude") || strings.Contains(string(recorded)+log, "tokenvalue") {
+	if !strings.Contains(string(recorded), "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN") || !(strings.Contains(string(recorded), "unibox-claude") || strings.Contains(string(recorded), "lookup service unibox name claude")) || strings.Contains(string(recorded)+log, "tokenvalue") {
 		t.Fatalf("%s\n%s", recorded, log)
 	}
 	// Signed in already: no question, the token stays.

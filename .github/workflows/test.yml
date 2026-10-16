@@ -1,0 +1,51 @@
+# Every commit pushed to a branch, and every pull request, runs the tests;
+# a release waits for this run of its commit on main to have passed. The
+# token is read-only: the tests run the repository's code, and a pull
+# request's code is whoever wrote it.
+name: test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # The race detector runs on Linux. On macOS its runtime crashes now
+        # and then in a child between fork and exec (tsan_rtl.cpp:94, the
+        # child dies of SIGSEGV before git or an editor even starts), which
+        # fails tests that did nothing wrong; a race in Go code is the same
+        # on either system, so macOS runs the suite without it.
+        include:
+          - os: ubuntu-latest
+            target: test
+          - os: macos-latest
+            target: test-fast
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Check formatting and vet
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt-clean: $unformatted"
+            exit 1
+          fi
+          go vet ./...
+      - name: Test
+        run: make ${{ matrix.target }}

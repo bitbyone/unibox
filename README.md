@@ -4,6 +4,8 @@ A wrapper over sandbox runtimes for coding agents: one CLI and one
 profile format, with an adapter per runtime. Today: Docker Sandboxes
 (`sbx`). Using the runtime directly still works.
 
+Documentation: **https://bitbyone.github.io/unibox/**
+
 ## How it works
 
 ```
@@ -31,12 +33,24 @@ Credentials stay on the host; the runtime's proxy adds them to requests.
 
 ## Install
 
-Needs Go 1.26+, git, and `sbx` signed in (`sbx login`).
+Needs git, Docker, and `sbx` signed in (`sbx login`).
+
+With Homebrew, from the tap in this repository; it builds the release on
+your machine from its tagged commit:
+
+```sh
+brew tap bitbyone/unibox https://github.com/bitbyone/unibox
+brew install unibox
+```
+
+Or from a checkout, with Go 1.26+:
 
 ```sh
 git clone https://github.com/bitbyone/unibox && cd unibox
 make install            # → ~/.local/bin/unibox
 ```
+
+`unibox --version` prints the release and the profile format it reads.
 
 ## Use
 

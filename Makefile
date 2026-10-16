@@ -2,8 +2,13 @@ PREFIX ?= $(HOME)/.local
 
 .PHONY: build test test-fast install clean fmt
 
+# VERSION is the release tag on HEAD without its v, empty anywhere else,
+# where unibox --version names the commit instead.
+VERSION ?= $(shell git describe --tags --exact-match --match 'v[0-9]*.[0-9]*' 2>/dev/null | sed 's/^v//')
+LDFLAGS := $(if $(VERSION),-X github.com/tobola/unibox/internal/version.Version=$(VERSION))
+
 build:
-	go build -o unibox ./cmd/unibox
+	go build -ldflags "$(LDFLAGS)" -o unibox ./cmd/unibox
 
 test:
 	go test -race ./...
