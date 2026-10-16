@@ -5,8 +5,8 @@ class Unibox < Formula
   desc "Run coding agents in sandboxes defined by profiles in a git repository"
   homepage "https://bitbyone.github.io/unibox/"
   url "https://github.com/bitbyone/unibox.git",
-      tag:      "v0.0",
-      revision: "0000000000000000000000000000000000000000"
+      tag:      "v0.1",
+      revision: "787d2adfe19c629ab7c984f34d10022e9bb30d83"
   license "MIT"
   head "https://github.com/bitbyone/unibox.git", branch: "main"
 
