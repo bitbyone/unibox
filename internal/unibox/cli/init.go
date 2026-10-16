@@ -55,7 +55,7 @@ func (o *options) inspectCommand() *cobra.Command {
 			}
 			return nil
 		}
-		return fmt.Errorf("sandbox %s not found; list them with unibox ls", args[0])
+		return fmt.Errorf("sandbox %s not found; list them with unibox sandboxes", args[0])
 	}}
 }
 

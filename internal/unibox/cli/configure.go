@@ -616,7 +616,7 @@ func (o *options) networkCommand() *cobra.Command {
 		return rmHosts.RunE(cmd, append([]string{p.Name}, hosts...))
 	}})
 	var off bool
-	port := &cobra.Command{Use: "port profile name spec", Args: cobra.ExactArgs(3), Short: "Publish a sandbox port on the host's loopback by name, at every start unless --off", Long: "Publish a sandbox port on the host's loopback by name. The spec is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any free host port, 8080:3000 host port 8080. A port is published when a sandbox starts unless --off; unibox port <sandbox> name:on|off switches it while the sandbox runs. Running sandboxes get the change at once.", RunE: func(cmd *cobra.Command, args []string) error {
+	port := &cobra.Command{Use: "port profile name spec", Args: cobra.ExactArgs(3), Short: "Publish a sandbox port on the host's loopback by name, at every start unless --off", Long: "Publish a sandbox port on the host's loopback by name. The spec is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any free host port, 8080:3000 host port 8080. A port is published when a sandbox starts unless --off; unibox port <sandbox> name:on|off switches it while the sandbox runs. Running sandboxes get the change at once; unibox port <sandbox> lists one sandbox's ports with their URLs.", RunE: func(cmd *cobra.Command, args []string) error {
 		p, err := o.manager.Profile(args[0])
 		if err != nil {
 			return err
@@ -806,7 +806,7 @@ func (o *options) agentCommand() *cobra.Command {
 // portCommand lists a sandbox's ports, and switches them while it runs
 // without touching the profile.
 func (o *options) portCommand() *cobra.Command {
-	return &cobra.Command{Use: "port sandbox [name|spec:on|off...]", Args: cobra.MinimumNArgs(1), Short: "List a sandbox's ports, or switch them on or off while it runs", Long: "List a sandbox's ports, or switch them while it runs: fe:on, devtools:off by the profile's names, or a spec the profile does not name, 8080:3000:on. The profile stays as it is, and the sandbox's next start goes back to its defaults; unibox network port changes those.", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "port sandbox [name|spec:on|off...]", Args: cobra.MinimumNArgs(1), Short: "List a sandbox's ports, or switch them on or off while it runs", Long: "List a sandbox's ports, or switch them while it runs: fe:on, devtools:off by the profile's names, or a spec the profile does not name, 8080:3000:on. The profile stays as it is, and the sandbox's next start goes back to its defaults; unibox network port <profile> changes those, for every sandbox of the profile.", RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if len(args) > 1 {
 			switches := map[string]bool{}

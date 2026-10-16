@@ -41,8 +41,7 @@ func (v *orderedValue) Set(value string) error {
 
 func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f := c.Flags()
-	f.StringVar(&r.Sandbox, "sandbox", "", "Existing sandbox name")
-	f.StringVar(&r.NewSandbox, "new-sandbox", "", "Create a sandbox with this name")
+	f.StringVar(&r.Sandbox, "sandbox", "", "Sandbox to work in; one that does not exist yet is made from --profile (default: the profile's name)")
 	f.StringVar(&r.Profile, "profile", "", "Environment profile for a new sandbox")
 	f.StringVar(&r.Runtime, "runtime", "", "Runtime adapter (existing sandboxes keep theirs)")
 	f.StringVar(&r.Agent, "agent", "", "Coding agent declared by the profile")
@@ -54,7 +53,6 @@ func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f.BoolVar(&r.Mount, "mount", false, "Mount the selected directories of the host into the sandbox instead of cloning them: the agent works on your files and .git as they are")
 	f.Var(&orderedValue{req: r}, "repo", "Repository path or HTTPS URL, optionally name=source (repeatable)")
 	f.Var(&orderedValue{req: r, branch: true}, "branch", "Before all repos: shared branch; after a repo: override only that repo")
-	c.MarkFlagsMutuallyExclusive("sandbox", "new-sandbox")
 }
 
 type reportedError struct{ status int }
@@ -229,10 +227,13 @@ func (o *options) taskCommand(name string) *cobra.Command {
 // running session sees them at once: they are clones in its task directory.
 func (o *options) addRepoCommand() *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: "add-repo task --repo <path-or-url>...", Args: cobra.ExactArgs(1), Short: "Clone more repositories into a prepared task, also while its agent runs", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "add-repo task [directory...]", Args: cobra.MinimumNArgs(1), Short: "Clone more repositories into a prepared task, also while its agent runs", Long: "Clone more repositories into a prepared task, also while its agent runs: directories as run takes them, or --repo for a URL or name=source.", RunE: func(cmd *cobra.Command, args []string) error {
 		req.Task = args[0]
+		for _, dir := range args[1:] {
+			req.Repositories = append(req.Repositories, unibox.RepoInput{Source: dir})
+		}
 		if len(req.Repositories) == 0 {
-			return fmt.Errorf("no repository selected; pass --repo <path-or-url>")
+			return fmt.Errorf("no repository selected; name a directory, or pass --repo <path-or-url>")
 		}
 		if err := o.preflight(cmd, &req); err != nil {
 			return err

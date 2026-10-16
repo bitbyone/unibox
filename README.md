@@ -50,14 +50,15 @@ unibox network port web fe 3000:3000              # publish a port on localhost 
 unibox build web                                  # build its image now (run builds when needed)
 
 # create sandbox "web-1" from profile "web", clone this repo, run claude
-unibox run --profile web --new-sandbox web-1 --repo . --branch feat/login --agent claude
+unibox run --profile web --sandbox web-1 --branch feat/login --agent claude
 
 # or work on this directory in place: mounted into sandbox "dev", not cloned
 unibox run --sandbox dev --agent copilot --mount
 
+unibox sandboxes                                  # all sandboxes (also: ls)
 unibox tasks                                      # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
-unibox add-repo <task> --repo ../api --branch feat/login  # clone one more, even while it runs
+unibox add-repo <task> ../api --branch feat/login  # clone one more, even while it runs
 unibox shell web-1                                # shell inside the sandbox
 unibox recreate web-1                             # recreate now (a start does when the profile needs it)
 ```

@@ -315,9 +315,6 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		return b, api.Task{}, r, nil, nil, err
 	}
 	if old, ok := state.Sandboxes[b.Name]; ok {
-		if req.NewSandbox != "" {
-			return b, api.Task{}, r, nil, nil, fmt.Errorf("sandbox %s already exists; use --sandbox", b.Name)
-		}
 		b = old
 	} else {
 		if _, exists, err := m.findBox(ctx, r, b); err != nil {

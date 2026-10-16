@@ -677,3 +677,28 @@ func TestASingleAgentProfileCreatesItsKindOfSandbox(t *testing.T) {
 		t.Fatalf("a profile of several agents must make a plain sandbox, got %q", kind)
 	}
 }
+
+func TestOneSandboxFlagNamesASandboxThereOrOneToMake(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	ctx := context.Background()
+	// Not there and no profile: what to do about it is said.
+	if _, _, _, err := m.Definition(Request{Sandbox: "fresh"}); err == nil || !strings.Contains(err.Error(), "pass --profile to make it") {
+		t.Fatalf("%v", err)
+	}
+	// Not there with a profile: it is the one to make.
+	b, _, p, err := m.Definition(Request{Sandbox: "fresh", Profile: "node", Runtime: "fake"})
+	if err != nil || b.Name != "fresh" || p.Name != "node" {
+		t.Fatalf("%v %+v", err, b)
+	}
+	if _, err := m.Create(ctx, Request{NewSandbox: "fresh", Profile: "node", Runtime: "fake"}); err != nil {
+		t.Fatal(err)
+	}
+	// There: it is used, the profile only checked.
+	if b, _, _, err = m.Definition(Request{Sandbox: "fresh", Profile: "node"}); err != nil || b.Name != "fresh" || b.Runtime != "fake" {
+		t.Fatalf("%v %+v", err, b)
+	}
+	if _, err := m.Create(ctx, Request{NewSandbox: "fresh", Profile: "node", Runtime: "fake"}); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("%v", err)
+	}
+}

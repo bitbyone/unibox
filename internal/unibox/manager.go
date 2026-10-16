@@ -256,6 +256,9 @@ func (m *Manager) usage(name string, shared bool) (*FileLock, error) {
 
 // A task's name is unique across sandboxes, so naming the task is enough to
 // find it. State from before that rule may still hold one name twice.
+// TaskSandbox names the sandbox holding a task.
+func (m *Manager) TaskSandbox(task string) (string, error) { return m.taskSandbox(task, false) }
+
 func (m *Manager) taskSandbox(task string, preparing bool) (string, error) {
 	s, err := m.Paths.ReadState()
 	if err != nil {
@@ -296,10 +299,19 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 	if name == "" {
 		name = req.NewSandbox
 	}
+	// --sandbox names a sandbox that is there, or one to make from
+	// --profile when it is not: one flag, whichever it turns out to be.
+	if name != "" && req.NewSandbox == "" && req.Profile != "" {
+		if s, err := m.Paths.ReadState(); err == nil {
+			if _, known := s.Sandboxes[name]; !known {
+				req.NewSandbox = name
+			}
+		}
+	}
 	if name != "" && req.NewSandbox == "" {
 		b, err := m.sandbox(name)
 		if err != nil {
-			return b, nil, Profile{}, err
+			return b, nil, Profile{}, fmt.Errorf("sandbox %s does not exist; pass --profile to make it (unibox profiles lists them)", name)
 		}
 		if req.Runtime != "" && req.Runtime != b.Runtime {
 			return b, nil, Profile{}, fmt.Errorf("sandbox %s belongs to runtime %s", name, b.Runtime)
@@ -316,7 +328,7 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 	}
 	if req.Profile == "" {
 		if name == "" {
-			return api.Sandbox{}, nil, Profile{}, fmt.Errorf("no sandbox chosen; pass --sandbox (unibox ls lists them) or --profile to make one (unibox profiles)")
+			return api.Sandbox{}, nil, Profile{}, fmt.Errorf("no sandbox chosen; pass --sandbox (unibox sandboxes lists them) or --profile to make one (unibox profiles)")
 		}
 		return api.Sandbox{}, nil, Profile{}, fmt.Errorf("new sandbox %s needs --profile; list profiles with unibox profiles", name)
 	}

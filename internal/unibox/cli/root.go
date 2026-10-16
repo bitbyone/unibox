@@ -299,7 +299,7 @@ func (o *options) diffCommand() *cobra.Command {
 
 func (o *options) instructionsCommand() *cobra.Command {
 	var sandbox string
-	c := &cobra.Command{Use: "instructions [profile]", Args: cobra.MaximumNArgs(1), Short: "Read assembled instructions or attach named texts to a sandbox", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "instructions [profile]", Args: cobra.MaximumNArgs(1), Short: "Read assembled instructions or attach named texts to a sandbox", Long: "Print the instructions an agent gets: a profile's, or with --sandbox those of a sandbox - its profile's and the texts attached to it. instructions attach <sandbox> <name>... sets what is attached.", RunE: func(cmd *cobra.Command, args []string) error {
 		profile := ""
 		attached := []string{}
 		if sandbox != "" {
@@ -335,7 +335,7 @@ func (o *options) instructionsCommand() *cobra.Command {
 		_, err = io.WriteString(o.output, text)
 		return err
 	}}
-	c.Flags().StringVar(&sandbox, "sandbox", "", "Show a sandbox's assembled instructions")
+	c.Flags().StringVar(&sandbox, "sandbox", "", "Show the instructions as this sandbox's agents get them, its attached texts included")
 	c.AddCommand(&cobra.Command{Use: "attach sandbox [instruction...]", Args: cobra.MinimumNArgs(1), Short: "Replace the sandbox's list of attached instruction names", RunE: func(cmd *cobra.Command, args []string) error {
 		if err := o.manager.AttachInstructions(args[0], args[1:]); err != nil {
 			return err
@@ -346,7 +346,7 @@ func (o *options) instructionsCommand() *cobra.Command {
 }
 
 func (o *options) listCommand() *cobra.Command {
-	return &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List unibox's sandboxes and their runtime state", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "sandboxes", Aliases: []string{"ls"}, Args: cobra.NoArgs, Short: "List unibox's sandboxes and their runtime state (also: ls)", RunE: func(cmd *cobra.Command, args []string) error {
 		boxes, err := o.manager.List(cmd.Context())
 		if err != nil {
 			return err
@@ -384,7 +384,7 @@ func (o *options) tasksCommand() *cobra.Command {
 			runs = append(runs, b.Runs...)
 		}
 		if len(args) == 1 && !found {
-			return fmt.Errorf("sandbox %s not found; unibox ls lists them", args[0])
+			return fmt.Errorf("sandbox %s not found; unibox sandboxes lists them", args[0])
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "tasks": tasks, "runs": runs})
@@ -470,21 +470,28 @@ func (o *options) recreateCommand() *cobra.Command {
 	return c
 }
 func (o *options) removeCommand(task bool) *cobra.Command {
-	use := "rm sandbox"
-	n := 1
+	use, short := "rm sandbox", "Remove a sandbox, after checking for running sessions and unpushed work"
 	if task {
-		use = "rm-task sandbox task"
-		n = 2
+		use, short = "rm-task task", "Remove a task from its sandbox, after checking for running sessions and unpushed work"
 	}
-	return &cobra.Command{Use: use, Args: cobra.ExactArgs(n), Short: "Remove only after checking for running sessions and unpushed work", RunE: func(cmd *cobra.Command, args []string) error {
-		if err := o.confirm("Remove " + strings.Join(args, "/") + "?"); err != nil {
+	return &cobra.Command{Use: use, Args: cobra.ExactArgs(1), Short: short, RunE: func(cmd *cobra.Command, args []string) error {
+		sandbox, id := args[0], ""
+		if task {
+			// A task's name is unique across sandboxes, so it finds its own.
+			name, err := o.manager.TaskSandbox(args[0])
+			if err != nil {
+				return err
+			}
+			sandbox, id = name, args[0]
+		}
+		what := "sandbox " + sandbox
+		if id != "" {
+			what = "task " + id + " from sandbox " + sandbox
+		}
+		if err := o.confirm("Remove " + what + "?"); err != nil {
 			return err
 		}
-		id := ""
-		if task {
-			id = args[1]
-		}
-		if err := o.manager.Remove(cmd.Context(), args[0], id); err != nil {
+		if err := o.manager.Remove(cmd.Context(), sandbox, id); err != nil {
 			return err
 		}
 		return o.success("removed")

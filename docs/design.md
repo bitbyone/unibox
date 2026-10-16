@@ -224,7 +224,7 @@ grouped worktree  <── git pull ───┐    /work/<task>/<repo>  clones o
     unmount fails or a directory is still mounted. It does not check for
     unpushed work, which is on the host. A recreated sandbox has no
     mounts; preparing its tasks again mounts them again.
-- **A task can grow while it runs** (`unibox add-repo <task> --repo ...`).
+- **A task can grow while it runs** (`unibox add-repo <task> <directory>...`).
   Since nothing is mounted, adding a repository is one more clone into
   `/work/<task>/`, made through the runtime's exec. The agent in a running
   session sees it at once and needs no restart. The task lock stays with
@@ -259,13 +259,13 @@ runs another process in the same environment, like `docker exec`.
 
 Both arrangements are offered, and the user picks at the start:
 
-- **A shared sandbox** (named for its profile unless `--new-sandbox` names it): tasks are directories
+- **A shared sandbox** (named for its profile unless `--sandbox` names it): tasks are directories
   `/work/<task>`, agents are processes side by side. Memory, the Gradle
   cache and Docker images are paid once. Between the agents there is no
   isolation at all - one user with sudo, one filesystem, one Docker, one
   set of ports (two `docker compose` Postgreses on 5432 collide). The
   picker says so.
-- **A sandbox of its own** for one task (`--new-sandbox <name>`): nothing it does reaches
+- **A sandbox of its own** for one task (`--sandbox <new name> --profile <p>`): nothing it does reaches
   another task.
 
 Both persist when the agent ends, for their caches; removing is the user's
@@ -290,7 +290,7 @@ there):
 1. **Open in Sandboxed Agent…** asks, each picker skipped when it has one
    item and ordered by use: the agent, the profile, the sandbox, the place
    (the existing `agentPlaces`). The pickers are filled from `unibox
-   profiles --json` and `unibox ls --json`. The sandbox picker is also
+   profiles --json` and `unibox sandboxes --json`. The sandbox picker is also
    where the runtime is chosen: the profile's sandboxes of every runtime,
    each carrying its own, then New Sandbox in <runtime>… for each runtime
    unibox has on - plain New Sandbox… while there is one.
@@ -1225,18 +1225,27 @@ contract's own version, apart from it.
 | `unibox prepare …` | the sandbox and the task, ready; JSON of both at the end |
 | `unibox run …` | the agent, in this terminal; prepares first if needed |
 | `unibox resume <task> [--agent A]` | a prepared task's agent again, in the sandbox that holds it |
-| `unibox add-repo <task> --repo …` | one more clone into a task, also while its agent runs |
-| `unibox ls [--json]`, `unibox tasks [<sandbox>] [--json]`, `unibox inspect <sandbox>` | sandboxes, their tasks, a sandbox's record |
+| `unibox add-repo <task> [directory...]` | one more clone into a task, also while its agent runs |
+| `unibox sandboxes [--json]` (also `ls`), `unibox tasks [<sandbox>] [--json]`, `unibox inspect <sandbox>` | sandboxes, their tasks, a sandbox's record |
 | `unibox script <sandbox> [name...]` | the profile's scripts, or run them in the sandbox now |
 | `unibox port <sandbox> [name:on\|off...]` | a sandbox's ports and their URLs; switched while it runs, the profile untouched |
-| `unibox shell <sandbox>`, `stop`, `recreate`, `rm`, `rm-task` | as named; removal checks for sessions and unpushed work |
+| `unibox shell <sandbox>`, `stop`, `recreate`, `rm`; `unibox rm-task <task>` | as named; removal checks for sessions and unpushed work |
 | `unibox prune` | removes the images unibox no longer needs |
 | `unibox config get\|set\|unset <key> [<value>]` | its configuration |
 | `unibox runtimes` | the adapters and what each isolates |
 | `unibox herdr install-plugin`, `uninstall-plugin`, `status [--json]` | [herdr](#herdr) |
 
+**One rule for arguments** (the user's call): what a command works on is
+its argument - a sandbox (`shell`, `stop`, `recreate`, `rm`, `inspect`,
+`port`, `script`, `tasks`, `create`), a task (`resume`, `add-repo`,
+`rm-task`, a task's name being unique across sandboxes), a profile
+(`build`, `diff`, `init`, `agent`, `network`, `service`, `instructions`) -
+and a flag says where or how. `run`, `check` and `prepare` make a task, so
+their arguments are its directories and the sandbox is where: `--sandbox`.
+
 `check`, `prepare` and `run` take the same task: `--profile`, `--agent`,
-`--runtime`, `--sandbox <name>` or `--new-sandbox <name>`, `--task`,
+`--runtime`, `--sandbox <name>` (one that does not exist yet is made from
+`--profile`), `--task`, `--mount`,
 `--branch`, `--repo [<dir>=]<path or https URL>` (repeated; or the
 current directory, as without unagit), `--author "Name <email>"`,
 `--instructions`, `--push`, `--ignore-local`; `run` and `resume` take
@@ -1443,8 +1452,9 @@ Next, for unagit to build on:
      goes.
    - `init --json` reports what a migration did (`migrated`), as it now
      does, under that version.
-   - Decide `--new-sandbox` against `--sandbox` (one flag that makes the
-     sandbox when it does not exist) before unagit passes either.
+   - Done: `--sandbox` alone, making the sandbox from `--profile` when it
+     is not there; `rm-task <task>`; `add-repo <task> [directory...]`;
+     `sandboxes`, with `ls` its alias.
 2. **unagit's integration**, in unagit's plan: Settings and the
    configuration handed over; Open in Sandboxed Agent… for one
    repository's worktree in This Terminal, then groups, then every place.
