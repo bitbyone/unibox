@@ -305,10 +305,11 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) 
 		r := api.Repository{Name: in.Name, HostPath: path, Author: req.Author, Mounted: true}
 		if top, err := git(ctx, path, "rev-parse", "--show-toplevel"); err == nil {
 			r.HostPath = top
-			if common, err := git(ctx, top, "rev-parse", "--path-format=absolute", "--git-common-dir"); err == nil {
-				if common, err = filepath.EvalSymlinks(common); err == nil && common != filepath.Join(top, ".git") && !strings.HasPrefix(common, top+string(filepath.Separator)) {
-					r.GitDir = common
-				}
+			// A worktree's .git names its main repository by the host's
+			// path, which the sandbox mounts elsewhere or not at all.
+			if info, err := os.Lstat(filepath.Join(top, ".git")); err == nil && !info.IsDir() {
+				main, _ := git(ctx, top, "rev-parse", "--path-format=absolute", "--git-common-dir")
+				return nil, fmt.Errorf("%s is a git worktree, which cannot be mounted; mount the repository's own checkout (%s), or leave out --mount to clone it", top, filepath.Dir(main))
 			}
 			r.Branch, _ = git(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
 			if raw, err := git(ctx, top, "config", "--get", "remote.origin.url"); err == nil {

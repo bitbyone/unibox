@@ -17,11 +17,9 @@ type Repository struct {
 	// CoAuthor is a git service's say over the agent's co-author trailer
 	// for this repository; unset leaves it to the profile.
 	CoAuthor *bool `json:"co_author,omitempty"`
-	// Mounted is a directory of the host mounted into the sandbox at its
-	// host path instead of cloned; GitDir is the repository's git
-	// directory when it lies outside it, as a worktree's does, mounted too.
-	Mounted bool   `json:"mounted,omitempty"`
-	GitDir  string `json:"git_dir,omitempty"`
+	// Mounted is HostPath mounted into the sandbox at the repository's
+	// place in the task instead of cloned.
+	Mounted bool `json:"mounted,omitempty"`
 }
 
 type Task struct {

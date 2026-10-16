@@ -346,36 +346,21 @@ func mountedDir(t api.Task, r api.Repository) string {
 	return "/var/lib/unibox/mounted/" + t.ID + "/" + r.Name
 }
 
-// mountedGitDirs is the git directory pattern git's includeIf matches the
-// mounted repository by: its own .git, or the main one a worktree's lives
-// in, which covers the worktree's.
-func mountedGitDirs(r api.Repository) string {
-	if r.GitDir != "" {
-		return r.GitDir + "/"
-	}
-	return r.HostPath + "/.git/"
-}
-
-// mountedScript links a mounted directory into the task, where the agent
-// works, and gives git in the guest the author and co-author hook for it
-// through an includeIf of the guest's global configuration - so commits
-// made in the sandbox are the task's, and the host's .git/config is left
-// as it is.
+// mountedScript checks a mounted directory is in its place in the task,
+// where the agent works, and gives git in the guest the author and
+// co-author hook for it through an includeIf of the guest's global
+// configuration - so commits made in the sandbox are the task's, and the
+// host's .git/config is left as it is.
 func mountedScript(t api.Task, r api.Repository, p Profile) string {
 	var b strings.Builder
 	dir := path.Join(t.Directory, r.Name)
-	fmt.Fprintf(&b, "dir=%s\nhost=%s\n", Quote(dir), Quote(r.HostPath))
-	b.WriteString(`[ -d "$host" ] || { echo "$host is not mounted in the sandbox; prepare the task again" >&2; exit 4; }
-if [ -L "$dir" ] || [ ! -e "$dir" ]; then
-  ln -sfn "$host" "$dir"
-else
-  echo "$dir is in the way of the mounted directory; inspect it in unibox shell" >&2; exit 4
-fi
+	fmt.Fprintf(&b, "dir=%s\n", Quote(dir))
+	b.WriteString(`[ -d "$dir" ] || { echo "$dir is not mounted in the sandbox; prepare the task again" >&2; exit 4; }
 `)
 	own := mountedDir(t, r)
-	// The mounted git directory holds the host's other worktrees too, which
-	// the guest does not have; git's gc would take them for gone and prune
-	// their records on the host.
+	// The repository's git directory records its worktrees on the host,
+	// which the guest does not have; git's gc would take them for gone and
+	// prune their records on the host.
 	config := "[gc]\n\tworktreePruneExpire = never\n"
 	if r.Author != "" {
 		name, email, _ := AuthorParts(r.Author)
@@ -392,22 +377,28 @@ fi
 		b.WriteString(writeGuest(own+"/hooks/credit", []byte(credit), "600"))
 	}
 	b.WriteString(writeGuest(own+"/gitconfig", []byte(config), "600"))
-	key := "includeIf.gitdir:" + mountedGitDirs(r) + ".path"
+	key := "includeIf.gitdir:" + dir + "/.git/.path"
 	fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\ngit config --global --add %s %s\n", Quote(key), Quote(key), Quote(own+"/gitconfig"))
 	return b.String()
 }
 
 // unmountedScript takes out of the guest what mountedScript put there for
-// a task's mounted repositories: the links and git's include. The host's
-// files are not touched; the directories are unmounted by the runtime.
+// a task's mounted repositories - git's include - and, run after the
+// runtime unmounted them, refuses to go on while a mount point still holds
+// anything: the task's directory is deleted next, and what a mount holds
+// is the host's.
 func unmountedScript(t api.Task) string {
 	var b strings.Builder
 	for _, r := range t.Repositories {
 		if !r.Mounted {
 			continue
 		}
-		key := "includeIf.gitdir:" + mountedGitDirs(r) + ".path"
-		fmt.Fprintf(&b, "rm -f %s\ngit config --global --unset-all %s >/dev/null 2>&1 || true\n", Quote(path.Join(t.Directory, r.Name)), Quote(key))
+		dir := path.Join(t.Directory, r.Name)
+		key := "includeIf.gitdir:" + dir + "/.git/.path"
+		fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\n", Quote(key))
+		fmt.Fprintf(&b, "dir=%s\n", Quote(dir))
+		b.WriteString(`if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then echo "$dir is still mounted; the task is kept so nothing of the host is deleted" >&2; exit 4; fi
+`)
 	}
 	if b.Len() > 0 {
 		b.WriteString("rm -rf " + Quote("/var/lib/unibox/mounted/"+t.ID) + "\n")

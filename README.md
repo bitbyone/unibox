@@ -67,11 +67,13 @@ start: an image to build, logins and secrets, a branch the forge does not
 have, and what changed in the profile. `run` fixes what it can. Every command accepts `--json`.
 
 `--mount` (on `run`, `prepare` and `add-repo`) mounts the selected
-directories into a running sandbox instead of cloning them: the agent
-works on your files and your `.git` as they are, on whatever is checked
-out, and what it writes there - a git hook included - is on your machine
-at once. Use it knowingly; without it nothing of yours is mounted.
-`rm-task` unmounts and never deletes your files.
+directories into a running sandbox, at `/work/<task>/<name>`, instead of
+cloning them: the agent works on your files and your `.git` as they are,
+on whatever is checked out, and what it writes there - a git hook
+included - is on your machine at once. Use it knowingly; without it
+nothing of yours is mounted. A git worktree cannot be mounted (its `.git`
+points into the main repository by path); mount the repository's own
+checkout. `rm-task` unmounts first and never deletes your files.
 
 ## Environments repository
 

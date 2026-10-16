@@ -722,8 +722,12 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 		}
 		removed := b.Tasks[index]
 		if exists {
-			// A mounted directory's link and git include go first; rm -rf
-			// then takes the task's links, never what they point to.
+			// Mounted directories come out before anything is deleted, and
+			// the guest checks they did: rm -rf would go into a mount and
+			// delete the host's files.
+			if err = m.unmountTask(ctx, b, r, removed); err != nil {
+				return err
+			}
 			if s := unmountedScript(removed); s != "" {
 				if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", s}}), m.Log); err != nil {
 					return err
@@ -734,11 +738,6 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 			}
 		}
 		b.Tasks = slices.Delete(b.Tasks, index, index+1)
-		if exists {
-			if err = m.unmountTask(ctx, b, r, removed); err != nil {
-				return err
-			}
-		}
 		return m.saveBox(b)
 	}
 	if exists {
@@ -749,62 +748,53 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 	return m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil })
 }
 
-// mountedPaths are the host directories a task's mounted repositories need
-// in the sandbox: each, and the git directory of a worktree, outside it.
-func mountedPaths(t api.Task) []string {
-	out := []string{}
+// mounts are a task's mounted repositories: each host directory and the
+// place in the task it is mounted at.
+func mounts(t api.Task) [][2]string {
+	out := [][2]string{}
 	for _, r := range t.Repositories {
 		if r.Mounted {
-			out = append(out, r.HostPath)
-			if r.GitDir != "" {
-				out = append(out, r.GitDir)
-			}
+			out = append(out, [2]string{r.HostPath, path.Join(t.Directory, r.Name)})
 		}
 	}
 	return out
 }
 
 // mountTask mounts a task's host directories into its sandbox, at their
-// host paths, before the task is prepared there.
+// places in the task, before the task is prepared there.
 func (m *Manager) mountTask(ctx context.Context, b api.Sandbox, r Runtime, t api.Task) error {
-	paths := mountedPaths(t)
-	if len(paths) == 0 {
+	list := mounts(t)
+	if len(list) == 0 {
 		return nil
 	}
 	mounter, ok := r.(Mounter)
 	if !ok {
 		return fmt.Errorf("runtime %s cannot mount host directories; leave out --mount", r.Name())
 	}
-	for _, p := range paths {
-		if err := mounter.Mount(ctx, b.RuntimeName, p); err != nil {
+	for _, mt := range list {
+		if err := mounter.Mount(ctx, b.RuntimeName, mt[0], mt[1]); err != nil {
 			return err
 		}
-		fmt.Fprintf(m.Log, "mounted %s into sandbox %s\n", p, b.Name)
+		fmt.Fprintf(m.Log, "mounted %s at %s in sandbox %s\n", mt[0], mt[1], b.Name)
 	}
 	return nil
 }
 
-// unmountTask takes out of the sandbox the host directories of a removed
-// task that no task left in it still needs.
-func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, r Runtime, removed api.Task) error {
-	mounter, ok := r.(Mounter)
-	if !ok {
+// unmountTask takes a task's host directories out of its sandbox.
+func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, r Runtime, t api.Task) error {
+	list := mounts(t)
+	if len(list) == 0 {
 		return nil
 	}
-	still := map[string]bool{}
-	for _, t := range b.Tasks {
-		for _, p := range mountedPaths(t) {
-			still[p] = true
-		}
+	mounter, ok := r.(Mounter)
+	if !ok {
+		return fmt.Errorf("runtime %s cannot unmount host directories; the task is kept so nothing of the host is deleted", r.Name())
 	}
-	for _, p := range mountedPaths(removed) {
-		if still[p] {
-			continue
+	for _, mt := range list {
+		if err := mounter.Unmount(ctx, b.RuntimeName, mt[0], mt[1]); err != nil {
+			return fmt.Errorf("%w; the task is kept so nothing of the host is deleted", err)
 		}
-		if err := mounter.Unmount(ctx, b.RuntimeName, p); err != nil {
-			return err
-		}
-		fmt.Fprintf(m.Log, "unmounted %s from sandbox %s\n", p, b.Name)
+		fmt.Fprintf(m.Log, "unmounted %s from sandbox %s\n", mt[0], b.Name)
 	}
 	return nil
 }
