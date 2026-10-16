@@ -101,12 +101,7 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(o.log, "profile %s changed what its image is built from; building it\n", p.Name)
-				if !o.json {
-					if err = o.manager.Diff(cmd.Context(), p.Name, rt.Name(), o.log); err != nil {
-						return err
-					}
-				}
+				fmt.Fprintf(o.log, "profile %s changed what its image is built from; building it (unibox diff %s shows what)\n", p.Name, p.Name)
 				if err = o.manager.Build(cmd.Context(), p.Name, rt.Name(), false); err != nil {
 					return err
 				}

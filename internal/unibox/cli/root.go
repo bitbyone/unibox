@@ -279,14 +279,6 @@ func (o *options) buildCommand() *cobra.Command {
 	var rt string
 	var rebuild bool
 	c := &cobra.Command{Use: "build profile", Args: cobra.ExactArgs(1), Short: "Build, validate and load a profile image", RunE: func(cmd *cobra.Command, args []string) error {
-		if !o.yes {
-			if err := o.manager.Diff(cmd.Context(), args[0], rt, o.log); err != nil {
-				return err
-			}
-			if err := o.confirm("Build profile " + args[0] + "?"); err != nil {
-				return err
-			}
-		}
 		if err := o.manager.Build(cmd.Context(), args[0], rt, rebuild); err != nil {
 			return err
 		}

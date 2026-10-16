@@ -1014,8 +1014,8 @@ only got in the way):
   services + github, network.allow + jitpack.io` - and goes on. A change
   made through unibox's own commands is not told again.
 - What the change leads to is said too: an image built from changed
-  inputs is built without a question (with the diff since its last
-  build), and a sandbox made from changed settings is recreated, naming
+  inputs is built without a question, its diff left to `unibox diff`
+  (the user's call: the log is no place for it), and a sandbox made from changed settings is recreated, naming
   them - `recreating sandbox web-1: services, the image was rebuilt`.
   The checks for unpushed work and running sessions still stand before a
   recreation.
@@ -1121,14 +1121,15 @@ its co-author line, sbx's name for it - and never reads unagit's
   `docker save`, `sbx template load`, tagged `unibox/<profile>:<tree>`.
   A local build is for this machine's architecture, which is all a local
   sandbox needs.
-- **A build shows what it is about to build.** `unibox diff <profile>`
-  prints what changed in the profile's directory since its image last
-  built (the tree is in the tag) as a unified diff. unagit's Build…
-  question draws it in unagit's own differ - the one the Changes dialog
-  draws (`drawDiff`, `diffdraw.go`) - before it asks. A teammate's
-  Dockerfile runs in the host's Docker when built; isolated there, but
-  `RUN --mount` and build secrets can reach out, so the user sees it
-  first. No approval of its own beyond that question.
+- **What a build would build is there to look at, not printed.** `unibox
+  diff <profile>` prints what changed in the profile's directory since
+  its image last built (the tree is in the tag) as a unified diff; a
+  build, `unibox build` or the one before a start, says that it builds and
+  points at it, and asks nothing. unagit can draw it in its own differ -
+  the one the Changes dialog draws (`drawDiff`, `diffdraw.go`) - where it
+  offers Build…. A teammate's Dockerfile runs in the host's Docker when
+  built; isolated there, but `RUN --mount` and build secrets can reach
+  out, which is what `unibox diff` is for.
 
 ## unibox
 
