@@ -185,6 +185,11 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 	if err = checkNeeds(needs); err != nil {
 		return nil, err
 	}
+	if req.Mount {
+		if err = switchMounted(ctx, repos); err != nil {
+			return nil, err
+		}
+	}
 	return repos, nil
 }
 

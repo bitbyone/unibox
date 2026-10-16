@@ -65,8 +65,8 @@ func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing
 		t.Fatal(err)
 	}
 	config, _ := os.ReadFile(filepath.Join(host, ".git", "config"))
-	// A branch or a push has no say over what is checked out on the host.
-	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "x", Agent: "claude", Mount: true, Branch: "feat/x", Repositories: []RepoInput{{Source: host}}}); err == nil || !strings.Contains(err.Error(), "leave out --branch") {
+	// unibox does not push a mounted directory.
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "x", Agent: "claude", Mount: true, Push: true, Repositories: []RepoInput{{Source: host}}}); err == nil || !strings.Contains(err.Error(), "leave out --push") {
 		t.Fatalf("%v", err)
 	}
 	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "local", Agent: "claude", Author: "Person <person@example.com>", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
@@ -132,5 +132,37 @@ func TestAWorktreeIsNotMounted(t *testing.T) {
 	}
 	if _, _, err := ResolveRepositories(context.Background(), Request{Mount: true, Repositories: []RepoInput{{Source: "https://forge.invalid/x.git"}}}); err == nil {
 		t.Fatal("a URL was mounted")
+	}
+}
+
+func TestAMountedDirectoryIsSwitchedToTheBranchAskedForAndMadeLocally(t *testing.T) {
+	t.Parallel()
+	_, host := remoteFixture(t)
+	ctx := context.Background()
+	req := Request{Mount: true, Branch: "feat/local", Repositories: []RepoInput{{Source: host}}}
+	// check says what preparing will do, and does not do it.
+	repos, needs, err := ResolveRepositories(ctx, req)
+	if err != nil || len(repos) != 1 || repos[0].Branch != "feat/local" || len(needs) != 1 || needs[0].Code != "branch_switch" || !strings.Contains(needs[0].Message, "made there from HEAD") || !needs[0].Warning {
+		t.Fatalf("%v %+v %+v", err, repos, needs)
+	}
+	if got := gitTest(t, host, "branch", "--show-current"); got != "main" {
+		t.Fatalf("check switched the host to %s", got)
+	}
+	// Preparing switches it, making the branch there; the forge has none.
+	if _, err := resolveForTask(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitTest(t, host, "branch", "--show-current"); got != "feat/local" {
+		t.Fatal(got)
+	}
+	// Back to an existing branch, a change in the way is refused by git.
+	write(t, filepath.Join(host, "code.txt"), "edited on feat/local\n")
+	gitTest(t, host, "commit", "-qam", "edit")
+	write(t, filepath.Join(host, "code.txt"), "uncommitted\n")
+	if _, err := resolveForTask(ctx, Request{Mount: true, Branch: "main", Repositories: []RepoInput{{Source: host}}}); err == nil || !strings.Contains(err.Error(), "commit or stash what is in the way") {
+		t.Fatalf("%v", err)
+	}
+	if got := gitTest(t, host, "branch", "--show-current"); got != "feat/local" {
+		t.Fatal(got)
 	}
 }

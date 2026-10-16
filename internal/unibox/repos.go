@@ -83,8 +83,7 @@ func AuthorParts(author string) (string, string, error) {
 
 func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []api.Need, error) {
 	if req.Mount {
-		repos, err := resolveMounted(ctx, req)
-		return repos, nil, err
+		return resolveMounted(ctx, req)
 	}
 	repos := []api.Repository{}
 	needs := []api.Need{}
@@ -277,17 +276,21 @@ func PushRepositories(ctx context.Context, repos []api.Repository) error {
 
 // resolveMounted turns a request's directories into repositories mounted
 // from the host. The agent works on the host's files and git directory as
-// they are, on what is checked out there, so nothing is pushed, cloned or
-// compared with a forge; the user asked for exactly that.
-func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) {
-	if req.Branch != "" || req.Push {
-		return nil, fmt.Errorf("a mounted directory works on what is checked out on the host; leave out --branch and --push")
+// they are, so nothing is pushed, cloned or compared with a forge; the user
+// asked for exactly that. A branch asked for is the one the host's checkout
+// is switched to when the task is prepared - made there from HEAD when it
+// is not, as nothing needs it on the forge - which a need says beforehand.
+func resolveMounted(ctx context.Context, req Request) ([]api.Repository, []api.Need, error) {
+	if req.Push {
+		return nil, nil, fmt.Errorf("a mounted directory is not pushed by unibox; leave out --push")
 	}
 	repos := []api.Repository{}
+	needs := []api.Need{}
 	names := map[string]bool{}
 	for _, in := range req.Repositories {
-		if in.Branch != "" {
-			return nil, fmt.Errorf("a mounted directory works on what is checked out on the host; leave out --branch")
+		branch := in.Branch
+		if branch == "" {
+			branch = req.Branch
 		}
 		path, err := ExpandPath(in.Source)
 		if err == nil {
@@ -297,10 +300,10 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) 
 			path, err = filepath.EvalSymlinks(path)
 		}
 		if info, statErr := os.Stat(path); err != nil || statErr != nil || !info.IsDir() {
-			return nil, fmt.Errorf("--mount takes directories of the host, and %s is not one", in.Source)
+			return nil, nil, fmt.Errorf("--mount takes directories of the host, and %s is not one", in.Source)
 		}
 		if strings.Contains(path, ":") {
-			return nil, fmt.Errorf("%s has a colon in its path, which a mount cannot name; mount a directory without one", path)
+			return nil, nil, fmt.Errorf("%s has a colon in its path, which a mount cannot name; mount a directory without one", path)
 		}
 		r := api.Repository{Name: in.Name, HostPath: path, Author: req.Author, Mounted: true}
 		if top, err := git(ctx, path, "rev-parse", "--show-toplevel"); err == nil {
@@ -309,9 +312,21 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) 
 			// path, which the sandbox mounts elsewhere or not at all.
 			if info, err := os.Lstat(filepath.Join(top, ".git")); err == nil && !info.IsDir() {
 				main, _ := git(ctx, top, "rev-parse", "--path-format=absolute", "--git-common-dir")
-				return nil, fmt.Errorf("%s is a git worktree, which cannot be mounted; mount the repository's own checkout (%s), or leave out --mount to clone it", top, filepath.Dir(main))
+				return nil, nil, fmt.Errorf("%s is a git worktree, which cannot be mounted; mount the repository's own checkout (%s), or leave out --mount to clone it", top, filepath.Dir(main))
 			}
-			r.Branch, _ = git(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
+			current, _ := git(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
+			r.Branch = current
+			if branch != "" && branch != current {
+				if _, err := git(ctx, ".", "check-ref-format", "--branch", branch); err != nil {
+					return nil, nil, fmt.Errorf("invalid branch %q; use a git branch name", branch)
+				}
+				r.Branch = branch
+				made := ""
+				if _, err := git(ctx, top, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err != nil {
+					made = ", made there from HEAD"
+				}
+				needs = append(needs, api.Need{Code: "branch_switch", Message: "the host's checkout is switched to " + branch + made, Repository: in.Source, Warning: true})
+			}
 			if raw, err := git(ctx, top, "config", "--get", "remote.origin.url"); err == nil {
 				r.URL, _ = CloneURL(raw)
 			}
@@ -327,10 +342,10 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) 
 			r.Name = filepath.Base(r.HostPath)
 		}
 		if err := ValidName(r.Name); err != nil {
-			return nil, fmt.Errorf("repository directory: %w; use --repo name=path", err)
+			return nil, nil, fmt.Errorf("repository directory: %w; use --repo name=path", err)
 		}
 		if names[r.Name] {
-			return nil, fmt.Errorf("duplicate repository directory %s; use --repo name=path", r.Name)
+			return nil, nil, fmt.Errorf("duplicate repository directory %s; use --repo name=path", r.Name)
 		}
 		names[r.Name] = true
 		if r.URL != "" {
@@ -343,10 +358,36 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) 
 		}
 		if r.Author != "" {
 			if _, _, err := AuthorParts(r.Author); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+		}
+		if branch != "" && r.Branch == "" {
+			return nil, nil, fmt.Errorf("%s is not a git repository, so it has no branch to switch to; leave out --branch", r.HostPath)
 		}
 		repos = append(repos, r)
 	}
-	return repos, nil
+	return repos, needs, nil
+}
+
+// switchMounted switches each mounted repository's host checkout to the
+// branch the task asked for, making it from HEAD when the host has none of
+// that name. git refuses a switch that would overwrite uncommitted changes,
+// and so does unibox, naming them.
+func switchMounted(ctx context.Context, repos []api.Repository) error {
+	for _, r := range repos {
+		if !r.Mounted || r.Branch == "" {
+			continue
+		}
+		if current, _ := git(ctx, r.HostPath, "symbolic-ref", "--quiet", "--short", "HEAD"); current == r.Branch {
+			continue
+		}
+		args := []string{"switch", r.Branch}
+		if _, err := git(ctx, r.HostPath, "show-ref", "--verify", "--quiet", "refs/heads/"+r.Branch); err != nil {
+			args = []string{"switch", "-c", r.Branch}
+		}
+		if _, err := git(ctx, r.HostPath, args...); err != nil {
+			return fmt.Errorf("cannot switch %s to %s; commit or stash what is in the way and retry: %w", r.HostPath, r.Branch, err)
+		}
+	}
+	return nil
 }

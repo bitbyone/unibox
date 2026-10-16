@@ -212,8 +212,12 @@ grouped worktree  <── git pull ───┐    /work/<task>/<repo>  clones o
     `gc.worktreePruneExpire = never` - the repository's git directory
     records the host's worktrees, which the guest does not have, and gc
     would prune their records on the host.
-  - Nothing is cloned, pushed or compared with a forge, so `--branch` and
-    `--push` are refused with it.
+  - Nothing is cloned, pushed or compared with a forge, so `--push` is
+    refused with it. `--branch` switches the host's checkout to the
+    branch when the task is prepared, making it there from HEAD when the
+    host has none of that name - it need not be on the forge, as nothing
+    is cloned from there; `check` only says so (`branch_switch`), and git
+    refuses a switch that would overwrite uncommitted changes.
   - **Removal unmounts before it deletes.** `rm -rf` of the task would go
     into a mount, so `rm-task` unmounts first, has the guest check every
     mount point is empty, and keeps the task, deleting nothing, when an

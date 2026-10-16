@@ -70,7 +70,9 @@ have, and what changed in the profile. `run` fixes what it can. Every command ac
 directories into a running sandbox, at `/work/<task>/<name>`, instead of
 cloning them: the agent works on your files and your `.git` as they are,
 on whatever is checked out, and what it writes there - a git hook
-included - is on your machine at once. Use it knowingly; without it
+included - is on your machine at once. `--branch` with it switches your
+checkout to that branch first, making it from HEAD when you have none of
+that name; it need not be on the forge. Use it knowingly; without it
 nothing of yours is mounted. A git worktree cannot be mounted (its `.git`
 points into the main repository by path); mount the repository's own
 checkout. `rm-task` unmounts first and never deletes your files.
