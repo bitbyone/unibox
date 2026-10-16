@@ -174,11 +174,6 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 		return nil, err
 	}
 	if req.Push {
-		for _, n := range needs {
-			if n.Code == "default_branch" || n.Code == "default_branch_unknown" {
-				return nil, checkNeeds([]api.Need{n})
-			}
-		}
 		if err = PushRepositories(ctx, repos); err != nil {
 			return nil, err
 		}

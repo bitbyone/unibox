@@ -63,18 +63,13 @@ func TestLocalPathWithBranchDoesNotSelectOrChangeMain(t *testing.T) {
 	if got := gitTest(t, host, "branch", "--show-current"); got != "main" {
 		t.Fatalf("host branch changed to %s", got)
 	}
-	_, needs, err = ResolveRepositories(context.Background(), Request{Repositories: []RepoInput{{Source: host}}})
+	// The default branch is a branch like any other to work on.
+	repos, needs, err = ResolveRepositories(context.Background(), Request{Repositories: []RepoInput{{Source: host}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, n := range needs {
-		if n.Code == "default_branch" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("default branch was not refused")
+	if len(needs) != 1 || needs[0].Code != "uncommitted" || len(repos) != 1 || repos[0].Branch != "main" {
+		t.Fatalf("%+v %+v", repos, needs)
 	}
 }
 

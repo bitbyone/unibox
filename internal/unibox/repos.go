@@ -173,14 +173,11 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 			return nil, nil, err
 		}
 		if local {
-			defaultBranch, remoteTip, err := remoteRefs(ctx, r.HostPath, r.URL, r.Branch)
+			// The agent may work on any branch, the default one too: the
+			// forge's protection of it is what bounds a push.
+			_, remoteTip, err := remoteRefs(ctx, r.HostPath, r.URL, r.Branch)
 			if err != nil {
 				return nil, nil, fmt.Errorf("cannot check remote branch for %s; check forge access: %w", r.Name, err)
-			}
-			if defaultBranch == "" {
-				needs = append(needs, api.Need{Code: "default_branch_unknown", Message: "cannot determine the forge's default branch; check its HEAD configuration", Repository: r.Name})
-			} else if defaultBranch == r.Branch {
-				needs = append(needs, api.Need{Code: "default_branch", Message: "make a work branch first", Repository: r.Name})
 			}
 			localTip, localErr := git(ctx, r.HostPath, "rev-parse", "--verify", "refs/heads/"+r.Branch)
 			if remoteTip == "" {

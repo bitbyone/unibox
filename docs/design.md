@@ -51,7 +51,7 @@ usable without unagit; **unagit is a UI over it** and one of its users.
 | the tokens a profile names, in the platform's store (`unibox secret`), reaching a sandbox as placeholders | its vault; later a source of short-lived tokens for a service's `command:` |
 | running the agent, stopping an idle sandbox | the questions: build, sign in, migrate, commit first |
 | its herdr plugin | the commit dialog's warning, the pull |
-| refusing a default branch | picking the environments repository from the list, handing unibox its path |
+| | picking the environments repository from the list, handing unibox its path |
 
 ## The picture
 
@@ -263,8 +263,7 @@ there):
    unibox has on - plain New Sandbox… while there is one.
 2. `unibox check --json` with the profile, sandbox, agent, branch and
    repositories. It answers with `needs`, each a `code` unagit asks about
-   in its own dialogs: `default_branch` (refused: "make a worktree with a
-   branch first"), `uncommitted` and `local_commits` (they will not reach
+   in its own dialogs: `uncommitted` and `local_commits` (they will not reach
    the sandbox, which clones from the forge - Commit… or go on without
    them), `branch_not_pushed` (the push of step 3), `image_required`
    (Build…, with the profile's diff), `login_required` and
@@ -329,6 +328,10 @@ unless `--push` asks it to run the user's own `git push -u`.
   this and wired as a git service (`unibox service add`). Narrow: a GitLab project or group access token with
   Developer on the projects concerned; a GitHub fine-grained token on the
   repositories, contents write.
+- **Any branch may be worked on, the default one too** (the user's call;
+  a task on the default branch was refused before). The agent pushes to
+  the branch it was given, so the forge's protection of that branch is
+  what bounds it.
 - **The forge is now the boundary.** The agent can push to any branch the
   token may, force-push, delete. Protect `main` and release branches on the
   forge, and if possible restrict the token to the work branches (GitLab
