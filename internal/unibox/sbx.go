@@ -510,3 +510,20 @@ func (r *SBX) RemoveImage(ctx context.Context, ref string) error {
 	}
 	return errSbx
 }
+
+// Mount bind-mounts a host directory into the running sandbox at the same
+// path (sbx mount, checked: live, writable, kept across a stop). It is
+// idempotent in sbx, so a task prepared again mounts again harmlessly.
+func (r *SBX) Mount(ctx context.Context, sandbox, host string) error {
+	if err := runQuiet(hostCommand(ctx, "sbx", "mount", sandbox, host)); err != nil {
+		return fmt.Errorf("sbx did not mount %s: %w", host, err)
+	}
+	return nil
+}
+
+func (r *SBX) Unmount(ctx context.Context, sandbox, host string) error {
+	if err := runQuiet(hostCommand(ctx, "sbx", "umount", sandbox, host)); err != nil {
+		return fmt.Errorf("sbx did not unmount %s: %w", host, err)
+	}
+	return nil
+}

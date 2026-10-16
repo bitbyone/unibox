@@ -79,6 +79,13 @@ type SessionEnver interface {
 	SessionEnv(p Profile, agent string) []string
 }
 
+// Mounter is a runtime that mounts a directory of the host into a running
+// sandbox at the same path, and takes it out, without a recreation.
+type Mounter interface {
+	Mount(ctx context.Context, sandbox, host string) error
+	Unmount(ctx context.Context, sandbox, host string) error
+}
+
 // ImagePruner is a runtime whose images unibox can list and remove, so old
 // ones do not pile up: a sandbox does not need the image it was made from
 // once it exists.

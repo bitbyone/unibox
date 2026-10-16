@@ -849,6 +849,10 @@ func (m *Manager) Recreate(ctx context.Context, name string, rebuild bool) error
 		if err != nil {
 			return err
 		}
+		// A recreated sandbox has none of the mounts its tasks had.
+		if err = m.mountTask(ctx, b, r, b.Tasks[i]); err != nil {
+			return err
+		}
 		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(prepareScript(b.Tasks[i], p, a))}), m.Log); err != nil {
 			return err
 		}

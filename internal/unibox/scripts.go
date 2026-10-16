@@ -68,13 +68,14 @@ func prepareScript(t api.Task, p Profile, a Agent) string {
 	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\nmkdir -p " + Quote(t.Directory) + "\n")
 	for _, r := range t.Repositories {
 		dir := path.Join(t.Directory, r.Name)
+		if r.Mounted {
+			b.WriteString(mountedScript(t, r, p))
+			continue
+		}
 		name, email, _ := AuthorParts(r.Author)
 		fmt.Fprintf(&b, "url=%s\nbranch=%s\ndir=%s\n", Quote(r.URL), Quote(r.Branch), Quote(dir))
 		b.WriteString(`refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch")
-default=$(printf '%s\n' "$refs" | awk '$1 == "ref:" && $3 == "HEAD" {sub("refs/heads/", "", $2); print $2}')
 tip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$branch" '$2 == ref {print $1}')
-[ -n "$default" ] || { echo 'cannot determine the default branch; check the forge HEAD' >&2; exit 4; }
-[ "$branch" != "$default" ] || { echo 'default branch refused; make a work branch first' >&2; exit 4; }
 [ -n "$tip" ] || { echo 'branch does not exist on the forge; push it first' >&2; exit 4; }
 if [ ! -d "$dir" ]; then
   tmp="$dir.unibox-clone"
@@ -216,6 +217,10 @@ func safeToRemoveScript(t api.Task) string {
 	fmt.Fprintf(&b, "echo %s\n", Quote("checking task "+t.ID+" for work not on the forge"))
 	for _, r := range t.Repositories {
 		dir := path.Join(t.Directory, r.Name)
+		if r.Mounted {
+			fmt.Fprintf(&b, "echo %s\n", Quote("  "+r.Name+": mounted from "+r.HostPath+"; its work is on the host"))
+			continue
+		}
 		fmt.Fprintf(&b, "dir=%s\nname=%s\n", Quote(dir), Quote(r.Name))
 		b.WriteString(`if [ -d "$dir" ]; then
   [ -d "$dir/.git" ] || { echo "$name: an incomplete clone; inspect it before removing" >&2; exit 4; }
@@ -332,4 +337,77 @@ func scriptsScript(p Profile, names []string, env []string) string {
 		s += fmt.Sprintf("echo %s >&2\nif ! env %s%s; then echo %s >&2; exit 1; fi\n", Quote("unibox: running script "+name), vars, run, Quote("unibox: script "+name+" failed"))
 	}
 	return s
+}
+
+// mountedDir is where unibox keeps, in the guest, what a mounted repository
+// of a task needs of git: its configuration and commit hook, outside the
+// host's .git, which unibox does not write.
+func mountedDir(t api.Task, r api.Repository) string {
+	return "/var/lib/unibox/mounted/" + t.ID + "/" + r.Name
+}
+
+// mountedGitDirs is the git directory pattern git's includeIf matches the
+// mounted repository by: its own .git, or the main one a worktree's lives
+// in, which covers the worktree's.
+func mountedGitDirs(r api.Repository) string {
+	if r.GitDir != "" {
+		return r.GitDir + "/"
+	}
+	return r.HostPath + "/.git/"
+}
+
+// mountedScript links a mounted directory into the task, where the agent
+// works, and gives git in the guest the author and co-author hook for it
+// through an includeIf of the guest's global configuration - so commits
+// made in the sandbox are the task's, and the host's .git/config is left
+// as it is.
+func mountedScript(t api.Task, r api.Repository, p Profile) string {
+	var b strings.Builder
+	dir := path.Join(t.Directory, r.Name)
+	fmt.Fprintf(&b, "dir=%s\nhost=%s\n", Quote(dir), Quote(r.HostPath))
+	b.WriteString(`[ -d "$host" ] || { echo "$host is not mounted in the sandbox; prepare the task again" >&2; exit 4; }
+if [ -L "$dir" ] || [ ! -e "$dir" ]; then
+  ln -sfn "$host" "$dir"
+else
+  echo "$dir is in the way of the mounted directory; inspect it in unibox shell" >&2; exit 4
+fi
+`)
+	if r.Author == "" {
+		return b.String()
+	}
+	name, email, _ := AuthorParts(r.Author)
+	coAuthor := p.Git.CoAuthor
+	if r.CoAuthor != nil {
+		coAuthor = r.CoAuthor
+	}
+	credit := "on\n"
+	if coAuthor != nil && !*coAuthor {
+		credit = "off\n"
+	}
+	own := mountedDir(t, r)
+	config := fmt.Sprintf("[user]\n\tname = %s\n\temail = %s\n[core]\n\thooksPath = %s\n", name, email, own+"/hooks")
+	b.WriteString(writeGuest(own+"/hooks/commit-msg", []byte(coAuthorHook()), "700"))
+	b.WriteString(writeGuest(own+"/hooks/credit", []byte(credit), "600"))
+	b.WriteString(writeGuest(own+"/gitconfig", []byte(config), "600"))
+	key := "includeIf.gitdir:" + mountedGitDirs(r) + ".path"
+	fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\ngit config --global --add %s %s\n", Quote(key), Quote(key), Quote(own+"/gitconfig"))
+	return b.String()
+}
+
+// unmountedScript takes out of the guest what mountedScript put there for
+// a task's mounted repositories: the links and git's include. The host's
+// files are not touched; the directories are unmounted by the runtime.
+func unmountedScript(t api.Task) string {
+	var b strings.Builder
+	for _, r := range t.Repositories {
+		if !r.Mounted {
+			continue
+		}
+		key := "includeIf.gitdir:" + mountedGitDirs(r) + ".path"
+		fmt.Fprintf(&b, "rm -f %s\ngit config --global --unset-all %s >/dev/null 2>&1 || true\n", Quote(path.Join(t.Directory, r.Name)), Quote(key))
+	}
+	if b.Len() > 0 {
+		b.WriteString("rm -rf " + Quote("/var/lib/unibox/mounted/"+t.ID) + "\n")
+	}
+	return b.String()
 }

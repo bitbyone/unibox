@@ -52,6 +52,9 @@ unibox build web                                  # build its image now (run bui
 # create sandbox "web-1" from profile "web", clone this repo, run claude
 unibox run --profile web --new-sandbox web-1 --repo . --branch feat/login --agent claude
 
+# or work on this directory in place: mounted into sandbox "dev", not cloned
+unibox run --sandbox dev --agent copilot --mount
+
 unibox tasks                                      # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
 unibox add-repo <task> --repo ../api --branch feat/login  # clone one more, even while it runs
@@ -62,6 +65,13 @@ unibox recreate web-1                             # recreate now (a start does w
 `unibox check` (same arguments as `run`) lists anything missing before a
 start: an image to build, logins and secrets, a branch the forge does not
 have, and what changed in the profile. `run` fixes what it can. Every command accepts `--json`.
+
+`--mount` (on `run`, `prepare` and `add-repo`) mounts the selected
+directories into a running sandbox instead of cloning them: the agent
+works on your files and your `.git` as they are, on whatever is checked
+out, and what it writes there - a git hook included - is on your machine
+at once. Use it knowingly; without it nothing of yours is mounted.
+`rm-task` unmounts and never deletes your files.
 
 ## Environments repository
 

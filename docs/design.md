@@ -191,6 +191,23 @@ grouped worktree  <── git pull ───┐    /work/<task>/<repo>  clones o
   never config or hooks, so the host stays safe however the agent behaves.
 - **The cost**: what the agent has not pushed is not seen on the host. Its
   instructions tell it to commit and push as it goes.
+- **A directory is mounted instead, when the user says so** (`--mount`,
+  the user's call). It gives up the above on purpose: the agent works on
+  the host's files and `.git` as they are, on what is checked out there,
+  and a hook or `core.fsmonitor` it writes runs on the host later. sbx
+  mounts into a running sandbox (`sbx mount`, missing from its top-level
+  help; checked on a throwaway sandbox: live, writable, kept across a
+  stop, taken out by `sbx umount`, and removing the sandbox leaves the
+  host's files alone), at the host path, so a worktree's `.git` file still
+  points where it should - its main git directory is mounted too.
+  `/work/<task>/<name>` is a link to it. unibox writes nothing into the
+  host's `.git`: the task's author and co-author hook reach git in the
+  guest through an `includeIf "gitdir:..."` of the guest's global
+  configuration. Nothing is cloned, pushed or compared with a forge, so
+  `--branch` and `--push` are refused with it, and removal neither checks
+  for unpushed work nor deletes through the link: it unlinks, drops the
+  include and unmounts what no other task needs. A recreated sandbox has
+  no mounts; preparing its tasks again mounts them again.
 - **A task can grow while it runs** (`unibox add-repo <task> --repo ...`).
   Since nothing is mounted, adding a repository is one more clone into
   `/work/<task>/`, made through the runtime's exec. The agent in a running

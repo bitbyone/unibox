@@ -20,6 +20,9 @@ type Request struct {
 	Push, IgnoreLocal, Yes                                             bool
 	// Scripts are the profile's scripts to run before the agent's session.
 	Scripts []string
+	// Mount mounts the selected directories of the host into the sandbox
+	// instead of cloning them, at the user's word.
+	Mount bool
 	// services are the profile's, set by the manager once it knows the
 	// profile: a git service's author and co-author win over --author
 	// and the host's git configuration for the repositories under it.
@@ -79,6 +82,10 @@ func AuthorParts(author string) (string, string, error) {
 }
 
 func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []api.Need, error) {
+	if req.Mount {
+		repos, err := resolveMounted(ctx, req)
+		return repos, nil, err
+	}
 	repos := []api.Repository{}
 	needs := []api.Need{}
 	names := map[string]bool{}
@@ -266,4 +273,79 @@ func PushRepositories(ctx context.Context, repos []api.Repository) error {
 		}
 	}
 	return nil
+}
+
+// resolveMounted turns a request's directories into repositories mounted
+// from the host. The agent works on the host's files and git directory as
+// they are, on what is checked out there, so nothing is pushed, cloned or
+// compared with a forge; the user asked for exactly that.
+func resolveMounted(ctx context.Context, req Request) ([]api.Repository, error) {
+	if req.Branch != "" || req.Push {
+		return nil, fmt.Errorf("a mounted directory works on what is checked out on the host; leave out --branch and --push")
+	}
+	repos := []api.Repository{}
+	names := map[string]bool{}
+	for _, in := range req.Repositories {
+		if in.Branch != "" {
+			return nil, fmt.Errorf("a mounted directory works on what is checked out on the host; leave out --branch")
+		}
+		path, err := ExpandPath(in.Source)
+		if err == nil {
+			path, err = filepath.Abs(path)
+		}
+		if err == nil {
+			path, err = filepath.EvalSymlinks(path)
+		}
+		if info, statErr := os.Stat(path); err != nil || statErr != nil || !info.IsDir() {
+			return nil, fmt.Errorf("--mount takes directories of the host, and %s is not one", in.Source)
+		}
+		if strings.Contains(path, ":") {
+			return nil, fmt.Errorf("%s has a colon in its path, which a mount cannot name; mount a directory without one", path)
+		}
+		r := api.Repository{Name: in.Name, HostPath: path, Author: req.Author, Mounted: true}
+		if top, err := git(ctx, path, "rev-parse", "--show-toplevel"); err == nil {
+			r.HostPath = top
+			if common, err := git(ctx, top, "rev-parse", "--path-format=absolute", "--git-common-dir"); err == nil {
+				if common, err = filepath.EvalSymlinks(common); err == nil && common != filepath.Join(top, ".git") && !strings.HasPrefix(common, top+string(filepath.Separator)) {
+					r.GitDir = common
+				}
+			}
+			r.Branch, _ = git(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
+			if raw, err := git(ctx, top, "config", "--get", "remote.origin.url"); err == nil {
+				r.URL, _ = CloneURL(raw)
+			}
+			if r.Author == "" {
+				name, _ := git(ctx, top, "config", "user.name")
+				email, _ := git(ctx, top, "config", "user.email")
+				if name != "" || email != "" {
+					r.Author = name + " <" + email + ">"
+				}
+			}
+		}
+		if r.Name == "" {
+			r.Name = filepath.Base(r.HostPath)
+		}
+		if err := ValidName(r.Name); err != nil {
+			return nil, fmt.Errorf("repository directory: %w; use --repo name=path", err)
+		}
+		if names[r.Name] {
+			return nil, fmt.Errorf("duplicate repository directory %s; use --repo name=path", r.Name)
+		}
+		names[r.Name] = true
+		if r.URL != "" {
+			if author, coAuthor := GitIdentity(req.services, r.URL); author != "" || coAuthor != nil {
+				if author != "" && req.Author == "" {
+					r.Author = author
+				}
+				r.CoAuthor = coAuthor
+			}
+		}
+		if r.Author != "" {
+			if _, _, err := AuthorParts(r.Author); err != nil {
+				return nil, err
+			}
+		}
+		repos = append(repos, r)
+	}
+	return repos, nil
 }

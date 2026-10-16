@@ -156,9 +156,9 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	}
 }
 
-func TestTaskDefaultBranchAndMissingBranchAreRefusedInsideGuest(t *testing.T) {
+func TestTheDefaultBranchIsPreparedAndAMissingOneRefusedInsideGuest(t *testing.T) {
 	t.Parallel()
-	for _, branch := range []string{"main", "missing"} {
+	for branch, accepted := range map[string]bool{"main": true, "missing": false} {
 		t.Run(branch, func(t *testing.T) {
 			t.Parallel()
 			remote, _ := remoteFixture(t)
@@ -169,9 +169,9 @@ func TestTaskDefaultBranchAndMissingBranchAreRefusedInsideGuest(t *testing.T) {
 			if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
 				t.Fatal(err)
 			}
-			_, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "refused", Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: branch}}})
-			if err == nil {
-				t.Fatal("unsafe branch accepted")
+			_, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "t-" + branch, Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: branch}}})
+			if (err == nil) != accepted {
+				t.Fatalf("%s: %v", branch, err)
 			}
 		})
 	}

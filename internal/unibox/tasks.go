@@ -269,6 +269,9 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	part := t
 	part.Repositories = added
 	fmt.Fprintf(m.Log, "adding %d repositories to task %s\n", len(added), t.ID)
+	if err = m.mountTask(ctx, b, r, part); err != nil {
+		return t, nil, err
+	}
 	if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(prepareScript(part, p, a))}), m.Log); err != nil {
 		return t, nil, err
 	}
@@ -357,6 +360,9 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		}
 		a, _ := FindAgent(t.Agent)
 		fmt.Fprintf(m.Log, "preparing task %s\n", t.ID)
+		if err = m.mountTask(ctx, b, r, t); err != nil {
+			return b, t, r, nil, nil, err
+		}
 		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(prepareScript(t, p, a))}), m.Log); err != nil {
 			return b, t, r, nil, nil, err
 		}
@@ -714,12 +720,25 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 		if index < 0 {
 			return fmt.Errorf("task %s not found", task)
 		}
+		removed := b.Tasks[index]
 		if exists {
-			if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"rm", "-rf", "--", b.Tasks[index].Directory}}), m.Log); err != nil {
+			// A mounted directory's link and git include go first; rm -rf
+			// then takes the task's links, never what they point to.
+			if s := unmountedScript(removed); s != "" {
+				if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", s}}), m.Log); err != nil {
+					return err
+				}
+			}
+			if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"rm", "-rf", "--", removed.Directory}}), m.Log); err != nil {
 				return err
 			}
 		}
 		b.Tasks = slices.Delete(b.Tasks, index, index+1)
+		if exists {
+			if err = m.unmountTask(ctx, b, r, removed); err != nil {
+				return err
+			}
+		}
 		return m.saveBox(b)
 	}
 	if exists {
@@ -728,4 +747,64 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 		}
 	}
 	return m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil })
+}
+
+// mountedPaths are the host directories a task's mounted repositories need
+// in the sandbox: each, and the git directory of a worktree, outside it.
+func mountedPaths(t api.Task) []string {
+	out := []string{}
+	for _, r := range t.Repositories {
+		if r.Mounted {
+			out = append(out, r.HostPath)
+			if r.GitDir != "" {
+				out = append(out, r.GitDir)
+			}
+		}
+	}
+	return out
+}
+
+// mountTask mounts a task's host directories into its sandbox, at their
+// host paths, before the task is prepared there.
+func (m *Manager) mountTask(ctx context.Context, b api.Sandbox, r Runtime, t api.Task) error {
+	paths := mountedPaths(t)
+	if len(paths) == 0 {
+		return nil
+	}
+	mounter, ok := r.(Mounter)
+	if !ok {
+		return fmt.Errorf("runtime %s cannot mount host directories; leave out --mount", r.Name())
+	}
+	for _, p := range paths {
+		if err := mounter.Mount(ctx, b.RuntimeName, p); err != nil {
+			return err
+		}
+		fmt.Fprintf(m.Log, "mounted %s into sandbox %s\n", p, b.Name)
+	}
+	return nil
+}
+
+// unmountTask takes out of the sandbox the host directories of a removed
+// task that no task left in it still needs.
+func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, r Runtime, removed api.Task) error {
+	mounter, ok := r.(Mounter)
+	if !ok {
+		return nil
+	}
+	still := map[string]bool{}
+	for _, t := range b.Tasks {
+		for _, p := range mountedPaths(t) {
+			still[p] = true
+		}
+	}
+	for _, p := range mountedPaths(removed) {
+		if still[p] {
+			continue
+		}
+		if err := mounter.Unmount(ctx, b.RuntimeName, p); err != nil {
+			return err
+		}
+		fmt.Fprintf(m.Log, "unmounted %s from sandbox %s\n", p, b.Name)
+	}
+	return nil
 }

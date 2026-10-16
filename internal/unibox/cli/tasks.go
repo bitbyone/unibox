@@ -51,6 +51,7 @@ func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f.StringSliceVar(&r.Instructions, "instructions", nil, "Named instruction texts for a new sandbox")
 	f.BoolVar(&r.Push, "push", false, "Push selected local branches; create one nobody has from the local HEAD, or a URL's default tip (never force)")
 	f.BoolVar(&r.IgnoreLocal, "ignore-local", false, "Use the forge version despite uncommitted or unpushed local changes")
+	f.BoolVar(&r.Mount, "mount", false, "Mount the selected directories of the host into the sandbox instead of cloning them: the agent works on your files and .git as they are")
 	f.Var(&orderedValue{req: r}, "repo", "Repository path or HTTPS URL, optionally name=source (repeatable)")
 	f.Var(&orderedValue{req: r, branch: true}, "branch", "Before all repos: shared branch; after a repo: override only that repo")
 	c.MarkFlagsMutuallyExclusive("sandbox", "new-sandbox")
@@ -256,6 +257,7 @@ func (o *options) addRepoCommand() *cobra.Command {
 	f.StringVar(&req.Author, "author", "", "Commit author, as Name <email>")
 	f.BoolVar(&req.Push, "push", false, "Push selected local branches; create one nobody has from the local HEAD, or a URL's default tip (never force)")
 	f.BoolVar(&req.IgnoreLocal, "ignore-local", false, "Use the forge version despite uncommitted or unpushed local changes")
+	f.BoolVar(&req.Mount, "mount", false, "Mount the selected directories of the host into the sandbox instead of cloning them: the agent works on your files and .git as they are")
 	f.Var(&orderedValue{req: &req}, "repo", "Repository path or HTTPS URL, optionally name=source (repeatable)")
 	f.Var(&orderedValue{req: &req, branch: true}, "branch", "Before all repos: shared branch; after a repo: override only that repo")
 	return c

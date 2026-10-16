@@ -451,7 +451,8 @@ func (f *fakeRuntime) Exec(ctx context.Context, name string, c Command) *exec.Cm
 		args = []string{"sh", "-c", "exit 4"}
 	}
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Env = append(HostEnvironment(), "HOME="+filepath.Join(boxRoot, "home"))
+	// The guest's global git configuration is its home's, as in a VM.
+	cmd.Env = append(HostEnvironment(), "HOME="+filepath.Join(boxRoot, "home"), "GIT_CONFIG_GLOBAL="+filepath.Join(boxRoot, "home", ".gitconfig"))
 	if c.Directory != "" {
 		cmd.Dir = replace(c.Directory)
 	}
