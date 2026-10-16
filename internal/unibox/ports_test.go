@@ -89,7 +89,7 @@ func TestPortsArePublishedByTheProfileAndSwitchedWhileASandboxRuns(t *testing.T)
 	m.Runtimes = map[string]Runtime{"fake": live}
 	ctx := context.Background()
 	file := filepath.Join(m.Config.Environments, "sandboxes", "node", "sandbox.yaml")
-	profile := "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n"
+	profile := "version: 5\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n"
 	write(t, file, profile)
 	if err := m.Build(ctx, "node", "fake", false); err != nil {
 		t.Fatal(err)
@@ -152,7 +152,7 @@ func TestPortsArePublishedByTheProfileAndSwitchedWhileASandboxRuns(t *testing.T)
 	live.setState("unibox-dev", "running")
 
 	// A change of the profile's ports is applied live to a running sandbox.
-	write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3100:3000'\n")
+	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3100:3000'\n")
 	if err := m.ApplyPorts(ctx, "node"); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestAPortIsASpecOrASpecWithItsDefault(t *testing.T) {
 	}
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n    api: {port: 8080}\n")
+	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n    api: {port: 8080}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestAPortIsASpecOrASpecWithItsDefault(t *testing.T) {
 		"ports: {fe: {port: '3000', colour: red}}":    "not colour",
 		"ports: {fe: {port: '3000', default: maybe}}": "on or off",
 	} {
-		write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\nnetwork: {"+body+"}\n")
+		write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nnetwork: {"+body+"}\n")
 		if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", body, err)
 		}
@@ -217,7 +217,7 @@ func TestFormat2NetworkRulesMoveUnderNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Migrated) != 1 || report.Migrated[0] != "sandboxes/node/sandbox.yaml from format 2 to 4" {
+	if len(report.Migrated) != 1 || report.Migrated[0] != "sandboxes/node/sandbox.yaml from format 2 to 5" {
 		t.Fatalf("%q", report.Migrated)
 	}
 	p, err := LoadProfile(root, "node")
@@ -249,8 +249,56 @@ func TestFormat3BootstrapIsDroppedAndSaidSo(t *testing.T) {
 	if data, _ := os.ReadFile(file); strings.Contains(string(data), "bootstrap") {
 		t.Fatalf("%s", data)
 	}
-	write(t, file, "version: 4\ndockerfile: Dockerfile\nstart: start.sh\nbootstrap: x.sh\nagents: [claude]\n")
+	write(t, file, "version: 5\nstart: start.sh\nbootstrap: x.sh\nagents: [claude]\n")
 	if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "bootstrap") {
 		t.Fatalf("format 4 took bootstrap: %v", err)
+	}
+}
+
+func TestFormat4DockerfileBecomesSandboxDockerfile(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	dir := filepath.Join(root, "sandboxes", "node")
+	_ = os.Remove(filepath.Join(dir, "sandbox.dockerfile"))
+	write(t, filepath.Join(dir, "Dockerfile"), "FROM example/shell\n")
+	write(t, filepath.Join(dir, "sandbox.yaml"), "version: 4\n# Mine.\ndockerfile: Dockerfile\nstart: start.sh\nagents: [claude]\n")
+	if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "run unibox init node") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := Init(root, "node", nil, "2", "1g"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := LoadProfile(root, "node")
+	if err != nil || p.Dockerfile != "sandbox.dockerfile" {
+		t.Fatalf("%v %q", err, p.Dockerfile)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "sandbox.yaml")); strings.Contains(string(data), "dockerfile:") || !strings.Contains(string(data), "# Mine.") {
+		t.Fatalf("%s", data)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Dockerfile")); err == nil {
+		t.Fatal("the old Dockerfile stayed")
+	}
+	// A Dockerfile left beside it, both or neither of a file and an image,
+	// are named.
+	for setup, want := range map[string]string{
+		"Dockerfile": "rename Dockerfile to it",
+		"image":      "has sandbox.dockerfile and names image",
+		"neither":    "has no image: add sandbox.dockerfile",
+	} {
+		profile := "version: 5\nstart: start.sh\nagents: [claude]\n"
+		switch setup {
+		case "Dockerfile":
+			write(t, filepath.Join(dir, "Dockerfile"), "FROM x\n")
+		case "image":
+			profile += "image: example/image\n"
+		case "neither":
+			_ = os.Rename(filepath.Join(dir, "sandbox.dockerfile"), filepath.Join(dir, "_data", "aside"))
+		}
+		write(t, filepath.Join(dir, "sandbox.yaml"), profile)
+		if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v", setup, err)
+		}
+		_ = os.Remove(filepath.Join(dir, "Dockerfile"))
+		_ = os.Rename(filepath.Join(dir, "_data", "aside"), filepath.Join(dir, "sandbox.dockerfile"))
 	}
 }

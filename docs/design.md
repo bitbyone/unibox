@@ -108,7 +108,7 @@ Where each kind of setting lives:
  (git, the user's or a team's)                               config.yaml
  +--------------------------+   +-----------------------+   +----------------------+
  | kotlin/                  |   | config.yaml           |   | integrations:        |
- |   Dockerfile             |<--+   environments: <path>|<--+   unibox:            |
+ |   sandbox.dockerfile     |<--+   environments: <path>|<--+   unibox:            |
  |   sandbox.yaml           |   |   runtimes:           |   |     on: true         |
  |   start.sh               |   |     sbx: {on, stop_   |   |     environments:    |
  |   instructions.md        |   |           idle}       |   |       gl/team/envs   |
@@ -557,14 +557,14 @@ sandbox-envs/
 ├── sandboxes/
 │   ├── kotlin/
 │   │   ├── sandbox.yaml
-│   │   ├── Dockerfile
+│   │   ├── sandbox.dockerfile
 │   │   ├── start.sh
 │   │   ├── instructions.md
 │   │   └── .sbx/
 │   │       └── build.args
 │   └── node/
 │       ├── sandbox.yaml
-│       └── Dockerfile
+│       └── sandbox.dockerfile
 ├── _shared/
 │   ├── @install/
 │   │   └── tools/jdk-certs.sh
@@ -588,7 +588,7 @@ texts of `_shared/@instructions` and `.shared/@instructions` (`.md` files
 alone, none named `instructions.md`). Anything else in the repository is
 the user's to arrange, and a profile names such a file by its path. Runtime directories inside a profile are
 hidden (`.sbx/build.args`), and a profile's root holds only its definition,
-Dockerfile, start script and `instructions.md` - custom files, an agent
+`sandbox.dockerfile`, start script, scripts and `instructions.md` - custom files, an agent
 configuration seed say, go under an underscore directory of the profile's
 own, `_data` by convention. `unibox init <profile>` lays the whole shape
 out (interactively with `-i`) and `unibox validate` checks it, every
@@ -679,7 +679,7 @@ start.
 
 ```yaml
 version: 4                    # the format; see below
-dockerfile: Dockerfile        # relative to the profile; or image: <ref>
+# the image builds from sandbox.dockerfile beside it; or image: <ref>
 resources: {cpus: 8, memory: 50%} # fixed, or a share of the host's
 env: [SPRING_PROFILES_ACTIVE] # names; values from the environment
 caches:
@@ -828,8 +828,13 @@ git:
   the proxy) and signs one agent of a sandbox in by OAuth, so two `oauth`
   agents in one profile are refused, and the `oauth` one is declared
   first in the generated kit.
-- `image:` instead of `dockerfile:` names an image built elsewhere (a
-  team's CI); then nothing is built.
+- **The image builds from `sandbox.dockerfile`** beside `sandbox.yaml`
+  (format 5, the user's call): the layout says it, so the profile no
+  longer names it. `image:` names one built elsewhere (a team's CI)
+  instead, and then nothing is built; a profile with both, or with
+  neither, is refused, and a `Dockerfile` left in its root is named for
+  renaming. The migration renames the file `dockerfile:` named and drops
+  the key, keeping a comment the user wrote above it.
 - **Caches are read-only from the host.** `~/.gradle/caches` mounted
   read-only as Gradle's read-only dependency cache: what the host already
   has is not downloaded again, and what is missing goes to the VM's own
@@ -850,7 +855,7 @@ Each at its own moment, all running inside the VM:
 
 | what | lives in | runs | for |
 | --- | --- | --- | --- |
-| `Dockerfile` | the profile | when the image is built | everything static: toolchains, tools, certificates |
+| `sandbox.dockerfile` | the profile | when the image is built | everything static: toolchains, tools, certificates |
 | `start` | the profile | once per boot of the VM | services and daemons (a shared `docker compose`), configuration from the environment |
 | `scripts` | the profile | when asked for: `--script` before a session, `unibox script` now | whatever the user wants on demand: updating skills, resetting a database |
 
@@ -1228,7 +1233,7 @@ How a profile becomes flags:
 
 | profile | sbx |
 | --- | --- |
-| `dockerfile` | the built template, `-t unibox/<profile>:<tree>` |
+| `sandbox.dockerfile` | the built template, `-t unibox/<profile>:<tree>` |
 | `image` | `-t <image>` |
 | `resources` | `--cpus`, `--memory`; a share resolved by the adapter (below) |
 | `network.deny` | `--deny-network`; changes by `sbx policy` live |

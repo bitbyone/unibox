@@ -63,7 +63,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "mine.json"), `{"theme": "light"}`)
-	write(t, file, "version: 4\n# Mine, from before.\ndockerfile: Dockerfile\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\nnetwork:\n  allow: [jitpack.io] # Kotlin\n")
+	write(t, file, "version: 5\n# Mine, from before.\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\nnetwork:\n  allow: [jitpack.io] # Kotlin\n")
 	// A repository init laid out already, as a real one is.
 	if _, err := Init(root, "", nil, "0", ""); err != nil {
 		t.Fatal(err)
@@ -122,10 +122,10 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	for version, want := range map[string]string{
-		"":             "is of format none and this unibox reads format 4; run unibox init node to migrate it",
-		"version: 0\n": "is of format 0 and this unibox reads format 4; run unibox init node",
-		"version: 3\n": "is of format 3 and this unibox reads format 4; run unibox init node",
-		"version: 5\n": "is of format 5, newer than the 4 this unibox reads; upgrade unibox",
+		"":             "is of format none and this unibox reads format 5; run unibox init node to migrate it",
+		"version: 0\n": "is of format 0 and this unibox reads format 5; run unibox init node",
+		"version: 4\n": "is of format 4 and this unibox reads format 5; run unibox init node",
+		"version: 6\n": "is of format 6, newer than the 5 this unibox reads; upgrade unibox",
 	} {
 		// An older form fails on its version, not on a field it has.
 		write(t, file, version+"dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\nauth: {claude: oauth}\n")
@@ -134,7 +134,7 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 		}
 	}
 	// A newer one init leaves alone.
-	write(t, file, "version: 5\ndockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\n")
+	write(t, file, "version: 6\nagents: [claude]\nstart: start.sh\n")
 	if _, err := Init(root, "node", nil, "2", "1g"); err == nil || !strings.Contains(err.Error(), "upgrade unibox") {
 		t.Fatalf("%v", err)
 	}
@@ -171,7 +171,7 @@ instructions: [unibox]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 4|auth codex left out|agent_config copilot.theme left out" {
+	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 5|auth codex left out|agent_config copilot.theme left out" {
 		t.Fatalf("%q", report.Migrated)
 	}
 	p, err := LoadProfile(root, "node")
@@ -179,7 +179,7 @@ instructions: [unibox]
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
-	for _, want := range []string{"version: 4\n# Node work.\ndockerfile", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after.", "settings.json: _data/claude/settings.json", "resources: {cpus: 6, memory: 8g} # mine"} {
+	for _, want := range []string{"# Node work.\nstart: start.sh", "auth: {token: 'secret:claude'} # mine", ".claude.json: _data/c.json", "co_author: C <c@example.com>", "co_author: Cop <>", "author: user", "# Mine, after.", "settings.json: _data/claude/settings.json", "resources: {cpus: 6, memory: 8g} # mine"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("no %q in\n%s", want, data)
 		}
@@ -212,7 +212,7 @@ instructions: [unibox]
 	if _, err := Init(root, "fresh", []string{"claude"}, "2", "1g"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 4\n") {
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 5\n") {
 		t.Fatalf("%s", data)
 	}
 }
@@ -267,7 +267,7 @@ func TestInitMovesARepositoryFromTheOlderLayout(t *testing.T) {
 	write(t, filepath.Join(root, "_shared", "installations", "tools", "own.sh"), "#!/bin/sh\n")
 	write(t, filepath.Join(root, "instructions", "unibox.md"), string(managed[".shared/@instructions/unibox.md"]))
 	write(t, filepath.Join(root, "instructions", "team.md"), "team")
-	write(t, filepath.Join(root, "sandboxes", "node", "Dockerfile"), "FROM x\n"+generatedRunLines[0]+"\nbase\nEOF\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.dockerfile"), "FROM x\n"+generatedRunLines[0]+"\nbase\nEOF\n")
 	if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "run unibox init") {
 		t.Fatalf("%v", err)
 	}
@@ -284,11 +284,11 @@ func TestInitMovesARepositoryFromTheOlderLayout(t *testing.T) {
 			t.Errorf("%s: %v", rel, err)
 		}
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "Dockerfile")); !strings.Contains(string(data), "COPY --from=unibox / /\nRUN @install <<EOF\nbase\nEOF\n") {
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "sandbox.dockerfile")); !strings.Contains(string(data), "COPY --from=unibox / /\nRUN @install <<EOF\nbase\nEOF\n") {
 		t.Fatalf("%s", data)
 	}
 	joined := strings.Join(report.Relaid, "\n")
-	if !strings.Contains(joined, "moved _shared/installations/agents/claude.sh to _shared/@install/agents/claude.sh, which differs from unibox's and now wins over it") || !strings.Contains(joined, "sandboxes/node/Dockerfile runs @install") {
+	if !strings.Contains(joined, "moved _shared/installations/agents/claude.sh to _shared/@install/agents/claude.sh, which differs from unibox's and now wins over it") || !strings.Contains(joined, "sandboxes/node/sandbox.dockerfile runs @install") {
 		t.Fatalf("%s", joined)
 	}
 	if _, err := LoadProfile(root, "node"); err != nil {
@@ -341,7 +341,7 @@ func TestInstallRunsTheUsersScriptOverUnibox(t *testing.T) {
 func TestTheNetworkCommentShowsHowToWritePortsAndReplacesTheFormerOne(t *testing.T) {
 	t.Parallel()
 	var doc yaml.Node
-	text := "version: 4\ndockerfile: Dockerfile\nagents: [claude]\n" + strings.ReplaceAll(formerComments[0], "\\n", "\n") + "\nnetwork: {allow: [jitpack.io]}\n"
+	text := "version: 5\nagents: [claude]\n" + strings.ReplaceAll(formerComments[0], "\\n", "\n") + "\nnetwork: {allow: [jitpack.io]}\n"
 	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestTheNetworkCommentShowsHowToWritePortsAndReplacesTheFormerOne(t *testing
 		t.Fatalf("%s", s)
 	}
 	// Absent, it is an example in the footer, ports and all.
-	if err := yaml.Unmarshal([]byte("version: 4\ndockerfile: Dockerfile\nagents: [claude]\n"), &doc); err != nil {
+	if err := yaml.Unmarshal([]byte("version: 5\nagents: [claude]\n"), &doc); err != nil {
 		t.Fatal(err)
 	}
 	ArrangeProfile(&doc, "web")

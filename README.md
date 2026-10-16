@@ -11,7 +11,7 @@ profile format, with an adapter per runtime. Today: Docker Sandboxes
  ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────────┐
  │ sandboxes/<profile>/ │   │ unibox               │   │ /work/<task>/<repo>      │
  │   sandbox.yaml       │──▶│  profile → adapter   │──▶│   fresh clone, own branch│
- │   Dockerfile         │   │                      │   │                          │
+ │   sandbox.dockerfile │   │                      │   │                          │
  │ _shared/  .shared/   │   │ runtime (sbx)        │   │ claude / codex / copilot │
  │   @install @instr.   │   │  logins, proxy,      │◀──│   commits + pushes       │
  └──────────────────────┘   │  network policy      │   └──────────────────────────┘
@@ -77,7 +77,7 @@ my-envs/
 ├── sandboxes/
 │   └── web/
 │       ├── sandbox.yaml       profile definition
-│       ├── Dockerfile         the image
+│       ├── sandbox.dockerfile the image (or image: in sandbox.yaml)
 │       ├── instructions.md    extra instructions for the agents (optional)
 │       └── _data/             files the profile refers to (optional)
 ├── _shared/                   yours
@@ -119,8 +119,7 @@ path from `sandbox.yaml` (`../../notes/style.md`).
 one, format by format, best effort: what it cannot carry over it names.
 
 ```yaml
-version: 4
-dockerfile: Dockerfile
+version: 5
 resources: {cpus: 4, memory: 50%}    # fixed, or a share of the host's
 agents:                              # or a list: [claude, codex]
   claude:

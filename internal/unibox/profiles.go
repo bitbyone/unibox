@@ -283,14 +283,19 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 	return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", n.Line)
 }
 
+// ProfileDockerfile is the file a profile's image builds from.
+const ProfileDockerfile = "sandbox.dockerfile"
+
 // ProfileFormat is the form of sandbox.yaml this unibox reads. A profile
 // says its own in version; one of an older form is not read until unibox
 // init migrates it (migrations.go).
-const ProfileFormat = 4
+const ProfileFormat = 5
 
 type Profile struct {
-	Version    int    `yaml:"version" json:"-"`
-	Dockerfile string `yaml:"dockerfile" json:"dockerfile"`
+	Version int `yaml:"version" json:"-"`
+	// Dockerfile is sandbox.dockerfile when the profile has it, which a
+	// profile no longer names; empty when it names a built image instead.
+	Dockerfile string `yaml:"-" json:"dockerfile"`
 	Image      string `yaml:"image" json:"image"`
 	Resources  `yaml:"resources"`
 	HostAccess `yaml:",inline"`
@@ -420,9 +425,6 @@ func LoadProfile(root, name string) (Profile, error) {
 			p.AgentConfig[agentConfigKey(id, file)] = seed
 		}
 	}
-	if (p.Dockerfile == "") == (p.Image == "") {
-		return p, fmt.Errorf("profile %s must specify exactly one of dockerfile or image", name)
-	}
 	if err = p.Resources.validate(); err != nil {
 		return p, fmt.Errorf("profile %s: %w", name, err)
 	}
@@ -439,7 +441,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 		seen[id] = true
 	}
-	for _, path := range append([]string{p.Dockerfile, p.Start}, sortedValues(p.Scripts)...) {
+	for _, path := range append([]string{p.Start}, sortedValues(p.Scripts)...) {
 		if path != "" && !safeRelative(path) {
 			return p, fmt.Errorf("profile %s: script and dockerfile paths must stay inside their directory", name)
 		}
@@ -593,8 +595,8 @@ func LoadProfile(root, name string) (Profile, error) {
 	// Dockerfile, start script and instructions.md, hidden runtime
 	// directories - and custom files behind an underscore, _data by
 	// convention, where the Dockerfile and sandbox.yaml reference them.
-	known := map[string]bool{"sandbox.yaml": true, "instructions.md": true}
-	for _, ref := range append([]string{p.Dockerfile, p.Start}, sortedValues(p.Scripts)...) {
+	known := map[string]bool{"sandbox.yaml": true, ProfileDockerfile: true, "instructions.md": true}
+	for _, ref := range append([]string{p.Start}, sortedValues(p.Scripts)...) {
 		if ref != "" && !strings.Contains(ref, "/") {
 			known[ref] = true
 		}
@@ -608,7 +610,10 @@ func LoadProfile(root, name string) (Profile, error) {
 		if strings.HasPrefix(n, ".") || strings.HasPrefix(n, "_") || known[n] {
 			continue
 		}
-		return p, fmt.Errorf("profile %s: unexpected %s; a profile's root holds sandbox.yaml, its Dockerfile, start script, scripts and instructions.md - custom files go under _data and are referenced from there", name, n)
+		if n == "Dockerfile" {
+			return p, fmt.Errorf("profile %s: its image builds from sandbox.dockerfile; rename Dockerfile to it (unibox init %s does)", name, name)
+		}
+		return p, fmt.Errorf("profile %s: unexpected %s; a profile's root holds sandbox.yaml, sandbox.dockerfile, its start script, scripts and instructions.md - custom files go under _data and are referenced from there", name, n)
 	}
 	snapshot := func(dir, prefix string) error {
 		return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -656,12 +661,20 @@ func LoadProfile(root, name string) (Profile, error) {
 			}
 		}
 	}
-	for _, path := range []string{p.Dockerfile, p.Start} {
-		if path != "" {
-			if _, ok := p.Files[filepath.ToSlash(path)]; !ok {
-				return p, fmt.Errorf("profile %s: missing %s", name, path)
-			}
+	if p.Start != "" {
+		if _, ok := p.Files[filepath.ToSlash(p.Start)]; !ok {
+			return p, fmt.Errorf("profile %s: missing %s", name, p.Start)
 		}
+	}
+	// The image builds from sandbox.dockerfile, or is one built already.
+	_, builds := p.Files[ProfileDockerfile]
+	switch {
+	case builds && p.Image != "":
+		return p, fmt.Errorf("profile %s has sandbox.dockerfile and names image %s; keep one", name, p.Image)
+	case builds:
+		p.Dockerfile = ProfileDockerfile
+	case p.Image == "":
+		return p, fmt.Errorf("profile %s has no image: add sandbox.dockerfile beside its sandbox.yaml, or name a built one with image: <reference>", name)
 	}
 	for _, script := range sortedKeys(p.Scripts) {
 		if !portName.MatchString(script) {

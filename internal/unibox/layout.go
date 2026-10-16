@@ -25,7 +25,6 @@ type profileSection struct {
 // each says above it and how it reads when absent. %s is the profile.
 var profileSections = []profileSection{
 	{key: "version"},
-	{key: "dockerfile"},
 	{key: "image"},
 	{key: "resources", comment: "# What a sandbox gets: CPUs and memory, each fixed (4, 8g) or a share of\n# the host's (50%). sbx gives at most 75% of the host's memory.", example: "# resources: {cpus: 50%, memory: 8g}  # fixed, or a share of the host's"},
 	{key: "agents", comment: "# The agents the image has, and for each: how it signs in (auth - unibox\n# agent login; secret:<name> is a token unibox keeps), how it is credited in\n# commits (co_author - unibox agent co-author; Name <> gives no address),\n# and the seeds of its own configuration files, merged before every session."},

@@ -60,7 +60,7 @@ func cliFixture(t *testing.T) (unibox.Paths, string) {
 	if err := os.MkdirAll(filepath.Join(root, "sandboxes", "node"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), []byte("version: 4\nimage: example/image\nagents: [claude]\nenv: [BUILD_MODE]\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), []byte("version: 5\nimage: example/image\nagents: [claude]\nenv: [BUILD_MODE]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := paths.SaveConfig(unibox.Config{Environments: root, Runtimes: map[string]unibox.RuntimeConfig{}}); err != nil {
@@ -145,7 +145,7 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if err := c.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{".shared/@install/base.sh", ".shared/@install/agents/copilot.sh", ".shared/@instructions/unibox.md", "_shared/@install/custom.sh", "_shared/@instructions/custom.md", "sandboxes/my2n/sandbox.yaml", "sandboxes/my2n/Dockerfile", "sandboxes/my2n/instructions.md", "sandboxes/my2n/.sbx/build.args"} {
+	for _, rel := range []string{".shared/@install/base.sh", ".shared/@install/agents/copilot.sh", ".shared/@instructions/unibox.md", "_shared/@install/custom.sh", "_shared/@instructions/custom.md", "sandboxes/my2n/sandbox.yaml", "sandboxes/my2n/sandbox.dockerfile", "sandboxes/my2n/instructions.md", "sandboxes/my2n/.sbx/build.args"} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
@@ -163,7 +163,7 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if info, _ := os.Stat(filepath.Join(root, ".shared", "@install", "base.sh")); info.Mode().Perm()&0o100 == 0 {
 		t.Fatal("an installation script is not executable")
 	}
-	if dockerfile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "my2n", "Dockerfile")); !strings.Contains(string(dockerfile), "COPY --from=unibox / /\nRUN @install base tools/nvm agents/copilot\n") {
+	if dockerfile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "my2n", "sandbox.dockerfile")); !strings.Contains(string(dockerfile), "COPY --from=unibox / /\nRUN @install base tools/nvm agents/copilot\n") {
 		t.Fatalf("%s", dockerfile)
 	}
 	// A second init adds a profile, keeps the user's files as they are and

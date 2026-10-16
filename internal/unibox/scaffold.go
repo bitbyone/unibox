@@ -170,10 +170,16 @@ func fixDockerfiles(root string) ([]string, error) {
 	notes := []string{}
 	profiles, _ := os.ReadDir(filepath.Join(root, "sandboxes"))
 	for _, e := range profiles {
-		file := filepath.Join(root, "sandboxes", e.Name(), "Dockerfile")
+		name := ProfileDockerfile
+		file := filepath.Join(root, "sandboxes", e.Name(), name)
 		data, err := os.ReadFile(file)
 		if err != nil {
-			continue
+			// A profile of an older format, its Dockerfile not yet renamed.
+			name = "Dockerfile"
+			file = filepath.Join(root, "sandboxes", e.Name(), name)
+			if data, err = os.ReadFile(file); err != nil {
+				continue
+			}
 		}
 		text := string(data)
 		for _, line := range generatedRunLines {
@@ -186,9 +192,9 @@ func fixDockerfiles(root string) ([]string, error) {
 			if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
 				return notes, err
 			}
-			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile runs @install")
+			notes = append(notes, "sandboxes/"+e.Name()+"/"+name+" runs @install")
 		} else if strings.Contains(text, "/unibox/.install") || strings.Contains(text, ".shared/install.sh") {
-			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile still runs an older runner; run the scripts with COPY --from=unibox / / and RUN @install <names>")
+			notes = append(notes, "sandboxes/"+e.Name()+"/"+name+" still runs an older runner; run the scripts with COPY --from=unibox / / and RUN @install <names>")
 		}
 	}
 	return notes, nil
@@ -410,7 +416,7 @@ func Init(root, name string, agents []string, cpus, memory string) (InitReport, 
 	files := []struct {
 		rel, template string
 		data          []byte
-	}{{rel: dir + "/sandbox.yaml", data: profileText}, {rel: dir + "/Dockerfile", template: "Dockerfile.tmpl"}, {rel: dir + "/instructions.md", template: "instructions.md.tmpl"}, {rel: dir + "/.sbx/build.args", template: ".sbx/build.args"}}
+	}{{rel: dir + "/sandbox.yaml", data: profileText}, {rel: dir + "/" + ProfileDockerfile, template: "sandbox.dockerfile.tmpl"}, {rel: dir + "/instructions.md", template: "instructions.md.tmpl"}, {rel: dir + "/.sbx/build.args", template: ".sbx/build.args"}}
 	for _, f := range files {
 		data := f.data
 		if f.template != "" {
@@ -489,7 +495,7 @@ func completeProfile(root, name string, agents []string, report InitReport, plac
 		slices.Sort(a)
 		slices.Sort(b)
 		if !slices.Equal(a, b) {
-			return report, fmt.Errorf("profile %s declares %s; init does not change a profile's agents - edit its agents and Dockerfile, or leave out --agents", name, strings.Join(p.Agents, ", "))
+			return report, fmt.Errorf("profile %s declares %s; init does not change a profile's agents - edit its agents and sandbox.dockerfile, or leave out --agents", name, strings.Join(p.Agents, ", "))
 		}
 	}
 	rel := "sandboxes/" + name + "/sandbox.yaml"

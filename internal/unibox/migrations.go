@@ -21,6 +21,7 @@ var migrations = []func(profile *yaml.Node) (moves []seedMove, notes []string){
 	1: migrateFrom1,
 	2: migrateFrom2,
 	3: migrateFrom3,
+	4: migrateFrom4,
 }
 
 // seedMove is a file of a profile a migration renames, both relative to
@@ -94,6 +95,13 @@ func migrateProfile(root, name string) (from int, notes []string, err error) {
 	}
 	for _, m := range moves {
 		to := filepath.Join(dir, m.to)
+		if !safeRelative(m.from) {
+			notes = append(notes, fmt.Sprintf("%s is outside the profile, so it was not moved to %s", m.from, m.to))
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(dir, m.from)); err != nil {
+			continue
+		}
 		if _, statErr := os.Stat(to); statErr == nil {
 			notes = append(notes, fmt.Sprintf("%s already there, so %s was left as it was", m.to, m.from))
 			continue
@@ -296,8 +304,41 @@ func migrateFrom2(profile *yaml.Node) (moves []seedMove, notes []string) {
 // carry, which format 4 no longer runs.
 func migrateFrom3(profile *yaml.Node) (moves []seedMove, notes []string) {
 	if v := mapValue(profile, "bootstrap"); v != nil {
-		deleteMapKey(profile, "bootstrap")
+		dropKeepingComment(profile, "bootstrap")
 		notes = append(notes, "bootstrap "+v.Value+" left out: unibox no longer runs a script from the worked-on repositories")
 	}
 	return nil, notes
+}
+
+// migrateFrom4 drops dockerfile: format 5 builds from sandbox.dockerfile
+// beside sandbox.yaml, so the file the profile named is renamed to it.
+func migrateFrom4(profile *yaml.Node) (moves []seedMove, notes []string) {
+	v := mapValue(profile, "dockerfile")
+	if v == nil {
+		return nil, nil
+	}
+	dropKeepingComment(profile, "dockerfile")
+	if v.Value != "" && v.Value != ProfileDockerfile {
+		moves = append(moves, seedMove{v.Value, ProfileDockerfile})
+	}
+	return moves, nil
+}
+
+// dropKeepingComment takes a key out of the profile and gives the comment
+// the user wrote above it to the key that follows, so it is not lost with
+// the key; one of unibox's own goes, as the layout writes its own anew.
+func dropKeepingComment(profile *yaml.Node, key string) {
+	for i := 0; i+1 < len(profile.Content); i += 2 {
+		k := profile.Content[i]
+		if k.Value != key {
+			continue
+		}
+		owned := slices.ContainsFunc(profileSections, func(s profileSection) bool { return s.comment == k.HeadComment }) || slices.Contains(formerComments, k.HeadComment)
+		if k.HeadComment != "" && !owned && i+2 < len(profile.Content) {
+			next := profile.Content[i+2]
+			next.HeadComment = strings.TrimSpace(k.HeadComment + "\n" + next.HeadComment)
+		}
+		profile.Content = append(profile.Content[:i], profile.Content[i+2:]...)
+		return
+	}
 }
