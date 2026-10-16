@@ -163,25 +163,56 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if info, _ := os.Stat(filepath.Join(root, "_shared", ".install")); info.Mode().Perm()&0o100 == 0 {
 		t.Fatal("the runner is not executable")
 	}
-	// A second init adds a profile and keeps every existing file as it is.
+	// A second init adds a profile, keeps the user's files as they are and
+	// brings unibox's managed ones back to its own: an edited one rewritten,
+	// one this unibox no longer has taken out, the user's beside them kept.
+	original, _ := os.ReadFile(filepath.Join(root, "_shared", "installations", "base.sh"))
+	if !strings.Contains(string(original), "Managed by unibox") {
+		t.Fatalf("%s", original)
+	}
 	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "installations", "base.sh"), []byte("#!/bin/sh\necho mine\n")); err != nil {
 		t.Fatal(err)
 	}
-	c = New(paths, strings.NewReader(""), io.Discard, io.Discard)
+	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "installations", "tools", "mine.sh"), []byte("#!/bin/sh\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := testenv.WriteExecutable(filepath.Join(root, "_shared", "installations", "tools", "gone.sh"), []byte("#!/bin/sh\n")); err != nil {
+		t.Fatal(err)
+	}
+	list := filepath.Join(root, "_shared", ".unibox-managed")
+	listed, _ := os.ReadFile(list)
+	if err := os.WriteFile(list, append(listed, "_shared/installations/tools/gone.sh\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sandboxes", "my2n", "instructions.md"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var second bytes.Buffer
+	c = New(paths, strings.NewReader(""), &second, io.Discard)
 	c.SetArgs([]string{"init", "personal", "--agents", "claude,codex", "--cpus", "2", "--memory", "4g"})
 	if err := c.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := os.ReadFile(filepath.Join(root, "_shared", "installations", "base.sh"))
-	if !strings.Contains(string(b), "echo mine") {
-		t.Fatal("init overwrote an existing file")
+	if b, _ := os.ReadFile(filepath.Join(root, "_shared", "installations", "base.sh")); string(b) != string(original) {
+		t.Fatal("init kept an edited managed file")
 	}
-	second, err := unibox.LoadProfile(root, "personal")
+	for rel, want := range map[string]bool{"_shared/installations/tools/mine.sh": true, "_shared/installations/tools/gone.sh": false} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); (err == nil) != want {
+			t.Fatalf("%s: %v", rel, err)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "sandboxes", "my2n", "instructions.md")); string(b) != "mine\n" {
+		t.Fatal("init rewrote a profile's own file")
+	}
+	if !strings.Contains(second.String(), "updated _shared/installations/base.sh to unibox's own") || !strings.Contains(second.String(), "removed _shared/installations/tools/gone.sh") {
+		t.Fatalf("%s", second.String())
+	}
+	personal, err := unibox.LoadProfile(root, "personal")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(second.Agents, []string{"claude", "codex"}) || second.CPUs != "2" || second.Memory != "4g" {
-		t.Fatalf("%v %s %s", second.Agents, second.CPUs, second.Memory)
+	if !reflect.DeepEqual(personal.Agents, []string{"claude", "codex"}) || personal.CPUs != "2" || personal.Memory != "4g" {
+		t.Fatalf("%v %s %s", personal.Agents, personal.CPUs, personal.Memory)
 	}
 	c = New(paths, strings.NewReader(""), io.Discard, io.Discard)
 	c.SetArgs([]string{"init", "bad", "--agents", "nonsense"})

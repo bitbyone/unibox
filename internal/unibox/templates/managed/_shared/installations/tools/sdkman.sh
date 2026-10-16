@@ -1,4 +1,6 @@
 #!/bin/bash
+# Managed by unibox: init, check and build rewrite it to unibox's own. Put
+# your own installation scripts beside it under another name.
 # SDKMAN - the JVM toolchain manager. No versions are chosen here: pick them
 # in base.sh or in the Dockerfile, e.g.
 #   . /etc/profile.d/sdkman.sh

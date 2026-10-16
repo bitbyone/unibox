@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -23,6 +24,34 @@ type Manager struct {
 	Config   Config
 	Runtimes map[string]Runtime
 	Log      io.Writer
+
+	managed    sync.Once
+	managedErr error
+}
+
+// syncManaged brings the environments repository's managed files to this
+// unibox's own once per command, before a profile is read for a check, a
+// build or a task, so an image is built from them. A repository init did
+// not lay out is left alone.
+func (m *Manager) syncManaged() error {
+	m.managed.Do(func() {
+		root := m.Config.Environments
+		if root == "" || !LaidOut(root) {
+			return
+		}
+		written, updated, removed, err := SyncManaged(root)
+		if err != nil {
+			m.managedErr = fmt.Errorf("cannot bring the environments repository's managed files to unibox's own: %w", err)
+			return
+		}
+		for _, rel := range append(written, updated...) {
+			fmt.Fprintf(m.Log, "updated %s to unibox's own\n", rel)
+		}
+		for _, rel := range removed {
+			fmt.Fprintf(m.Log, "removed %s: unibox no longer has it\n", rel)
+		}
+	})
+	return m.managedErr
 }
 
 func Open(paths Paths, log io.Writer) (*Manager, error) {
@@ -37,7 +66,7 @@ func Open(paths Paths, log io.Writer) (*Manager, error) {
 	if home, err := os.UserHomeDir(); err == nil {
 		sbx.Bindings = filepath.Join(home, ".config", "sbx", "credentials.yaml")
 	}
-	return &Manager{paths, c, map[string]Runtime{"sbx": sbx}, log}, nil
+	return &Manager{Paths: paths, Config: c, Runtimes: map[string]Runtime{"sbx": sbx}, Log: log}, nil
 }
 
 func (m *Manager) Runtime(name string) (Runtime, error) {
@@ -128,6 +157,9 @@ func (m *Manager) Built(ctx context.Context, p Profile, r Runtime) (BuildRecord,
 	return BuildRecord{}, Fail(3, "image_required", "profile %s image is missing from %s; run unibox build %s", p.Name, r.Name(), p.Name)
 }
 func (m *Manager) Build(ctx context.Context, name, rt string, force bool) error {
+	if err := m.syncManaged(); err != nil {
+		return err
+	}
 	p, err := m.profile(name)
 	if err != nil {
 		return err
@@ -246,6 +278,9 @@ func (m *Manager) taskSandbox(task string, preparing bool) (string, error) {
 }
 
 func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error) {
+	if err := m.syncManaged(); err != nil {
+		return api.Sandbox{}, nil, Profile{}, err
+	}
 	if req.Sandbox == "" && req.NewSandbox == "" && req.Profile == "" && req.Task != "" {
 		name, err := m.taskSandbox(req.Task, len(req.Repositories) > 0)
 		if err != nil {
@@ -303,6 +338,9 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 }
 
 func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
+	if err := m.syncManaged(); err != nil {
+		return api.Check{}, err
+	}
 	result := api.Check{APIVersion: api.Version, Ready: true, Needs: []api.Need{}, Repositories: []api.Repository{}}
 	b, r, p, err := m.Definition(req)
 	if err != nil {

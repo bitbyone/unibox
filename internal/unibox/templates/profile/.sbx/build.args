@@ -1,0 +1,1 @@
+BASE=docker/sandbox-templates:shell

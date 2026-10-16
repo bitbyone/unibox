@@ -51,7 +51,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
 | `internal/unibox` | profiles, the manager, tasks, runtimes, the sbx adapter and its kit |
 | `internal/unibox/api` | the versioned JSON contract other programs read |
 | `internal/unibox/cli` | the cobra commands, preflight and its questions |
-| `internal/unibox/scaffold` | what `unibox init` lays out |
+| `internal/unibox/templates` | every file unibox puts into an environments repository, as files: `managed/` mirrors the ones unibox owns and keeps current, `profile/` what init writes once into a new profile, `seeds/` the agents' configuration seeds |
 | `internal/testenv` | the isolated environment every package's tests run in |
 
 ## Decisions worth knowing

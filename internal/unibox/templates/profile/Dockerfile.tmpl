@@ -1,0 +1,17 @@
+# The image is composed by _shared/install: list the installation scripts,
+# one per line. The sbx build passes BASE=docker/sandbox-templates:shell
+# (.sbx/build.args); the default keeps this buildable by hand.
+ARG BASE=ubuntu:24.04
+FROM ${BASE}
+
+ARG UNIBOX_RUNTIME
+USER root
+
+RUN --mount=type=bind,source=_shared,target=/unibox /unibox/.install <<EOF
+{{range .Installations}}{{.}}
+{{end}}EOF
+
+# The shell template ships an agent user; a plain ubuntu base needs one made.
+RUN id agent >/dev/null 2>&1 || useradd -m -s /bin/bash agent
+USER agent
+WORKDIR /home/agent

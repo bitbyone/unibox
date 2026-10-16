@@ -599,6 +599,23 @@ profile's `sandbox.yaml`, its `instructions.md` and its agent configuration
 seeds are not image inputs: they change nothing of the image and force no
 rebuild.
 
+- **What unibox ships it keeps current, and what it writes for the user
+  it never touches again** (the user's call). The runner, the
+  installation scripts and `instructions/unibox.md` are unibox's: `init`,
+  `check`, `build` and a task's start - each once per command, before a
+  profile is read, so an image is built from them - rewrite one that
+  differs, saying so, and remove one a newer unibox dropped, by the list
+  in `_shared/.unibox-managed`; the user's own files beside them are not
+  on it and stay. A repository init did not lay out (no runner, no list)
+  is not written into. A profile's files - `sandbox.yaml`, Dockerfile,
+  `instructions.md`, `.sbx/build.args`, the seeds - are written once by
+  init and are the user's from then on. Both kinds live in the unibox
+  repository as files, not strings in the code: `internal/unibox/templates`
+  embeds `managed/` (laid out as in the environments repository),
+  `profile/` (text templates of a new profile) and `seeds/<agent>/<file>`.
+  An update of a managed script outdates every image, as any change under
+  `_shared` does.
+
 unibox knows the repository by its path (`environments` in its
 configuration) and reads the working tree - what the user sees in their
 editor is what runs. In unagit, Settings picks it **from the list of

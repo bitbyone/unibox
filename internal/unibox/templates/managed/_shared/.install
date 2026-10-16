@@ -1,4 +1,6 @@
 #!/bin/sh
+# Managed by unibox: init, check and build rewrite it to unibox's own. Put
+# your own installation scripts beside it under another name.
 # Runs the named installation scripts of _shared/installations, in order.
 # Names come as arguments, or one per line on stdin - which lets a Dockerfile
 # write them as a vertical list in a heredoc. Blank lines and #-comments pass.

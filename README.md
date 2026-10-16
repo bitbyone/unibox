@@ -85,6 +85,16 @@ my-envs/
 └── README.md
 ```
 
+unibox owns some of these files and keeps them at its own version: the
+runner `_shared/.install`, the scripts in `_shared/installations/` and
+`instructions/unibox.md`. `init`, `check`, `build` and a start rewrite them
+when they differ - an edit of one is lost, and the command says which it
+rewrote - and take out one a newer unibox no longer has
+(`_shared/.unibox-managed` lists them). Add your own installation scripts
+beside them under another name, and your own texts under `instructions/`;
+those, and everything a profile holds, are yours and stay as you leave
+them.
+
 ## Profile
 
 `sandboxes/<profile>/sandbox.yaml`. It does not mention the runtime.

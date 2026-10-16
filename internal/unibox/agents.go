@@ -29,9 +29,9 @@ type Agent struct {
 
 // AgentFile is one configuration file of an agent in the guest home, JSON
 // or, by its name, TOML.
+// Its seed, when unibox has one, is templates/seeds/<agent>/<name>.
 type AgentFile struct {
 	Name, Path string
-	Seed       map[string]any
 }
 
 // TOML says whether the file is TOML rather than JSON.
@@ -87,29 +87,27 @@ var Agents = []Agent{
 	// and unibox's commit hook says the co-author, so no agent's own byline.
 	{ID: "claude", Command: "claude", Instructions: ".claude/CLAUDE.md", CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Args: []string{"--dangerously-skip-permissions"}, Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust,
 		Configs: []AgentFile{
-			{Name: ".claude.json", Path: ".claude.json", Seed: map[string]any{"hasCompletedOnboarding": true, "theme": "dark", "bypassPermissionsModeAccepted": true}},
-			{Name: "settings.json", Path: ".claude/settings.json", Seed: map[string]any{"includeCoAuthoredBy": false}},
+			{Name: ".claude.json", Path: ".claude.json"},
+			{Name: "settings.json", Path: ".claude/settings.json"},
 		}},
 	// codex works unasked - the VM is the boundary - so one started by hand
 	// in unibox shell is as free as one unibox runs.
 	{ID: "codex", Command: "codex", Instructions: ".codex/AGENTS.md", CoAuthor: "Codex <noreply@openai.com>", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, Setup: codexSetup,
 		Configs: []AgentFile{
-			{Name: "config.toml", Path: ".codex/config.toml", Seed: map[string]any{"approval_policy": "never", "sandbox_mode": "danger-full-access"}},
+			{Name: "config.toml", Path: ".codex/config.toml"},
 		}},
 	// Its settings.json, per copilot help config; config.json is the state
 	// it keeps itself, seeded only by a profile that wants to.
 	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Args: []string{"--allow-all"}, Env: []string{"COPILOT_ALLOW_ALL=true"},
 		Configs: []AgentFile{
-			{Name: "settings.json", Path: ".copilot/settings.json", Seed: map[string]any{
-				"theme": "default", "includeCoAuthoredBy": false, "autoUpdate": false, "banner": "never", "trustedFolders": []any{"/work"},
-			}},
+			{Name: "settings.json", Path: ".copilot/settings.json"},
 			{Name: "config.json", Path: ".copilot/config.json"},
 		}},
 	// --auto approves what the seed does not name either, as the other
 	// agents' flags do; the sandbox is the boundary.
 	{ID: "opencode", Command: "opencode", Instructions: ".config/opencode/AGENTS.md", CoAuthor: "opencode <noreply@opencode.ai>", Args: []string{"--auto"},
 		Configs: []AgentFile{
-			{Name: "opencode.json", Path: ".config/opencode/opencode.json", Seed: map[string]any{"$schema": "https://opencode.ai/config.json", "autoupdate": false, "permission": map[string]any{"edit": "allow", "bash": "allow", "webfetch": "allow"}}},
+			{Name: "opencode.json", Path: ".config/opencode/opencode.json"},
 		}},
 }
 

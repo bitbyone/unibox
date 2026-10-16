@@ -1,0 +1,9 @@
+{
+  "autoUpdate": false,
+  "banner": "never",
+  "includeCoAuthoredBy": false,
+  "theme": "default",
+  "trustedFolders": [
+    "/work"
+  ]
+}

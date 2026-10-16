@@ -3,30 +3,137 @@ package unibox
 import (
 	"bytes"
 	"embed"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/template"
 )
 
-//go:embed all:scaffold
-var scaffoldFS embed.FS
+// templates holds every file unibox puts into an environments repository,
+// as files rather than strings: managed/ mirrors the repository's paths of
+// the files unibox owns and keeps at its own version; profile/ is what init
+// writes once into a new profile, which is the user's from then on; seeds/
+// the agents' configuration seeds, per agent under the file's own name.
+//
+//go:embed all:templates
+var templatesFS embed.FS
 
 // InitReport says what Init wrote and what it found already there and kept.
 type InitReport struct {
 	Root          string
 	Written, Kept []string
+	// Updated and Removed are managed files brought to this unibox's own:
+	// rewritten, and taken out because this unibox no longer has them.
+	Updated, Removed []string
 	// Completed are files init brought up to date, adding what they lacked.
 	Completed []string
 	// Migrated says a profile was brought from an older format, then what
 	// of it could not be carried over.
 	Migrated []string
+}
+
+// managedList names, in the repository, the managed files unibox last
+// wrote, so that one a later unibox no longer has is taken out and the
+// user's own files beside them are not.
+const managedList = "_shared/.unibox-managed"
+
+// managedFiles are the files unibox owns in an environments repository, by
+// their path in it.
+func managedFiles() (map[string][]byte, error) {
+	out := map[string][]byte{}
+	err := fs.WalkDir(templatesFS, "templates/managed", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := templatesFS.ReadFile(path)
+		out[strings.TrimPrefix(path, "templates/managed/")] = data
+		return err
+	})
+	return out, err
+}
+
+func managedMode(rel string) os.FileMode {
+	if strings.HasSuffix(rel, "/.install") || strings.HasSuffix(rel, ".sh") {
+		return 0o755
+	}
+	return 0o644
+}
+
+// LaidOut says whether init laid the repository out, so its managed files
+// are unibox's to keep current.
+func LaidOut(root string) bool {
+	for _, rel := range []string{managedList, "_shared/.install"} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// SyncManaged brings the repository's managed files to this unibox's own:
+// it writes what is missing or differs, whatever was edited in it, and
+// takes out a file it wrote before and no longer has. Anything else under
+// _shared or instructions is the user's and stays.
+func SyncManaged(root string) (written, updated, removed []string, err error) {
+	files, err := managedFiles()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, rel := range sortedKeys(files) {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		mode := managedMode(rel)
+		old, readErr := os.ReadFile(path)
+		info, statErr := os.Stat(path)
+		if readErr == nil && statErr == nil && bytes.Equal(old, files[rel]) && info.Mode().Perm() == mode {
+			continue
+		}
+		if err = AtomicWrite(path, files[rel], mode); err != nil {
+			return nil, nil, nil, err
+		}
+		if readErr == nil {
+			updated = append(updated, rel)
+		} else {
+			written = append(written, rel)
+		}
+	}
+	list := filepath.Join(root, filepath.FromSlash(managedList))
+	if before, err := os.ReadFile(list); err == nil {
+		for _, rel := range strings.Split(strings.TrimSpace(string(before)), "\n") {
+			if _, still := files[rel]; rel == "" || strings.HasPrefix(rel, "#") || still || !safeRelative(rel) {
+				continue
+			}
+			if err := os.Remove(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+				removed = append(removed, rel)
+			}
+		}
+	}
+	text := "# The files unibox manages here, rewritten to its own by init, check and\n# build. Leave this list to unibox.\n" + strings.Join(sortedKeys(files), "\n") + "\n"
+	if old, err := os.ReadFile(list); err != nil || string(old) != text {
+		if err = AtomicWrite(list, []byte(text), 0o644); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	return written, updated, removed, nil
+}
+
+// profileTemplate renders one of templates/profile.
+func profileTemplate(name string, data any) ([]byte, error) {
+	src, err := templatesFS.ReadFile("templates/profile/" + name)
+	if err != nil {
+		return nil, err
+	}
+	t, err := template.New(name).Funcs(template.FuncMap{"join": strings.Join}).Option("missingkey=error").Parse(string(src))
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	err = t.Execute(&out, data)
+	return out.Bytes(), err
 }
 
 // Init lays the environments repository's mandatory structure into root and,
@@ -72,28 +179,12 @@ func Init(root, name string, agents []string, cpus, memory string) (InitReport, 
 		report.Written = append(report.Written, rel)
 		return nil
 	}
-	err := fs.WalkDir(scaffoldFS, "scaffold", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		rel := strings.TrimPrefix(path, "scaffold/")
-		dest := rel
-		if rel == ".install" || strings.HasPrefix(rel, "installations/") {
-			dest = "_shared/" + rel
-		}
-		data, err := scaffoldFS.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		mode := os.FileMode(0o644)
-		if rel == ".install" || strings.HasSuffix(rel, ".sh") {
-			mode = 0o755
-		}
-		return place(dest, data, mode)
-	})
+	written, updated, removed, err := SyncManaged(root)
 	if err != nil {
 		return report, err
 	}
+	report.Written = append(report.Written, written...)
+	report.Updated, report.Removed = updated, removed
 	if name == "" {
 		if err := os.MkdirAll(filepath.Join(root, "sandboxes"), 0o755); err != nil {
 			return report, err
@@ -119,9 +210,13 @@ func Init(root, name string, agents []string, cpus, memory string) (InitReport, 
 	// The profile is built as a node tree and laid out by the arrangement
 	// every change of it gets, so it reads the same written by init or by
 	// a later command: each agent with how it is credited and its seeds.
-	raw := fmt.Sprintf("# %s: describe the environment here. version is the profile's format;\n# unibox init migrates an older one.\nversion: %d\ndockerfile: Dockerfile\nresources: {cpus: %s, memory: %s}\nagents: [%s]\ninstructions: [unibox]\n", name, ProfileFormat, cpus, memory, strings.Join(declared, ", "))
+	fields := map[string]any{"Name": name, "Format": ProfileFormat, "CPUs": cpus, "Memory": memory, "Agents": declared, "Installations": lines}
+	raw, err := profileTemplate("sandbox.yaml.tmpl", fields)
+	if err != nil {
+		return report, err
+	}
 	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return report, err
 	}
 	for _, id := range agents {
@@ -136,37 +231,18 @@ func Init(root, name string, agents []string, cpus, memory string) (InitReport, 
 	if err != nil {
 		return report, err
 	}
-	profileYAML := string(profileText)
-	dockerfile := fmt.Sprintf(`# The image is composed by _shared/install: list the installation scripts,
-# one per line. The sbx build passes BASE=docker/sandbox-templates:shell
-# (.sbx/build.args); the default keeps this buildable by hand.
-ARG BASE=ubuntu:24.04
-FROM ${BASE}
-
-ARG UNIBOX_RUNTIME
-USER root
-
-RUN --mount=type=bind,source=_shared,target=/unibox /unibox/.install <<EOF
-%s
-EOF
-
-# The shell template ships an agent user; a plain ubuntu base needs one made.
-RUN id agent >/dev/null 2>&1 || useradd -m -s /bin/bash agent
-USER agent
-WORKDIR /home/agent
-`, strings.Join(lines, "\n"))
-	instructions := fmt.Sprintf("# %s\n\nWhat the agent should know when it works in this profile.\n", name)
-	for _, f := range []struct {
-		rel  string
-		data string
-		mode os.FileMode
-	}{
-		{dir + "/sandbox.yaml", profileYAML, 0o644},
-		{dir + "/Dockerfile", dockerfile, 0o644},
-		{dir + "/instructions.md", instructions, 0o644},
-		{dir + "/.sbx/build.args", "BASE=docker/sandbox-templates:shell\n", 0o644},
-	} {
-		if err := place(f.rel, []byte(f.data), f.mode); err != nil {
+	files := []struct {
+		rel, template string
+		data          []byte
+	}{{rel: dir + "/sandbox.yaml", data: profileText}, {rel: dir + "/Dockerfile", template: "Dockerfile.tmpl"}, {rel: dir + "/instructions.md", template: "instructions.md.tmpl"}, {rel: dir + "/.sbx/build.args", template: ".sbx/build.args"}}
+	for _, f := range files {
+		data := f.data
+		if f.template != "" {
+			if data, err = profileTemplate(f.template, fields); err != nil {
+				return report, err
+			}
+		}
+		if err := place(f.rel, data, 0o644); err != nil {
 			return report, err
 		}
 	}
@@ -197,15 +273,9 @@ func agentSeeds(agents []string) ([]agentSeed, error) {
 			return nil, err
 		}
 		for _, f := range a.Configs {
-			if f.Seed == nil {
+			data, err := templatesFS.ReadFile("templates/seeds/" + id + "/" + f.Name)
+			if errors.Is(err, fs.ErrNotExist) {
 				continue
-			}
-			var data []byte
-			if f.TOML() {
-				data, err = toml.Marshal(f.Seed)
-			} else {
-				data, err = json.MarshalIndent(f.Seed, "", "  ")
-				data = append(data, '\n')
 			}
 			if err != nil {
 				return nil, err

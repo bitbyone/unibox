@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -212,5 +213,39 @@ instructions: [unibox]
 	}
 	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 4\n") {
 		t.Fatalf("%s", data)
+	}
+}
+
+func TestManagedFilesAreKeptCurrentOnlyWhereInitLaidTheRepositoryOut(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	ctx := context.Background()
+	root := m.Config.Environments
+	if err := m.Build(ctx, "node", "fake", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "_shared")); err == nil {
+		t.Fatal("unibox wrote into a repository init did not lay out")
+	}
+	// Laid out, with a managed file edited: the next command rewrites it.
+	if _, _, _, err := SyncManaged(root); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "_shared", "installations", "agents", "claude.sh")
+	original, _ := os.ReadFile(file)
+	write(t, file, "echo edited\n")
+	again, err := Open(m.Paths, m.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again.Config.Environments, again.Runtimes = root, m.Runtimes
+	if _, err := again.Check(ctx, Request{Profile: "node", Repositories: []RepoInput{{Source: "https://forge.invalid/x.git", Branch: "feat/x"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(file); string(b) != string(original) {
+		t.Fatalf("%s", b)
+	}
+	if !strings.Contains(m.Log.(interface{ String() string }).String(), "updated _shared/installations/agents/claude.sh to unibox's own") {
+		t.Fatal("the rewrite was not said")
 	}
 }
