@@ -35,7 +35,9 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	if f, ok := in.(*os.File); ok {
 		o.interactive = term.IsTerminal(int(f.Fd()))
 	}
-	root := &cobra.Command{Use: "unibox", Short: "Run coding agents in independent sandbox environments", SilenceErrors: true, SilenceUsage: true, Version: fmt.Sprintf("%s (profile format %d)", version.String(), unibox.ProfileFormat)}
+	root := &cobra.Command{Use: "unibox", Short: "Run coding agents in independent sandbox environments", SilenceErrors: true, SilenceUsage: true, Version: version.String()}
+	// As unagit: the release alone, or dev and the commit while developing.
+	root.SetVersionTemplate("{{.Version}}\n")
 	root.SetIn(in)
 	root.SetOut(out)
 	root.SetErr(errout)
@@ -49,7 +51,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 		o.manager = m
 		return m.RefreshPlugin()
 	}
-	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand())
+	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand(), o.versionCommand())
 	for _, name := range []string{"check", "prepare", "run"} {
 		root.AddCommand(o.taskCommand(name))
 	}
@@ -519,5 +521,18 @@ func (o *options) pruneCommand() *cobra.Command {
 		}
 		fmt.Fprintf(o.output, "removed %d images\n", len(removed))
 		return nil
+	}}
+}
+
+// versionCommand prints the release unibox was built from, as --version
+// does; with --json also the profile format and the JSON contract's
+// version it speaks, for a program to check before it drives unibox.
+func (o *options) versionCommand() *cobra.Command {
+	return &cobra.Command{Use: "version", Args: cobra.NoArgs, Short: "Print the release unibox was built from (with --json, the profile format and API version too)", RunE: func(cmd *cobra.Command, args []string) error {
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "version": version.String(), "profile_format": unibox.ProfileFormat})
+		}
+		_, err := fmt.Fprintln(o.output, version.String())
+		return err
 	}}
 }

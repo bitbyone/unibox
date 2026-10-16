@@ -87,13 +87,10 @@ jobs:
           version=${GITHUB_REF_NAME#v}
           make build VERSION="$version"
           got=$(./unibox --version)
-          case "$got" in
-            "unibox version $version (profile format "*) ;;
-            *)
-              echo "::error::unibox --version printed $got, not version $version"
-              exit 1
-              ;;
-          esac
+          if [ "$got" != "$version" ]; then
+            echo "::error::unibox --version printed $got, not $version"
+            exit 1
+          fi
 
   formula:
     needs: [tested, check]

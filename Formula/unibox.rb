@@ -18,6 +18,6 @@ class Unibox < Formula
   end
 
   test do
-    assert_match "unibox version #{version} (profile format", shell_output("#{bin}/unibox --version")
+    assert_equal version.to_s, shell_output("#{bin}/unibox --version").strip
   end
 end

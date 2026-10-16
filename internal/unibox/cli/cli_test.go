@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"github.com/tobola/unibox/internal/version"
 	"io"
 	"os"
 	"path/filepath"
@@ -305,5 +307,24 @@ func TestTasksListsEverySandboxAndResumeNeedsOnlyTheTask(t *testing.T) {
 	c.SetArgs([]string{"resume", "nothing"})
 	if err = c.Execute(); err == nil || !strings.Contains(err.Error(), "unibox tasks lists them") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestVersionIsTheReleaseAloneAndJSONAddsTheFormats(t *testing.T) {
+	t.Parallel()
+	paths, _ := cliFixture(t)
+	for _, args := range [][]string{{"--version"}, {"version"}} {
+		var out bytes.Buffer
+		c := New(paths, strings.NewReader(""), &out, io.Discard)
+		c.SetArgs(args)
+		if err := c.Execute(); err != nil || strings.TrimSpace(out.String()) != version.String() {
+			t.Fatalf("%v: %v %q", args, err, out.String())
+		}
+	}
+	var out bytes.Buffer
+	c := New(paths, strings.NewReader(""), &out, io.Discard)
+	c.SetArgs([]string{"version", "--json"})
+	if err := c.Execute(); err != nil || !strings.Contains(out.String(), fmt.Sprintf(`"profile_format": %d`, unibox.ProfileFormat)) || !strings.Contains(out.String(), `"version": "`+version.String()+`"`) {
+		t.Fatalf("%v %s", err, out.String())
 	}
 }

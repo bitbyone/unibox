@@ -763,7 +763,7 @@ git:
   recorded settings keep the share, so another host is no recreation.
 - **A profile says its format** (the user's call): `version` is the
   first key (none is format 0), `ProfileFormat` is the one this unibox
-  reads, and `unibox --version` shows it. Loading never migrates: a
+  reads, and `unibox version --json` names it. Loading never migrates: a
   profile of an older format is refused with "run unibox init <profile>
   to migrate it", a newer one with "upgrade unibox". `init` migrates on
   the YAML, one format at a time (`migrations.go`, indexed by the format
@@ -1208,8 +1208,10 @@ in unagit's Settings.
 The contract unagit is written against. Everything a list shows has
 `--json`; a long operation prints its progress as lines, for a log.
 Called with `--json` or `--yes` it never asks: what stands in the way is
-an answer, not a prompt. `unibox --version` names the profile format it
-reads (`0.1.0 (profile format 2)`); `api_version` in the JSON is the
+an answer, not a prompt. `unibox --version` and `unibox version` print the
+release, as unagit's do (`0.1`; `dev (<commit>)` for a build that is not a
+release, the version coming from the tag at build time); `unibox version
+--json` adds the profile format it reads and `api_version`, the JSON
 contract's own version, apart from it.
 
 | command | does |

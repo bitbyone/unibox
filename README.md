@@ -50,7 +50,9 @@ git clone https://github.com/bitbyone/unibox && cd unibox
 make install            # → ~/.local/bin/unibox
 ```
 
-`unibox --version` prints the release and the profile format it reads.
+`unibox --version` (or `unibox version`) prints the release it was built
+from, `dev (<commit>)` for a build that is not one; `unibox version --json`
+adds the profile format and the API version it speaks.
 
 ## Use
 
@@ -144,7 +146,7 @@ path from `sandbox.yaml` (`../../notes/style.md`).
 
 `sandboxes/<profile>/sandbox.yaml`. It does not mention the runtime.
 `version` is the profile's format; a unibox reads one format (`unibox
---version` shows it) and refuses another. `unibox init <profile>` migrates an older
+version --json` names it) and refuses another. `unibox init <profile>` migrates an older
 one, format by format, best effort: what it cannot carry over it names.
 
 ```yaml
@@ -309,7 +311,9 @@ exists. `unibox prune` removes the rest unibox no longer needs: the images
 of profiles and sandboxes that are gone.
 
 sbx limits that show through: only one agent per sandbox can use `oauth`,
-and changes to network rules or logins apply when a sandbox is recreated.
+and a login or service added after a sandbox was made reaches it when the
+sandbox is recreated (sbx binds a token's placeholder at creation). Network
+rules and ports change live.
 
 ## More
 
