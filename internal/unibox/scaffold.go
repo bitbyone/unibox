@@ -143,16 +143,62 @@ func withoutHeader(b []byte) string {
 	return s
 }
 
-// oldRunLine is the line a Dockerfile init wrote before .shared ran the
-// installation scripts.
-const oldRunLine = "RUN --mount=type=bind,source=_shared,target=/unibox /unibox/.install <<EOF"
-const newRunLine = "RUN --mount=type=bind,target=/unibox /unibox/.shared/install.sh <<EOF"
+// generatedRunLines are the lines a Dockerfile init wrote to run the
+// installation scripts, in each older form, and newRunLines what replaces
+// them; the list of names that follows them stays, as @install reads it.
+var generatedRunLines = []string{
+	"RUN --mount=type=bind,source=_shared,target=/unibox /unibox/.install <<EOF",
+	"RUN --mount=type=bind,target=/unibox /unibox/.shared/install.sh <<EOF",
+}
+
+const newRunLines = "COPY --from=unibox / /\nRUN @install <<EOF"
+
+// generatedComments are the comments init wrote above them, each with the
+// one that replaces it.
+var generatedComments = map[string]string{
+	"# The image is composed by _shared/install: list the installation scripts,\n# one per line. The sbx build passes BASE=docker/sandbox-templates:shell\n# (.sbx/build.args); the default keeps this buildable by hand.\n":                                                                              dockerfileComment,
+	"# The image is composed by .shared/install.sh: list the installation scripts,\n# one per line: each runs from _shared/@install, yours, or .shared/@install,\n# unibox's. The sbx build passes BASE=docker/sandbox-templates:shell\n# (.sbx/build.args); the default keeps this buildable by hand.\n": dockerfileComment,
+}
+
+const dockerfileComment = "# The image is composed by @install: it runs the installation scripts it\n# names, in order, each from _shared/@install, yours, or .shared/@install,\n# unibox's; COPY --from=unibox puts it and them into the image. The sbx\n# build passes BASE=docker/sandbox-templates:shell (.sbx/build.args).\n"
+
+// fixDockerfiles rewrites, in every profile's Dockerfile, the lines an
+// older init wrote to run the installation scripts into the @install of
+// today. A Dockerfile that runs them otherwise is named, to be changed by
+// hand.
+func fixDockerfiles(root string) ([]string, error) {
+	notes := []string{}
+	profiles, _ := os.ReadDir(filepath.Join(root, "sandboxes"))
+	for _, e := range profiles {
+		file := filepath.Join(root, "sandboxes", e.Name(), "Dockerfile")
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		text := string(data)
+		for _, line := range generatedRunLines {
+			text = strings.ReplaceAll(text, line, newRunLines)
+		}
+		for old, now := range generatedComments {
+			text = strings.Replace(text, old, now, 1)
+		}
+		if text != string(data) {
+			if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
+				return notes, err
+			}
+			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile runs @install")
+		} else if strings.Contains(text, "/unibox/.install") || strings.Contains(text, ".shared/install.sh") {
+			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile still runs an older runner; run the scripts with COPY --from=unibox / / and RUN @install <names>")
+		}
+	}
+	return notes, nil
+}
 
 // relayOut moves a repository from the layout older unibox gave it -
 // _shared/.install, _shared/installations, instructions/ - to .shared and
-// _shared/{install,instructions}. A script or text that is unibox's own is
-// dropped, as .shared has it; one that differs is kept as the user's, where
-// it wins over unibox's. Best effort: what it cannot do it says.
+// _shared/{@install,@instructions}. A script or text that is unibox's own
+// is dropped, as .shared has it; one that differs is kept as the user's,
+// where it wins over unibox's. Best effort: what it cannot do it says.
 func relayOut(root string) ([]string, error) {
 	if _, err := os.Stat(filepath.Join(root, "_shared", ".install")); err != nil {
 		return nil, nil
@@ -207,26 +253,6 @@ func relayOut(root string) ([]string, error) {
 	}
 	for _, f := range []string{"_shared/.install", "_shared/.unibox-managed"} {
 		_ = os.Remove(filepath.Join(root, filepath.FromSlash(f)))
-	}
-	profiles, _ := os.ReadDir(filepath.Join(root, "sandboxes"))
-	for _, e := range profiles {
-		file := filepath.Join(root, "sandboxes", e.Name(), "Dockerfile")
-		data, err := os.ReadFile(file)
-		if err != nil {
-			continue
-		}
-		text := string(data)
-		switch {
-		case strings.Contains(text, oldRunLine):
-			text = strings.ReplaceAll(text, oldRunLine, newRunLine)
-			text = strings.Replace(text, "# The image is composed by _shared/install: list the installation scripts,\n# one per line.", "# The image is composed by .shared/install.sh: list the installation scripts,\n# one per line: each runs from _shared/@install, yours, or .shared/@install,\n# unibox's.", 1)
-			if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
-				return notes, err
-			}
-			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile runs .shared/install.sh")
-		case strings.Contains(text, ".install"):
-			notes = append(notes, "sandboxes/"+e.Name()+"/Dockerfile still names .install; run the scripts with "+newRunLine)
-		}
 	}
 	return notes, nil
 }
@@ -305,6 +331,11 @@ func Init(root, name string, agents []string, cpus, memory string) (InitReport, 
 	}
 	relaid, err := relayOut(root)
 	report.Relaid = relaid
+	if err != nil {
+		return report, err
+	}
+	fixed, err := fixDockerfiles(root)
+	report.Relaid = append(report.Relaid, fixed...)
 	if err != nil {
 		return report, err
 	}

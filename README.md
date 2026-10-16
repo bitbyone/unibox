@@ -84,16 +84,24 @@ my-envs/
 │   ├── @install/custom.sh     installation scripts, named in a Dockerfile
 │   └── @instructions/custom.md  instruction texts, named in a profile
 ├── .shared/                   unibox's, kept at its own version
-│   ├── install.sh             the runner a Dockerfile calls
 │   ├── @install/              base, agents/claude, tools/nvm, ...
 │   └── @instructions/unibox.md
 └── README.md
 ```
 
 The `@` directories are what a profile names things from: a Dockerfile
-lists installation scripts by name (`agents/claude` runs
-`@install/agents/claude.sh`) and a profile's `instructions` names texts
-(`unibox` is `@instructions/unibox.md`). Yours in `_shared` win over
+runs installation scripts by name, and a profile's `instructions` names
+texts (`unibox` is `@instructions/unibox.md`):
+
+```dockerfile
+COPY --from=unibox / /
+RUN @install base tools/nvm agents/claude custom
+```
+
+`COPY --from=unibox` puts the `@install` command and the scripts into the
+image - unibox hands them to the build as a build context of that name -
+and `agents/claude` runs `@install/agents/claude.sh`. The names can also
+come one per line in a heredoc (`RUN @install <<EOF`). Yours in `_shared` win over
 unibox's in `.shared` of the same name, so overriding one of its scripts
 is putting yours there. `.shared` is unibox's alone: `init`, `check`,
 `build` and a start rewrite it to this unibox's version when it differs,

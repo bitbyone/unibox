@@ -241,7 +241,21 @@ func (r *SBX) Build(ctx context.Context, p Profile, tag string, log io.Writer) (
 				return "", err
 			}
 		}
-		args := []string{"build", "--tag", tag, "--file", filepath.Join(dir, p.Dockerfile)}
+		install, err := p.InstallContext()
+		if err != nil {
+			return "", err
+		}
+		installDir, err := os.MkdirTemp(r.Cache, "install-")
+		if err != nil {
+			return "", err
+		}
+		defer os.RemoveAll(installDir)
+		for name, file := range install {
+			if err = AtomicWrite(filepath.Join(installDir, filepath.FromSlash(name)), file.Data, os.FileMode(file.Mode)); err != nil {
+				return "", err
+			}
+		}
+		args := []string{"build", "--tag", tag, "--file", filepath.Join(dir, p.Dockerfile), "--build-context", "unibox=" + installDir}
 		buildArgs, err := p.BuildArgs(r.Name())
 		if err != nil {
 			return "", err

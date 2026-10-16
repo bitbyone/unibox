@@ -572,7 +572,6 @@ sandbox-envs/
 │       ├── review-style.md
 │       └── no-migrations.md
 ├── .shared/
-│   ├── install.sh
 │   ├── @install/
 │   │   ├── base.sh
 │   │   └── agents/claude.sh
@@ -594,11 +593,20 @@ configuration seed say, go under an underscore directory of the profile's
 own, `_data` by convention. `unibox init <profile>` lays the whole shape
 out (interactively with `-i`) and `unibox validate` checks it, every
 profile and every text included. `.shared/` and `_shared/` are copied into
-every profile's build context, so a Dockerfile composes what it needs: the
-runner `.shared/install.sh` runs the scripts a Dockerfile heredoc names,
-each from `_shared/@install` or else `.shared/@install`. Their contents but
-the instruction texts are part of every profile's revision - a change
-there marks every image outdated. The
+every profile's build context, so a Dockerfile can copy what it needs
+from them. The installation scripts reach it another way, for a short
+Dockerfile: the build gets a second context, `unibox`, holding the runner
+at `/usr/local/bin/@install` and the scripts at
+`/usr/local/lib/unibox/install`, unibox's with the user's of the same name
+over them; `COPY --from=unibox / /` puts both into the image and `RUN
+@install base agents/claude custom` runs them by name (or a heredoc's
+lines). The runner is a template of the unibox repository, not a file of
+the environments repository. `@install` is the command's name because
+`install` is coreutils', which builds use. A file of `.shared` or
+`_shared`, but the instruction texts, and the runner itself are part of
+every profile's revision - a change there marks every image outdated.
+`init` rewrites the lines an older init generated to run the scripts
+(`/unibox/.install`, `/unibox/.shared/install.sh`) into these two. The
 profile's `sandbox.yaml`, its `instructions.md` and its agent configuration
 seeds are not image inputs: they change nothing of the image and force no
 rebuild.

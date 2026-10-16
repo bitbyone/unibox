@@ -239,7 +239,7 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	if err != nil || !strings.Contains(out, "environments repository: "+root+" (configured)") || !strings.Contains(out, "add a profile with unibox init <profile>") {
 		t.Fatalf("%v\n%s\n%s", err, out, log)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".shared", "install.sh")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".shared", "@install", "base.sh")); err != nil {
 		t.Fatal("the repository was not laid out")
 	}
 	// A profile goes into the configured one, which init names.

@@ -145,7 +145,7 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if err := c.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{".shared/install.sh", ".shared/@install/base.sh", ".shared/@install/agents/copilot.sh", ".shared/@instructions/unibox.md", "_shared/@install/custom.sh", "_shared/@instructions/custom.md", "sandboxes/my2n/sandbox.yaml", "sandboxes/my2n/Dockerfile", "sandboxes/my2n/instructions.md", "sandboxes/my2n/.sbx/build.args"} {
+	for _, rel := range []string{".shared/@install/base.sh", ".shared/@install/agents/copilot.sh", ".shared/@instructions/unibox.md", "_shared/@install/custom.sh", "_shared/@instructions/custom.md", "sandboxes/my2n/sandbox.yaml", "sandboxes/my2n/Dockerfile", "sandboxes/my2n/instructions.md", "sandboxes/my2n/.sbx/build.args"} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
@@ -160,8 +160,11 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	if text, err := p.InstructionText(nil); err != nil || !strings.Contains(text, "Unibox sandbox") {
 		t.Fatalf("%v %q", err, text)
 	}
-	if info, _ := os.Stat(filepath.Join(root, ".shared", "install.sh")); info.Mode().Perm()&0o100 == 0 {
-		t.Fatal("the runner is not executable")
+	if info, _ := os.Stat(filepath.Join(root, ".shared", "@install", "base.sh")); info.Mode().Perm()&0o100 == 0 {
+		t.Fatal("an installation script is not executable")
+	}
+	if dockerfile, _ := os.ReadFile(filepath.Join(root, "sandboxes", "my2n", "Dockerfile")); !strings.Contains(string(dockerfile), "COPY --from=unibox / /\nRUN @install base tools/nvm agents/copilot\n") {
+		t.Fatalf("%s", dockerfile)
 	}
 	// A second init adds a profile, keeps the user's files as they are and
 	// brings unibox's managed ones back to its own: an edited one rewritten,

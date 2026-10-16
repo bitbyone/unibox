@@ -708,11 +708,16 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile %s: config %s of %s: %v", name, file, agent, err)
 		}
 	}
+	install, err := p.InstallContext()
+	if err != nil {
+		return p, err
+	}
 	p.Revision = digest(struct {
 		Files             map[string]SnapshotFile
 		Dockerfile, Image string
 		Agents            []string
-	}{p.BuildFiles(), p.Dockerfile, p.Image, p.Agents})
+		Install           map[string]SnapshotFile
+	}{p.BuildFiles(), p.Dockerfile, p.Image, p.Agents, install})
 	return p, nil
 }
 
@@ -740,6 +745,27 @@ func (p Profile) BuildFiles() map[string]SnapshotFile {
 		}
 	}
 	return out
+}
+
+// InstallContext is the build context a Dockerfile copies @install from
+// (COPY --from=unibox / /): the runner at /usr/local/bin/@install and the
+// installation scripts at /usr/local/lib/unibox/install, unibox's from
+// .shared/@install with the user's of _shared/@install over them, so a name
+// of the user's wins.
+func (p Profile) InstallContext() (map[string]SnapshotFile, error) {
+	runner, err := templatesFS.ReadFile("templates/build/@install")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]SnapshotFile{"usr/local/bin/@install": {runner, 0o755}}
+	for _, from := range []string{".shared/@install/", "_shared/@install/"} {
+		for name, file := range p.Files {
+			if rest, ok := strings.CutPrefix(name, from); ok {
+				out["usr/local/lib/unibox/install/"+rest] = file
+			}
+		}
+	}
+	return out, nil
 }
 
 // OAuthAgent is the agent the profile signs in by OAuth; the first in the

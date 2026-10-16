@@ -267,7 +267,7 @@ func TestInitMovesARepositoryFromTheOlderLayout(t *testing.T) {
 	write(t, filepath.Join(root, "_shared", "installations", "tools", "own.sh"), "#!/bin/sh\n")
 	write(t, filepath.Join(root, "instructions", "unibox.md"), string(managed[".shared/@instructions/unibox.md"]))
 	write(t, filepath.Join(root, "instructions", "team.md"), "team")
-	write(t, filepath.Join(root, "sandboxes", "node", "Dockerfile"), "FROM x\n"+oldRunLine+"\nbase\nEOF\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "Dockerfile"), "FROM x\n"+generatedRunLines[0]+"\nbase\nEOF\n")
 	if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "run unibox init") {
 		t.Fatalf("%v", err)
 	}
@@ -278,17 +278,17 @@ func TestInitMovesARepositoryFromTheOlderLayout(t *testing.T) {
 	for rel, want := range map[string]bool{
 		"_shared/.install": false, "_shared/.unibox-managed": false, "_shared/installations": false, "instructions": false,
 		"_shared/@install/agents/claude.sh": true, "_shared/@install/tools/own.sh": true, "_shared/@install/base.sh": false,
-		"_shared/@instructions/team.md": true, "_shared/@instructions/unibox.md": false, ".shared/install.sh": true,
+		"_shared/@instructions/team.md": true, "_shared/@instructions/unibox.md": false, ".shared/@install/base.sh": true,
 	} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); (err == nil) != want {
 			t.Errorf("%s: %v", rel, err)
 		}
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "Dockerfile")); !strings.Contains(string(data), newRunLine) {
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "Dockerfile")); !strings.Contains(string(data), "COPY --from=unibox / /\nRUN @install <<EOF\nbase\nEOF\n") {
 		t.Fatalf("%s", data)
 	}
 	joined := strings.Join(report.Relaid, "\n")
-	if !strings.Contains(joined, "moved _shared/installations/agents/claude.sh to _shared/@install/agents/claude.sh, which differs from unibox's and now wins over it") || !strings.Contains(joined, "sandboxes/node/Dockerfile runs .shared/install.sh") {
+	if !strings.Contains(joined, "moved _shared/installations/agents/claude.sh to _shared/@install/agents/claude.sh, which differs from unibox's and now wins over it") || !strings.Contains(joined, "sandboxes/node/Dockerfile runs @install") {
 		t.Fatalf("%s", joined)
 	}
 	if _, err := LoadProfile(root, "node"); err != nil {
@@ -296,20 +296,44 @@ func TestInitMovesARepositoryFromTheOlderLayout(t *testing.T) {
 	}
 }
 
-func TestTheRunnerPrefersTheUsersScripts(t *testing.T) {
+func TestInstallRunsTheUsersScriptOverUnibox(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := profileFixture(t)
 	if _, _, _, err := SyncManaged(root); err != nil {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(root, ".shared", "@install", "x.sh"), "echo from unibox\n")
 	write(t, filepath.Join(root, "_shared", "@install", "x.sh"), "echo mine\n")
 	write(t, filepath.Join(root, ".shared", "@install", "only.sh"), "echo only from unibox\n")
-	out, err := exec.Command("sh", filepath.Join(root, ".shared", "install.sh"), "x", "only.sh").CombinedOutput()
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	install, err := p.InstallContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(install["usr/local/lib/unibox/install/x.sh"].Data) != "echo mine\n" || install["usr/local/bin/@install"].Mode != 0o755 || install["usr/local/lib/unibox/install/agents/claude.sh"].Data == nil {
+		t.Fatalf("%v", install)
+	}
+	// The runner, pointed at the merged scripts, runs them by name.
+	dir := t.TempDir()
+	for name, file := range install {
+		if err := AtomicWrite(filepath.Join(dir, filepath.FromSlash(name)), file.Data, os.FileMode(file.Mode)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := strings.Replace(string(install["usr/local/bin/@install"].Data), "dir=/usr/local/lib/unibox/install", "dir="+filepath.Join(dir, "usr/local/lib/unibox/install"), 1)
+	out, err := exec.Command("sh", "-c", runner, "@install", "x", "only.sh").CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "mine") || strings.Contains(string(out), "\nfrom unibox") || !strings.Contains(string(out), "only from unibox") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if out, err = exec.Command("sh", filepath.Join(root, ".shared", "install.sh"), "absent").CombinedOutput(); err == nil || !strings.Contains(string(out), "no installation script absent") {
+	if out, err = exec.Command("sh", "-c", runner, "@install", "absent").CombinedOutput(); err == nil || !strings.Contains(string(out), "no installation script absent") {
 		t.Fatalf("%v\n%s", err, out)
+	}
+	// A change of the user's script outdates the image.
+	write(t, filepath.Join(root, "_shared", "@install", "x.sh"), "echo mine, changed\n")
+	if changed, err := LoadProfile(root, "node"); err != nil || changed.Revision == p.Revision {
+		t.Fatalf("%v", err)
 	}
 }
