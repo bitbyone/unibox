@@ -1,9 +1,11 @@
 package unibox
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -308,4 +310,26 @@ func sessionScript(id string, args []string) string {
 		s += Quote(arg) + " "
 	}
 	return s + "\nexit $?\n"
+}
+
+// scriptsScript runs a profile's scripts one after another, each from a
+// file of its own so its #! line is honoured (sh when it has none), with
+// UNIBOX_SCRIPT and env set; the first to fail stops the rest.
+func scriptsScript(p Profile, names []string, env []string) string {
+	s := "set -e\n"
+	for _, name := range names {
+		file := "/var/lib/unibox/scripts/" + name
+		data := p.Files[filepath.ToSlash(p.Scripts[name])].Data
+		s += writeGuest(file, data, "700")
+		run := Quote(file)
+		if !bytes.HasPrefix(data, []byte("#!")) {
+			run = "/bin/sh " + run
+		}
+		vars := ""
+		for _, kv := range append(slices.Clone(env), "UNIBOX_SCRIPT="+name) {
+			vars += Quote(kv) + " "
+		}
+		s += fmt.Sprintf("echo %s >&2\nif ! env %s%s; then echo %s >&2; exit 1; fi\n", Quote("unibox: running script "+name), vars, run, Quote("unibox: script "+name+" failed"))
+	}
+	return s
 }

@@ -3,7 +3,9 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
@@ -165,6 +167,9 @@ func (o *options) taskCommand(name string) *cobra.Command {
 	var req unibox.Request
 	c := &cobra.Command{Use: name + " [directory...] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare independent forge clones inside a sandbox", "run": "Prepare a task and run its agent in this terminal (unibox resume runs it again)"}[name]}
 	taskFlags(c, &req)
+	if name == "run" {
+		scriptFlag(c, &req)
+	}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		extra := []string{}
 		if n := cmd.ArgsLenAtDash(); n >= 0 {
@@ -282,4 +287,45 @@ func (o *options) createCommand() *cobra.Command {
 	c.Flags().StringVar(&req.Runtime, "runtime", "", "Runtime adapter")
 	c.Flags().StringSliceVar(&req.Instructions, "instructions", nil, "Named instruction texts to attach")
 	return c
+}
+
+func scriptFlag(c *cobra.Command, r *unibox.Request) {
+	c.Flags().StringArrayVar(&r.Scripts, "script", nil, "Run one of the profile's scripts in the sandbox before the agent starts (repeatable, in order)")
+}
+
+// scriptCommand lists a sandbox's scripts, or runs them at once.
+func (o *options) scriptCommand() *cobra.Command {
+	return &cobra.Command{Use: "script sandbox [name...]", Args: cobra.MinimumNArgs(1), Short: "List the scripts of a sandbox's profile, or run them in it now", Long: "List the scripts a sandbox's profile names under scripts, or run them in the sandbox now, in /work, one after another; the first to fail stops the rest. unibox run and resume take --script to run them before the agent starts instead.", RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 1 {
+			if o.json {
+				return fmt.Errorf("a script writes to the terminal; omit --json")
+			}
+			return o.manager.RunScripts(cmd.Context(), args[0], args[1:], o.output)
+		}
+		profile, scripts, err := o.manager.SandboxScripts(args[0])
+		if err != nil {
+			return err
+		}
+		if o.json {
+			if scripts == nil {
+				scripts = map[string]string{}
+			}
+			return o.write(map[string]any{"api_version": api.Version, "sandbox": args[0], "profile": profile, "scripts": scripts})
+		}
+		if len(scripts) == 0 {
+			fmt.Fprintf(o.output, "profile %s has no scripts; name them under scripts in its sandbox.yaml\n", profile)
+			return nil
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "SCRIPT\tFILE")
+		names := []string{}
+		for n := range scripts {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		for _, n := range names {
+			fmt.Fprintf(w, "%s\t%s\n", n, scripts[n])
+		}
+		return w.Flush()
+	}}
 }

@@ -667,6 +667,8 @@ agents:                       # what the image has, in order; a list of
     config:
       config.toml: _data/codex/config.toml # TOML as well as JSON
 start: start.sh               # in the VM, once per boot of the VM
+scripts:                      # in the VM only when asked for, by name
+  update-skills: update-skills.sh
 instructions:                 # names of instructions/*.md, or .md paths
   - unibox                    # relative to sandbox.yaml; the profile's own
   - review-style              # instructions.md attaches itself
@@ -806,7 +808,7 @@ git:
   and the network rules do not map onto it) and sbx's `sbxenv.yaml`
   (sbx's alone, and experimental).
 
-### Two scripts
+### Scripts
 
 Each at its own moment, all running inside the VM:
 
@@ -814,6 +816,18 @@ Each at its own moment, all running inside the VM:
 | --- | --- | --- | --- |
 | `Dockerfile` | the profile | when the image is built | everything static: toolchains, tools, certificates |
 | `start` | the profile | once per boot of the VM | services and daemons (a shared `docker compose`), configuration from the environment |
+| `scripts` | the profile | when asked for: `--script` before a session, `unibox script` now | whatever the user wants on demand: updating skills, resetting a database |
+
+- **unibox runs scripts and knows nothing of what they do** (the user's
+  call): updating skills an image installed, say, is the user's script,
+  not a command of unibox's. A script is a profile file read when it
+  runs - not an input of the image, not a setting the sandbox is made
+  from - so changing one rebuilds and recreates nothing. It runs from a
+  file of its own in the VM so its `#!` line counts, as the agent's user,
+  with `UNIBOX_SANDBOX` and `UNIBOX_SCRIPT` (and `UNIBOX_TASK`,
+  `UNIBOX_TASK_DIR` before a session); the first to fail stops the rest
+  and, before a session, the agent. `unibox script` counts as a session,
+  as a shell does, so an idle sandbox is stopped after it.
 
 - **`start` runs once per boot, whoever booted the VM.** A VM can be
   started by something else (`sbx exec` from a terminal, sbx's TUI), so
@@ -1122,6 +1136,7 @@ contract's own version, apart from it.
 | `unibox resume <task> [--agent A]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox add-repo <task> --repo …` | one more clone into a task, also while its agent runs |
 | `unibox ls [--json]`, `unibox tasks [<sandbox>] [--json]`, `unibox inspect <sandbox>` | sandboxes, their tasks, a sandbox's record |
+| `unibox script <sandbox> [name...]` | the profile's scripts, or run them in the sandbox now |
 | `unibox port <sandbox> [name:on\|off...]` | a sandbox's ports and their URLs; switched while it runs, the profile untouched |
 | `unibox shell <sandbox>`, `stop`, `recreate`, `rm`, `rm-task` | as named; removal checks for sessions and unpushed work |
 | `unibox config get\|set\|unset <key> [<value>]` | its configuration |
@@ -1132,7 +1147,8 @@ contract's own version, apart from it.
 `--runtime`, `--sandbox <name>` or `--new-sandbox <name>`, `--task`,
 `--branch`, `--repo [<dir>=]<path or https URL>` (repeated; or the
 current directory, as without unagit), `--author "Name <email>"`,
-`--instructions`, `--push`, `--ignore-local`.
+`--instructions`, `--push`, `--ignore-local`; `run` and `resume` take
+`--script <name>` too.
 
 Exit codes say what kind of failure: 3 an image to build first, 4
 refused (`unpushed_work`, `guest_busy`, `confirmation_required`,

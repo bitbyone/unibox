@@ -108,6 +108,9 @@ agents:                              # or a list: [claude, codex]
     config:
       config.toml: _data/codex/config.toml
 instructions: [unibox]               # from instructions/
+start: start.sh                      # in the VM, at every boot of it
+scripts:                             # run only when asked for, by name
+  update-skills: update-skills.sh
 network:
   allow: [jitpack.io]                # hosts to allow
   deny: [gist.github.com]            # hosts to block
@@ -121,6 +124,20 @@ approve it: when what it asks of the host changes (environment variables,
 mounted caches, logins, services, network rules), the next start says what
 changed and what it leads to - an image built, a sandbox recreated, or rules
 applied to the running sandbox live.
+
+## Scripts
+
+`start` runs in the VM at every boot of it. Anything else runs only when
+asked for: a profile names its scripts under `scripts`, and `unibox run` or
+`unibox resume` with `--script <name>` (repeatable) runs them before the
+agent starts, in its directory, while `unibox script <sandbox> <name>...`
+runs them now, in `/work`; `unibox script <sandbox>` lists them. What a
+script does is yours - `npx -y skills update -g -y`, a database reset.
+It runs as the agent's user with `UNIBOX_SANDBOX`, `UNIBOX_SCRIPT` and,
+before a session, `UNIBOX_TASK` and `UNIBOX_TASK_DIR`; its `#!` line is
+honoured, `sh` without one. The first to fail stops the rest and the
+agent. A script is read when it runs, so changing it builds and recreates
+nothing.
 
 ## Agents
 

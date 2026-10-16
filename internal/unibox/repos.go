@@ -18,6 +18,8 @@ type Request struct {
 	Repositories                                                       []RepoInput
 	Instructions                                                       []string
 	Push, IgnoreLocal, Yes                                             bool
+	// Scripts are the profile's scripts to run before the agent's session.
+	Scripts []string
 	// services are the profile's, set by the manager once it knows the
 	// profile: a git service's author and co-author win over --author
 	// and the host's git configuration for the repositories under it.

@@ -475,6 +475,15 @@ func RunChild(cmd *exec.Cmd) error {
 }
 
 func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errout io.Writer, extra []string) error {
+	if len(req.Scripts) > 0 {
+		_, _, p, err := m.Definition(req)
+		if err != nil {
+			return err
+		}
+		if err = p.knownScripts(req.Scripts); err != nil {
+			return err
+		}
+	}
 	b, t, r, usage, taskLock, err := m.prepare(ctx, req, true)
 	if err != nil {
 		return err
@@ -514,6 +523,12 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		}
 		if err := m.mergeAgentConfig(ctx, b, r, a, a.Trust(dirs)); err != nil {
 			fmt.Fprintf(errout, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
+		}
+	}
+	if len(req.Scripts) > 0 {
+		env := []string{"UNIBOX_SANDBOX=" + b.Name, "UNIBOX_TASK=" + t.ID, "UNIBOX_TASK_DIR=" + t.Directory}
+		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", scriptsScript(p, req.Scripts, env)}, Directory: dir}), errout); err != nil {
+			return fmt.Errorf("a script failed, so %s was not started: %w", a.ID, err)
 		}
 	}
 	script := sessionScript(run.ID, args)
@@ -571,6 +586,70 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 	}
 	defer m.finishRun(b, r, run, lease, usage, nil)
 	return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, []string{"bash", "-l"})}, Interactive: true, Input: in, Output: out, Error: errout}))
+}
+
+// RunScripts runs a profile's scripts in its sandbox at once, in /work,
+// counted as a session as a shell is, so an idle sandbox is stopped after.
+func (m *Manager) RunScripts(ctx context.Context, name string, scripts []string, out io.Writer) error {
+	guard, err := m.guard(name)
+	if err != nil {
+		return err
+	}
+	b, err := m.sandbox(name)
+	if err != nil {
+		guard.Close()
+		return err
+	}
+	p, err := m.profile(b.Profile)
+	if err == nil {
+		err = p.knownScripts(scripts)
+	}
+	if err != nil {
+		guard.Close()
+		return err
+	}
+	r, err := m.Runtime(b.Runtime)
+	if err != nil {
+		guard.Close()
+		return err
+	}
+	if err = r.Available(ctx); err != nil {
+		guard.Close()
+		return err
+	}
+	if _, exists, err := m.findBox(ctx, r, b); err != nil || !exists {
+		guard.Close()
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("sandbox is missing; run unibox recreate %s", name)
+	}
+	usage, err := m.usage(name, true)
+	guard.Close()
+	if err != nil {
+		return err
+	}
+	run, lease, err := m.recordRun(b, api.Task{}, "")
+	if err != nil {
+		usage.Close()
+		return err
+	}
+	defer m.finishRun(b, r, run, lease, usage, nil)
+	env := []string{"UNIBOX_SANDBOX=" + b.Name}
+	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, []string{"sh", "-c", scriptsScript(p, scripts, env)})}, Directory: "/work"}), out)
+}
+
+// SandboxScripts are the scripts of a sandbox's profile, by name.
+func (m *Manager) SandboxScripts(name string) (string, map[string]string, error) {
+	b, err := m.sandbox(name)
+	if err != nil {
+		return "", nil, err
+	}
+	p, err := m.profile(b.Profile)
+	if err != nil {
+		return "", nil, err
+	}
+	return p.Name, p.Scripts, nil
 }
 
 func (m *Manager) Stop(ctx context.Context, name string) error {

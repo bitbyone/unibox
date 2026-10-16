@@ -299,6 +299,9 @@ type Profile struct {
 	// Agents, Auth, Git.CoAuthors and AgentConfig.
 	AgentList AgentList `yaml:"agents" json:"-"`
 	Start     string    `yaml:"start" json:"start"`
+	// Scripts run in a sandbox only when asked for, by name: before an
+	// agent's session (--script) or at once (unibox script).
+	Scripts map[string]string `yaml:"scripts" json:"scripts,omitempty"`
 	// Bootstrap is always empty: format 3 ran a script the worked-on
 	// repository had to carry, which none did, and format 4 has none. It
 	// stays in JSON so the settings recorded of a sandbox before then
@@ -436,7 +439,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 		seen[id] = true
 	}
-	for _, path := range []string{p.Dockerfile, p.Start} {
+	for _, path := range append([]string{p.Dockerfile, p.Start}, sortedValues(p.Scripts)...) {
 		if path != "" && !safeRelative(path) {
 			return p, fmt.Errorf("profile %s: script and dockerfile paths must stay inside their directory", name)
 		}
@@ -591,7 +594,7 @@ func LoadProfile(root, name string) (Profile, error) {
 	// directories - and custom files behind an underscore, _data by
 	// convention, where the Dockerfile and sandbox.yaml reference them.
 	known := map[string]bool{"sandbox.yaml": true, "instructions.md": true}
-	for _, ref := range []string{p.Dockerfile, p.Start} {
+	for _, ref := range append([]string{p.Dockerfile, p.Start}, sortedValues(p.Scripts)...) {
 		if ref != "" && !strings.Contains(ref, "/") {
 			known[ref] = true
 		}
@@ -605,7 +608,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		if strings.HasPrefix(n, ".") || strings.HasPrefix(n, "_") || known[n] {
 			continue
 		}
-		return p, fmt.Errorf("profile %s: unexpected %s; a profile's root holds sandbox.yaml, its Dockerfile, start script and instructions.md - custom files go under _data and are referenced from there", name, n)
+		return p, fmt.Errorf("profile %s: unexpected %s; a profile's root holds sandbox.yaml, its Dockerfile, start script, scripts and instructions.md - custom files go under _data and are referenced from there", name, n)
 	}
 	snapshot := func(dir, prefix string) error {
 		return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -657,6 +660,17 @@ func LoadProfile(root, name string) (Profile, error) {
 			}
 		}
 	}
+	for _, script := range sortedKeys(p.Scripts) {
+		if !portName.MatchString(script) {
+			return p, fmt.Errorf("profile %s: script name %q must be lower case letters, digits and dashes, starting with a letter", name, script)
+		}
+		if p.Scripts[script] == "" {
+			return p, fmt.Errorf("profile %s: script %s names no file", name, script)
+		}
+		if _, ok := p.Files[filepath.ToSlash(p.Scripts[script])]; !ok {
+			return p, fmt.Errorf("profile %s: script %s: missing %s", name, script, p.Scripts[script])
+		}
+	}
 	for _, rt := range []string{"sbx", "podman"} {
 		entries, _ := os.ReadDir(filepath.Join(p.Dir, "."+rt))
 		for _, e := range entries {
@@ -702,9 +716,14 @@ func LoadProfile(root, name string) (Profile, error) {
 // BuildFiles is the image's inputs: the profile's files without what only
 // unibox reads - the definition, the automatic instructions.md, the agent
 // configuration seeds. Those change without the image changing.
+//
+// A script is read when it runs, so it is not one either.
 func (p Profile) BuildFiles() map[string]SnapshotFile {
 	skip := map[string]bool{"sandbox.yaml": true, "instructions.md": true}
 	for _, file := range p.AgentConfig {
+		skip[filepath.ToSlash(file)] = true
+	}
+	for _, file := range p.Scripts {
 		skip[filepath.ToSlash(file)] = true
 	}
 	out := make(map[string]SnapshotFile, len(p.Files))
@@ -998,4 +1017,25 @@ func parseSeed(f AgentFile, data []byte) (map[string]any, error) {
 		return nil, fmt.Errorf("not a JSON object: %v", err)
 	}
 	return seed, nil
+}
+
+func sortedValues(m map[string]string) []string {
+	out := []string{}
+	for _, k := range sortedKeys(m) {
+		out = append(out, m[k])
+	}
+	return out
+}
+
+// knownScripts says which of the names the profile has no script for.
+func (p Profile) knownScripts(names []string) error {
+	for _, n := range names {
+		if _, ok := p.Scripts[n]; !ok {
+			if len(p.Scripts) == 0 {
+				return fmt.Errorf("profile %s has no scripts; name them under scripts in its sandbox.yaml", p.Name)
+			}
+			return fmt.Errorf("profile %s has no script %s; it has %s", p.Name, n, strings.Join(sortedKeys(p.Scripts), ", "))
+		}
+	}
+	return nil
 }
