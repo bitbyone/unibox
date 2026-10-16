@@ -372,22 +372,25 @@ else
   echo "$dir is in the way of the mounted directory; inspect it in unibox shell" >&2; exit 4
 fi
 `)
-	if r.Author == "" {
-		return b.String()
-	}
-	name, email, _ := AuthorParts(r.Author)
-	coAuthor := p.Git.CoAuthor
-	if r.CoAuthor != nil {
-		coAuthor = r.CoAuthor
-	}
-	credit := "on\n"
-	if coAuthor != nil && !*coAuthor {
-		credit = "off\n"
-	}
 	own := mountedDir(t, r)
-	config := fmt.Sprintf("[user]\n\tname = %s\n\temail = %s\n[core]\n\thooksPath = %s\n", name, email, own+"/hooks")
-	b.WriteString(writeGuest(own+"/hooks/commit-msg", []byte(coAuthorHook()), "700"))
-	b.WriteString(writeGuest(own+"/hooks/credit", []byte(credit), "600"))
+	// The mounted git directory holds the host's other worktrees too, which
+	// the guest does not have; git's gc would take them for gone and prune
+	// their records on the host.
+	config := "[gc]\n\tworktreePruneExpire = never\n"
+	if r.Author != "" {
+		name, email, _ := AuthorParts(r.Author)
+		coAuthor := p.Git.CoAuthor
+		if r.CoAuthor != nil {
+			coAuthor = r.CoAuthor
+		}
+		credit := "on\n"
+		if coAuthor != nil && !*coAuthor {
+			credit = "off\n"
+		}
+		config += fmt.Sprintf("[user]\n\tname = %s\n\temail = %s\n[core]\n\thooksPath = %s\n", name, email, own+"/hooks")
+		b.WriteString(writeGuest(own+"/hooks/commit-msg", []byte(coAuthorHook()), "700"))
+		b.WriteString(writeGuest(own+"/hooks/credit", []byte(credit), "600"))
+	}
 	b.WriteString(writeGuest(own+"/gitconfig", []byte(config), "600"))
 	key := "includeIf.gitdir:" + mountedGitDirs(r) + ".path"
 	fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\ngit config --global --add %s %s\n", Quote(key), Quote(key), Quote(own+"/gitconfig"))

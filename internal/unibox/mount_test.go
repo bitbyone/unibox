@@ -76,7 +76,7 @@ func TestAMountedDirectoryIsWorkedOnInPlaceAndOnlyUnmountedOnRemoval(t *testing.
 		t.Fatalf("%s", global)
 	}
 	own, _ := os.ReadFile(filepath.Join(f.root, "unibox-dev", "state", "mounted", "local", filepath.Base(host), "gitconfig"))
-	if !strings.Contains(string(own), "name = Person") || !strings.Contains(string(own), "hooksPath") {
+	if !strings.Contains(string(own), "name = Person") || !strings.Contains(string(own), "hooksPath") || !strings.Contains(string(own), "worktreePruneExpire = never") {
 		t.Fatalf("%s", own)
 	}
 	// Removing the task unlinks and unmounts; the host's files stay, with
