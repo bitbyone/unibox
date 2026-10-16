@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -276,10 +277,8 @@ func (r *SBX) Build(ctx context.Context, p Profile, tag string, log io.Writer) (
 			return "", err
 		}
 		defer os.RemoveAll(installDir)
-		for name, file := range install {
-			if err = AtomicWrite(filepath.Join(installDir, filepath.FromSlash(name)), file.Data, os.FileMode(file.Mode)); err != nil {
-				return "", err
-			}
+		if err = writeInstallContext(installDir, install); err != nil {
+			return "", err
 		}
 		args := []string{"build", "--tag", tag, "--file", filepath.Join(dir, p.Dockerfile), "--build-context", "unibox=" + installDir}
 		buildArgs, err := p.BuildArgs(r.Name())
@@ -427,4 +426,23 @@ func (r *SBX) UnpublishPort(ctx context.Context, sandbox string, p api.Published
 		return fmt.Errorf("sbx did not unpublish %s: %w", spec, err)
 	}
 	return nil
+}
+
+// writeInstallContext lays the install context out for COPY --from=unibox
+// / /, which gives each directory it copies the mode it has here: /usr and
+// /usr/local among them, so every directory is 0755 - a 0700 one, as a
+// temporary directory is made, shut apt's sandbox user out of /usr and
+// failed every later apt-get on its signatures.
+func writeInstallContext(dir string, files map[string]SnapshotFile) error {
+	for name, file := range files {
+		if err := AtomicWrite(filepath.Join(dir, filepath.FromSlash(name)), file.Data, os.FileMode(file.Mode)); err != nil {
+			return err
+		}
+	}
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return err
+		}
+		return os.Chmod(path, 0o755)
+	})
 }

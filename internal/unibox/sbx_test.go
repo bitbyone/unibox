@@ -543,3 +543,19 @@ func TestSbxForwardingReadsPastWhatSbxSaysFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestTheInstallContextLeavesTheImagesDirectoriesOpen(t *testing.T) {
+	t.Parallel()
+	dir, err := os.MkdirTemp(t.TempDir(), "install-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = writeInstallContext(dir, map[string]SnapshotFile{"usr/local/bin/@install": {[]byte("#!/bin/sh\n"), 0o755}, "usr/local/lib/unibox/install/base.sh": {[]byte("x"), 0o644}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"", "usr", "usr/local", "usr/local/bin", "usr/local/lib/unibox/install"} {
+		if info, err := os.Stat(filepath.Join(dir, d)); err != nil || info.Mode().Perm() != 0o755 {
+			t.Errorf("%q: %v %v", d, err, info.Mode())
+		}
+	}
+}
