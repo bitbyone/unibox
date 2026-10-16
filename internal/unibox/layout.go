@@ -34,9 +34,16 @@ var profileSections = []profileSection{
 	{key: "scripts", comment: "# Run in a sandbox only when asked for, by name: unibox run|resume\n# --script <name> before the agent starts, unibox script <sandbox> <name> now.", example: "# scripts:                            # run when asked: --script <name>, unibox script\n#   update-skills: update-skills.sh"},
 	{key: "git", comment: "# Who commits: you, from the host's git (--author on a run wins)."},
 	{key: "services", comment: "# Forges and services the sandbox reaches - unibox service add. The token\n# stays on the host; the sandbox sees a placeholder the proxy swaps. A\n# service also takes refresh, author and co_author.", example: "# services:                           # unibox service add %s <name>\n#   github: {git: true, host: github.com, user: x-access-token, command: secret:github}"},
-	{key: "network", comment: "# What the sandbox reaches beyond the runtime's policy (allow), what it may\n# not (deny wins), and its ports on the host's loopback by name - a spec, or\n# {port, default: off} to publish only when asked. Applied live: unibox\n# network allow|deny|port; unibox port <sandbox> name:on|off for now.", example: "# network:                            # unibox network allow|deny|port %s ...\n#   allow: [jitpack.io]\n#   deny: [gist.github.com]\n#   ports: {web: '3000:3000', devtools: {port: '9333:9222', default: off}}"},
+	{key: "network", comment: "# What the sandbox may reach, and which of its ports the host reaches - all\n# applied live, no recreation:\n#   allow: [jitpack.io]          hosts beyond the runtime's policy\n#   deny: [gist.github.com]      hosts refused; deny wins over allow\n#   ports:                       sandbox ports on the host's localhost, by name\n#     web: '3000:3000'           host port 3000 to sandbox port 3000, at every start\n#     api: '8080'                sandbox port 8080 on any free host port\n#     devtools: {port: '9333:9222', default: off}   published only when switched on\n# unibox network allow|deny|port <profile> changes this; unibox port <sandbox>\n# lists the ports with their URLs, and unibox port <sandbox> web:off devtools:on\n# switches them while the sandbox runs, leaving this file as it is.", example: "# network:                            # unibox network allow|deny|port %s ...\n#   allow: [jitpack.io]               # hosts beyond the runtime's policy\n#   deny: [gist.github.com]           # hosts refused; deny wins over allow\n#   ports:                            # sandbox ports on the host's localhost, by name\n#     web: '3000:3000'                # host:sandbox, published at every start\n#     api: '8080'                     # any free host port; unibox port <sandbox> shows it\n#     devtools: {port: '9333:9222', default: off}  # only when switched on"},
 	{key: "env", comment: "# Host variables passed in by name.", example: "# env: [BUILD_MODE]                   # host variables passed in by name"},
 	{key: "caches", comment: "# Host directories mounted read-only, named inside by a variable.", example: "# caches:                             # host directories mounted read-only\n#   - {host: ~/.gradle/caches, env: GRADLE_RO_DEP_CACHE}"},
+}
+
+// formerComments are comments unibox wrote above a section before it said
+// them as profileSections do now; they are unibox's, so replaced, not kept
+// as the user's.
+var formerComments = []string{
+	"# What the sandbox reaches beyond the runtime's policy (allow), what it may\n# not (deny wins), and its ports on the host's loopback by name - a spec, or\n# {port, default: off} to publish only when asked. Applied live: unibox\n# network allow|deny|port; unibox port <sandbox> name:on|off for now.",
 }
 
 // ArrangeProfile lays a profile's top-level mapping out in the sections'
@@ -71,6 +78,9 @@ func ArrangeProfile(doc *yaml.Node, name string) {
 		if s.comment != "" {
 			owned[s.comment] = true
 		}
+	}
+	for _, c := range formerComments {
+		owned[c] = true
 	}
 	present := map[string]bool{}
 	m.Content = m.Content[:0]

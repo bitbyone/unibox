@@ -337,3 +337,30 @@ func TestInstallRunsTheUsersScriptOverUnibox(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestTheNetworkCommentShowsHowToWritePortsAndReplacesTheFormerOne(t *testing.T) {
+	t.Parallel()
+	var doc yaml.Node
+	text := "version: 4\ndockerfile: Dockerfile\nagents: [claude]\n" + strings.ReplaceAll(formerComments[0], "\\n", "\n") + "\nnetwork: {allow: [jitpack.io]}\n"
+	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
+		t.Fatal(err)
+	}
+	ArrangeProfile(&doc, "web")
+	out, err := encodeProfile(&doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if strings.Contains(s, "for now.") || !strings.Contains(s, "#     web: '3000:3000'") || !strings.Contains(s, "devtools: {port: '9333:9222', default: off}") {
+		t.Fatalf("%s", s)
+	}
+	// Absent, it is an example in the footer, ports and all.
+	if err := yaml.Unmarshal([]byte("version: 4\ndockerfile: Dockerfile\nagents: [claude]\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	ArrangeProfile(&doc, "web")
+	out, _ = encodeProfile(&doc)
+	if !strings.Contains(string(out), "#   ports:") || !strings.Contains(string(out), "#     api: '8080'") {
+		t.Fatalf("%s", out)
+	}
+}
