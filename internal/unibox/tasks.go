@@ -570,12 +570,17 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		guard.Close()
 		return err
 	}
-	if _, exists, err := m.findBox(ctx, r, b); err != nil || !exists {
+	box, exists, err := m.findBox(ctx, r, b)
+	if err != nil || !exists {
 		guard.Close()
 		if err != nil {
 			return err
 		}
 		return fmt.Errorf("sandbox is missing; run unibox recreate %s", name)
+	}
+	if err = m.startBox(ctx, r, b, box); err != nil {
+		guard.Close()
+		return err
 	}
 	usage, err := m.usage(name, true)
 	guard.Close()
@@ -620,12 +625,17 @@ func (m *Manager) RunScripts(ctx context.Context, name string, scripts []string,
 		guard.Close()
 		return err
 	}
-	if _, exists, err := m.findBox(ctx, r, b); err != nil || !exists {
+	box, exists, err := m.findBox(ctx, r, b)
+	if err != nil || !exists {
 		guard.Close()
 		if err != nil {
 			return err
 		}
 		return fmt.Errorf("sandbox is missing; run unibox recreate %s", name)
+	}
+	if err = m.startBox(ctx, r, b, box); err != nil {
+		guard.Close()
+		return err
 	}
 	usage, err := m.usage(name, true)
 	guard.Close()

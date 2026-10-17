@@ -29,7 +29,7 @@ const flow = [
   {
     where: 'Host',
     what: 'unibox and the runtime',
-    lines: ['profile → adapter → sbx', 'logins in the keychain', 'credential proxy', 'network policy'],
+    lines: ['profile → adapter → sbx or msb', 'logins in the keychain', 'credential proxy', 'network policy'],
   },
   {
     where: 'Sandbox',

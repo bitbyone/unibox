@@ -66,21 +66,22 @@ func Open(paths Paths, log io.Writer) (*Manager, error) {
 	if home, err := os.UserHomeDir(); err == nil {
 		sbx.Bindings = filepath.Join(home, ".config", "sbx", "credentials.yaml")
 	}
-	return &Manager{Paths: paths, Config: c, Runtimes: map[string]Runtime{"sbx": sbx}, Log: log}, nil
+	msb := &MSB{Cache: filepath.Join(paths.Cache, "msb"), Log: log}
+	return &Manager{Paths: paths, Config: c, Runtimes: map[string]Runtime{"sbx": sbx, "msb": msb}, Log: log}, nil
 }
+
+// runtimeOrder is the order a new sandbox's runtime is chosen in when none
+// is set: sbx where it is installed, else msb, which unibox brings along.
+var runtimeOrder = []string{"sbx", "msb"}
 
 func (m *Manager) Runtime(name string) (Runtime, error) {
 	if name == "" {
 		name = m.Config.DefaultRuntime
 	}
 	if name == "" {
-		for id := range m.Runtimes {
-			if m.Config.Enabled(id) {
-				if name != "" {
-					return nil, fmt.Errorf("more than one runtime is enabled; pass --runtime or set default_runtime")
-				}
-				name = id
-			}
+		name = m.defaultRuntime()
+		if name == "" {
+			return nil, fmt.Errorf("no runtime is enabled and installed; install sbx, or enable msb with unibox config set runtimes.msb.on true")
 		}
 	}
 	r, ok := m.Runtimes[name]
@@ -92,6 +93,29 @@ func (m *Manager) Runtime(name string) (Runtime, error) {
 	}
 	return r, nil
 }
+
+// defaultRuntime is the first enabled runtime that is present, in
+// runtimeOrder, then by name.
+func (m *Manager) defaultRuntime() string {
+	order := slices.Clone(runtimeOrder)
+	for _, id := range sortedKeys(m.Runtimes) {
+		if !slices.Contains(order, id) {
+			order = append(order, id)
+		}
+	}
+	for _, id := range order {
+		r, ok := m.Runtimes[id]
+		if !ok || !m.Config.Enabled(id) {
+			continue
+		}
+		if p, ok := r.(Present); ok && !p.Present() {
+			continue
+		}
+		return id
+	}
+	return ""
+}
+
 func (m *Manager) profile(name string) (Profile, error) {
 	return LoadProfile(m.Config.Environments, name)
 }
@@ -437,6 +461,17 @@ func (m *Manager) Login(ctx context.Context, req Request, agent string, in io.Re
 	return a.Login(ctx, agent, auth, in, out, errout)
 }
 
+// startBox starts a stopped sandbox whose runtime does not start one when a
+// command runs in it.
+func (m *Manager) startBox(ctx context.Context, r Runtime, b api.Sandbox, box Box) error {
+	s, ok := r.(Starter)
+	if !ok || box.State == "running" {
+		return nil
+	}
+	fmt.Fprintf(m.Log, "starting sandbox %s\n", b.Name)
+	return s.Start(ctx, b.RuntimeName, m.Log)
+}
+
 func (m *Manager) findBox(ctx context.Context, r Runtime, b api.Sandbox) (Box, bool, error) {
 	boxes, err := r.List(ctx)
 	if err != nil {
@@ -508,7 +543,9 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 			return err
 		}
 	}
+	created := false
 	if force || !exists || b.Revision != revision {
+		created = true
 		exclusive, err = m.usage(b.Name, false)
 		if err != nil {
 			return fmt.Errorf("sandbox %s needs recreation but is in use; retry after its sessions finish", b.Name)
@@ -571,6 +608,16 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profi
 		b.State = "running"
 		if err = m.saveBox(*b); err != nil {
 			return err
+		}
+	}
+	if !created {
+		if err = m.startBox(ctx, r, *b, box); err != nil {
+			return err
+		}
+		if f, ok := r.(SecretRefresher); ok && box.State == "running" {
+			if err = f.RefreshSecrets(ctx, b.RuntimeName, m.Log); err != nil {
+				return err
+			}
 		}
 	}
 	if err = m.syncNetwork(ctx, b, r, p); err != nil {
@@ -817,6 +864,15 @@ func (m *Manager) Create(ctx context.Context, req Request) (api.Sandbox, error) 
 }
 
 func (m *Manager) safeBox(ctx context.Context, b api.Sandbox, r Runtime) error {
+	// The checks run in the guest, which a runtime that does not start a
+	// sandbox on its own has to be started for.
+	if box, ok, err := m.findBox(ctx, r, b); err != nil {
+		return err
+	} else if ok {
+		if err = m.startBox(ctx, r, b, box); err != nil {
+			return err
+		}
+	}
 	if err := runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(guestIdleScript)}), m.Log); err != nil {
 		return Fail(4, "guest_busy", "sandbox %s may still have a running guest session; inspect it with unibox shell", b.Name)
 	}

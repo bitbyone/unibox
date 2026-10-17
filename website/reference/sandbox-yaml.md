@@ -47,7 +47,8 @@ resources: {cpus: 50%, memory: 50%}
 
 For sbx, a share of CPUs is a rounded count, at least one, and `100%` is all
 the host's CPUs. A share of memory is resolved from the host's memory, and
-capped at sbx's limit of 75%, with a note.
+capped at sbx's limit of 75%, with a note. msb takes the count and the size
+as they resolve.
 
 ### `agents`
 
@@ -202,6 +203,7 @@ sandbox in `env`.
 | `start.sh`, scripts | what `start` and `scripts` name |
 | `_data/` | seeds and other files the profile refers to, by convention |
 | `.sbx/build.args` | `KEY=VALUE` build arguments when building for sbx |
+| `.msb/build.args` | the same, when building for msb |
 
 ## Format versions
 

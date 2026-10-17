@@ -2,8 +2,9 @@
 
 ## Where it stands
 
-Built and in daily use (2026-10-15): profiles of format 2, sbx as the one
-runtime, tasks, the agents' logins, services and network rules, the herdr
+Built and in daily use (2026-10-15): profiles of format 5, sbx as the
+runtime where it is installed and microsandbox, built in, everywhere else
+(2026-10-17), tasks, the agents' logins, services and network rules, the herdr
 plugin. This began as unagit's plan - it replaced "Agents in a container"
 in unagit's docs/herdr.md - and keeps its reasoning, so that the decisions
 are not undone by accident. What unagit builds over unibox is unagit's
@@ -1316,6 +1317,81 @@ Spike questions about it:
 - Does `sbx template load` take a tar from `docker save`, or only one from
   `sbx template save`? If only the latter: build in a sandbox and `sbx
   template save` it, or push to a registry.
+
+### microsandbox (msb), the built-in runtime
+
+Checked against msb 0.7.8 and its Go SDK v0.7.8 on macOS (Apple Silicon),
+2026-10-17. msb is chosen for a new sandbox when sbx is not installed
+(`runtimeOrder`); a sandbox keeps the runtime it was made in.
+
+**Why the SDK and the CLI both.** The SDK installs the runtime
+(`EnsureRuntime`: msb and libkrunfw into `~/.microsandbox`), so whoever
+installs unibox has a runtime without installing anything else, and it
+rotates a secret live (below). It is cgo over an embedded library of about
+27 MB, which `msb_sdk.go` keeps behind the `cgo` build tag: built without
+cgo, unibox uses an `msb` on `PATH` and cannot rotate live. Everything else
+goes through the `msb` the SDK installed: `create --conf` takes a whole
+configuration file, and `exec --tty` handles the terminal, which the SDK's
+`Exec` returning `*exec.Cmd` in unibox could not.
+
+| Runtime | msb |
+| --- | --- |
+| `List` | `msb list --format json` |
+| `Images` | `msb image ls --format json` |
+| `Build` | `docker build`, `docker save`, `msb image load --input` (5 GB in 18 s) |
+| `Create` | `msb create --name N --conf <unibox's file>`, under the secrets shell |
+| `Start` | `msb start N`, under the secrets shell |
+| `Exec` | `msb exec [--tty \| --stream [--no-stdin]] [-w] [-u] N -- cmd…` |
+| `Stop`, `Remove` | `msb stop N`, `msb remove --force N` |
+| ports listed | `msb inspect N --format json`, `config.network.ports` |
+
+What was verified, and what it decided:
+
+- **Secrets.** A secret in the configuration names its value by a host
+  variable (`value: {$msb_env: UNIBOX_MSB_<ENV>}`); msb stores the name,
+  not the value, and reads the variable when the sandbox boots. Without it
+  `msb start` - and `msb exec` on a stopped sandbox, which would start it -
+  fails, so a sandbox never runs without its secrets. unibox runs msb
+  under `sh -c` that fills each variable with the output of the secret's
+  host command, so a value goes from the command to msb, never through
+  unibox. `~/.cache/unibox/msb/<sandbox>/secrets.json` keeps the commands
+  for the next boot. A custom `placeholder` and `header_fields` work: the
+  guest sees the placeholder, a request to an allowed host carries the
+  value, and a git service's value goes into `Authorization` alone.
+- **Rotation.** msb refreshes nothing. `msb modify --secret` rotates only
+  by resetting the placeholder, which needs a restart; the SDK's `Modify`
+  with the same placeholder and source rotates live (checked: the next
+  request carried the new value). Before each session on a running sandbox
+  unibox runs itself as `__msb-secrets` under the secrets shell, and that
+  process calls `Modify`.
+- **No logins of its own.** msb has no OAuth flow and no local secret
+  store (its `store` source is cloud-only; the local resolver refuses it).
+  Agents sign in by `token`, `api-key` (kept by unibox as
+  `<agent>-api-key`) or `command`. Codex's ChatGPT login is refused: its
+  refresh would hand the guest real tokens; a later look may find a way
+  through the proxy. Codex reads its key from `auth.json`, which
+  `codexSetup` writes with the placeholder `proxy-managed`, as for sbx.
+- **TLS.** Interception is on for every sandbox, as secrets and hostname
+  rules need it. msb puts its CA into the guest's store and sets
+  `NODE_EXTRA_CA_CERTS`; claude, copilot (node), codex (Rust), git and curl
+  all went through.
+- **Network.** msb's own default is the public internet. A non-empty allow
+  list makes it deny the rest, so unibox gives every sandbox sbx's default
+  policy (`msbBaseAllow`, from `sbx policy ls`), DNS, the services' hosts
+  and the profile's `allow`; `deny` goes first and wins. Rules cannot change
+  on a running sandbox (neither CLI nor SDK), so a change recreates it.
+- **Ports** are published at creation only; SDK `Modify` gains ports after
+  0.7.8. A port without a host port gets a free one when the sandbox is
+  made. A change recreates the sandbox; `unibox port` lists them but
+  cannot switch them.
+- **Mounts** cannot be added to a sandbox, by CLI or SDK, so `--mount` is
+  refused. A disk snapshot restored under the same name with a new mount,
+  ports and rules keeps `/work` (checked), but the CLI's restore drops the
+  secrets and TLS; not used.
+- **Disk.** msb's root is 4 GiB; unibox asks for 64 GiB (`upper_size`),
+  sparse on the host.
+- **Logs.** `msb exec` keeps a command's output in
+  `~/.microsandbox/sandboxes/<name>/logs/exec.log` on the host.
 
 ### herdr
 

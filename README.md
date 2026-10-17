@@ -1,8 +1,9 @@
 # unibox
 
 A wrapper over sandbox runtimes for coding agents: one CLI and one
-profile format, with an adapter per runtime. Today: Docker Sandboxes
-(`sbx`). Using the runtime directly still works.
+profile format, with an adapter per runtime: Docker Sandboxes (`sbx`)
+where it is installed, and microsandbox (`msb`), which unibox brings along,
+everywhere else. Using the runtime directly still works.
 
 Documentation: **https://bitbyone.github.io/unibox/**
 
@@ -33,7 +34,10 @@ Credentials stay on the host; the runtime's proxy adds them to requests.
 
 ## Install
 
-Needs git, Docker, and `sbx` signed in (`sbx login`).
+Needs git and Docker. With `sbx` installed and signed in (`sbx login`),
+sandboxes run in sbx; without it, in microsandbox, which unibox installs
+into `~/.microsandbox` the first time it needs it (Apple silicon Macs and
+Linux with KVM).
 
 With Homebrew, from the tap in this repository; it builds the release on
 your machine from its tagged commit:
@@ -223,7 +227,8 @@ to no account, and `--reset` takes it back to the default. `unibox agent ls
 ## Auth
 
 `unibox agent login <profile> [agent...]` signs agents in and writes their `auth`
-into the profile: codex through the runtime's ChatGPT login in the browser,
+into the profile: codex through the runtime's ChatGPT login in the browser
+(sbx) or an OpenAI API key (msb, which keeps no OAuth logins),
 claude through `claude setup-token`, copilot through a fine-grained GitHub
 token with Copilot Requests alone. A token is asked for on a hidden prompt
 and kept in the platform's store - the login keychain on macOS, the Secret
@@ -275,7 +280,8 @@ itself. Your own comment over a section stays.
 reach hosts the runtime's policy refuses, or refuses ones it allows; `rm`
 takes hosts back to the policy and `ls` lists the rules with the hosts the
 services need. The change is written into the profile and applied to its
-running sandboxes at once - sbx changes rules live, so nothing is recreated.
+running sandboxes at once - sbx changes rules live, so nothing is recreated;
+an msb sandbox is recreated for it, after unibox asks.
 
 `unibox network port <profile> <name> <spec> [--off]` publishes a sandbox
 port on the host's loopback by name; the spec is
@@ -297,12 +303,15 @@ over the git `services` of the profile. `unibox check` warns when it is stored.
 
 | Runtime | Status | Isolation |
 | --- | --- | --- |
-| `sbx` (Docker Sandboxes) | supported | micro-VM, egress proxy, credentials kept on the host |
+| `sbx` (Docker Sandboxes) | supported, the default where installed | micro-VM, egress proxy, credentials kept on the host |
+| `msb` (microsandbox) | built in, the default without sbx | micro-VM, egress proxy, credentials kept on the host |
 | Podman / Docker | planned | container |
 
 Adding a runtime means implementing one Go interface (create, exec, stop,
 build, and optionally store logins). Profiles do not change.
-`unibox runtimes` shows what is installed.
+`unibox runtimes` shows what is installed; `unibox config set default_runtime
+msb` or `--runtime msb` chooses one for new sandboxes, and a sandbox keeps
+the runtime it was made in.
 
 An image is tagged with its profile's revision (`unibox/dev:1508ba9b...`),
 so unibox tells a current one from an outdated one. A build removes the
@@ -315,6 +324,14 @@ sbx limits that show through: only one agent per sandbox can use `oauth`,
 and a login or service added after a sandbox was made reaches it when the
 sandbox is recreated (sbx binds a token's placeholder at creation). Network
 rules and ports change live.
+
+msb limits that show through: no `oauth` logins (claude by `token`, codex
+by an API key), and network rules, ports and logins are set when a sandbox
+is made, so a change of them recreates it; `--mount` is refused. Its tokens
+are fetched each time a sandbox boots and again before each session, so a
+rotated token reaches a running sandbox without a restart. A sandbox may
+reach what sbx's default policy allows - AI services, package registries,
+forges, container registries - and what the profile adds.
 
 ## More
 

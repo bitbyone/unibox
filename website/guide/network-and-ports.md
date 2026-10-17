@@ -1,13 +1,14 @@
 # Network and Ports
 
 What a sandbox may reach, and which of its ports your machine reaches, are
-part of its profile - and both change on running sandboxes at once, with
-nothing recreated.
+part of its profile - and with sbx both change on running sandboxes at
+once, with nothing recreated; an msb sandbox is recreated for a change.
 
 ## Network rules
 
 The runtime has a policy of its own: sbx refuses what it does not list and
-already allows the usual registries. A profile widens it with `allow` and
+already allows the usual registries; an msb sandbox gets the same list from
+unibox. A profile widens it with `allow` and
 narrows it with `deny`:
 
 ```sh
@@ -84,4 +85,5 @@ files.
 | `network.ports` | live through `unibox network port`; at the next start after a hand edit |
 | `unibox port <sandbox> ...` | live, until the sandbox next starts |
 | `services`, an agent's `auth` | a recreation: sbx binds a token's placeholder when it makes the sandbox |
+| network rules and ports of an msb sandbox | a recreation, after unibox asks: msb sets them when it makes the sandbox |
 | `env`, `caches`, `agents`, the image | a recreation, told at the next start |

@@ -56,6 +56,7 @@ const referenceSidebar = [
       { text: 'Files on Disk', link: '/reference/files' },
       { text: 'Security', link: '/reference/security' },
       { text: 'The sbx Runtime', link: '/reference/sbx' },
+      { text: 'The msb Runtime', link: '/reference/msb' },
       { text: 'Developing unibox', link: '/reference/developing' },
     ],
   },

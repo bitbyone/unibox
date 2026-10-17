@@ -70,6 +70,9 @@ again.
 
 ## How it works underneath
 
+`--mount` needs sbx: msb cannot add a mount to a sandbox it has made, so
+unibox refuses it there.
+
 sbx mounts into a running sandbox. Verified on a throwaway sandbox: the mount
 is live and writable, kept across a stop, taken out by an unmount that leaves
 an empty mount point, and removing the sandbox leaves the host's files alone.

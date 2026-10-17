@@ -55,6 +55,11 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	for _, name := range []string{"check", "prepare", "run"} {
 		root.AddCommand(o.taskCommand(name))
 	}
+	// unibox runs itself as this under the shell that fetched a running
+	// msb sandbox's tokens, to hand them to msb; it is no command for people.
+	root.AddCommand(&cobra.Command{Use: unibox.MSBSecretsCommand + " sandbox spec...", Hidden: true, Args: cobra.MinimumNArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
+		return unibox.RotateMSBSecrets(cmd.Context(), args[0], args[1:])
+	}})
 	return root
 }
 

@@ -175,6 +175,29 @@ func (o *options) ensureSecret(cmd *cobra.Command, store unibox.SecretStore, nam
 	return nil
 }
 
+// recreateFor offers to recreate the sandboxes whose runtime cannot take a
+// change of what live; each one declined keeps the old until it is.
+func (o *options) recreateFor(cmd *cobra.Command, names []string, what string) error {
+	for _, name := range names {
+		if err := o.confirm("Runtime of sandbox " + name + " cannot change " + what + " live; recreate it to apply them?"); err != nil {
+			fmt.Fprintf(o.log, "sandbox %s keeps its old %s until it is recreated\n", name, what)
+			continue
+		}
+		if err := o.manager.Recreate(cmd.Context(), name, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *options) applyPorts(cmd *cobra.Command, profile string) error {
+	recreate, err := o.manager.ApplyPorts(cmd.Context(), profile)
+	if err != nil {
+		return err
+	}
+	return o.recreateFor(cmd, recreate, "ports")
+}
+
 func (o *options) loginCommand() *cobra.Command {
 	var renew, viaGH bool
 	var rt string
@@ -201,6 +224,17 @@ func (o *options) loginCommand() *cobra.Command {
 			fmt.Fprintf(o.log, "%s:\n", id)
 			switch id {
 			case "codex":
+				if r.Name() == "msb" {
+					// msb keeps no ChatGPT login; an API key from the
+					// platform's store signs codex in, in sbx as well.
+					if err := o.ensureSecret(cmd, store, "openai", renew, []string{
+						"msb signs codex in by an OpenAI API key, not a ChatGPT login",
+					}, "https://platform.openai.com/api-keys"); err != nil {
+						return err
+					}
+					auths[id] = unibox.AgentAuth{Method: unibox.AuthCommand, Command: unibox.SecretPrefix + "openai"}
+					continue
+				}
 				auths[id] = unibox.AgentAuth{Method: unibox.AuthOAuth}
 				fmt.Fprintln(o.log, "  the ChatGPT login is kept by the runtime, which opens the browser for it")
 			case "claude":
@@ -290,6 +324,10 @@ func (o *options) loginCommand() *cobra.Command {
 						return err
 					}
 				default:
+					continue
+				}
+				if r.Name() == "msb" && method != unibox.AuthAPIKey {
+					fmt.Fprintf(o.log, "%s's %s login is fetched each time msb boots the sandbox\n", id, method)
 					continue
 				}
 				fmt.Fprintf(o.log, "stored %s's %s login in %s\n", id, method, r.Name())
@@ -552,14 +590,8 @@ func (o *options) networkCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, name := range recreate {
-				if err := o.confirm("Runtime of sandbox " + name + " cannot change network rules live; recreate it to apply them?"); err != nil {
-					fmt.Fprintf(o.log, "sandbox %s keeps its old rules until it is recreated\n", name)
-					continue
-				}
-				if err := o.manager.Recreate(cmd.Context(), name, false); err != nil {
-					return err
-				}
+			if err = o.recreateFor(cmd, recreate, "network rules"); err != nil {
+				return err
 			}
 			return o.success(fmt.Sprintf("profile %s allows %s and denies %s", p.Name, orNone(allow), orNone(deny)))
 		}}
@@ -606,7 +638,7 @@ func (o *options) networkCommand() *cobra.Command {
 			}); err != nil {
 				return err
 			}
-			if err = o.manager.ApplyPorts(cmd.Context(), p.Name); err != nil {
+			if err = o.applyPorts(cmd, p.Name); err != nil {
 				return err
 			}
 			if len(hosts) == 0 {
@@ -630,7 +662,7 @@ func (o *options) networkCommand() *cobra.Command {
 		}); err != nil {
 			return err
 		}
-		if err = o.manager.ApplyPorts(cmd.Context(), p.Name); err != nil {
+		if err = o.applyPorts(cmd, p.Name); err != nil {
 			return err
 		}
 		when := "at every start"

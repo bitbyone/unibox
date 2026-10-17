@@ -86,6 +86,27 @@ type Mounter interface {
 	Unmount(ctx context.Context, sandbox, host, target string) error
 }
 
+// Starter is a runtime that does not start a stopped sandbox on its own
+// when a command is run in it. msb resolves a sandbox's secrets from the
+// environment of the command that boots it, so unibox starts it with them.
+type Starter interface {
+	Start(ctx context.Context, sandbox string, log io.Writer) error
+}
+
+// SecretRefresher is a runtime whose running sandboxes get their tokens
+// fetched again before each session, as the runtime does not refresh them
+// itself.
+type SecretRefresher interface {
+	RefreshSecrets(ctx context.Context, sandbox string, log io.Writer) error
+}
+
+// Present says whether a runtime is there to use without asking it
+// anything: an installed program, or one unibox brings along. Choosing a
+// runtime for a new sandbox takes the first present one.
+type Present interface {
+	Present() bool
+}
+
 // ImagePruner is a runtime whose images unibox can list and remove, so old
 // ones do not pile up: a sandbox does not need the image it was made from
 // once it exists.

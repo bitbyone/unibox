@@ -9,7 +9,7 @@ one says how they fit.
  │ sandboxes/<profile>/ │   │ unibox               │   │ /work/<task>/<repo>      │
  │   sandbox.yaml       │──▶│  profile → adapter   │──▶│   fresh clone, own branch│
  │   sandbox.dockerfile │   │                      │   │                          │
- │ _shared/  .shared/   │   │ runtime (sbx)        │   │ claude / codex / copilot │
+ │ _shared/  .shared/   │   │ runtime (sbx / msb)  │   │ claude / codex / copilot │
  │   @install @instr.   │   │  logins, proxy,      │◀──│   commits + pushes       │
  └──────────────────────┘   │  network policy      │   └──────────────────────────┘
                             └──────────────────────┘             │
@@ -76,11 +76,15 @@ logins):
 
 | Runtime | Status | Isolation |
 | --- | --- | --- |
-| `sbx` (Docker Sandboxes) | supported | micro-VM, egress proxy, credentials kept on the host |
+| `sbx` (Docker Sandboxes) | supported, the default where installed | micro-VM, egress proxy, credentials kept on the host |
+| `msb` (microsandbox) | built in, the default without sbx | micro-VM, egress proxy, credentials kept on the host |
 | Podman / Docker | planned | container |
 
-`unibox runtimes` shows what is installed, and
-[The sbx Runtime](/reference/sbx) what was verified about sbx.
+A new sandbox goes to sbx when it is installed and to msb otherwise;
+`unibox config set default_runtime msb` or `--runtime msb` chooses, and a
+sandbox keeps the runtime it was made in. `unibox runtimes` shows what is
+there; [The sbx Runtime](/reference/sbx) and
+[The msb Runtime](/reference/msb) what was verified about each.
 
 ## Agent
 

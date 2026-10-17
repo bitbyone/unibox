@@ -1,8 +1,9 @@
 # Getting Started
 
 unibox runs coding agents - claude, codex, copilot and opencode - in
-isolated sandboxes. Each sandbox is a micro-VM made by a sandbox runtime
-(today Docker Sandboxes, `sbx`) from a **profile** you keep in a git
+isolated sandboxes. Each sandbox is a micro-VM made by a sandbox runtime -
+Docker Sandboxes (`sbx`) where it is installed, otherwise microsandbox
+(`msb`), which unibox brings along - from a **profile** you keep in a git
 repository of your own. The agent clones your repositories from the forge,
 commits and pushes inside the sandbox; your machine, your home and your
 logins stay out of its reach.
@@ -44,7 +45,9 @@ format it reads and the version of its JSON contract.
 ### Requirements
 
 - **macOS** (verified on Apple Silicon) or **Linux**
-- **Docker Sandboxes** (`sbx`), signed in with `sbx login`
+- a runtime: **Docker Sandboxes** (`sbx`), signed in with `sbx login`; or
+  none, and unibox installs **microsandbox** into `~/.microsandbox` the
+  first time it needs it (Apple silicon Macs, Linux with KVM)
 - **Docker**, for building the profiles' images
 - **git**
 - **Go 1.26** or newer, only to build unibox from a checkout

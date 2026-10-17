@@ -153,7 +153,7 @@ func TestPortsArePublishedByTheProfileAndSwitchedWhileASandboxRuns(t *testing.T)
 
 	// A change of the profile's ports is applied live to a running sandbox.
 	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nnetwork:\n  ports:\n    fe: '3100:3000'\n")
-	if err := m.ApplyPorts(ctx, "node"); err != nil {
+	if _, err := m.ApplyPorts(ctx, "node"); err != nil {
 		t.Fatal(err)
 	}
 	if got := live.hostPorts("unibox-dev"); !slices.Equal(got, []int{3100, 7000}) {

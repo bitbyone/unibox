@@ -687,7 +687,7 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile %s: script %s: missing %s", name, script, p.Scripts[script])
 		}
 	}
-	for _, rt := range []string{"sbx", "podman"} {
+	for _, rt := range []string{"sbx", "msb", "podman"} {
 		entries, _ := os.ReadDir(filepath.Join(p.Dir, "."+rt))
 		for _, e := range entries {
 			if e.IsDir() || e.Name() != "build.args" {

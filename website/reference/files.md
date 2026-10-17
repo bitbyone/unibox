@@ -11,6 +11,8 @@ unibox's home follows the XDG variables: `$XDG_CONFIG_HOME/unibox` and
 | `~/.config/unibox/state.json` | what use taught: host access last seen per profile, builds, sandboxes, tasks, runs |
 | `~/.config/unibox/herdr-plugin/` | the herdr plugin's manifest, when installed |
 | `~/.cache/unibox/sbx/` | generated for sbx: build contexts, kits; never edited, regenerated |
+| `~/.cache/unibox/msb/<sandbox>/` | an msb sandbox's configuration and the commands that fetch its secrets; never their values |
+| `~/.microsandbox/` | the microsandbox runtime unibox installed, its images and sandboxes |
 | `~/.config/sbx/credentials.yaml` | sbx's own file; unibox adds the bindings a multi-agent sandbox needs, and never removes one |
 
 ### `config.yaml`
@@ -41,7 +43,7 @@ own store for the logins it keeps. `unibox secret ls` lists their names.
 
 ### Images
 
-Built images live in Docker and in sbx's own image store, tagged
+Built images live in Docker and in the runtime's own image store, tagged
 `unibox/<profile>:<revision>`, a digest of what the image is built from. `unibox prune` removes those no longer needed.
 
 ## In the environments repository

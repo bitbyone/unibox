@@ -57,6 +57,11 @@ func sbxForwarding(ctx context.Context) (bool, error) {
 	return false, fmt.Errorf("cannot determine sbx SSH forwarding from sbx settings get ssh.agentForwardingEnabled --json, which answered %q; update sbx or retry", said)
 }
 
+func (r *SBX) Present() bool {
+	_, err := exec.LookPath("sbx")
+	return err == nil
+}
+
 func (r *SBX) Available(ctx context.Context) error {
 	if _, err := exec.LookPath("sbx"); err != nil {
 		return fmt.Errorf("sbx is not installed; install Docker Sandboxes and run sbx login")
@@ -247,73 +252,9 @@ func (r *SBX) Remove(ctx context.Context, name string) error {
 }
 
 func (r *SBX) Build(ctx context.Context, p Profile, tag string, log io.Writer) (string, error) {
-	if err := os.MkdirAll(r.Cache, 0o700); err != nil {
-		return "", err
-	}
-	dir, err := os.MkdirTemp(r.Cache, "build-")
-	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(dir)
-	if p.Image != "" {
-		if err = runLogged(hostCommand(ctx, "docker", "pull", p.Image), log); err != nil {
-			return "", err
-		}
-		if err = runLogged(hostCommand(ctx, "docker", "tag", p.Image, tag), log); err != nil {
-			return "", err
-		}
-	} else {
-		for name, file := range p.BuildFiles() {
-			dest := filepath.Join(dir, filepath.FromSlash(name))
-			if err = AtomicWrite(dest, file.Data, os.FileMode(file.Mode)); err != nil {
-				return "", err
-			}
-		}
-		install, err := p.InstallContext()
-		if err != nil {
-			return "", err
-		}
-		installDir, err := os.MkdirTemp(r.Cache, "install-")
-		if err != nil {
-			return "", err
-		}
-		defer os.RemoveAll(installDir)
-		if err = writeInstallContext(installDir, install); err != nil {
-			return "", err
-		}
-		args := []string{"build", "--tag", tag, "--file", filepath.Join(dir, p.Dockerfile), "--build-context", "unibox=" + installDir}
-		buildArgs, err := p.BuildArgs(r.Name())
-		if err != nil {
-			return "", err
-		}
-		for _, arg := range buildArgs {
-			args = append(args, "--build-arg", arg)
-		}
-		args = append(args, dir)
-		if err = runLogged(hostCommand(ctx, "docker", args...), log); err != nil {
-			return "", err
-		}
-	}
-	for _, id := range p.Agents {
-		a, _ := FindAgent(id)
-		fmt.Fprintf(log, "checking agent %s\n", id)
-		cmd := hostCommand(ctx, "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--entrypoint", "/bin/sh", tag, "-c", "command -v "+Quote(a.Command))
-		if err = runLogged(cmd, log); err != nil {
-			return "", fmt.Errorf("profile %s declares %s but its image cannot find it; install it in the Dockerfile", p.Name, id)
-		}
-	}
-	archive := filepath.Join(dir, "image.tar")
-	if err = runLogged(hostCommand(ctx, "docker", "image", "save", "--output", archive, tag), log); err != nil {
-		return "", err
-	}
-	if err = runLogged(hostCommand(ctx, "sbx", "template", "load", archive), log); err != nil {
-		return "", err
-	}
-	b, err := commandOutput(hostCommand(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", tag))
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(b)), nil
+	return buildImage(ctx, r.Cache, r.Name(), p, tag, log, func(archive string) error {
+		return runLogged(hostCommand(ctx, "sbx", "template", "load", archive), log)
+	})
 }
 
 // UpdateNetwork changes a running sandbox's rules in place: sbx applies a

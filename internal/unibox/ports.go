@@ -151,8 +151,15 @@ func validatePorts(ports map[string]Port) error {
 
 // PortPublisher is a runtime that publishes a running sandbox's ports on
 // the host and takes them back, without a recreation.
-type PortPublisher interface {
+// PortLister is a runtime that says which of a sandbox's ports are
+// published. One that publishes them only when it creates a sandbox, as msb
+// does, lists them without being a PortPublisher.
+type PortLister interface {
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)
+}
+
+type PortPublisher interface {
+	PortLister
 	PublishPort(ctx context.Context, sandbox, spec string, log io.Writer) error
 	UnpublishPort(ctx context.Context, sandbox string, port api.PublishedPort, log io.Writer) error
 }
@@ -276,7 +283,7 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	}
 	running := exists && box.State == "running"
 	var actual []api.PublishedPort
-	if pub, ok := r.(PortPublisher); ok && running {
+	if pub, ok := r.(PortLister); ok && running {
 		if actual, err = pub.PublishedPorts(ctx, b.RuntimeName); err != nil {
 			return nil, false, err
 		}
@@ -328,7 +335,7 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 		return err
 	}
 	if _, ok := r.(PortPublisher); !ok {
-		return fmt.Errorf("runtime %s cannot publish ports", b.Runtime)
+		return fmt.Errorf("runtime %s publishes ports only when it creates a sandbox; change the profile's default with unibox network port, which recreates sandbox %s", b.Runtime, name)
 	}
 	p, err := m.profile(b.Profile)
 	if err != nil {
@@ -356,15 +363,16 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 }
 
 // ApplyPorts brings every running sandbox of a profile to its ports.
-func (m *Manager) ApplyPorts(ctx context.Context, profile string) error {
+func (m *Manager) ApplyPorts(ctx context.Context, profile string) ([]string, error) {
 	p, err := m.profile(profile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s, err := m.Paths.ReadState()
 	if err != nil {
-		return err
+		return nil, err
 	}
+	needRecreate := []string{}
 	for _, name := range sortedKeys(s.Sandboxes) {
 		b := s.Sandboxes[name]
 		if b.Profile != p.Name {
@@ -372,21 +380,30 @@ func (m *Manager) ApplyPorts(ctx context.Context, profile string) error {
 		}
 		r, err := m.Runtime(b.Runtime)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		box, exists, err := m.findBox(ctx, r, b)
-		if err != nil || !exists || box.State != "running" {
+		if err != nil || !exists {
+			continue
+		}
+		// A runtime that publishes ports only when it creates a sandbox
+		// takes the change with a recreation.
+		if _, ok := r.(PortPublisher); !ok {
+			needRecreate = append(needRecreate, name)
+			continue
+		}
+		if box.State != "running" {
 			continue
 		}
 		guard, err := m.guard(name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		err = m.syncPorts(ctx, &b, r, p)
 		guard.Close()
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return needRecreate, nil
 }

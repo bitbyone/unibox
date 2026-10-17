@@ -69,7 +69,8 @@ unibox agent ls web                    # how each signs in and is credited
 
 `agent login` signs agents in and writes their `auth` into the profile:
 
-- **codex** - through the runtime's ChatGPT login, in the browser;
+- **codex** - through the runtime's ChatGPT login, in the browser, with sbx;
+  with msb, which keeps no OAuth logins, through an OpenAI API key;
 - **claude** - through `claude setup-token` on your terminal, then a hidden
   prompt for the long-lived token it prints;
 - **copilot** - through a fine-grained GitHub token with the **Copilot
@@ -105,6 +106,13 @@ The runtime signs one agent of a sandbox in by OAuth, so two `oauth` agents in
 one profile are refused. That is why claude beside codex signs in by `token`:
 claude's subscription goes through a long-lived token from
 `claude setup-token`, and codex keeps its ChatGPT `oauth`.
+:::
+
+::: info msb
+msb runs no OAuth flow: `oauth` is refused there, so claude signs in by
+`token` and codex by `api-key` or `command`. Nothing is stored in msb; each
+login's command runs when msb boots the sandbox, and again before each
+session, so a new token reaches a running sandbox.
 :::
 
 ### Copilot through your gh login

@@ -56,7 +56,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
 | Package | What it owns |
 | --- | --- |
 | `cmd/unibox` | the entry point |
-| `internal/unibox` | profiles, the manager, tasks, runtimes, the sbx adapter and its kit |
+| `internal/unibox` | profiles, the manager, tasks, runtimes, the sbx adapter and its kit, the msb adapter (`msb*.go`) |
 | `internal/unibox/api` | the versioned JSON contract other programs read |
 | `internal/unibox/cli` | the cobra commands, preflight and its questions |
 | `internal/unibox/templates` | every file unibox puts into an environments repository, as files: `managed/` mirrors `.shared`, which unibox owns and keeps current, `user/` the examples init writes once into `_shared`, `profile/` what init writes once into a new profile, `seeds/` the agents' configuration seeds, `build/` the `@install` runner a build gets |
@@ -64,6 +64,14 @@ about it. Keep command output short: pipe through `head`, `tail` or
 | `internal/testenv` | the isolated environment every package's tests run in |
 
 ## Decisions worth knowing
+
+- **msb is the built-in runtime.** A new sandbox goes to sbx where it is
+  installed, else to msb, which the microsandbox Go SDK installs on first
+  use. The SDK (cgo, behind the `cgo` build tag) installs it and rotates
+  secrets live; everything else runs the `msb` CLI. msb reads a secret
+  from a host variable when it boots a sandbox, so unibox boots it under a
+  shell that fills the variables from the secrets' commands - a value
+  never passes through unibox. docs/design.md has what was verified.
 
 - **A profile has a format version.** Changing what sandbox.yaml may say
   in a way an existing profile no longer reads bumps `ProfileFormat` and
