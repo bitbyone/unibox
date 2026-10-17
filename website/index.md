@@ -1,7 +1,7 @@
 ---
 layout: page
 title: unibox
-titleTemplate: Sandboxes for coding agents
+titleTemplate: A wrapper for sbx and msb
 sidebar: false
 aside: false
 ---

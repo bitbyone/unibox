@@ -1,15 +1,15 @@
 # Getting Started
 
-unibox runs coding agents - claude, codex, copilot and opencode - in
-isolated sandboxes. Each sandbox is a micro-VM made by a sandbox runtime -
-Docker Sandboxes (`sbx`) where it is installed, otherwise microsandbox
-(`msb`), which unibox brings along - from a **profile** you keep in a git
-repository of your own. The agent clones your repositories from the forge,
-commits and pushes inside the sandbox; your machine, your home and your
-logins stay out of its reach.
+unibox is a command-line wrapper over two sandbox runtimes, Docker
+Sandboxes (`sbx`) and microsandbox (`msb`), for running coding agents -
+claude, codex, copilot and opencode - on your machine during local
+development. It gives both one profile format, kept in a git repository of
+yours, and sets up what the runtime needs. The runtime makes the sandbox, a
+micro-VM, and keeps your tokens out of it; the agent clones your
+repositories inside, commits and pushes to a branch, and you pull.
 
-It is a wrapper over sandbox runtimes: one command line and one profile
-format, with an adapter per runtime. Using the runtime directly still works.
+sbx is used where it is installed, msb otherwise; unibox installs msb itself.
+Using the runtime directly still works.
 
 ## Install unibox
 
@@ -142,7 +142,7 @@ question.
 
 ## Where next
 
-- [Why unibox](./why): the problem, and the threat model in plain words
+- [What unibox Is](./why): what it does, what it leaves to the runtime, and the threat model
 - [Concepts](./concepts): environments repository, profile, sandbox, task, runtime
 - [Profiles](./profiles): what `sandbox.yaml` says
 - [Tasks](./tasks): branches, several repositories, resuming

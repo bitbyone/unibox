@@ -29,7 +29,7 @@ const flow = [
   {
     where: 'Host',
     what: 'unibox and the runtime',
-    lines: ['profile → adapter → sbx or msb', 'logins in the keychain', 'credential proxy', 'network policy'],
+    lines: ['unibox: profile → settings', 'sbx or msb: the VM,', '  credential proxy,', '  network policy'],
   },
   {
     where: 'Sandbox',
@@ -45,48 +45,43 @@ const flow = [
 
 const features = [
   {
-    title: 'Isolated by design',
-    text: 'Each sandbox is a micro-VM with its own kernel, disk and Docker. Nothing of your home is mounted unless you ask.',
-    link: '/guide/why',
-  },
-  {
-    title: 'Logins never enter the sandbox',
-    text: 'Tokens stay in the keychain on the host. The sandbox sees placeholders the runtime\'s proxy swaps on the way out.',
-    link: '/guide/services-and-secrets',
-  },
-  {
-    title: 'Profiles in git',
-    text: 'An environment is a sandbox.yaml and a Dockerfile in a repository of yours: reviewed, versioned, shared with a team.',
+    title: 'One profile format',
+    text: 'A sandbox.yaml and a Dockerfile in a git repository of yours. The same profile runs in sbx or in msb.',
     link: '/guide/profiles',
   },
   {
-    title: 'Several agents, one image',
-    text: 'claude, codex, copilot and opencode side by side in one image, each signed in its own way, each credited in commits.',
+    title: 'Setup done by commands',
+    text: 'unibox init lays out the repository, unibox agent login and unibox service add sign agents and forges in. No runtime configuration by hand.',
+    link: '/guide/',
+  },
+  {
+    title: 'Logins kept on the host',
+    text: 'Tokens stay in the keychain. unibox hands them to the runtime, whose proxy puts them into requests; the sandbox sees placeholders.',
+    link: '/guide/services-and-secrets',
+  },
+  {
+    title: 'Agents side by side',
+    text: 'claude, codex, copilot and opencode in one image, each signed in and credited in commits.',
     link: '/guide/agents',
   },
   {
-    title: 'Live network rules and named ports',
-    text: 'Allow or deny a host and the running sandboxes follow at once. Publish ports by name and switch them on and off.',
-    link: '/guide/network-and-ports',
-  },
-  {
-    title: 'Mount when you choose',
-    text: 'By default the agent works on fresh clones. With --mount it works on your checkout instead, knowingly.',
-    link: '/guide/mount',
-  },
-  {
-    title: 'Tasks that last',
-    text: 'A task is clones on a branch in a sandbox. Resume it later with any agent of the profile, or add a repository while it runs.',
+    title: 'Tasks on clones',
+    text: 'A task is clones of your repositories on a branch inside a sandbox. Resume it later, with any agent of the profile.',
     link: '/guide/tasks',
   },
   {
-    title: 'Images that know their age',
-    text: 'Images are tagged with the profile\'s revision. unibox builds when an input changed, unibox diff shows what did, and old images go.',
+    title: 'Network rules and ports by name',
+    text: 'Allow or deny hosts and publish ports with a command. sbx applies a change live; msb recreates the sandbox.',
+    link: '/guide/network-and-ports',
+  },
+  {
+    title: 'Images rebuilt when needed',
+    text: 'An image is tagged with the profile\'s revision, built again when an input changed, and old ones are removed.',
     link: '/guide/images',
   },
   {
     title: 'Scriptable',
-    text: 'Every command takes --json and --yes, with a versioned JSON contract - built for a UI such as unagit to drive it.',
+    text: 'Every command takes --json and --yes, with a versioned JSON contract, so a program such as unagit can drive it.',
     link: '/reference/cli',
   },
 ]
@@ -95,12 +90,14 @@ const features = [
 <template>
   <div class="home">
     <section class="hero">
-      <p class="kicker">Sandboxes for coding agents</p>
-      <h1>Give the agent a whole machine.<br /><span>Keep yours out of its reach.</span></h1>
+      <p class="kicker">A wrapper for sbx and msb</p>
+      <h1>Coding agents in local sandboxes,<br /><span>from one profile format.</span></h1>
       <p class="lead">
-        unibox runs claude, codex, copilot and opencode in isolated micro-VMs, defined by profiles
-        in a git repository of yours. The agent clones, commits and pushes inside the sandbox;
-        your home, your keys and your logins stay on the host.
+        unibox is a command-line wrapper over two sandbox runtimes, Docker Sandboxes (sbx) and
+        microsandbox (msb). It gives them one profile format and sets up the rest - the image, the
+        agents' logins, forge tokens, network rules - so an agent runs in a sandbox on your machine
+        with one command. The isolation, the credential proxy and the network policy are the
+        runtime's; unibox configures them. It is for local development, and nothing more.
       </p>
 
       <div class="install">
@@ -122,7 +119,7 @@ const features = [
 
       <div class="actions">
         <a class="btn brand" :href="withBase('/guide/')">Get Started</a>
-        <a class="btn alt" :href="withBase('/guide/why')">Why unibox</a>
+        <a class="btn alt" :href="withBase('/guide/why')">What it is</a>
         <a class="btn alt" href="https://github.com/bitbyone/unibox">GitHub</a>
       </div>
     </section>
@@ -130,8 +127,8 @@ const features = [
     <section class="how" aria-label="How unibox works">
       <h2>How it works</h2>
       <p class="sub">
-        A profile describes the environment. unibox turns it into the runtime's own means, and the
-        work leaves the sandbox the way a colleague's would: as pushes to a branch.
+        A profile describes the environment. unibox turns it into the runtime's settings. The agent
+        works on clones in the sandbox and pushes to a branch, which you pull.
       </p>
       <ol class="flow">
         <li v-for="(step, i) in flow" :key="step.where" class="step">
@@ -146,8 +143,8 @@ const features = [
         </li>
       </ol>
       <p class="note">
-        Real tokens are added by the proxy on the host, on requests to the hosts a login or a
-        service names. Inside the VM there is only a placeholder.
+        The runtime's proxy puts the real token into requests to the hosts a login or a service
+        names. Inside the VM there is only a placeholder.
       </p>
     </section>
 
@@ -161,7 +158,7 @@ const features = [
 <span class="dim">$</span> <b>unibox tasks</b>
 <span class="dim">$</span> <b>unibox resume</b> <em>&lt;task&gt;</em> <b>--agent codex</b>
 
-<span class="dim"># reach a host the policy refuses: written into the profile, applied live</span>
+<span class="dim"># reach a host the policy refuses: written into the profile</span>
 <span class="dim">$</span> <b>unibox network allow web jitpack.io</b>
 
 <span class="dim"># publish the dev server on localhost by name, at every start</span>
@@ -171,7 +168,7 @@ const features = [
 
     <section class="arrangement">
       <div class="copy-col">
-        <h2>The forge is where work crosses</h2>
+        <h2>Work comes back through the forge</h2>
         <p>
           No host directory is mounted by default, and nothing of the sandbox reaches your
           checkout. A <code>.git</code> the agent could write holds commands your machine would
@@ -188,7 +185,7 @@ const features = [
     </section>
 
     <section class="features">
-      <h2>What it gives you</h2>
+      <h2>What unibox does</h2>
       <div class="grid">
         <a v-for="f in features" :key="f.title" class="card" :href="withBase(f.link)">
           <h3>{{ f.title }}</h3>
@@ -198,10 +195,11 @@ const features = [
     </section>
 
     <section class="closing">
-      <h2>One command lays it all out</h2>
+      <h2>Getting started</h2>
       <p>
-        <code>unibox init --dir ~/my-envs</code> lays out your environments repository,
-          <code>unibox init web</code> adds a first profile. Sign its agents in, and run.
+        <code>unibox init --dir ~/my-envs</code> lays out an environments repository,
+        <code>unibox init web</code> adds a profile, <code>unibox agent login web</code> signs its
+        agents in, and <code>unibox run --profile web</code> starts one.
       </p>
       <a class="btn brand" :href="withBase('/guide/')">Getting Started</a>
     </section>

@@ -1,11 +1,20 @@
-# Why unibox
+# What unibox Is
+
+unibox is a command-line wrapper over sandbox runtimes: today Docker
+Sandboxes (`sbx`) and microsandbox (`msb`), perhaps others later. It gives
+them one profile format and does the setup - the image, the agents' logins,
+forge tokens, network rules, ports - so a coding agent runs in a sandbox on
+your machine with one command.
+
+That is all it is. The isolation, the credential proxy and the network
+policy are the runtime's; unibox configures them and does not add security
+of its own. It is meant for local development, not for running agents for
+other people, in CI or in the cloud, and it has no plans beyond that.
 
 A coding agent is most useful when it may do anything: install a package,
-run the tests, start a database, try something and throw it away. It is most
-dangerous when it does that on your machine, with your home directory, your
-SSH keys and every login you have within reach.
-
-unibox gives the agent a whole machine of its own and keeps yours out of it.
+run the tests, start a database. Doing that on your own machine puts your
+home directory, your SSH keys and your logins within its reach; a sandbox
+runtime keeps them out, and unibox makes the runtime quick to set up.
 
 ## What it is for
 
@@ -41,8 +50,8 @@ your checkout  <── git pull ──┐        /work/<task>/<repo>  clones of 
 Assume the agent may be wrong, confused or steered by something it read. What
 can it reach?
 
-**Not your machine.** It runs in a micro-VM with its own kernel, its own
-disk and its own Docker Engine. Your home, your keys and your other projects
+**Not your machine.** The runtime runs it in a micro-VM with its own kernel,
+its own disk and its own Docker Engine. Your home, your keys and your other projects
 are not there.
 
 **Not your git.** A `.git` directory the agent can write holds commands your
@@ -59,8 +68,7 @@ the real value in place of the placeholder on requests to the hosts the login
 names. An agent that prints its environment prints a placeholder.
 
 **Not every host on the internet.** The runtime's network policy refuses what
-it does not list, and a profile allows or denies more. Changes apply to
-running sandboxes at once.
+it does not list, and a profile allows or denies more.
 
 **What it can reach is the forge**, with the token you gave the sandbox. It
 can push to any branch that token may push to, force-push and delete. So the
@@ -86,13 +94,12 @@ with what it leads to.
 
 ## Why a wrapper
 
-Docker Sandboxes does the isolation. unibox adds what a day of work with
-agents needs around it: profiles in a format that names no runtime, tasks
-that span repositories and outlive a session, several agents in one image,
-logins and services set up through commands rather than by hand, network
-rules and ports by name, and a JSON contract other programs - such as
-[unagit](./unagit) - build on. Adding a runtime means implementing one Go
-interface; profiles do not change.
+The runtime does the isolation, and each can be used directly. unibox adds
+the setup around it: a profile format that names no runtime, tasks that
+span repositories, several agents in one image, logins and services set up
+by commands rather than by hand, network rules and ports by name, and a JSON
+contract other programs - such as [unagit](./unagit) - can use. Adding a
+runtime means implementing one Go interface; profiles do not change.
 
 ## Considered and rejected
 

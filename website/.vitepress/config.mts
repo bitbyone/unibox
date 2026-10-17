@@ -10,7 +10,7 @@ const guideSidebar = [
     text: 'Introduction',
     items: [
       { text: 'Getting Started', link: '/guide/' },
-      { text: 'Why unibox', link: '/guide/why' },
+      { text: 'What unibox Is', link: '/guide/why' },
       { text: 'Concepts', link: '/guide/concepts' },
     ],
   },
@@ -66,7 +66,7 @@ export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'Run coding agents in isolated sandboxes, defined by profiles in a git repository of your own.',
+  description: 'A command-line wrapper over sbx and msb: one profile format and an easy setup for running coding agents in sandboxes during local development.',
   cleanUrls: true,
   lastUpdated: true,
   head: [

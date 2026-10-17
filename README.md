@@ -1,9 +1,12 @@
 # unibox
 
-A wrapper over sandbox runtimes for coding agents: one CLI and one
-profile format, with an adapter per runtime: Docker Sandboxes (`sbx`)
-where it is installed, and microsandbox (`msb`), which unibox brings along,
-everywhere else. Using the runtime directly still works.
+A command-line wrapper over sandbox runtimes for running coding agents
+during local development: one profile format and the setup around it, with
+an adapter per runtime - Docker Sandboxes (`sbx`) where it is installed, and
+microsandbox (`msb`), which unibox installs itself, everywhere else. Others
+may follow. The isolation, the credential proxy and the network policy are
+the runtime's; unibox configures them. Using the runtime directly still
+works.
 
 Documentation: **https://bitbyone.github.io/unibox/**
 

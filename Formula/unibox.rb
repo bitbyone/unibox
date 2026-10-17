@@ -2,7 +2,7 @@
 # the revision below when a vX.Y tag is pushed; Homebrew refuses to build if
 # the tag no longer points at that revision. Edit the rest by hand.
 class Unibox < Formula
-  desc "Run coding agents in sandboxes defined by profiles in a git repository"
+  desc "Wrapper over sbx and msb for running coding agents in local sandboxes"
   homepage "https://bitbyone.github.io/unibox/"
   url "https://github.com/bitbyone/unibox.git",
       tag:      "v0.1",
