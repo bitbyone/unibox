@@ -330,7 +330,9 @@ rules and ports change live.
 
 msb limits that show through: no `oauth` logins (claude by `token`, codex
 by an API key), and network rules, ports and logins are set when a sandbox
-is made, so a change of them recreates it; `--mount` is refused. Its tokens
+is made, so a change of them recreates it; `--mount` is refused. A host
+behind a VPN with a resolver of its own resolves when the VPN is connected
+as the sandbox is made. Its tokens
 are fetched each time a sandbox boots and again before each session, so a
 rotated token reaches a running sandbox without a restart. A sandbox may
 reach what sbx's default policy allows - AI services, package registries,

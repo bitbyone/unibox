@@ -3,9 +3,12 @@ package unibox
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -33,7 +36,58 @@ while [ $# -gt 0 ]; do
 done
 `
 	mustWriteExecutable(t, filepath.Join(dir, "msb"), []byte(script))
-	return &MSB{Cache: filepath.Join(dir, "cache"), Binary: filepath.Join(dir, "msb")}, argv, env, conf
+	return &MSB{Cache: filepath.Join(dir, "cache"), Binary: filepath.Join(dir, "msb"), DNS: fakeDNS()}, argv, env, conf
+}
+
+// fakeDNS is a host whose VPN resolves git.corp.example, privately, through
+// a resolver of its own, 10.1.1.53, which answers public names too; the
+// global resolver, 100.100.100.100, does not know the name.
+func fakeDNS() *hostDNS {
+	answers := map[string]map[string][]net.IP{
+		"10.1.1.53":       {"git.corp.example": {net.ParseIP("10.0.0.7")}, msbDNSProbe: {net.ParseIP("140.82.121.3")}},
+		"10.9.9.9":        {"git.corp.example": {net.ParseIP("10.0.0.7")}},
+		"100.100.100.100": {msbDNSProbe: {net.ParseIP("140.82.121.3")}},
+	}
+	return &hostDNS{
+		lookup: func(ctx context.Context, name string) ([]net.IP, error) {
+			switch name {
+			case "git.corp.example":
+				return []net.IP{net.ParseIP("10.0.0.7")}, nil
+			case "gone.corp.example":
+				return nil, fmt.Errorf("no such host")
+			}
+			return []net.IP{net.ParseIP("203.0.113.5")}, nil
+		},
+		query: func(ctx context.Context, server, name string) ([]net.IP, error) {
+			if ips, ok := answers[server][name]; ok {
+				return ips, nil
+			}
+			return nil, fmt.Errorf("no answer")
+		},
+		resolvers: func(ctx context.Context) ([]string, []string, error) {
+			return []string{"100.100.100.100"}, []string{"100.100.100.100", "10.9.9.9", "10.1.1.53"}, nil
+		},
+	}
+}
+
+func TestMSBResolvesAVPNsPrivateHostsThroughTheVPNsResolver(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "darwin" {
+		t.Skip("msb does the split itself where resolv.conf has a stub resolver")
+	}
+	servers, allow, notes := fakeDNS().msbDNSFor(context.Background(), []string{"git.corp.example", "github.com", "*.corp.example", "gone.corp.example", "10.0.0.0/8"})
+	// 10.9.9.9 knows the name but not public ones, so msb, which falls
+	// through only on no answer, could not use it.
+	if !slices.Equal(servers, []string{"10.1.1.53", "100.100.100.100"}) || !slices.Equal(allow, []string{"10.0.0.7"}) {
+		t.Fatalf("servers %v allow %v", servers, allow)
+	}
+	if len(notes) != 2 || !strings.Contains(notes[0], "through 10.1.1.53") || !strings.Contains(notes[1], "gone.corp.example does not resolve") {
+		t.Fatalf("notes %q", notes)
+	}
+	global, all := scutilResolvers("DNS configuration\n\nresolver #1\n  nameserver[0] : 100.100.100.100\n  nameserver[1] : fd7a:115c:a1e0::53\n\nresolver #2\n  domain : local\n\nresolver #3\n  nameserver[0] : 10.132.64.20\n\nDNS configuration (for scoped queries)\n\nresolver #1\n  nameserver[0] : 100.100.100.100\n")
+	if !slices.Equal(global, []string{"100.100.100.100", "fd7a:115c:a1e0::53"}) || !slices.Equal(all, []string{"100.100.100.100", "fd7a:115c:a1e0::53", "10.132.64.20"}) {
+		t.Fatalf("global %v all %v", global, all)
+	}
 }
 
 func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
@@ -48,6 +102,7 @@ func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
 			Services: map[string]Service{
 				"gitlab": {Git: true, Host: HostList{"gitlab.example.com"}, User: "oauth2", Command: "printf %s-%s gitlab value"},
 				"jfrog":  {Env: "ARTIFACTORY_TOKEN", Host: HostList{"jfrog.example.com"}, Command: "printf %s-%s jfrog value"},
+				"corp":   {Git: true, Host: HostList{"git.corp.example"}, User: "oauth2", Command: "printf %s-%s corp value"},
 			},
 		}}
 	if err := r.Create(context.Background(), spec, io.Discard); err != nil {
@@ -83,6 +138,7 @@ func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
 		Network    struct {
 			Allow, Deny, Ports []string
 			TLS                map[string]bool
+			DNS                map[string][]string
 		}
 		Secrets map[string]struct {
 			Value        map[string]string
@@ -101,6 +157,9 @@ func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
 		if !slices.Contains(c.Network.Allow, want) {
 			t.Errorf("allow lacks %s", want)
 		}
+	}
+	if runtime.GOOS == "darwin" && (!slices.Equal(c.Network.DNS["nameservers"], []string{"10.1.1.53", "100.100.100.100"}) || !slices.Contains(c.Network.Allow, "10.0.0.7")) {
+		t.Errorf("the VPN's host does not resolve: %+v", c.Network)
 	}
 	if !slices.Equal(c.Network.Deny, []string{"gist.github.com"}) || !c.Network.TLS["enabled"] {
 		t.Errorf("network %+v", c.Network)

@@ -1380,6 +1380,22 @@ What was verified, and what it decided:
   policy (`msbBaseAllow`, from `sbx policy ls`), DNS, the services' hosts
   and the profile's `allow`; `deny` goes first and wins. Rules cannot change
   on a running sandbox (neither CLI nor SDK), so a change recreates it.
+- **DNS behind a VPN.** On macOS msb asks only the global resolvers
+  (`State:/Network/Global/DNS`); it does no split DNS, so a name a VPN
+  resolves through its own resolver - gitlab.2n.cz through 10.132.64.20,
+  with Tailscale's 100.100.100.100 global - is unknown in the sandbox. It
+  also drops an answer with a private address unless a rule names the
+  address, and puts a secret into a request only to an address it saw a DNS
+  answer for: pinning the name in `/etc/hosts` resolved it but blocked the
+  token. So when a sandbox is made, unibox resolves the profile's service
+  and `allow` hosts as the host does; for one with a private address it
+  finds the host's resolver (`scutil --dns`) that gives it, and that answers
+  public names too, since msb falls through only when a resolver does not
+  answer. That resolver goes first in `network.dns.nameservers`, before the
+  global ones, and the address is allowed. Checked: git on gitlab.2n.cz with
+  its token, public hosts, and another private address still refused. It
+  holds until the sandbox is recreated - connect the VPN first. On Linux
+  msb reads `/etc/resolv.conf`, whose stub resolver does the split.
 - **Ports** are published at creation only; SDK `Modify` gains ports after
   0.7.8. A port without a host port gets a free one when the sandbox is
   made. A change recreates the sandbox; `unibox port` lists them but

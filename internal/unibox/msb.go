@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,8 @@ type MSB struct {
 	// Binary is msb's path when set, so tests use a stand-in; empty finds
 	// the installed runtime, installing it the first time.
 	Binary string
+	// DNS is how the host resolves names; nil asks the host itself.
+	DNS *hostDNS
 
 	mu   sync.Mutex
 	path string
@@ -316,7 +319,7 @@ func freePort(ip, proto string) (int, error) {
 }
 
 // msbConfig is the sandbox's configuration as msb create --conf reads it.
-func (r *MSB) msbConfig(s Spec, secrets []msbSecret) (map[string]any, error) {
+func (r *MSB) msbConfig(ctx context.Context, s Spec, secrets []msbSecret, log io.Writer) (map[string]any, error) {
 	conf := map[string]any{
 		"image":       map[string]any{"oci": s.Image, "upper_size": msbDisk},
 		"pull_policy": "never",
@@ -362,6 +365,22 @@ func (r *MSB) msbConfig(s Spec, secrets []msbSecret) (map[string]any, error) {
 	}
 	allow, deny := msbNetwork(s.Access)
 	network := map[string]any{"allow": allow, "tls": map[string]any{"enabled": true}}
+	dns := r.DNS
+	if dns == nil {
+		dns = defaultHostDNS()
+	}
+	named := slices.Clone(s.Access.AllowNetwork)
+	for _, name := range sortedKeys(s.Access.Services) {
+		named = append(named, s.Access.Services[name].ProxyHosts()...)
+	}
+	nameservers, addresses, notes := dns.msbDNSFor(ctx, named)
+	for _, n := range notes {
+		fmt.Fprintln(log, n)
+	}
+	if len(nameservers) > 0 {
+		network["allow"] = append(allow, addresses...)
+		network["dns"] = map[string]any{"nameservers": nameservers}
+	}
 	if len(deny) > 0 {
 		network["deny"] = deny
 	}
@@ -403,7 +422,7 @@ func (r *MSB) Create(ctx context.Context, s Spec, log io.Writer) error {
 	if err != nil {
 		return err
 	}
-	conf, err := r.msbConfig(s, secrets)
+	conf, err := r.msbConfig(ctx, s, secrets, log)
 	if err != nil {
 		return err
 	}

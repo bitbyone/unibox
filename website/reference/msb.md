@@ -47,6 +47,17 @@ the profile's services and its `allow`. HTTPS is intercepted, as secrets and
 host rules need it; msb's certificate authority is trusted in the sandbox,
 and node, git, curl and codex work through it.
 
+## Behind a VPN
+
+On macOS msb asks only the machine's global DNS servers, so a host a VPN
+resolves through a resolver of its own - an internal forge, say - would not
+resolve in the sandbox. When unibox makes a sandbox it resolves the hosts of
+the profile's services and `allow` as your machine does; for one with a
+private address it gives msb the resolver that knows it first and allows
+that address, and says so. Connect the VPN before the sandbox is made; after
+connecting it later, or when the address changes, `unibox recreate` the
+sandbox.
+
 ## What needs a recreation
 
 msb sets network rules, ports, mounts and secrets when it makes a sandbox
