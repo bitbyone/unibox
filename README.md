@@ -216,7 +216,7 @@ build_args:
   NPM_MIRROR: ${vars.npm-mirror}         # stays in the image's history: never a secret
 ```
 
-Each person keeps the values in `~/.config/unibox/vars.yaml` (laid out by
+Each person keeps the values in `~/.config/unibox/vars.toml` (laid out by
 `unibox init`); a run or a build stops while one it refers to is missing:
 
 ```sh

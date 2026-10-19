@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,32 +17,40 @@ import (
 // in the environments repository. Shared values apply to every profile, a
 // profile's own win over them. A run stops while one is missing.
 
-// UserVars is ~/.config/unibox/vars.yaml.
+// UserVars is ~/.config/unibox/vars.toml: global values, and a profile's
+// own over them.
 type UserVars struct {
-	Vars     map[string]string            `yaml:"vars"`
-	Profiles map[string]map[string]string `yaml:"profiles"`
+	Vars     map[string]string            `toml:"global"`
+	Profiles map[string]map[string]string `toml:"profiles,omitempty"`
 }
 
-const varsHeader = `# Your own values for what profiles ask of you (their vars:), kept here and
-# never in the environments repository. Values under vars apply to every
-# profile; those under profiles.<name> to that profile alone, and win.
+const varsHeader = `# Your own values for what profiles ask of you (their vars), kept here and
+# never in the environments repository. Values under [global] apply to every
+# profile; those under [profiles.<name>] to that profile alone, and win.
 # unibox var set|ls|rm changes this file; no secret belongs here - keep
 # tokens with unibox secret set.
+
 `
 
-func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.yaml") }
+func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.toml") }
+
+// legacyVarsFile is where the values were kept in YAML, moved into
+// vars.toml the first time they are read.
+func (p Paths) legacyVarsFile() string { return filepath.Join(p.Config, "vars.yaml") }
 
 func (p Paths) LoadVars() (UserVars, error) {
 	u := UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}}
 	b, err := os.ReadFile(p.VarsFile())
 	if os.IsNotExist(err) {
-		return u, nil
+		return p.migrateVars(u)
 	}
 	if err != nil {
 		return u, err
 	}
-	if err = yaml.Unmarshal(b, &u); err != nil {
-		return u, fmt.Errorf("%s is not valid YAML; fix it or set the values again with unibox var set: %w", p.VarsFile(), err)
+	d := toml.NewDecoder(bytes.NewReader(b))
+	d.DisallowUnknownFields()
+	if err = d.Decode(&u); err != nil {
+		return u, fmt.Errorf("%s is not valid: values go under [global] or [profiles.<name>]; fix it or set them again with unibox var set: %w", p.VarsFile(), err)
 	}
 	if u.Vars == nil {
 		u.Vars = map[string]string{}
@@ -52,19 +61,47 @@ func (p Paths) LoadVars() (UserVars, error) {
 	return u, nil
 }
 
+func (p Paths) migrateVars(u UserVars) (UserVars, error) {
+	b, err := os.ReadFile(p.legacyVarsFile())
+	if os.IsNotExist(err) {
+		return u, nil
+	}
+	if err != nil {
+		return u, err
+	}
+	var old struct {
+		Vars     map[string]string            `yaml:"vars"`
+		Profiles map[string]map[string]string `yaml:"profiles"`
+	}
+	if err = yaml.Unmarshal(b, &old); err != nil {
+		return u, fmt.Errorf("%s is not valid YAML, so it could not be moved into %s; fix it or set the values again with unibox var set: %w", p.legacyVarsFile(), p.VarsFile(), err)
+	}
+	for k, v := range old.Vars {
+		u.Vars[k] = v
+	}
+	for name, values := range old.Profiles {
+		u.Profiles[name] = values
+	}
+	if err = p.SaveVars(u); err != nil {
+		return u, err
+	}
+	return u, os.Remove(p.legacyVarsFile())
+}
+
 func (p Paths) SaveVars(u UserVars) error {
 	for name, values := range u.Profiles {
 		if len(values) == 0 {
 			delete(u.Profiles, name)
 		}
 	}
-	var b bytes.Buffer
-	enc := yaml.NewEncoder(&b)
-	enc.SetIndent(2)
-	if err := enc.Encode(u); err != nil {
+	if u.Vars == nil {
+		u.Vars = map[string]string{}
+	}
+	b, err := toml.Marshal(u)
+	if err != nil {
 		return err
 	}
-	return AtomicWrite(p.VarsFile(), append([]byte(varsHeader), b.Bytes()...), 0o600)
+	return AtomicWrite(p.VarsFile(), append([]byte(varsHeader), b...), 0o600)
 }
 
 // EnsureVarsFile lays the file out when there is none, so a person finds
@@ -72,6 +109,10 @@ func (p Paths) SaveVars(u UserVars) error {
 func (p Paths) EnsureVarsFile() (bool, error) {
 	if _, err := os.Stat(p.VarsFile()); err == nil {
 		return false, nil
+	}
+	if _, err := os.Stat(p.legacyVarsFile()); err == nil {
+		_, err = p.LoadVars()
+		return false, err
 	}
 	return true, p.SaveVars(UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}})
 }

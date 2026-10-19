@@ -132,8 +132,18 @@ build_args:
   NPM_MIRROR: ${vars.npm-mirror}    # stays in the image's history: never a secret
 ```
 
-Each person keeps the values in `~/.config/unibox/vars.yaml`, which
-`unibox init` lays out:
+Each person keeps the values in `~/.config/unibox/vars.toml`, which
+`unibox init` lays out - global ones, and a profile's own over them:
+
+```toml
+[global]
+artifactory-user = "tobola"
+
+[profiles.dev]
+gitlab-2n-author = "Jan Tobola <tobola@2n.com>"
+```
+
+`unibox var` writes it for you:
 
 ```sh
 unibox var set artifactory-user tobola                                   # every profile

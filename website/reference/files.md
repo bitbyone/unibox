@@ -7,7 +7,7 @@ unibox's home follows the XDG variables: `$XDG_CONFIG_HOME/unibox` and
 
 | Path | What it holds |
 | --- | --- |
-| `~/.config/unibox/vars.yaml` | your own values for what profiles ask of you (`vars`): shared ones, and each profile's over them |
+| `~/.config/unibox/vars.toml` | your own values for what profiles ask of you (`vars`): shared ones, and each profile's over them |
 | `~/.config/unibox/config.yaml` | your choices: the environments repository, the default runtime, the runtimes' settings |
 | `~/.config/unibox/state.json` | what use taught: host access last seen per profile, builds, sandboxes, tasks, runs |
 | `~/.config/unibox/herdr-plugin/` | the herdr plugin's manifest, when installed |

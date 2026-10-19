@@ -419,7 +419,7 @@ unibox var rm <name> [-p <profile>]
 ```
 
 Keeps your own values for what profiles ask of you (`vars`), in
-`~/.config/unibox/vars.yaml`. Without `-p` a value applies to every profile;
+`~/.config/unibox/vars.toml`. Without `-p` a value applies to every profile;
 with it, to that profile alone, over the shared one. `var` does not take the
 profile from the context, so a value is never made one profile's by
 accident. `ls -p` lists what the profile asks, each value and where it comes

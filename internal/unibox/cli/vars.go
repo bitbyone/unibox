@@ -17,7 +17,7 @@ func (o *options) varCommand() *cobra.Command {
 	var profile string
 	c := &cobra.Command{Use: "var", Short: "Keep your own values for what profiles ask of you (their vars)", Long: `A profile shared by a team names what each person sets for themselves - a
 user name, a commit identity - under vars. The values are yours, kept in
-~/.config/unibox/vars.yaml and never in the environments repository: a value
+~/.config/unibox/vars.toml and never in the environments repository: a value
 without --profile applies to every profile, one with --profile to that
 profile alone, and wins. A run stops while a profile's value is missing.
 unibox sets them in every session and for the profile's start script. No

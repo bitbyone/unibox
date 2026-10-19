@@ -67,7 +67,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
 
 - **A profile holds nothing personal.** What each person sets for
   themselves it declares under `vars`; the values are in the user's
-  `~/.config/unibox/vars.yaml`, and reach the sandbox only where the
+  `~/.config/unibox/vars.toml`, and reach the sandbox only where the
   profile refers to them as `${vars.<name>}` - in `env`, `build_args`, a
   service's `user` and `author`. A run stops while one is missing. `env`
   is the one place a variable is set; a service's placeholder goes there

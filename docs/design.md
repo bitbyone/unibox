@@ -932,8 +932,9 @@ secrets it names (`init -i`), and without a terminal lists them.
 A profile is meant to be shared by a team, so it holds nothing personal.
 What each person has to set - a user name a build reads, a commit identity
 on one forge - the profile declares under `vars`, by name with what it is
-for. The values live in the user's `~/.config/unibox/vars.yaml`: shared ones
-under `vars`, a profile's own under `profiles.<name>`, which win. A run stops
+for. The values live in the user's `~/.config/unibox/vars.toml`: global ones
+under `[global]`, a profile's own under `[profiles.<name>]`, which win (a
+`vars.yaml` of before is moved into it the first time it is read). A run stops
 while one is missing (`var_missing`, and `ensure` refuses), since a sandbox
 without it would fail later and less clearly. A value reaches the sandbox
 where the profile refers to it, most often as a variable of every session

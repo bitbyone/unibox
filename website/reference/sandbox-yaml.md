@@ -212,7 +212,7 @@ build_args:
 what each is for: lower-case letters, digits and hyphens, and never a secret
 (a name that says one is refused; a token stays `secret:<name>`). The values
 are not in the profile: each person keeps theirs in
-`~/.config/unibox/vars.yaml` with `unibox var set`. A var reaches nothing on
+`~/.config/unibox/vars.toml` with `unibox var set`. A var reaches nothing on
 its own; the profile refers to it as `${vars.<name>}`.
 
 `env` is every session's variables - an agent's, a shell's, the scripts' and

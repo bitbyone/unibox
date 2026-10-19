@@ -382,7 +382,7 @@ type Profile struct {
 	// refer to a var.
 	BuildArgSpec map[string]string `yaml:"build_args" json:"-"`
 	// Vars are what each person sets for themselves, by a name of its own
-	// with what each is for. The values live in the user's vars.yaml, never
+	// with what each is for. The values live in the user's vars.toml, never
 	// in the profile, and reach a sandbox only where the profile refers to
 	// them as ${vars.<name>}. VarValues are the values found; SetEnv and
 	// BuildArgValues are env and build_args with every reference filled.
