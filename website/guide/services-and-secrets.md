@@ -132,6 +132,19 @@ a command's arguments, the log, `--json`, the state or the profile.
 `secret:<name>` is portable: unibox turns it into the host command of the
 platform it runs on, so a profile is shared between macOS and Linux.
 
+A token stored this way is put into a profile by a service that names it,
+instead of asking for it again - one token can serve several services or
+profiles:
+
+```sh
+unibox secret set artifactory
+unibox service add web artifactory --host artifactory.example.com --secret artifactory
+```
+
+`unibox service rm` removes a token it stored for the service itself, named
+after it, unless another profile names it; a token stored on its own and
+named with `--secret` stays until `unibox secret rm`.
+
 ## Stores unibox does not keep
 
 A profile may name any host command instead - written by hand, or with

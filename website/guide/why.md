@@ -1,8 +1,9 @@
 # What unibox Is
 
-unibox is a command-line wrapper over sandbox runtimes: today Docker
-Sandboxes (`sbx`) and microsandbox (`msb`), perhaps others later. It gives
-them one profile format and does the setup - the image, the agents' logins,
+unibox is a command-line wrapper over sandbox runtimes: Docker Sandboxes
+(`sbx`), with microsandbox (`msb`) as an experimental second one that shows
+the format carries over; perhaps others later. It gives them one profile
+format and does the setup - the image, the agents' logins,
 forge tokens, network rules, ports - so a coding agent runs in a sandbox on
 your machine with one command.
 

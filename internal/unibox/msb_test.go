@@ -272,19 +272,22 @@ func TestMSBAuthKeepsNoOAuth(t *testing.T) {
 	}
 }
 
-func TestMSBIsTheRuntimeWhereSbxIsMissing(t *testing.T) {
+func TestMSBIsUsedOnlyWhenAskedFor(t *testing.T) {
 	bin := t.TempDir()
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	m := &Manager{Runtimes: map[string]Runtime{"sbx": &SBX{}, "msb": &MSB{Binary: "/bin/true"}}}
-	want := "msb"
-	if !msbPlatform() {
-		want = ""
+	if got := m.defaultRuntime(); got != "" {
+		t.Fatalf("without sbx the experimental runtime was chosen: %q", got)
 	}
-	if got := m.defaultRuntime(); got != want {
-		t.Fatalf("without sbx the runtime is %q", got)
+	if _, err := m.Runtime(""); err == nil || !strings.Contains(err.Error(), "default_runtime msb") {
+		t.Fatalf("%v", err)
 	}
 	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\n"))
 	if got := m.defaultRuntime(); got != "sbx" {
 		t.Fatalf("with sbx the runtime is %q", got)
+	}
+	m.Config.DefaultRuntime = "msb"
+	if r, err := m.Runtime(""); err != nil || r.Name() != "msb" {
+		t.Fatalf("the configured runtime was not used: %v", err)
 	}
 }

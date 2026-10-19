@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -146,7 +147,15 @@ func (o *options) configCommand() *cobra.Command {
 		}
 		return nil
 	}})
-	c.AddCommand(&cobra.Command{Use: "set key value", Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
+	c.AddCommand(&cobra.Command{Use: "set key value", Args: cobra.ExactArgs(2), Short: "Change a setting", Long: `Change a setting of unibox's own configuration. The keys:
+
+  environments              the environments repository's path
+  default_runtime           the runtime new sandboxes get: sbx, or the experimental msb
+  runtimes.<name>.on        whether a runtime may be used (true, false)
+  runtimes.<name>.stop_idle whether a sandbox is stopped when its last session ends
+
+A sandbox keeps the runtime it was made in; --runtime asks for another one
+for a new sandbox.`, Example: "  unibox config set default_runtime sbx\n  unibox config set runtimes.sbx.stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		key, value := args[0], args[1]
 		switch key {
@@ -278,8 +287,9 @@ func (o *options) runtimesCommand() *cobra.Command {
 			if err := r.Available(cmd.Context()); err != nil {
 				reason = err.Error()
 			}
-			rows = append(rows, map[string]any{"name": name, "enabled": o.manager.Config.Enabled(name), "available": reason == "", "error": reason, "capabilities": r.Capabilities()})
+			rows = append(rows, map[string]any{"name": name, "default": name == o.manager.DefaultRuntime(), "experimental": unibox.IsExperimental(r), "enabled": o.manager.Config.Enabled(name), "available": reason == "", "error": reason, "capabilities": r.Capabilities()})
 		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i]["name"].(string) > rows[j]["name"].(string) })
 		return o.write(map[string]any{"api_version": api.Version, "runtimes": rows})
 	}}
 }

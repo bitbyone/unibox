@@ -1,15 +1,16 @@
 # Getting Started
 
-unibox is a command-line wrapper over two sandbox runtimes, Docker
-Sandboxes (`sbx`) and microsandbox (`msb`), for running coding agents -
+unibox is a command-line wrapper over Docker Sandboxes (`sbx`) for running
+coding agents -
 claude, codex, copilot and opencode - on your machine during local
 development. It gives both one profile format, kept in a git repository of
 yours, and sets up what the runtime needs. The runtime makes the sandbox, a
 micro-VM, and keeps your tokens out of it; the agent clones your
 repositories inside, commits and pushes to a branch, and you pull.
 
-sbx is used where it is installed, msb otherwise; unibox installs msb itself.
-Using the runtime directly still works.
+An experimental adapter for microsandbox (`msb`) shows that the same
+profile runs on another runtime; it is used only when asked for. Using the
+runtime directly still works.
 
 ## Install unibox
 
@@ -45,9 +46,10 @@ format it reads and the version of its JSON contract.
 ### Requirements
 
 - **macOS** (verified on Apple Silicon) or **Linux**
-- a runtime: **Docker Sandboxes** (`sbx`), signed in with `sbx login`; or
-  none, and unibox installs **microsandbox** into `~/.microsandbox` the
-  first time it needs it (Apple silicon Macs, Linux with KVM)
+- **Docker Sandboxes** (`sbx`), signed in with `sbx login`. The
+  experimental msb runtime needs nothing more: unibox installs it into
+  `~/.microsandbox` the first time it is used (Apple silicon Macs, Linux
+  with KVM)
 - **Docker**, for building the profiles' images
 - **git**
 - **Go 1.26** or newer, only to build unibox from a checkout

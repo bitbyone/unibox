@@ -2,9 +2,9 @@
 
 A command-line wrapper over sandbox runtimes for running coding agents
 during local development: one profile format and the setup around it, with
-an adapter per runtime - Docker Sandboxes (`sbx`) where it is installed, and
-microsandbox (`msb`), which unibox installs itself, everywhere else. Others
-may follow. The isolation, the credential proxy and the network policy are
+an adapter per runtime. The supported runtime is Docker Sandboxes (`sbx`);
+microsandbox (`msb`) is experimental, there to show that a profile carries
+over to another runtime unchanged. Others may follow. The isolation, the credential proxy and the network policy are
 the runtime's; unibox configures them. Using the runtime directly still
 works.
 
@@ -37,10 +37,10 @@ Credentials stay on the host; the runtime's proxy adds them to requests.
 
 ## Install
 
-Needs git and Docker. With `sbx` installed and signed in (`sbx login`),
-sandboxes run in sbx; without it, in microsandbox, which unibox installs
-into `~/.microsandbox` the first time it needs it (Apple silicon Macs and
-Linux with KVM).
+Needs git, Docker, and `sbx` signed in (`sbx login`). The experimental msb
+runtime needs nothing more: unibox installs microsandbox into
+`~/.microsandbox` the first time it is used (Apple silicon Macs and Linux
+with KVM).
 
 With Homebrew, from the tap in this repository; it builds the release on
 your machine from its tagged commit:
@@ -265,7 +265,8 @@ in the platform's store and writes the `services` entry. It knows `github`,
 `gitlab` and `artifactory` (from the name, or `--kind`), anything else is
 `--kind generic` with `--host`, `--git` or `--env`. `--host github.com/<owner>`
 gives one owner on a forge a token of its own; `--author` and `--no-co-author`
-say who commits; `--command` takes a store unibox does not keep; `--gh` signs a `github`
+say who commits; `--secret <name>` names a token stored before with `unibox
+secret set <name>` instead of asking for one; `--command` takes a store unibox does not keep; `--gh` signs a `github`
 service in through your gh login, which reaches every owner it can at once. `unibox
 service ls <profile>` shows each and whether its token is stored, `unibox
 service rm` takes one out.
@@ -306,15 +307,16 @@ over the git `services` of the profile. `unibox check` warns when it is stored.
 
 | Runtime | Status | Isolation |
 | --- | --- | --- |
-| `sbx` (Docker Sandboxes) | supported, the default where installed | micro-VM, egress proxy, credentials kept on the host |
-| `msb` (microsandbox) | built in, the default without sbx | micro-VM, egress proxy, credentials kept on the host |
+| `sbx` (Docker Sandboxes) | supported, the default | micro-VM, egress proxy, credentials kept on the host |
+| `msb` (microsandbox) | experimental, used only when asked for | micro-VM, egress proxy, credentials kept on the host |
 | Podman / Docker | planned | container |
 
 Adding a runtime means implementing one Go interface (create, exec, stop,
 build, and optionally store logins). Profiles do not change.
-`unibox runtimes` shows what is installed; `unibox config set default_runtime
-msb` or `--runtime msb` chooses one for new sandboxes, and a sandbox keeps
-the runtime it was made in.
+`unibox runtimes` shows what is installed and which runtime is the default.
+`unibox config set default_runtime <name>` sets the default for new
+sandboxes, `--runtime <name>` asks for one sandbox, and a sandbox keeps the
+runtime it was made in.
 
 An image is tagged with its profile's revision (`unibox/dev:1508ba9b...`),
 so unibox tells a current one from an outdated one. A build removes the
@@ -328,7 +330,8 @@ and a login or service added after a sandbox was made reaches it when the
 sandbox is recreated (sbx binds a token's placeholder at creation). Network
 rules and ports change live.
 
-msb limits that show through: no `oauth` logins (claude by `token`, codex
+msb is experimental: it shows that a profile runs unchanged on another
+runtime, and is not meant for daily use yet. Its limits that show through: no `oauth` logins (claude by `token`, codex
 by an API key), and network rules, ports and logins are set when a sandbox
 is made, so a change of them recreates it; `--mount` is refused. A host
 behind a VPN with a resolver of its own resolves when the VPN is connected

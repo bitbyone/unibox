@@ -71,8 +71,9 @@ func Open(paths Paths, log io.Writer) (*Manager, error) {
 }
 
 // runtimeOrder is the order a new sandbox's runtime is chosen in when none
-// is set: sbx where it is installed, else msb, which unibox brings along.
-var runtimeOrder = []string{"sbx", "msb"}
+// is set. An experimental runtime is never chosen for the user; it is used
+// when set as default_runtime or asked for with --runtime.
+var runtimeOrder = []string{"sbx"}
 
 func (m *Manager) Runtime(name string) (Runtime, error) {
 	if name == "" {
@@ -81,7 +82,7 @@ func (m *Manager) Runtime(name string) (Runtime, error) {
 	if name == "" {
 		name = m.defaultRuntime()
 		if name == "" {
-			return nil, fmt.Errorf("no runtime is enabled and installed; install sbx, or enable msb with unibox config set runtimes.msb.on true")
+			return nil, fmt.Errorf("sbx is not installed; install Docker Sandboxes and run sbx login, or try the experimental msb runtime with unibox config set default_runtime msb")
 		}
 	}
 	r, ok := m.Runtimes[name]
@@ -94,8 +95,17 @@ func (m *Manager) Runtime(name string) (Runtime, error) {
 	return r, nil
 }
 
-// defaultRuntime is the first enabled runtime that is present, in
-// runtimeOrder, then by name.
+// DefaultRuntime is the runtime a new sandbox gets when none is asked for:
+// the configured one, else the first enabled, present and supported one.
+func (m *Manager) DefaultRuntime() string {
+	if m.Config.DefaultRuntime != "" {
+		return m.Config.DefaultRuntime
+	}
+	return m.defaultRuntime()
+}
+
+// defaultRuntime is the first enabled runtime that is present and not
+// experimental, in runtimeOrder, then by name.
 func (m *Manager) defaultRuntime() string {
 	order := slices.Clone(runtimeOrder)
 	for _, id := range sortedKeys(m.Runtimes) {
@@ -109,6 +119,9 @@ func (m *Manager) defaultRuntime() string {
 			continue
 		}
 		if p, ok := r.(Present); ok && !p.Present() {
+			continue
+		}
+		if IsExperimental(r) {
 			continue
 		}
 		return id
@@ -411,6 +424,9 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 				}
 			}
 		}
+	}
+	if IsExperimental(r) {
+		result.Needs = append(result.Needs, api.Need{Code: "runtime_experimental", Warning: true, Message: fmt.Sprintf("runtime %s is experimental; sbx is the supported runtime", r.Name())})
 	}
 	if a, ok := r.(Authenticator); ok {
 		result.Needs = append(result.Needs, a.AuthNeeds(ctx, b.RuntimeName, p)...)

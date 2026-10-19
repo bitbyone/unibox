@@ -20,8 +20,9 @@ import (
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-// MSB runs sandboxes in microsandbox, unibox's built-in runtime: the SDK
-// installs msb on first use, so a machine without sbx still has a runtime.
+// MSB runs sandboxes in microsandbox, an experimental runtime that shows a
+// profile carries over from sbx unchanged. It is used only when asked for;
+// the SDK installs msb on first use.
 // unibox drives msb's CLI - a sandbox is created from a configuration file
 // unibox writes, and sessions run through msb exec, whose terminal handling
 // the SDK does not offer - and uses the SDK for installing the runtime and
@@ -45,6 +46,7 @@ type MSB struct {
 const msbDisk = "64G"
 
 func (r *MSB) Name() string               { return "msb" }
+func (r *MSB) Experimental() bool         { return true }
 func (r *MSB) Capabilities() Capabilities { return Capabilities{"vm", true, true, true} }
 
 // msbPlatform says whether microsandbox runs here: Apple silicon Macs and

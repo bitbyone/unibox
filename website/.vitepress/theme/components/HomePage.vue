@@ -29,7 +29,7 @@ const flow = [
   {
     where: 'Host',
     what: 'unibox and the runtime',
-    lines: ['unibox: profile → settings', 'sbx or msb: the VM,', '  credential proxy,', '  network policy'],
+    lines: ['unibox: profile → settings', 'sbx: the VM,', '  credential proxy,', '  network policy'],
   },
   {
     where: 'Sandbox',
@@ -46,7 +46,7 @@ const flow = [
 const features = [
   {
     title: 'One profile format',
-    text: 'A sandbox.yaml and a Dockerfile in a git repository of yours. The same profile runs in sbx or in msb.',
+    text: 'A sandbox.yaml and a Dockerfile in a git repository of yours. It names no runtime: the same profile runs in the experimental msb too.',
     link: '/guide/profiles',
   },
   {
@@ -71,7 +71,7 @@ const features = [
   },
   {
     title: 'Network rules and ports by name',
-    text: 'Allow or deny hosts and publish ports with a command. sbx applies a change live; msb recreates the sandbox.',
+    text: 'Allow or deny hosts and publish ports with a command; sbx applies a change to running sandboxes.',
     link: '/guide/network-and-ports',
   },
   {
@@ -90,14 +90,15 @@ const features = [
 <template>
   <div class="home">
     <section class="hero">
-      <p class="kicker">A wrapper for sbx and msb</p>
+      <p class="kicker">A wrapper for Docker Sandboxes</p>
       <h1>Coding agents in local sandboxes,<br /><span>from one profile format.</span></h1>
       <p class="lead">
-        unibox is a command-line wrapper over two sandbox runtimes, Docker Sandboxes (sbx) and
-        microsandbox (msb). It gives them one profile format and sets up the rest - the image, the
-        agents' logins, forge tokens, network rules - so an agent runs in a sandbox on your machine
-        with one command. The isolation, the credential proxy and the network policy are the
-        runtime's; unibox configures them. It is for local development, and nothing more.
+        unibox is a command-line wrapper over Docker Sandboxes (sbx). It gives it a profile format
+        and sets up the rest - the image, the agents' logins, forge tokens, network rules - so an
+        agent runs in a sandbox on your machine with one command. The isolation, the credential
+        proxy and the network policy are sbx's; unibox configures them. An experimental adapter for
+        microsandbox (msb) shows the same profile runs elsewhere. It is for local development, and
+        nothing more.
       </p>
 
       <div class="install">

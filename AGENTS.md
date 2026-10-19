@@ -65,9 +65,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
 
 ## Decisions worth knowing
 
-- **msb is the built-in runtime.** A new sandbox goes to sbx where it is
-  installed, else to msb, which the microsandbox Go SDK installs on first
-  use. The SDK (cgo, behind the `cgo` build tag) installs it and rotates
+- **msb is an experimental runtime.** sbx is the supported one and the
+  default; msb shows that profiles carry over, and is used only when set
+  as `default_runtime` or asked for with `--runtime` (`Experimental`). The
+  microsandbox Go SDK installs it on first use. The SDK (cgo, behind the `cgo` build tag) installs it and rotates
   secrets live; everything else runs the `msb` CLI. msb reads a secret
   from a host variable when it boots a sandbox, so unibox boots it under a
   shell that fills the variables from the secrets' commands - a value

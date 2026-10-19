@@ -1,9 +1,14 @@
 # The msb Runtime
 
-[microsandbox](https://microsandbox.dev) is unibox's built-in runtime: a new
-sandbox goes to it when sbx is not installed, and unibox installs it - msb
-and its kernel library, into `~/.microsandbox` - the first time it is
-needed. It runs on Apple silicon Macs and on Linux with KVM. What follows was
+::: warning Experimental
+msb shows that a profile runs unchanged on a second runtime. sbx is the
+supported runtime and the default; msb is used only when asked for:
+`unibox config set default_runtime msb`, or `--runtime msb` for one sandbox.
+:::
+
+[microsandbox](https://microsandbox.dev) runs each sandbox as a micro-VM.
+unibox installs it - msb and its kernel library, into `~/.microsandbox` -
+the first time it is used. It runs on Apple silicon Macs and on Linux with KVM. What follows was
 verified against msb 0.7.8.
 
 ## What a profile becomes

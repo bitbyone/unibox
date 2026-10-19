@@ -99,7 +99,12 @@ func (o *options) secretStore() (unibox.SecretStore, error) {
 
 func (o *options) secretCommand() *cobra.Command {
 	c := &cobra.Command{Use: "secret", Short: "Keep tokens in the platform's store, for profiles to name as secret:<name>"}
-	c.AddCommand(&cobra.Command{Use: "set name", Args: cobra.ExactArgs(1), Short: "Store a token, asked for on a hidden prompt or read from stdin", RunE: func(cmd *cobra.Command, args []string) error {
+	c.AddCommand(&cobra.Command{Use: "set name", Args: cobra.ExactArgs(1), Short: "Store a token, asked for on a hidden prompt or read from stdin", Long: `Store a token in the platform's store - the login keychain on macOS, the
+Secret Service on Linux - under a name. It is asked for on a hidden prompt,
+or read from stdin, and never shown again.
+
+A profile names it as secret:<name>; unibox service add --secret <name>
+writes a service that uses it, and an agent's auth can name it too.`, Example: "  unibox secret set artifactory\n  unibox service add dev artifactory --host artifactory.example.com --secret artifactory", RunE: func(cmd *cobra.Command, args []string) error {
 		if err := unibox.ValidName(args[0]); err != nil {
 			return err
 		}
@@ -370,7 +375,7 @@ var serviceKinds = map[string]serviceKind{
 
 func (o *options) serviceCommand() *cobra.Command {
 	c := &cobra.Command{Use: "service", Short: "Sign a profile's sandboxes in to forges and other host services"}
-	var kind, user, scheme, env, author, refresh, command string
+	var kind, user, scheme, env, author, refresh, command, secret string
 	var hosts []string
 	var git, noCoAuthor, renew, viaGH bool
 	add := &cobra.Command{Use: "add profile name", Args: cobra.ExactArgs(2), Short: "Store a service's token and write its entry into the profile", RunE: func(cmd *cobra.Command, args []string) error {
@@ -416,8 +421,11 @@ func (o *options) serviceCommand() *cobra.Command {
 		if len(s.Host) == 0 {
 			return fmt.Errorf("give %s its host with --host", name)
 		}
+		if secret != "" && (command != "" || viaGH) {
+			return fmt.Errorf("--secret names where the token is; leave out --command and --gh")
+		}
 		gh := false
-		if kind == "github" && command == "" {
+		if kind == "github" && command == "" && secret == "" {
 			stored := false
 			if store, err := o.secretStore(); err == nil {
 				stored, _ = store.Has(cmd.Context(), name)
@@ -431,6 +439,22 @@ func (o *options) serviceCommand() *cobra.Command {
 		}
 		if gh {
 			s.Command = GHCommand
+		} else if secret != "" {
+			// A token stored before, perhaps for several services, is
+			// named rather than asked for again.
+			if err := unibox.ValidName(secret); err != nil {
+				return err
+			}
+			store, err := o.secretStore()
+			if err != nil {
+				return err
+			}
+			if ok, err := store.Has(cmd.Context(), secret); err != nil {
+				return err
+			} else if !ok {
+				return fmt.Errorf("no secret %s is stored; store it with unibox secret set %s", secret, secret)
+			}
+			s.Command = unibox.SecretPrefix + secret
 		} else if command != "" {
 			// A store unibox does not know - Vault, 1Password - is the
 			// user's command, run by the runtime as it is.
@@ -474,6 +498,7 @@ func (o *options) serviceCommand() *cobra.Command {
 	f.BoolVar(&noCoAuthor, "no-co-author", false, "No Co-Authored-By trailer for the agent in its repositories")
 	f.StringVar(&refresh, "refresh", "", "How often the runtime fetches the token again, e.g. 10m")
 	f.StringVar(&command, "command", "", "A host command printing the token, for a store unibox does not keep (Vault, 1Password)")
+	f.StringVar(&secret, "secret", "", "A token stored with unibox secret set, by its name, instead of asking for one")
 	f.BoolVar(&renew, "renew", false, "Ask for the token again, replacing the stored one")
 	f.BoolVar(&viaGH, "gh", false, "Sign a github service in through your gh login (gh auth token)")
 	c.AddCommand(add)
@@ -526,7 +551,7 @@ func (o *options) serviceCommand() *cobra.Command {
 	}})
 
 	var keep bool
-	rm := &cobra.Command{Use: "rm profile name", Args: cobra.ExactArgs(2), Short: "Take a service out of the profile, and its token unless another profile names it", RunE: func(cmd *cobra.Command, args []string) error {
+	rm := &cobra.Command{Use: "rm profile name", Args: cobra.ExactArgs(2), Short: "Take a service out of the profile, and the token stored for it unless another profile names it", RunE: func(cmd *cobra.Command, args []string) error {
 		p, err := o.manager.Profile(args[0])
 		if err != nil {
 			return err
@@ -542,7 +567,11 @@ func (o *options) serviceCommand() *cobra.Command {
 			return err
 		}
 		ref, isRef := unibox.SecretRef(s.Command)
-		if isRef && !keep {
+		if isRef && ref != args[1] {
+			// A secret of another name was stored on its own and named
+			// with --secret; it is the user's to remove.
+			fmt.Fprintf(o.log, "kept secret %s: unibox secret rm %s removes it\n", ref, ref)
+		} else if isRef && !keep {
 			names, _ := unibox.ProfileNames(o.manager.Config.Environments)
 			used := false
 			for _, other := range names {

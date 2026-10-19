@@ -56,7 +56,7 @@ const referenceSidebar = [
       { text: 'Files on Disk', link: '/reference/files' },
       { text: 'Security', link: '/reference/security' },
       { text: 'The sbx Runtime', link: '/reference/sbx' },
-      { text: 'The msb Runtime', link: '/reference/msb' },
+      { text: 'The msb Runtime (experimental)', link: '/reference/msb' },
       { text: 'Developing unibox', link: '/reference/developing' },
     ],
   },
@@ -66,7 +66,7 @@ export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'A command-line wrapper over sbx and msb: one profile format and an easy setup for running coding agents in sandboxes during local development.',
+  description: 'A command-line wrapper over Docker Sandboxes: one profile format and an easy setup for running coding agents in sandboxes during local development.',
   cleanUrls: true,
   lastUpdated: true,
   head: [

@@ -100,6 +100,17 @@ type SecretRefresher interface {
 	RefreshSecrets(ctx context.Context, sandbox string, log io.Writer) error
 }
 
+// Experimental is a runtime that is not yet supported: it shows that
+// profiles carry over to it, and is used only when asked for.
+type Experimental interface {
+	Experimental() bool
+}
+
+func IsExperimental(r Runtime) bool {
+	e, ok := r.(Experimental)
+	return ok && e.Experimental()
+}
+
 // Present says whether a runtime is there to use without asking it
 // anything: an installed program, or one unibox brings along. Choosing a
 // runtime for a new sandbox takes the first present one.

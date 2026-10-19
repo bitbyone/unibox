@@ -119,6 +119,26 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	if !strings.Contains(string(data), "env: ARTIFACTORY_TOKEN") || !strings.Contains(string(data), "command: vault kv get -field=token secret/art") {
 		t.Fatalf("%s", data)
 	}
+	// A token stored on its own is named, not asked for, and outlives the
+	// service.
+	if _, _, err = run(t, paths, "", "service", "add", "node", "jfrog", "--kind", "artifactory", "--host", "jfrog.example.com", "--secret", "jfrog-token"); err == nil || !strings.Contains(err.Error(), "unibox secret set jfrog-token") {
+		t.Fatalf("a missing secret was named: %v", err)
+	}
+	if _, _, err = run(t, paths, "jf-tokenvalue\n", "secret", "set", "jfrog-token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, log, err = run(t, paths, "", "service", "add", "node", "jfrog", "--kind", "artifactory", "--host", "jfrog.example.com", "--secret", "jfrog-token"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if data, _ = os.ReadFile(file); !strings.Contains(string(data), "command: secret:jfrog-token") {
+		t.Fatalf("%s", data)
+	}
+	if _, _, err = run(t, paths, "", "service", "rm", "node", "jfrog"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, _ = run(t, paths, "", "secret", "ls"); !strings.Contains(out, "jfrog-token") {
+		t.Fatal("a secret stored on its own went with the service")
+	}
 	if _, _, err = run(t, paths, "", "service", "rm", "node", "gitlab-2n"); err != nil {
 		t.Fatal(err)
 	}

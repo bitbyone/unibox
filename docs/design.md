@@ -3,8 +3,8 @@
 ## Where it stands
 
 Built and in daily use (2026-10-15): profiles of format 5, sbx as the
-runtime where it is installed and microsandbox, built in, everywhere else
-(2026-10-17), tasks, the agents' logins, services and network rules, the herdr
+supported runtime, microsandbox as an experimental one that shows profiles
+carry over (2026-10-17), tasks, the agents' logins, services and network rules, the herdr
 plugin. This began as unagit's plan - it replaced "Agents in a container"
 in unagit's docs/herdr.md - and keeps its reasoning, so that the decisions
 are not undone by accident. What unagit builds over unibox is unagit's
@@ -1318,11 +1318,14 @@ Spike questions about it:
   `sbx template save`? If only the latter: build in a sandbox and `sbx
   template save` it, or push to a registry.
 
-### microsandbox (msb), the built-in runtime
+### microsandbox (msb), an experimental runtime
 
 Checked against msb 0.7.8 and its Go SDK v0.7.8 on macOS (Apple Silicon),
-2026-10-17. msb is chosen for a new sandbox when sbx is not installed
-(`runtimeOrder`); a sandbox keeps the runtime it was made in.
+2026-10-17. msb is experimental: it shows the profile format carries over
+to a second runtime, and sbx stays the supported one and the default. It
+is never chosen for the user - only as `default_runtime` or with
+`--runtime msb` - and `unibox check` warns when it is used. A sandbox keeps
+the runtime it was made in.
 
 **Why the SDK and the CLI both.** The SDK installs the runtime
 (`EnsureRuntime`: msb and libkrunfw into `~/.microsandbox`), so whoever

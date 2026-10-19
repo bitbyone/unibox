@@ -76,13 +76,15 @@ logins):
 
 | Runtime | Status | Isolation |
 | --- | --- | --- |
-| `sbx` (Docker Sandboxes) | supported, the default where installed | micro-VM, egress proxy, credentials kept on the host |
-| `msb` (microsandbox) | built in, the default without sbx | micro-VM, egress proxy, credentials kept on the host |
+| `sbx` (Docker Sandboxes) | supported, the default | micro-VM, egress proxy, credentials kept on the host |
+| `msb` (microsandbox) | experimental, used only when asked for | micro-VM, egress proxy, credentials kept on the host |
 | Podman / Docker | planned | container |
 
-A new sandbox goes to sbx when it is installed and to msb otherwise;
-`unibox config set default_runtime msb` or `--runtime msb` chooses, and a
-sandbox keeps the runtime it was made in. `unibox runtimes` shows what is
+A new sandbox goes to the default runtime, sbx unless
+`unibox config set default_runtime <name>` says otherwise;
+`--runtime <name>` asks for one sandbox, and a sandbox keeps the runtime it
+was made in. msb shows that a profile runs unchanged on another runtime; it is not
+meant for daily use yet. `unibox runtimes` shows what is
 there; [The sbx Runtime](/reference/sbx) and
 [The msb Runtime](/reference/msb) what was verified about each.
 
