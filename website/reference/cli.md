@@ -410,7 +410,9 @@ Reads or changes unibox's own configuration. The keys:
 unibox runtimes
 ```
 
-Shows the installed adapters and their isolation capabilities.
+Shows each runtime: supported or experimental, which is the default,
+whether it can be used here, and what it isolates with. `--json` adds its
+capabilities.
 
 ### `unibox herdr`
 

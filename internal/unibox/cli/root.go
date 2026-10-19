@@ -280,7 +280,7 @@ func (o *options) profilesCommand() *cobra.Command {
 	}}
 }
 func (o *options) runtimesCommand() *cobra.Command {
-	return &cobra.Command{Use: "runtimes", Args: cobra.NoArgs, Short: "Show installed adapters and their isolation capabilities", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "runtimes", Args: cobra.NoArgs, Short: "Show the runtimes, which is the default, and whether each can be used", RunE: func(cmd *cobra.Command, args []string) error {
 		rows := []map[string]any{}
 		for name, r := range o.manager.Runtimes {
 			reason := ""
@@ -290,7 +290,29 @@ func (o *options) runtimesCommand() *cobra.Command {
 			rows = append(rows, map[string]any{"name": name, "default": name == o.manager.DefaultRuntime(), "experimental": unibox.IsExperimental(r), "enabled": o.manager.Config.Enabled(name), "available": reason == "", "error": reason, "capabilities": r.Capabilities()})
 		}
 		sort.Slice(rows, func(i, j int) bool { return rows[i]["name"].(string) > rows[j]["name"].(string) })
-		return o.write(map[string]any{"api_version": api.Version, "runtimes": rows})
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "runtimes": rows})
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "RUNTIME\tSTATUS\tAVAILABLE\tISOLATION")
+		for _, r := range rows {
+			status := "supported"
+			if r["experimental"].(bool) {
+				status = "experimental"
+			}
+			if r["default"].(bool) {
+				status += ", default"
+			}
+			if !r["enabled"].(bool) {
+				status += ", off"
+			}
+			available := "yes"
+			if e := r["error"].(string); e != "" {
+				available = "no: " + e
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r["name"], status, available, r["capabilities"].(unibox.Capabilities).Isolation)
+		}
+		return w.Flush()
 	}}
 }
 func (o *options) buildCommand() *cobra.Command {

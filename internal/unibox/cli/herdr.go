@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,10 +13,25 @@ import (
 
 func (o *options) herdrCommand() *cobra.Command {
 	c := &cobra.Command{Use: "herdr", Short: "Install and operate the sandbox agent status plugin"}
-	c.AddCommand(&cobra.Command{Use: "status", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return o.write(map[string]any{"api_version": api.Version, "plugin": o.manager.PluginStatus(cmd.Context())})
+	c.AddCommand(&cobra.Command{Use: "status", Args: cobra.NoArgs, Short: "Show whether herdr and the plugin are installed", RunE: func(cmd *cobra.Command, args []string) error {
+		s := o.manager.PluginStatus(cmd.Context())
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "plugin": s})
+		}
+		switch {
+		case !s.Available:
+			fmt.Fprintf(o.output, "herdr is not available: %s\n", s.Error)
+		default:
+			fmt.Fprintln(o.output, s.Version)
+		}
+		if s.Installed {
+			fmt.Fprintf(o.output, "plugin installed at %s\n", s.Path)
+		} else {
+			fmt.Fprintln(o.output, "plugin not installed; unibox herdr install-plugin installs it")
+		}
+		return nil
 	}})
-	c.AddCommand(&cobra.Command{Use: "install-plugin", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	c.AddCommand(&cobra.Command{Use: "install-plugin", Args: cobra.NoArgs, Short: "Install the plugin that shows sandboxed agents' status in herdr", RunE: func(cmd *cobra.Command, args []string) error {
 		if err := o.confirm("Install the unibox herdr plugin and its background observer?"); err != nil {
 			return err
 		}
@@ -24,7 +40,7 @@ func (o *options) herdrCommand() *cobra.Command {
 		}
 		return o.success("herdr plugin installed")
 	}})
-	c.AddCommand(&cobra.Command{Use: "uninstall-plugin", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	c.AddCommand(&cobra.Command{Use: "uninstall-plugin", Args: cobra.NoArgs, Short: "Remove the plugin and its background observer", RunE: func(cmd *cobra.Command, args []string) error {
 		if err := o.confirm("Uninstall the unibox herdr plugin?"); err != nil {
 			return err
 		}
