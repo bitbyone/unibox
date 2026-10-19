@@ -204,7 +204,7 @@ func TestAnUpdateMergesTheTemplatesChangesWithTheUsersAllOrNothing(t *testing.T)
 	if err = plan.Apply(root, tpl); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".templates", "acme", "conflicts", "dev")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, ".templates", "acme", "conflicts")); err == nil {
 		t.Fatal("the conflicts stayed")
 	}
 	// A profile without a base cannot tell whose a difference is.

@@ -723,5 +723,7 @@ func (u TemplateUpdate) Apply(root string, t Template) error {
 		}
 		_ = os.RemoveAll(conflictDir(root, u.Template, m.Profile.Name))
 	}
+	// Gone with the last conflict; one still there keeps it.
+	_ = os.Remove(filepath.Join(templateDir(root, u.Template), "conflicts"))
 	return nil
 }
