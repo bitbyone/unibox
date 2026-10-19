@@ -27,7 +27,12 @@ func (o *options) prompt(reader *bufio.Reader, question, preset string) (string,
 }
 
 func (o *options) inspectCommand() *cobra.Command {
-	return &cobra.Command{Use: "inspect sandbox", Args: cobra.ExactArgs(1), Short: "Show a sandbox's record and the runtime materials made for it", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "inspect [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Show a sandbox's record and the runtime materials made for it", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(first(args))
+		if err != nil {
+			return err
+		}
+		args = []string{name}
 		boxes, err := o.manager.List(cmd.Context())
 		if err != nil {
 			return err
@@ -55,7 +60,7 @@ func (o *options) inspectCommand() *cobra.Command {
 			}
 			return nil
 		}
-		return fmt.Errorf("sandbox %s not found; list them with unibox sandboxes", args[0])
+		return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", args[0])
 	}}
 }
 
@@ -235,7 +240,7 @@ func (o *options) initCommand() *cobra.Command {
 			fmt.Fprintln(o.output, "add a profile with unibox init <profile>, or be asked with unibox init -i")
 			return nil
 		}
-		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox agent login %s, add forges with unibox service add %s <name>, then unibox run builds and starts it\n", name, name, name)
+		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox agent login -p %s, add forges with unibox service add <name> -p %s, then unibox run builds and starts it\n", name, name, name)
 		return nil
 	}}
 	c.Flags().StringVar(&dir, "dir", "", "The environments repository to lay out and configure (default: the configured one)")

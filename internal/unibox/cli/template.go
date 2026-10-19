@@ -400,8 +400,13 @@ what you want, update again.`, RunE: func(cmd *cobra.Command, args []string) err
 		}
 		return o.success(fmt.Sprintf("updated template %s to %s", name, shortCommit(t.Commit)))
 	}})
-	c.AddCommand(&cobra.Command{Use: "diff profile", Args: cobra.ExactArgs(1), Short: "Show how a profile differs from the template profile it was copied from", RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := o.manager.Profile(args[0])
+	var profile string
+	diff := &cobra.Command{Use: "diff", Args: cobra.NoArgs, Short: "Show how a profile differs from the template profile it was copied from", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.profileName(profile)
+		if err != nil {
+			return err
+		}
+		p, err := o.manager.Profile(name)
 		if err != nil {
 			return err
 		}
@@ -429,7 +434,9 @@ what you want, update again.`, RunE: func(cmd *cobra.Command, args []string) err
 		}
 		fmt.Fprintf(o.output, "profile %s is as the template's %s\n", p.Name, p.TemplateProfile())
 		return nil
-	}})
+	}}
+	profileFlag(diff, &profile)
+	c.AddCommand(diff)
 	return c
 }
 

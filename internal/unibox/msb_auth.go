@@ -103,9 +103,9 @@ func (r *MSB) AuthNeeds(ctx context.Context, sandbox string, p Profile) []api.Ne
 			hint := "choose " + strings.Join(msbAuthMethods[id], ", ")
 			switch {
 			case id == "claude" && a.Method == AuthOAuth:
-				hint = "sign claude in by token, which unibox agent login " + p.Name + " claude sets up"
+				hint = "sign claude in by token, which unibox agent login claude -p " + p.Name + " sets up"
 			case id == "codex" && a.Method == AuthOAuth:
-				hint = "sign codex in by an OpenAI API key: unibox agent login " + p.Name + " codex"
+				hint = "sign codex in by an OpenAI API key: unibox agent login codex -p " + p.Name
 			}
 			needs = append(needs, api.Need{Code: "auth_unsupported", Agent: id, Message: fmt.Sprintf("msb cannot sign %s in by %s, as it keeps no OAuth logins; %s", id, a.Method, hint)})
 			continue
@@ -124,7 +124,7 @@ func (r *MSB) AuthNeeds(ctx context.Context, sandbox string, p Profile) []api.Ne
 		if ok, err := store.Has(ctx, msbKeyName(id)); err != nil {
 			needs = append(needs, api.Need{Code: "secret_missing", Message: err.Error()})
 		} else if !ok {
-			needs = append(needs, api.Need{Code: "login_required", Agent: id, Message: fmt.Sprintf("%s signs in by api-key, but no key is stored; unibox agent login %s %s asks for it", id, p.Name, id)})
+			needs = append(needs, api.Need{Code: "login_required", Agent: id, Message: fmt.Sprintf("%s signs in by api-key, but no key is stored; unibox agent login %s -p %s asks for it", id, id, p.Name)})
 		}
 	}
 	return needs

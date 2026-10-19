@@ -32,6 +32,14 @@ type Config struct {
 	Environments   string                   `yaml:"environments" json:"environments"`
 	DefaultRuntime string                   `yaml:"default_runtime,omitempty" json:"default_runtime,omitempty"`
 	Runtimes       map[string]RuntimeConfig `yaml:"runtimes,omitempty" json:"runtimes,omitempty"`
+	// Context is the sandbox and profile a command works on when it is
+	// not told, set by unibox context use.
+	Context Context `yaml:"context,omitempty" json:"context,omitempty"`
+}
+
+type Context struct {
+	Sandbox string `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
+	Profile string `yaml:"profile,omitempty" json:"profile,omitempty"`
 }
 type Paths struct{ Config, Cache string }
 

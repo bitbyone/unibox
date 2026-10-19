@@ -9,7 +9,7 @@ Three kinds of script make and serve a sandbox, each at its own moment:
 | `scripts` | the profile | when asked for, in the VM | whatever you want on demand: updating skills, resetting a database |
 
 `start` and `scripts` run inside the VM. A Dockerfile runs in your host's
-Docker; read a teammate's change with `unibox diff` before it builds.
+Docker; read a teammate's change with `unibox profile diff` before it builds.
 
 ## `start`
 
@@ -37,14 +37,14 @@ scripts:
 A script runs only when asked for, by name:
 
 ```sh
-unibox run --profile web --agent claude --script update-skills   # before the agent starts
+unibox run -p web --agent claude --script update-skills   # before the agent starts
 unibox resume login-flow --script reset-db --script update-skills
-unibox script web-1                                               # list them
-unibox script web-1 reset-db                                      # run now, in /work
+unibox script ls -s web-1                                 # list them
+unibox script run reset-db -s web-1                       # run now, in /work
 ```
 
 `--script` is repeatable and runs in order, in the task's directory, before
-the agent starts. `unibox script <sandbox> <name>...` runs them now, in
+the agent starts. `unibox script run <name>... -s <sandbox>` runs them now, in
 `/work`, one after another, and counts as a session as a shell does.
 
 A script runs:
@@ -90,9 +90,9 @@ you replace it - with a `_shared/@instructions/unibox.md` of your own, say.
 A sandbox can carry more shared texts than its profile lists:
 
 ```sh
-unibox run --profile web --sandbox web-review --instructions review-style
-unibox instructions attach web-review review-style no-migrations
-unibox instructions attach web-review          # attach none
+unibox run -p web -s web-review --instructions review-style
+unibox instructions attach review-style no-migrations -s web-review
+unibox instructions attach -s web-review       # attach none
 ```
 
 `attach` replaces the sandbox's list of attached names.
@@ -100,8 +100,8 @@ unibox instructions attach web-review          # attach none
 ### Reading them
 
 ```sh
-unibox instructions web                  # as a profile's agents get them
-unibox instructions --sandbox web-1      # as a sandbox's, attached texts included
+unibox instructions -p web              # as a profile's agents get them
+unibox instructions -s web-1            # as a sandbox's, attached texts included
 ```
 
 ## Skills

@@ -60,14 +60,14 @@ resolve in the sandbox. When unibox makes a sandbox it resolves the hosts of
 the profile's services and `allow` as your machine does; for one with a
 private address it gives msb the resolver that knows it first and allows
 that address, and says so. Connect the VPN before the sandbox is made; after
-connecting it later, or when the address changes, `unibox recreate` the
-sandbox.
+connecting it later, or when the address changes, `unibox sandbox recreate`
+the sandbox.
 
 ## What needs a recreation
 
 msb sets network rules, ports, mounts and secrets when it makes a sandbox
 and cannot change them on a running one. A change of rules or ports is
-offered as a recreation; `unibox port <sandbox> name:on` cannot switch a
+offered as a recreation; `unibox network port publish` cannot switch a
 port, and `--mount` is refused. A token that changes does not need one.
 
 ## Files

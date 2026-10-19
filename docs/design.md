@@ -217,15 +217,15 @@ grouped worktree  <── git pull ───┐    /work/<task>/<repo>  clones o
     refused with it. `--branch` switches the host's checkout to the
     branch when the task is prepared, making it there from HEAD when the
     host has none of that name - it need not be on the forge, as nothing
-    is cloned from there; `check` only says so (`branch_switch`), and git
+    is cloned from there; `task check` only says so (`branch_switch`), and git
     refuses a switch that would overwrite uncommitted changes.
   - **Removal unmounts before it deletes.** `rm -rf` of the task would go
-    into a mount, so `rm-task` unmounts first, has the guest check every
+    into a mount, so `task rm` unmounts first, has the guest check every
     mount point is empty, and keeps the task, deleting nothing, when an
     unmount fails or a directory is still mounted. It does not check for
     unpushed work, which is on the host. A recreated sandbox has no
     mounts; preparing its tasks again mounts them again.
-- **A task can grow while it runs** (`unibox add-repo <task> <directory>...`).
+- **A task can grow while it runs** (`unibox task add-repo <task> <directory>...`).
   Since nothing is mounted, adding a repository is one more clone into
   `/work/<task>/`, made through the runtime's exec. The agent in a running
   session sees it at once and needs no restart. The task lock stays with
@@ -260,13 +260,13 @@ runs another process in the same environment, like `docker exec`.
 
 Both arrangements are offered, and the user picks at the start:
 
-- **A shared sandbox** (named for its profile unless `--sandbox` names it): tasks are directories
+- **A shared sandbox** (named for its profile unless `-s` names it): tasks are directories
   `/work/<task>`, agents are processes side by side. Memory, the Gradle
   cache and Docker images are paid once. Between the agents there is no
   isolation at all - one user with sudo, one filesystem, one Docker, one
   set of ports (two `docker compose` Postgreses on 5432 collide). The
   picker says so.
-- **A sandbox of its own** for one task (`--sandbox <new name> --profile <p>`): nothing it does reaches
+- **A sandbox of its own** for one task (`-s <new name> -p <p>`): nothing it does reaches
   another task.
 
 Both persist when the agent ends, for their caches; removing is the user's
@@ -291,11 +291,11 @@ there):
 1. **Open in Sandboxed Agent…** asks, each picker skipped when it has one
    item and ordered by use: the agent, the profile, the sandbox, the place
    (the existing `agentPlaces`). The pickers are filled from `unibox
-   profiles --json` and `unibox sandboxes --json`. The sandbox picker is also
+   profile ls --json` and `unibox sandbox ls --json`. The sandbox picker is also
    where the runtime is chosen: the profile's sandboxes of every runtime,
    each carrying its own, then New Sandbox in <runtime>… for each runtime
    unibox has on - plain New Sandbox… while there is one.
-2. `unibox check --json` with the profile, sandbox, agent, branch and
+2. `unibox task check --json` with the profile, sandbox, agent, branch and
    repositories. It answers with `needs`, each a `code` unagit asks about
    in its own dialogs: `uncommitted` and `local_commits` (they will not reach
    the sandbox, which clones from the forge - Commit… or go on without
@@ -310,12 +310,12 @@ there):
    has no upstream or is ahead of it - from the host, with its own
    credentials, through the path `P` uses. A branch origin has moved past
    stops the start with the reason; nothing is forced.
-4. `unibox prepare --json` with the repositories' clone URLs **from the
+4. `unibox task prepare --json` with the repositories' clone URLs **from the
    forge's API** (`--repo <dir>=<https URL>`, the project's http URL),
    never from a local remote, which can carry a token (a chezmoi origin,
    AGENTS.md); https always - the sandbox has no SSH key. A `runTask` log
    of its output; it prints the sandbox and the task as JSON at the end.
-5. The place chosen runs `unibox resume <task>`, the task `prepare` made - This Terminal,
+5. The place chosen runs `unibox resume <task>`, the task `task prepare` made - This Terminal,
    Zellij, Ghostty or herdr, as for any agent; `unibox resume <task>
    --agent <id>` runs a task again, with any of the profile's agents.
 6. unagit's session record (`<config>/sessions/`) gets the sandbox and the
@@ -323,7 +323,7 @@ there):
 
 ### What unibox does
 
-`unibox prepare` (and `run`, when not prepared):
+`unibox task prepare` (and `run`, when not prepared):
 
 1. Creates the VM if new (`sbx create`, see [runtime](#the-runtime)) or
    starts it, and runs the profile's `start` if the VM booted since it last
@@ -462,7 +462,7 @@ and the design turns on it:
   before the secret, so unibox sets the placeholder in copilot's
   environment itself; it is not secret. This is copilot's `token` auth:
   a fixed placeholder (`SessionEnv` hands it to the session), the
-  generated kit declares no github credential for it, and `check` warns
+  generated kit declares no github credential for it, and `task check` warns
   (`service_overridden`) while the built-in secret is stored and a
   service names github.com.
 - **One forge, several owners.** A fine-grained GitHub token has one
@@ -560,7 +560,7 @@ state or the profile, and a test holds each of these.
   macOS and Linux, and survives a move from sbx to podman. A plain
   command stays allowed, written by hand, for a store unibox does not
   know.
-- **Agents.** `unibox agent login [agent]`, for the agents of the profiles, or
+- **Agents.** `unibox agent login [agent] -p <profile>`, for the profile's agents, or
   one: codex - the runtime's own OAuth login in the browser, as now;
   claude - `claude setup-token` on the user's terminal, then the hidden
   prompt; copilot - opens the page for a fine-grained token, says what to
@@ -572,7 +572,7 @@ state or the profile, and a test holds each of these.
   in and nothing of the service's own stored, unibox asks. It says what
   that gives away - the whole gh login - and copilot keeps it as a token
   login, on Copilot's hosts alone, so github.com stays the services'.
-- **Services.** `unibox service add <profile> <name>` asks for, or takes
+- **Services.** `unibox service add <name> -p <profile>` asks for, or takes
   by flags, the forge or the kind of service, its host and path, the user
   the forge expects, the author and co-author, then the token on the
   hidden prompt; stores it, and writes the `services` entry. unibox knows
@@ -639,7 +639,7 @@ hidden (`.sbx/build.args`), and a profile's root holds only its definition,
 `sandbox.dockerfile`, start script, scripts and `instructions.md` - custom files, an agent
 configuration seed say, go under an underscore directory of the profile's
 own, `_data` by convention. `unibox init <profile>` lays the whole shape
-out (interactively with `-i`) and `unibox validate` checks it, every
+out (interactively with `-i`) and `unibox profile validate` checks it, every
 profile and every text included. `.shared/` and `_shared/` are copied into
 every profile's build context, so a Dockerfile can copy what it needs
 from them. The installation scripts reach it another way, for a short
@@ -665,7 +665,7 @@ rebuild.
   the same `@install` and `@instructions`; the `@` marks a directory a
   profile names things from, and the user's of a name wins over unibox's,
   so a script or text is overridden by putting one in `_shared`, never by
-  editing unibox's. `init`, `check`, `build` and a task's start - each once
+  editing unibox's. `init`, `task check`, `profile build` and a task's start - each once
   per command, before a profile is read, so an image is built from them -
   rewrite `.shared` to this unibox's own where it differs and take out
   anything else in it, saying so; a repository init did not lay out (no
@@ -695,7 +695,7 @@ nothing chosen in unagit, unibox's own setting is left as it is.
 Without unagit the first command lays the repository out and configures
 it: `unibox init --dir <path>`, or `unibox init -i`, which asks where
 (here by default) when nothing is configured. With nothing configured,
-`ls` and `profiles` say so and how to start, and init without `--dir`
+`sandbox ls` and `profile ls` say so and how to start, and init without `--dir`
 refuses rather than guess; once configured, init names the repository it
 writes into. `unibox config unset environments` forgets it and leaves
 the files.
@@ -837,16 +837,16 @@ git:
   environment, caches, agents.
 - **Ports are published by name** (format 3, the user's call): a profile
   names each port, says whether a sandbox starts with it, and `unibox
-  port <sandbox> name:on|off` switches it while the sandbox runs without
-  writing the profile. Checked on a throwaway sandbox (`sbx ports`, sbx
+  network port publish|unpublish <name> -s <sandbox>` switches it while
+  the sandbox runs without writing the profile. Checked on a throwaway sandbox (`sbx ports`, sbx
   0.47): a port is published live on the host's loopback, tcp4 when no
   protocol is named; `--json` lists `host_ip`, `host_port`,
   `sandbox_port`, `protocol`; a host port taken already is a 409; and
   published ports survive a stop - listed as none while stopped, back at
   the start, an ephemeral one with a new host port. `--unpublish` takes a
   port back only by its exact host port and does nothing, quietly, for
-  another. So unibox records what it published by name and spec, finds
-  the runtime's entries by the spec (any host port for an ephemeral one),
+  another. So unibox records what it published by name and mapping, finds
+  the runtime's entries by the mapping (any host port for an ephemeral one),
   unpublishes them by what sbx lists, and leaves a port it did not
   publish alone. Switches last while a sandbox runs: a start that finds
   it stopped drops them and publishes the profile's defaults, since sbx
@@ -960,7 +960,7 @@ Each at its own moment, all running inside the VM:
 | --- | --- | --- | --- |
 | `sandbox.dockerfile` | the profile | when the image is built | everything static: toolchains, tools, certificates |
 | `start` | the profile | once per boot of the VM | services and daemons (a shared `docker compose`), configuration from the environment |
-| `scripts` | the profile | when asked for: `--script` before a session, `unibox script` now | whatever the user wants on demand: updating skills, resetting a database |
+| `scripts` | the profile | when asked for: `--script` before a session, `unibox script run` now | whatever the user wants on demand: updating skills, resetting a database |
 
 - **unibox runs scripts and knows nothing of what they do** (the user's
   call): updating skills an image installed, say, is the user's script,
@@ -970,7 +970,7 @@ Each at its own moment, all running inside the VM:
   file of its own in the VM so its `#!` line counts, as the agent's user,
   with `UNIBOX_SANDBOX` and `UNIBOX_SCRIPT` (and `UNIBOX_TASK`,
   `UNIBOX_TASK_DIR` before a session); the first to fail stops the rest
-  and, before a session, the agent. `unibox script` counts as a session,
+  and, before a session, the agent. `unibox script run` counts as a session,
   as a shell does, so an idle sandbox is stopped after it.
 
 - **`start` runs once per boot, whoever booted the VM.** A VM can be
@@ -1011,8 +1011,8 @@ it would be committed. So:
   the agent's user-level instructions (`~/.claude/CLAUDE.md`,
   `~/.codex/AGENTS.md` - each agent's file is in unibox's table of
   agents), never into `/work`.
-- `unibox instructions <profile>` prints them as the agent gets them
-  (`--sandbox` for a sandbox's, with its attached texts);
+- `unibox instructions -p <profile>` prints them as the agent gets them
+  (`-s` for a sandbox's, with its attached texts);
   the Sandboxes tab shows that in a pane under Profiles, rendered by
   `internal/md`, and Edit Instructions… opens the files in the editor.
 
@@ -1044,7 +1044,7 @@ it would be committed. So:
   path of one forge). A clone unibox prepared keeps its own
   `user.name`/`user.email`, which outrank the includes. Such a clone has
   no co-author hook and is not in the task's record: what must be kept
-  belongs in `unibox add-repo`.
+  belongs in `unibox task add-repo`.
 - `co_author: true` adds `Co-Authored-By: <agent>` to every commit, and
   unibox alone says it. A `commit-msg` hook in each clone in the VM takes
   out any co-author trailer the agent added of itself - copilot always
@@ -1056,13 +1056,13 @@ it would be committed. So:
   session's: `run` and `resume` name it to the hook (`UNIBOX_AGENT`, as
   the table calls it, and `UNIBOX_CO_AUTHOR`, as the profile credits
   it), so a task resumed with another agent credits that one, and a
-  commit made by hand in `unibox shell`, with no agent running, is left
+  commit made by hand in `unibox sandbox shell`, with no agent running, is left
   as it is. `co_author: false` - the profile's, or a git service's for
   its repositories - keeps the hook but has it add nothing, so off means
   no co-author, not the agent's own. The hook is rewritten in every clone
   before each session. An agent's `co_author` gives it another name and
-  address than the table's (`unibox agent co-author <profile> <agent>
-  "Name <email>"`); init writes the defaults out, so the profile shows
+  address than the table's (`unibox agent co-author <agent> --as
+  "Name <email>" -p <profile>`); init writes the defaults out, so the profile shows
   them, and `Name <>` credits an agent with no address - a trailer is
   text, shown though linked to no account. It is read per session, so
   changing it recreates nothing. A hook in the VM's own clone is the VM's
@@ -1112,12 +1112,12 @@ decision, 2026-10-15; it replaced a `direnv allow`-like approval, which
 only got in the way):
 
 - unibox's state keeps, per profile, its host-facing fields as last seen.
-  `check` names what changed as a warning (`profile_changed`); the next
+  `task check` names what changed as a warning (`profile_changed`); the next
   start says it once - `profile web changed what it asks of the host:
   services + github, network.allow + jitpack.io` - and goes on. A change
   made through unibox's own commands is not told again.
 - What the change leads to is said too: an image built from changed
-  inputs is built without a question, its diff left to `unibox diff`
+  inputs is built without a question, its diff left to `unibox profile diff`
   (the user's call: the log is no place for it), and a sandbox made from changed settings is recreated, naming
   them - `recreating sandbox web-1: services, the image was rebuilt`.
   The checks for unpushed work and running sessions still stand before a
@@ -1237,14 +1237,14 @@ its co-author line, sbx's name for it - and never reads unagit's
   A local build is for this machine's architecture, which is all a local
   sandbox needs.
 - **What a build would build is there to look at, not printed.** `unibox
-  diff <profile>` prints what changed in the profile's directory since
+  profile diff <profile>` prints what changed in the profile's directory since
   its image last built (the tree is in the tag) as a unified diff; a
-  build, `unibox build` or the one before a start, says that it builds and
+  build, `unibox profile build` or the one before a start, says that it builds and
   points at it, and asks nothing. unagit can draw it in its own differ -
   the one the Changes dialog draws (`drawDiff`, `diffdraw.go`) - where it
   offers Build…. A teammate's Dockerfile runs in the host's Docker when
   built; isolated there, but `RUN --mount` and build secrets can reach
-  out, which is what `unibox diff` is for.
+  out, which is what `unibox profile diff` is for.
 
 ## unibox
 
@@ -1284,37 +1284,52 @@ contract's own version, apart from it.
 | command | does |
 | --- | --- |
 | `unibox init [<profile>] [-i] [--dir D]` | lays out the environments repository and adds a profile; on an existing one completes it, and migrates an older format |
-| `unibox validate [--json]` | the repository's layout, every profile, every attachable text |
-| `unibox profiles [--json]` | profiles: name, agents, image state per runtime, error, last commit |
-| `unibox instructions <profile>` | the instructions as the agent gets them |
-| `unibox diff <profile>` | what changed since the last build, a unified diff |
-| `unibox build <profile> [--runtime R]` | builds, checks the agents, loads |
-| `unibox agent login\|co-author\|ls`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|port\|rm\|ls`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
-| `unibox check … --json` | what stands in the way of a start, as `needs` with a `code` each |
-| `unibox prepare …` | the sandbox and the task, ready; JSON of both at the end |
+| `unibox profile validate [--json]` | the repository's layout, every profile, every attachable text |
+| `unibox profile ls [--json]` | profiles: name, agents, image state per runtime, error, last commit |
+| `unibox instructions [-p P \| -s S]` | the instructions as the agent gets them |
+| `unibox profile diff [P]` | what changed since the last build, a unified diff |
+| `unibox profile build [P] [--runtime R]` | builds, checks the agents, loads |
+| `unibox agent login\|co-author\|ls`, `unibox service add\|ls\|rm`, `unibox network allow\|deny\|rm\|ls`, `unibox network port set\|unset`, `unibox secret set\|ls\|rm` | configure a profile and keep its tokens (see Configured through unibox) |
+| `unibox task check … --json` | what stands in the way of a start, as `needs` with a `code` each |
+| `unibox task prepare …` | the sandbox and the task, ready; JSON of both at the end |
 | `unibox run …` | the agent, in this terminal; prepares first if needed |
 | `unibox resume <task> [--agent A]` | a prepared task's agent again, in the sandbox that holds it |
-| `unibox add-repo <task> [directory...]` | one more clone into a task, also while its agent runs |
-| `unibox sandboxes [--json]` (also `ls`), `unibox tasks [<sandbox>] [--json]`, `unibox inspect <sandbox>` | sandboxes, their tasks, a sandbox's record |
-| `unibox script <sandbox> [name...]` | the profile's scripts, or run them in the sandbox now |
-| `unibox port <sandbox> [name:on\|off...]` | a sandbox's ports and their URLs; switched while it runs, the profile untouched |
-| `unibox shell <sandbox>`, `stop`, `recreate`, `rm`; `unibox rm-task <task>` | as named; removal checks for sessions and unpushed work |
+| `unibox task add-repo <task> [directory...]` | one more clone into a task, also while its agent runs |
+| `unibox task rename <task> <name>\|--reset`, `unibox task rm <task>` | a task's alias; removal checks for sessions and unpushed work |
+| `unibox sandbox ls [--json]`, `unibox task ls [-s S] [--json]`, `unibox sandbox inspect [S]` | sandboxes, their tasks, a sandbox's record |
+| `unibox script ls\|run [name...] [-s S]` | the profile's scripts, or run them in the sandbox now |
+| `unibox network port ls\|publish\|unpublish [-s S]` | a sandbox's ports and their URLs; switched while it runs, the profile untouched |
+| `unibox sandbox create <name> [-p P]`, `shell`, `stop`, `recreate [S]`, `rm <S>` | as named; removal checks for sessions and unpushed work |
+| `unibox context [use -s S -p P \| clear]` | the sandbox and profile commands work in when not told |
 | `unibox prune` | removes the images unibox no longer needs |
 | `unibox config get\|set\|unset <key> [<value>]` | its configuration |
-| `unibox runtimes` | the adapters and what each isolates |
+| `unibox runtime ls` | the adapters and what each isolates |
 | `unibox herdr install-plugin`, `uninstall-plugin`, `status [--json]` | [herdr](#herdr) |
 
-**One rule for arguments** (the user's call): what a command works on is
-its argument - a sandbox (`shell`, `stop`, `recreate`, `rm`, `inspect`,
-`port`, `script`, `tasks`, `create`), a task (`resume`, `add-repo`,
-`rm-task`, a task's name being unique across sandboxes), a profile
-(`build`, `diff`, `init`, `agent`, `network`, `service`, `instructions`) -
-and a flag says where or how. `run`, `check` and `prepare` make a task, so
-their arguments are its directories and the sandbox is where: `--sandbox`.
+**Nouns, then verbs** (the user's call): commands are grouped by what they
+work on - `task`, `sandbox`, `profile`, `runtime`, `network`, `agent`,
+`service`, `script`, `instructions`, `template`, `secret`, `var`, `herdr` -
+and only the everyday ones stand alone: `run`, `resume`, `init`, `context`,
+`config`, `prune`, `version`. The positional argument is only the thing a
+command acts on - one name, or a list of the same kind, such as directories
+or hosts - and the profile it works in is `-p`/`--profile`, the sandbox
+`-s`/`--sandbox`, the same flag everywhere. A task's name being unique
+across sandboxes, a task alone finds its sandbox.
 
-`check`, `prepare` and `run` take the same task: `--profile`, `--agent`,
-`--runtime`, `--sandbox <name>` (one that does not exist yet is made from
-`--profile`), `--task`, `--mount`,
+Left out, `-p` and `-s` come from `UNIBOX_PROFILE` and `UNIBOX_SANDBOX`,
+then from the context, then from there being only one, as kubectl keeps a
+context. `unibox context use -s dev -p dev` sets it after checking both
+exist, `unibox context` shows it and why, `unibox context clear` forgets it;
+it is kept in `config.yaml` as `context: {sandbox, profile}`, and removing
+the context's sandbox clears it from there. Three places do not default, so
+a forgotten context cannot do harm: `unibox sandbox rm` always names its
+sandbox, `unibox task ls` lists every sandbox's tasks unless given `-s`, and
+`unibox var` without `-p` is the value every profile shares.
+
+`task check`, `task prepare` and `run` take the same task: `-p`, `--agent`,
+`--runtime`, `-s <name>` (one that does not exist yet is made from `-p`;
+with neither, the default sandbox, else a new one of the default profile),
+`--task`, `--mount`,
 `--branch`, `--repo [<dir>=]<path or https URL>` (repeated; or the
 current directory, as without unagit), `--author "Name <email>"`,
 `--instructions`, `--push`, `--ignore-local`; `run` and `resume` take
@@ -1390,7 +1405,7 @@ Checked against msb 0.7.8 and its Go SDK v0.7.8 on macOS (Apple Silicon),
 2026-10-17. msb is experimental: it shows the profile format carries over
 to a second runtime, and sbx stays the supported one and the default. It
 is never chosen for the user - only as `default_runtime` or with
-`--runtime msb` - and `unibox check` warns when it is used. A sandbox keeps
+`--runtime msb` - and `unibox task check` warns when it is used. A sandbox keeps
 the runtime it was made in.
 
 **Why the SDK and the CLI both.** The SDK installs the runtime
@@ -1467,8 +1482,8 @@ What was verified, and what it decided:
   msb reads `/etc/resolv.conf`, whose stub resolver does the split.
 - **Ports** are published at creation only; SDK `Modify` gains ports after
   0.7.8. A port without a host port gets a free one when the sandbox is
-  made. A change recreates the sandbox; `unibox port` lists them but
-  cannot switch them.
+  made. A change recreates the sandbox; `unibox network port ls` lists them, but
+  `publish` and `unpublish` cannot switch them.
 - **Mounts** cannot be added to a sandbox, by CLI or SDK, so `--mount` is
   refused. A disk snapshot restored under the same name with a new mount,
   ports and rules keeps `/work` (checked), but the CLI's restore drops the
@@ -1599,8 +1614,8 @@ unagit's tests are its own plan's (unagit's docs/sandboxes.md).
 ## Order of work
 
 Built, in this order: the spike by hand; unibox's core (the runtime with
-sbx, profiles, the build and the agents' check); tasks (`check`,
-`prepare`, `run`, `resume`, instructions, author and hook, `start`,
+sbx, profiles, the build and the agents' check); tasks (`task check`,
+`task prepare`, `run`, `resume`, instructions, author and hook, `start`,
 stopping idle sandboxes), usable from a terminal without unagit; kits for
 several agents; services, secrets and network rules configured through
 unibox; agents' seeds; the herdr plugin; the versioned profile format.
@@ -1608,16 +1623,17 @@ unibox; agents' seeds; the herdr plugin; the versioned profile format.
 Next, for unagit to build on:
 
 1. **The contract, before unagit reads it** (unibox):
-   - `profiles --json` drops `approved`, left from the approval this
+   - `profile ls --json` drops `approved`, left from the approval this
      replaced, and says a profile's `format` with a code for one of an
      older format (`profile_format`), so unagit can offer Migrate…
      without parsing an error's text. `api_version` 2, since a field
      goes.
    - `init --json` reports what a migration did (`migrated`), as it now
      does, under that version.
-   - Done: `--sandbox` alone, making the sandbox from `--profile` when it
-     is not there; `rm-task <task>`; `add-repo <task> [directory...]`;
-     `sandboxes`, with `ls` its alias.
+   - Done: `-s` alone, making the sandbox from `-p` when it is not
+     there; `task rm <task>`; `task add-repo <task> [directory...]`;
+     `sandbox ls`; the commands grouped noun then verb, with `-p`, `-s`
+     and a context for where they work.
 2. **unagit's integration**, in unagit's plan: Settings and the
    configuration handed over; Open in Sandboxed Agent… for one
    repository's worktree in This Terminal, then groups, then every place.
@@ -1703,5 +1719,5 @@ Facts the implementation stands on:
   and the next non-blocking try found it busy (or, with the error
   ignored, took nothing and stopped a sandbox in use). FileLock.Close
   unlocks first, which releases every copy.
-- unibox ls could hint at a missing sandbox's row that recreate restores
+- `unibox sandbox ls` could hint at a missing sandbox's row that recreate restores
   it and rm removes the record.

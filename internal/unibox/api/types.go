@@ -81,7 +81,7 @@ type PublishedPort struct {
 	Protocol    string `json:"protocol"`
 }
 
-// Port is one of a sandbox's ports, as unibox port lists it.
+// Port is one of a sandbox's ports, as unibox network port ls lists it.
 type Port struct {
 	Name      string          `json:"name"`
 	Port      string          `json:"port"`

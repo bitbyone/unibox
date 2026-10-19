@@ -98,7 +98,7 @@ agent can push to any branch, force-push and delete.
 ::: warning sbx's built-in github secret
 With sbx's built-in `github` secret stored, sbx signs every request to
 github.com itself, over a profile's git services - and over a narrow token.
-Sign copilot in by `token`, not `command`; `unibox check` warns
+Sign copilot in by `token`, not `command`; `unibox task check` warns
 (`service_overridden`) while the built-in secret is stored and a service names
 github.com.
 :::
@@ -107,7 +107,7 @@ github.com.
 
 `--mount` gives up the git protection above on purpose, for one task. The
 agent works on your files and your `.git` as they are. Worktrees are refused,
-and `rm-task` unmounts before it deletes and never deletes your files. See
+and `unibox task rm` unmounts before it deletes and never deletes your files. See
 [Mounting a Directory](/guide/mount).
 
 ## Caches
@@ -119,12 +119,12 @@ Caches are read-only. Read-write would let the agent put a jar or an
 
 A profile's Dockerfile runs in the host's Docker when it is built. A build is
 isolated there, but `RUN --mount` and build secrets can reach out. Read
-`unibox diff <profile>` before building a teammate's change.
+`unibox profile diff <profile>` before building a teammate's change.
 
 ## Profiles are told, not asked
 
 The profile is yours, so nothing asks you to approve it. When what it asks of
-the host changes, `unibox check` says so (`profile_changed`) and the next start
+the host changes, `unibox task check` says so (`profile_changed`) and the next start
 names the change - `services + github, network.allow + jitpack.io` - and what
 it leads to.
 

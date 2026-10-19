@@ -252,7 +252,7 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Pr
 	return m.saveBox(*b)
 }
 
-// PortState is one port of a sandbox as unibox port shows it.
+// PortState is one port of a sandbox as unibox network port ls shows it.
 type PortState struct {
 	Name, Spec string
 	Default    bool
@@ -335,7 +335,7 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 		return err
 	}
 	if _, ok := r.(PortPublisher); !ok {
-		return fmt.Errorf("runtime %s publishes ports only when it creates a sandbox; change the profile's default with unibox network port, which recreates sandbox %s", b.Runtime, name)
+		return fmt.Errorf("runtime %s publishes ports only when it creates a sandbox; change the profile's default with unibox network port set, which recreates sandbox %s", b.Runtime, name)
 	}
 	p, err := m.profile(b.Profile)
 	if err != nil {
@@ -346,7 +346,7 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 		return err
 	}
 	if !exists || box.State != "running" {
-		return fmt.Errorf("sandbox %s is not running; a port switched now lasts while it runs - start it with unibox resume or unibox shell, or change the profile's default with unibox network port", name)
+		return fmt.Errorf("sandbox %s is not running; a port switched now lasts while it runs - start it with unibox resume or unibox sandbox shell, or change the profile's default with unibox network port set", name)
 	}
 	if b.PortSwitches == nil {
 		b.PortSwitches = map[string]bool{}
@@ -354,7 +354,7 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 	for key, on := range switches {
 		if _, named := p.Ports[key]; !named {
 			if _, err := ParsePortSpec(key); err != nil {
-				return fmt.Errorf("profile %s has no port %s, and it is not a port spec either; unibox port %s lists them", p.Name, key, name)
+				return fmt.Errorf("profile %s has no port %s, and it is not a mapping either; unibox network port ls -s %s lists them", p.Name, key, name)
 			}
 		}
 		b.PortSwitches[key] = on

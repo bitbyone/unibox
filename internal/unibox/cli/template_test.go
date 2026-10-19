@@ -56,7 +56,7 @@ func TestInitFromCopiesATemplateProfileAndSaysWhatItNeeds(t *testing.T) {
 	if data, _ := os.ReadFile(filepath.Join(root, ".templates", "acme", "@install", "team", "thing.sh")); string(data) != "echo newer\n" {
 		t.Fatalf("%s", data)
 	}
-	if _, _, err = run(t, paths, "", "template", "diff", "dev"); err != nil {
+	if _, _, err = run(t, paths, "", "template", "diff", "-p", "dev"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err = run(t, paths, "", "init", "other", "--use", "team"); err == nil {

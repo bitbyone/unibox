@@ -54,7 +54,7 @@ format it reads and the version of its JSON contract.
 - **git**
 - **Go 1.26** or newer, only to build unibox from a checkout
 
-`unibox runtimes` shows which runtimes are installed and what each isolates.
+`unibox runtime ls` shows which runtimes are installed and what each isolates.
 
 ## Your environments repository
 
@@ -80,8 +80,8 @@ edit. Commit them as you would any repository; unibox reads the working tree,
 so what you see in your editor is what runs.
 
 ::: tip
-`unibox validate` checks the whole repository - its layout, every profile and
-every instruction text - and `unibox profiles` lists the profiles with their
+`unibox profile validate` checks the whole repository - its layout, every
+profile and every instruction text - and `unibox profile ls` lists the profiles with their
 agents and the state of their images.
 :::
 
@@ -92,8 +92,8 @@ profile. A git forge is a **service** the sandbox pushes to with a token of
 its own:
 
 ```sh
-unibox agent login web             # sign its agents in
-unibox service add web github      # a token for git on github.com
+unibox agent login -p web          # sign its agents in
+unibox service add github -p web   # a token for git on github.com
 ```
 
 Tokens are asked for on a hidden prompt and kept in the platform's store - the
@@ -107,7 +107,7 @@ From inside a repository whose branch is on the forge:
 
 ```sh
 cd ~/src/web
-unibox run --profile web --sandbox web-1 --branch feat/login --agent claude
+unibox run -p web -s web-1 --branch feat/login --agent claude
 ```
 
 This builds the image when it needs to, creates sandbox `web-1` from profile
@@ -118,11 +118,23 @@ no other agent of unibox's is left in it; its disk, caches and tasks stay.
 The agent pushes to `feat/login`. You pull as you would a colleague's commits.
 
 ```sh
-unibox tasks                # every task, in every sandbox
-unibox resume <task>        # continue it later
-unibox shell web-1          # a shell inside the sandbox
-unibox sandboxes            # every sandbox (also: unibox ls)
+unibox task ls                 # every task, in every sandbox
+unibox resume <task>           # continue it later
+unibox sandbox shell web-1     # a shell inside the sandbox
+unibox sandbox ls              # every sandbox
 ```
+
+Commands are a noun, then a verb, and take the profile they work in as `-p`
+and the sandbox as `-s`. To leave those out, set a context once:
+
+```sh
+unibox context use -s web-1 -p web
+unibox sandbox shell           # now in web-1
+```
+
+`UNIBOX_SANDBOX` and `UNIBOX_PROFILE` win over the context; with neither, a
+sandbox or profile that is the only one serves. [Tasks](./tasks#the-context)
+says more.
 
 ::: warning Protect your branches
 The agent can push to any branch its token may push to. Protect `main` and
@@ -131,12 +143,12 @@ release branches on the forge, and give the sandbox a narrow token.
 
 ## Before a start
 
-`unibox check` takes the same arguments as `run` and lists anything in the
+`unibox task check` takes the same arguments as `run` and lists anything in the
 way: an image to build, logins and secrets, a branch the forge does not have,
 and what changed in the profile. `run` fixes what it can.
 
 ```sh
-unibox check --profile web --sandbox web-1 --branch feat/login --agent claude
+unibox task check -p web -s web-1 --branch feat/login --agent claude
 ```
 
 Every command accepts `--json`, and with `--json` or `--yes` none asks a

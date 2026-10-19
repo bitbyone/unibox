@@ -46,7 +46,7 @@ run the task with any of the profile's agents.
 Arguments after `--` on `run` or `resume` go to the agent:
 
 ```sh
-unibox run --profile web --agent claude -- --model opus
+unibox run -p web --agent claude -- --model opus
 ```
 
 No agent stops to ask whether to trust what unibox prepared: before every
@@ -61,10 +61,10 @@ rebuild.
 ## Signing in
 
 ```sh
-unibox agent login web                 # every agent of profile web
-unibox agent login web claude          # one
-unibox agent login web --renew         # ask for every token again
-unibox agent ls web                    # how each signs in and is credited
+unibox agent login -p web              # every agent of profile web
+unibox agent login claude -p web       # one
+unibox agent login --renew -p web      # ask for every token again
+unibox agent ls -p web                 # how each signs in and is credited
 ```
 
 `agent login` signs agents in and writes their `auth` into the profile:
@@ -118,7 +118,7 @@ session, so a new token reaches a running sandbox.
 ### Copilot through your gh login
 
 ```sh
-unibox agent login web copilot --gh
+unibox agent login copilot --gh -p web
 ```
 
 writes `copilot: {token: gh auth token}`. At a terminal where gh is signed in,
@@ -130,14 +130,14 @@ hosts, not github.com, so git on github.com is still left to the profile's
 ::: tip
 Sign copilot in by `token`, not `command`. `command` stores sbx's built-in
 `github` secret, and with it sbx signs every request to github.com itself -
-over the git services of the profile. `unibox check` warns when it is stored.
+over the git services of the profile. `unibox task check` warns when it is stored.
 :::
 
 ## Co-authors
 
 Commits carry your git identity and one co-author line for the agent of the
 session that commits. A task resumed with another agent credits that one; a
-commit you make in `unibox shell` credits none.
+commit you make in `unibox sandbox shell` credits none.
 
 unibox alone says it. claude's and copilot's own bylines are off in their
 seeds (`includeCoAuthoredBy: false`), and a `commit-msg` hook in each clone
@@ -145,10 +145,10 @@ takes out a trailer an agent adds of itself - copilot always does - before
 adding the profile's, or none where `co_author: false`.
 
 ```sh
-unibox agent co-author web                                  # how each is credited
-unibox agent co-author web claude "Claude <noreply@anthropic.com>"
-unibox agent co-author web codex "Codex <>"                 # no address, linked to no account
-unibox agent co-author web codex --reset                    # back to the default
+unibox agent co-author -p web                                    # how each is credited
+unibox agent co-author claude --as "Claude <noreply@anthropic.com>" -p web
+unibox agent co-author codex --as "Codex <>" -p web              # no address, linked to no account
+unibox agent co-author codex --reset -p web                      # back to the default
 ```
 
 The defaults:
@@ -183,4 +183,4 @@ merge leaves what unibox writes between its own markers alone - codex's
 login routing and its trust of `/work`, for example. Seeds are not image
 inputs: changing one rebuilds nothing.
 
-So a codex started by hand in `unibox shell` is as free as one unibox runs.
+So a codex started by hand in `unibox sandbox shell` is as free as one unibox runs.

@@ -6,12 +6,25 @@ unibox [command] [flags]
 
 ## Conventions
 
-**One rule for arguments.** What a command works on is its argument - a
-sandbox (`shell`, `stop`, `recreate`, `rm`, `inspect`, `port`, `script`,
-`tasks`, `create`), a task (`resume`, `add-repo`, `rename-task`, `rm-task`), a profile
-(`build`, `diff`, `init`, `agent`, `network`, `service`, `instructions`) -
-and a flag says where or how. `run`, `check` and `prepare` make a task, so
-their arguments are its directories and the sandbox is a flag, `--sandbox`.
+**Nouns, then verbs.** Commands come in groups named for what they work on -
+`task`, `sandbox`, `profile`, `runtime`, `network`, `agent`, `service`,
+`script`, `instructions`, `template`, `secret`, `var`, `herdr` - and the verb
+follows: `unibox sandbox stop`, `unibox network port publish`. Only the
+everyday commands stand alone: `run`, `resume`, `init`, `context`, `config`,
+`prune` and `version`.
+
+**The argument is what the command acts on.** One name - a task, a sandbox,
+a service, a host's rule - or a list of the same kind, such as directories or
+hosts. The profile a command works in is `-p`/`--profile`, the sandbox
+`-s`/`--sandbox`, so the same flag means the same thing everywhere.
+
+**Where a command works when not told.** Left out, `-p` and `-s` come from
+`UNIBOX_PROFILE` and `UNIBOX_SANDBOX`, then from the
+[context](#unibox-context), then from there being only one. A command that
+cannot tell says so and names the choices. Three exceptions keep a mistake
+cheap: `unibox sandbox rm` always names its sandbox, `unibox task ls` lists
+every sandbox's tasks unless given `-s`, and `unibox var` without `-p` is the
+value every profile shares.
 
 **Global flags**, on every command:
 
@@ -39,7 +52,155 @@ way is an answer, not a prompt. Every JSON object carries `api_version`.
 Under `--json` a failure is `{"api_version", "code", "message"}`. Errors are
 lower case and say what to do: `sbx is not signed in - run sbx login`.
 
-## The environments repository
+## Tasks
+
+### `unibox run`
+
+```
+unibox run [directory...] [-- agent-args...] [flags]
+```
+
+Prepares a task and runs its agent in this terminal, or with `--shell` a
+login shell in the task's directory. The directories are the task's
+repositories; the current directory when none is named. Arguments after `--`
+go to the agent. With neither `-s` nor `-p`, the task goes into the default
+sandbox - `UNIBOX_SANDBOX`, the context's, or the only one - and when there is
+none, into a new sandbox of the default profile.
+
+| Flag | Meaning |
+| --- | --- |
+| `-p`, `--profile <name>` | the profile a new sandbox is made from |
+| `-s`, `--sandbox <name>` | the sandbox to work in; one that does not exist yet is made from `-p` |
+| `--agent <name>` | the coding agent, one the profile declares |
+| `--shell` | open a shell in the task's directory instead of the agent; excludes `--agent`, and a new task names the profile's first agent for a later `resume` |
+| `--task <name>` | the task's name, unique across sandboxes (default: its first repository and a digest) |
+| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone |
+| `--repo <[name=]source>` | a repository path or https URL, optionally `name=source` (repeatable) |
+| `--author "Name <email>"` | the commit author |
+| `--push` | push the selected local branches; create one nobody has from the local HEAD, or a URL's default tip; never forces |
+| `--ignore-local` | use the forge's version despite uncommitted or unpushed local changes |
+| `--mount` | mount the selected directories into the sandbox instead of cloning them |
+| `--instructions <names>` | named instruction texts for a new sandbox |
+| `--runtime <name>` | the runtime adapter (existing sandboxes keep theirs) |
+| `--script <name>` | run one of the profile's scripts before the agent starts (repeatable, in order) |
+
+### `unibox resume`
+
+```
+unibox resume <task> [-- agent-args...] [flags]
+```
+
+Runs a prepared task's agent again, or a shell in its directory, in the
+sandbox that holds it.
+
+| Flag | Meaning |
+| --- | --- |
+| `--agent <name>` | a coding agent to run instead of the task's own |
+| `--shell` | open a shell in the task's directory instead of the agent; excludes `--agent` |
+| `--script <name>` | run one of the profile's scripts before the agent starts (repeatable, in order) |
+
+### `unibox task`
+
+```
+unibox task prepare [directory...] [-- agent-args...] [flags]
+unibox task check [directory...] [-- agent-args...] [flags]
+unibox task ls [-s <sandbox>]
+unibox task add-repo <task> [directory...] [flags]
+unibox task rename <task> <name>
+unibox task rename <task> --reset
+unibox task rm <task>
+```
+
+`prepare` makes the sandbox and the task ready and prints both; `check`
+explains what a task needs before it can start. Both take the directories and
+flags `run` does, except `--shell` and `--script`, and choose the sandbox as it
+does.
+
+`ls` lists prepared tasks, in every sandbox or with `-s` in one; it does not
+take the sandbox from the context, so a forgotten context hides nothing. An
+`ALIAS` column shows once a task has one.
+
+`add-repo` clones more repositories into a prepared task, also while its
+agent runs: directories as `run` takes them, or `--repo` for a URL or
+`name=source`.
+
+| Flag | Meaning |
+| --- | --- |
+| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone |
+| `--repo <[name=]source>` | a repository path or https URL (repeatable) |
+| `--author "Name <email>"` | the commit author |
+| `--push` | push the selected local branches (never forces) |
+| `--ignore-local` | use the forge's version despite local changes |
+| `--mount` | mount the selected directories instead of cloning them |
+
+`rename` gives a task an alias, taken wherever its ID is (`resume`,
+`task add-repo`, `task rm`). The task keeps its ID and its directory
+`/work/<id>`, so a running session is not disturbed. A name is unique across
+sandboxes, as an ID is; `--reset` takes the alias away.
+
+`rm` removes a task from its sandbox, after checking for running sessions and
+unpushed work. A mounted directory is unmounted first and never deleted.
+
+## Sandboxes
+
+### `unibox sandbox`
+
+```
+unibox sandbox ls
+unibox sandbox create <name> [-p <profile>] [flags]
+unibox sandbox inspect [sandbox]
+unibox sandbox shell [sandbox]
+unibox sandbox stop [sandbox]
+unibox sandbox recreate [sandbox] [--rebuild]
+unibox sandbox rm <sandbox>
+```
+
+`ls` lists unibox's sandboxes and their runtime state. `create` makes a named
+sandbox of a profile without mounting a host workspace and without a task.
+`inspect` shows a sandbox's record and the runtime materials made for it.
+`shell` opens an interactive shell in it, which counts as an active session,
+so the sandbox is not stopped under it. `stop` stops an idle sandbox without
+deleting its disk. `recreate` rebuilds the image when needed and recreates an
+idle sandbox, without discarding unpushed work.
+
+`rm` removes a sandbox, after checking for running sessions and unpushed
+work. It always names the sandbox rather than taking the default, and when
+that sandbox is the context's, the context forgets it.
+
+The sandbox of `inspect`, `shell`, `stop` and `recreate` is optional: left
+out, it is the default, as the [conventions](#conventions) say.
+
+| Flag | Command | Meaning |
+| --- | --- | --- |
+| `-p`, `--profile <name>` | `create` | the environment profile |
+| `--instructions <names>` | `create` | named instruction texts to attach |
+| `--runtime <name>` | `create` | the runtime adapter |
+| `--rebuild` | `recreate` | force a fresh image build |
+
+### `unibox script`
+
+```
+unibox script ls [-s <sandbox>]
+unibox script run <name...> [-s <sandbox>]
+```
+
+`ls` lists the scripts the sandbox's profile names under `scripts`; `run`
+runs them in the sandbox now, in `/work`, one after another; the first to
+fail stops the rest. `run` and `resume` take `--script` to run them before
+the agent starts instead.
+
+### `unibox instructions`
+
+```
+unibox instructions [-p <profile> | -s <sandbox>]
+unibox instructions attach [instruction...] -s <sandbox>
+```
+
+Prints the instructions an agent gets: a profile's, or with `-s` a
+sandbox's - its profile's and the texts attached to it. `attach` replaces the
+sandbox's list of attached instruction names; with none it clears the list.
+
+## Profiles
 
 ### `unibox init`
 
@@ -63,13 +224,44 @@ older format. With `--from` it copies the profile from a
 | `--use <profile>` | the template's profile to copy (default: the profile's name) |
 | `--template <name>` | the name the template is kept under in `.templates` (default: its repository's) |
 
+### `unibox profile`
+
+```
+unibox profile ls
+unibox profile build [profile] [flags]
+unibox profile diff [profile] [flags]
+unibox profile validate
+```
+
+`ls` lists profiles: name, agents, image state per runtime, errors, last
+commit. `build` builds a profile's image, checks the declared agents and
+loads it. `diff` shows what changed in the profile since its image was last
+built, as a unified diff. `validate` checks the environments repository: its
+layout, every profile, every instruction text. The profile of `build` and
+`diff` is optional: left out, it is the default.
+
+| Flag | Command | Meaning |
+| --- | --- | --- |
+| `--rebuild` | `build` | build again even when current |
+| `--runtime <name>` | `build` | the runtime to build for |
+| `--runtime <name>` | `diff` | the runtime of the previous build |
+
+### `unibox prune`
+
+```
+unibox prune
+```
+
+Removes the images unibox no longer needs: older builds, and those of
+profiles and sandboxes that are gone.
+
 ### `unibox template`
 
 ```
 unibox template inspect <source> [--template <name>]
 unibox template ls
 unibox template update <template>
-unibox template diff <profile>
+unibox template diff [-p <profile>]
 ```
 
 `inspect` fetches a template - a git URL or a directory - and tells what it
@@ -83,290 +275,33 @@ nothing when you and the template changed the same place, which it leaves to
 resolve under `.templates/<template>/conflicts/`. `diff` shows how a
 profile differs from the template profile it was copied from.
 
-### `unibox validate`
-
-```
-unibox validate
-```
-
-Checks the environments repository: its layout, every profile, every
-instruction text.
-
-### `unibox profiles`
-
-```
-unibox profiles
-```
-
-Lists profiles: name, agents, image state per runtime, errors, last commit.
-
-### `unibox instructions`
-
-```
-unibox instructions [profile] [flags]
-unibox instructions attach <sandbox> [instruction...]
-```
-
-Prints the instructions an agent gets: a profile's, or with `--sandbox` a
-sandbox's - its profile's and the texts attached to it. `attach` replaces the
-sandbox's list of attached instruction names.
-
-| Flag | Meaning |
-| --- | --- |
-| `--sandbox <name>` | show them as this sandbox's agents get them, attached texts included |
-
-## Images
-
-### `unibox build`
-
-```
-unibox build <profile> [flags]
-```
-
-Builds, checks the declared agents and loads a profile's image.
-
-| Flag | Meaning |
-| --- | --- |
-| `--rebuild` | build again even when current |
-| `--runtime <name>` | the runtime to build for |
-
-### `unibox diff`
-
-```
-unibox diff <profile> [flags]
-```
-
-Shows what changed in the profile since its image was last built, as a
-unified diff.
-
-| Flag | Meaning |
-| --- | --- |
-| `--runtime <name>` | the runtime of the previous build |
-
-### `unibox prune`
-
-```
-unibox prune
-```
-
-Removes the images unibox no longer needs: older builds, and those of
-profiles and sandboxes that are gone.
-
-## Tasks
-
-### `unibox run`, `unibox prepare`, `unibox check`
-
-```
-unibox run [directory...] [-- agent-args...] [flags]
-unibox prepare [directory...] [-- agent-args...] [flags]
-unibox check [directory...] [-- agent-args...] [flags]
-```
-
-`run` prepares a task and runs its agent in this terminal, or with `--shell`
-a login shell in the task's directory. `prepare` makes
-the sandbox and the task ready and prints both. `check` explains what a task
-needs before it can start. The directories are the task's repositories; the
-current directory when none is named. Arguments after `--` go to the agent.
-
-| Flag | Meaning |
-| --- | --- |
-| `--profile <name>` | the profile a new sandbox is made from |
-| `--sandbox <name>` | the sandbox to work in; one that does not exist yet is made from `--profile` (default: the profile's name) |
-| `--agent <name>` | the coding agent, one the profile declares |
-| `--shell` | `run` only: open a shell in the task's directory instead of the agent; excludes `--agent`, and a new task names the profile's first agent for a later `resume` |
-| `--task <name>` | the task's name, unique across sandboxes (default: its first repository and a digest) |
-| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone |
-| `--repo <[name=]source>` | a repository path or https URL, optionally `name=source` (repeatable) |
-| `--author "Name <email>"` | the commit author |
-| `--push` | push the selected local branches; create one nobody has from the local HEAD, or a URL's default tip; never forces |
-| `--ignore-local` | use the forge's version despite uncommitted or unpushed local changes |
-| `--mount` | mount the selected directories into the sandbox instead of cloning them |
-| `--instructions <names>` | named instruction texts for a new sandbox |
-| `--runtime <name>` | the runtime adapter (existing sandboxes keep theirs) |
-| `--script <name>` | `run` only: run one of the profile's scripts before the agent starts (repeatable, in order) |
-
-### `unibox resume`
-
-```
-unibox resume <task> [-- agent-args...] [flags]
-```
-
-Runs a prepared task's agent again, or a shell in its directory, in the
-sandbox that holds it.
-
-| Flag | Meaning |
-| --- | --- |
-| `--agent <name>` | a coding agent to run instead of the task's own |
-| `--shell` | open a shell in the task's directory instead of the agent; excludes `--agent` |
-| `--script <name>` | run one of the profile's scripts before the agent starts (repeatable, in order) |
-
-### `unibox add-repo`
-
-```
-unibox add-repo <task> [directory...] [flags]
-```
-
-Clones more repositories into a prepared task, also while its agent runs:
-directories as `run` takes them, or `--repo` for a URL or `name=source`.
-
-| Flag | Meaning |
-| --- | --- |
-| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone |
-| `--repo <[name=]source>` | a repository path or https URL (repeatable) |
-| `--author "Name <email>"` | the commit author |
-| `--push` | push the selected local branches (never forces) |
-| `--ignore-local` | use the forge's version despite local changes |
-| `--mount` | mount the selected directories instead of cloning them |
-
-### `unibox tasks`
-
-```
-unibox tasks [sandbox]
-```
-
-Lists prepared tasks, in every sandbox or in one. An `ALIAS` column shows
-once a task has one.
-
-### `unibox rename-task`
-
-```
-unibox rename-task <task> <name>
-```
-
-Gives a task an alias, taken wherever its ID is (`resume`, `add-repo`,
-`rm-task`). The task keeps its ID and its directory `/work/<id>`, so a
-running session is not disturbed. A name is unique across sandboxes, as an
-ID is; the task's own ID as the name takes the alias away.
-
-### `unibox rm-task`
-
-```
-unibox rm-task <task>
-```
-
-Removes a task from its sandbox, after checking for running sessions and
-unpushed work. A mounted directory is unmounted first and never deleted.
-
-## Sandboxes
-
-### `unibox sandboxes`
-
-```
-unibox sandboxes
-unibox ls
-```
-
-Lists unibox's sandboxes and their runtime state.
-
-### `unibox create`
-
-```
-unibox create <sandbox> [flags]
-```
-
-Creates a named sandbox without mounting a host workspace and without a task.
-
-| Flag | Meaning |
-| --- | --- |
-| `--profile <name>` | the environment profile |
-| `--instructions <names>` | named instruction texts to attach |
-| `--runtime <name>` | the runtime adapter |
-
-### `unibox inspect`
-
-```
-unibox inspect <sandbox>
-```
-
-Shows a sandbox's record and the runtime materials made for it.
-
-### `unibox shell`
-
-```
-unibox shell <sandbox>
-```
-
-Opens an interactive shell in the sandbox. It counts as an active session, so
-the sandbox is not stopped under it.
-
-### `unibox stop`
-
-```
-unibox stop <sandbox>
-```
-
-Stops an idle sandbox without deleting its disk.
-
-### `unibox recreate`
-
-```
-unibox recreate <sandbox> [flags]
-```
-
-Rebuilds the image when needed and recreates an idle sandbox, without
-discarding unpushed work.
-
-| Flag | Meaning |
-| --- | --- |
-| `--rebuild` | force a fresh image build |
-
-### `unibox rm`
-
-```
-unibox rm <sandbox>
-```
-
-Removes a sandbox, after checking for running sessions and unpushed work.
-
-### `unibox port`
-
-```
-unibox port <sandbox> [name|spec:on|off...]
-```
-
-Lists a sandbox's ports with their URLs, or switches them while it runs -
-`fe:on`, `devtools:off` by the profile's names, or a spec the profile does not
-name, `8080:3000:on`. The profile stays as it is, and the sandbox's next start
-goes back to its defaults.
-
-### `unibox script`
-
-```
-unibox script <sandbox> [name...]
-```
-
-Lists the scripts the sandbox's profile names under `scripts`, or runs them
-in the sandbox now, in `/work`, one after another; the first to fail stops the
-rest.
-
-## Configuring a profile
-
 ### `unibox agent`
 
 ```
-unibox agent login <profile> [agent...] [flags]
-unibox agent co-author <profile> [agent] ["Name <email>"] [flags]
-unibox agent ls <profile>
+unibox agent ls [-p <profile>]
+unibox agent login [agent...] [-p <profile>] [flags]
+unibox agent co-author [agent] [--as "Name <email>" | --reset] [-p <profile>]
 ```
 
 `login` signs a profile's agents in: tokens into the platform's store, the
-profile's `auth` written. `co-author` shows or sets how the profile credits
-each agent in its commits (`Name <>` for no address). `ls` lists the agents,
-how each signs in and is credited.
+profile's `auth` written. `co-author` shows how the profile credits each
+agent in its commits, or with `--as` sets it (`Name <>` for no address). `ls`
+lists the agents, how each signs in and is credited.
 
 | Flag | Command | Meaning |
 | --- | --- | --- |
 | `--gh` | `login` | sign copilot in through your gh login (`gh auth token`) |
 | `--renew` | `login` | ask for every token again, replacing the stored ones |
 | `--runtime <name>` | `login` | the runtime that keeps the logins (default: the configured one) |
+| `--as "Name <email>"` | `co-author` | how to credit the agent |
 | `--reset` | `co-author` | credit the agent as unibox does by default |
 
 ### `unibox service`
 
 ```
-unibox service add <profile> <name> [flags]
-unibox service ls <profile>
-unibox service rm <profile> <name> [flags]
+unibox service add <name> [-p <profile>] [flags]
+unibox service ls [-p <profile>]
+unibox service rm <name> [-p <profile>] [flags]
 ```
 
 `add` stores a service's token and writes its entry into the profile. `ls`
@@ -384,32 +319,58 @@ service out of the profile, and its token unless another profile names it.
 | `--author "Name <email>"` | `add` | who commits under the service (`--author` on a run wins) |
 | `--no-co-author` | `add` | no `Co-Authored-By` trailer for the agent in its repositories |
 | `--command <cmd>` | `add` | a host command printing the token, for a store unibox does not keep |
+| `--secret <name>` | `add` | a token stored with `unibox secret set`, by its name, instead of asking for one |
 | `--gh` | `add` | sign a `github` service in through your gh login |
 | `--refresh <duration>` | `add` | how often the runtime fetches the token again, e.g. `10m` |
 | `--renew` | `add` | ask for the token again, replacing the stored one |
 | `--keep-secret` | `rm` | keep the stored token |
 
+## Network
+
 ### `unibox network`
 
 ```
-unibox network allow <profile> <host...>
-unibox network deny <profile> <host...>
-unibox network rm <profile> <host|port...>
-unibox network ls <profile>
-unibox network port <profile> <name> <spec> [flags]
+unibox network allow <host...> [-p <profile>]
+unibox network deny <host...> [-p <profile>]
+unibox network rm <host...> [-p <profile>]
+unibox network ls [-p <profile>]
 ```
 
-Allows or denies hosts and publishes ports for a profile's sandboxes; every
-change is written into the profile and applied to its running sandboxes.
-`allow` lets them reach hosts the runtime's policy refuses, `deny` refuses
-hosts it allows, `rm` takes hosts back to the runtime's policy or ports out by
-name, and `ls` lists the rules with the hosts the services need. `port`
-publishes a sandbox port on the host's loopback by name; the spec is
-`[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`.
+Allows or denies hosts for a profile's sandboxes; every change is written
+into the profile and applied to its running sandboxes. `allow` lets them
+reach hosts the runtime's policy refuses, `deny` refuses hosts it allows,
+`rm` takes hosts back to the runtime's policy, and `ls` lists the rules with
+the hosts the services need. Ports are listed by `network port ls`.
+
+### `unibox network port`
+
+```
+unibox network port ls [-s <sandbox> | -p <profile>]
+unibox network port set <name> --map <mapping> [--off] [-p <profile>]
+unibox network port unset <name...> [-p <profile>]
+unibox network port publish [name...] [--map <mapping>...] [-s <sandbox>]
+unibox network port unpublish [name...] [--map <mapping>...] [-s <sandbox>]
+```
+
+A port is published on the host's loopback. A mapping is
+`[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`: `3000` takes any free host
+port, `8080:3000` host port 8080.
+
+`set` and `unset` change the profile, for every sandbox of it, and apply at
+once to the running ones: `set` publishes a sandbox port by name at every
+start, or with `--off` only when asked to; `unset` takes ports out.
+`publish` and `unpublish` switch a running sandbox's ports alone - the
+profile's by name, others by `--map` - and its next start goes back to the
+profile's. `ls` lists a sandbox's ports with their URLs, or with `-p` the
+ports the profile declares.
 
 | Flag | Command | Meaning |
 | --- | --- | --- |
-| `--off` | `port` | publish it only when switched on, not at start |
+| `--map <mapping>` | `set` | the mapping the name stands for |
+| `--off` | `set` | publish it only when asked to, not at start |
+| `--map <mapping>` | `publish`, `unpublish` | a mapping the profile does not name (repeatable) |
+
+## Secrets and values
 
 ### `unibox secret`
 
@@ -426,18 +387,35 @@ names, never the values.
 ### `unibox var`
 
 ```
-unibox var set <name> <value> [--profile <name>]
-unibox var ls [--profile <name>]
-unibox var rm <name> [--profile <name>]
+unibox var set <name> <value> [-p <profile>]
+unibox var ls [-p <profile>]
+unibox var rm <name> [-p <profile>]
 ```
 
 Keeps your own values for what profiles ask of you (`vars`), in
-`~/.config/unibox/vars.yaml`. Without `--profile` a value applies to every
-profile; with it, to that profile alone, over the shared one. `ls --profile`
-lists what the profile asks, each value and where it comes from, and what is
-missing.
+`~/.config/unibox/vars.yaml`. Without `-p` a value applies to every profile;
+with it, to that profile alone, over the shared one. `var` does not take the
+profile from the context, so a value is never made one profile's by
+accident. `ls -p` lists what the profile asks, each value and where it comes
+from, and what is missing.
 
 ## unibox itself
+
+### `unibox context`
+
+```
+unibox context
+unibox context use [-s <sandbox>] [-p <profile>]
+unibox context clear
+```
+
+Keeps the sandbox and profile commands work in when they are not told, so a
+day spent in one sandbox needs no `-s`. `use` sets either or both, after
+checking they exist; `context` alone shows what commands would use and why -
+the context, `UNIBOX_SANDBOX` or `UNIBOX_PROFILE`, or there being only one;
+`clear` forgets it. The context is kept in `config.yaml` as
+`context: {sandbox, profile}`. The environment variables win over it, so a
+terminal can work elsewhere without changing it.
 
 ### `unibox config`
 
@@ -458,10 +436,10 @@ Reads or changes unibox's own configuration. The keys:
 
 `unset` forgets a setting, back to its default.
 
-### `unibox runtimes`
+### `unibox runtime`
 
 ```
-unibox runtimes
+unibox runtime ls
 ```
 
 Shows each runtime: supported or experimental, which is the default,

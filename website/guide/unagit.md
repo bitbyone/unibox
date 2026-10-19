@@ -44,14 +44,14 @@ profile format is the YAML's, which unagit never reads.
 ## A start, as planned
 
 1. unagit fills its pickers - agent, profile, sandbox, place - from
-   `unibox profiles --json` and `unibox sandboxes --json`.
-2. `unibox check --json` answers with what is needed, each with a code
+   `unibox profile ls --json` and `unibox sandbox ls --json`.
+2. `unibox task check --json` answers with what is needed, each with a code
    unagit turns into a dialog of its own: build, sign in, commit first.
 3. unagit pushes the branch from the host, with its own credentials.
-4. `unibox prepare --json` with the repositories' https clone URLs from the
+4. `unibox task prepare --json` with the repositories' https clone URLs from the
    forge's API, never from a local remote that might carry a token.
 5. The place chosen - a terminal, Zellij, Ghostty or herdr - runs
-   `unibox resume <task>`, the task `prepare` made.
+   `unibox resume <task>`, the task `task prepare` made.
 
 unagit's tokens never go into a sandbox: the push before a start is unagit's,
 from the host, and everything after it is the sandbox's own.

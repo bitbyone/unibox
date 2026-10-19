@@ -180,10 +180,11 @@ network:
 | --- | --- |
 | `allow` | patterns the runtime's policy would refuse: a host, `*.domain`, an IP or a CIDR, with an optional port |
 | `deny` | patterns it would allow; deny wins |
-| `ports` | name to a spec, or to `{port: <spec>, default: on\|off}` |
+| `ports` | name to a mapping, or to `{port: <mapping>, default: on\|off}` |
 
-A port spec is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. A spec alone is
-published at every start.
+A port mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`, as
+`unibox network port set --map` takes it. A mapping alone is published at
+every start.
 
 ### `vars`, `env` and `build_args`
 

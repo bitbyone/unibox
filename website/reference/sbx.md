@@ -10,7 +10,7 @@ macOS (Apple Silicon) on throwaway sandboxes. Where sbx's behaviour shows
 through, it says so.
 
 ::: tip Before you start
-`sbx login` once. `unibox runtimes` shows whether sbx is installed and
+`sbx login` once. `unibox runtime ls` shows whether sbx is installed and
 available, and what it isolates.
 :::
 
@@ -124,7 +124,7 @@ Services become sbx custom secrets, scoped to the sandbox:
 - Published ports survive a stop: listed as none while stopped, back at the
   start, an ephemeral one with a new host port.
 - `--unpublish` takes a port back only by its exact host port. So unibox
-  records what it published by name and spec, and leaves a port it did not
+  records what it published by name and mapping, and leaves a port it did not
   publish alone.
 - A start that finds a sandbox stopped drops the switches and publishes the
   profile's defaults; a switch on a stopped sandbox is refused, since

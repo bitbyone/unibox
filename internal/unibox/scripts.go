@@ -79,14 +79,14 @@ tip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$branch" '$2 == ref {print 
 [ -n "$tip" ] || { echo 'branch does not exist on the forge; push it first' >&2; exit 4; }
 if [ ! -d "$dir" ]; then
   tmp="$dir.unibox-clone"
-  [ ! -e "$tmp" ] || { echo 'incomplete clone remains; inspect it in unibox shell and remove it before retrying' >&2; exit 4; }
+  [ ! -e "$tmp" ] || { echo 'incomplete clone remains; inspect it in unibox sandbox shell and remove it before retrying' >&2; exit 4; }
   git clone --filter=blob:none --single-branch --branch "$branch" -- "$url" "$tmp"
   mv "$tmp" "$dir"
 else
-  [ -d "$dir/.git" ] || { echo 'task directory is not a clone; inspect it in unibox shell' >&2; exit 4; }
-  [ "$(git -C "$dir" remote get-url origin)" = "$url" ] || { echo 'task origin changed; inspect it in unibox shell' >&2; exit 4; }
-  [ "$(git -C "$dir" symbolic-ref --short HEAD)" = "$branch" ] || { echo 'task branch changed; restore it in unibox shell' >&2; exit 4; }
-  [ -z "$(git -C "$dir" status --porcelain --untracked-files=all)" ] || { echo 'task has local edits; finish them in unibox shell before preparing again' >&2; exit 4; }
+  [ -d "$dir/.git" ] || { echo 'task directory is not a clone; inspect it in unibox sandbox shell' >&2; exit 4; }
+  [ "$(git -C "$dir" remote get-url origin)" = "$url" ] || { echo 'task origin changed; inspect it in unibox sandbox shell' >&2; exit 4; }
+  [ "$(git -C "$dir" symbolic-ref --short HEAD)" = "$branch" ] || { echo 'task branch changed; restore it in unibox sandbox shell' >&2; exit 4; }
+  [ -z "$(git -C "$dir" status --porcelain --untracked-files=all)" ] || { echo 'task has local edits; finish them in unibox sandbox shell before preparing again' >&2; exit 4; }
   git -C "$dir" fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
   git -C "$dir" merge-base --is-ancestor HEAD "refs/remotes/origin/$branch" || { echo 'task has unpushed or divergent commits; preserve them before continuing' >&2; exit 4; }
   git -C "$dir" merge --ff-only "refs/remotes/origin/$branch"
@@ -165,7 +165,7 @@ func identityScript(p Profile) string {
 // profile credits it (UNIBOX_CO_AUTHOR); the hook takes out any co-author
 // trailer of either name - agents add their own, copilot always, in their
 // own case and address - and, unless the clone's credit file says off,
-// adds the profile's. A commit made by hand in unibox shell, with no agent
+// adds the profile's. A commit made by hand in unibox sandbox shell, with no agent
 // running, is left as it is.
 func coAuthorHook() string {
 	return `#!/bin/sh
@@ -201,7 +201,7 @@ for f in /var/lib/unibox/runs/*; do
   read -r pid born < "$f"
   now=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null || true)
   if [ -n "$now" ] && [ "$now" = "$born" ]; then
-    echo 'a guest session is still running; inspect it with unibox shell' >&2
+    echo 'a guest session is still running; inspect it with unibox sandbox shell' >&2
     exit 4
   fi
 done

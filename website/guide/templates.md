@@ -81,7 +81,7 @@ and a template's names never collide with yours.
 ```sh
 unibox template ls                 # each template, where it comes from, its profiles
 unibox template update agent-envs  # take its shared files anew
-unibox template diff dev           # how your profile differs from the template's
+unibox template diff -p dev        # how your profile differs from the template's
 ```
 
 `update` fetches the template again and merges it into every profile copied

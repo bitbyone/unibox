@@ -342,7 +342,7 @@ type Profile struct {
 	AgentList AgentList `yaml:"agents" json:"-"`
 	Start     string    `yaml:"start" json:"start"`
 	// Scripts run in a sandbox only when asked for, by name: before an
-	// agent's session (--script) or at once (unibox script).
+	// agent's session (--script) or at once (unibox script run).
 	Scripts map[string]string `yaml:"scripts" json:"scripts,omitempty"`
 	// Bootstrap is always empty: format 3 ran a script the worked-on
 	// repository had to carry, which none did, and format 4 has none. It

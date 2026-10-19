@@ -108,19 +108,19 @@ an error.
 ## Building
 
 ```sh
-unibox build web               # build if outdated, check the agents, load
-unibox build web --rebuild     # build again even when current
-unibox diff web                # what changed since the last build
+unibox profile build web               # build if outdated, check the agents, load
+unibox profile build web --rebuild     # build again even when current
+unibox profile diff web                # what changed since the last build
 ```
 
-`unibox run`, `prepare` and `recreate` build when needed, without a question;
-`recreate --rebuild` forces a fresh build. A build says that it builds and
-points at `unibox diff`, which prints what changed in the profile's directory
+`unibox run`, `task prepare` and `sandbox recreate` build when needed, without
+a question; `sandbox recreate --rebuild` forces a fresh build. A build says
+that it builds and points at `unibox profile diff`, which prints what changed in the profile's directory
 since its image last built as a unified diff.
 
 ::: tip Read a teammate's change before it builds
 A Dockerfile runs in your host's Docker when it is built. Isolated there, but
-`RUN --mount` and build secrets can reach out. `unibox diff` is there for
+`RUN --mount` and build secrets can reach out. `unibox profile diff` is there for
 exactly that.
 :::
 
@@ -141,7 +141,7 @@ it in the Dockerfile" - so the declaration cannot quietly stop being true. An
 An image is tagged with its profile's revision, a digest of everything it is
 built from: `unibox/web:1508ba9befee705c`. So unibox tells a current one from
 an outdated one, per runtime - **built**, **outdated**, **not built** - and
-`unibox profiles` shows it. unibox reads the working tree, so uncommitted
+`unibox profile ls` shows it. unibox reads the working tree, so uncommitted
 changes count as any other.
 
 The revision covers the profile's files, `.shared/` and `_shared/` (but not

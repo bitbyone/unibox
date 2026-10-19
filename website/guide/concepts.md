@@ -47,9 +47,10 @@ with sudo, one filesystem, one Docker, one set of ports. Or it can be **its
 own** for one task, and nothing it does reaches another.
 
 ```sh
-unibox run --profile web                      # sandbox "web", named for the profile
-unibox run --profile web --sandbox web-login  # a sandbox of its own
-unibox run --sandbox web-login                # an existing one
+unibox run -p web                # sandbox "web", named for the profile
+unibox run -p web -s web-login   # a sandbox of its own
+unibox run -s web-login          # an existing one
+unibox run                       # the default: UNIBOX_SANDBOX, the context's, or the only one
 ```
 
 ## Task
@@ -61,8 +62,8 @@ sandbox:
 
 ```sh
 unibox resume <task>
-unibox add-repo <task> ../api
-unibox rm-task <task>
+unibox task add-repo <task> ../api
+unibox task rm <task>
 ```
 
 By default a task is named after its first repository and a digest; `--task`
@@ -84,7 +85,7 @@ A new sandbox goes to the default runtime, sbx unless
 `unibox config set default_runtime <name>` says otherwise;
 `--runtime <name>` asks for one sandbox, and a sandbox keeps the runtime it
 was made in. msb shows that a profile runs unchanged on another runtime; it is not
-meant for daily use yet. `unibox runtimes` shows what is
+meant for daily use yet. `unibox runtime ls` shows what is
 there; [The sbx Runtime](/reference/sbx) and
 [The msb Runtime](/reference/msb) what was verified about each.
 

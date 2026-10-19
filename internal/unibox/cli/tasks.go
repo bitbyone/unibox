@@ -48,8 +48,8 @@ func shellFlag(c *cobra.Command, r *unibox.Request) {
 
 func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f := c.Flags()
-	f.StringVar(&r.Sandbox, "sandbox", "", "Sandbox to work in; one that does not exist yet is made from --profile (default: the profile's name)")
-	f.StringVar(&r.Profile, "profile", "", "Environment profile for a new sandbox")
+	f.StringVarP(&r.Sandbox, "sandbox", "s", "", "Sandbox to work in; one that does not exist yet is made from -p (default: UNIBOX_SANDBOX, the context's, or the only one)")
+	f.StringVarP(&r.Profile, "profile", "p", "", "Environment profile for a new sandbox (default with no sandbox: UNIBOX_PROFILE, the context's, or the only one)")
 	f.StringVar(&r.Runtime, "runtime", "", "Runtime adapter (existing sandboxes keep theirs)")
 	f.StringVar(&r.Agent, "agent", "", "Coding agent declared by the profile")
 	f.StringVar(&r.Task, "task", "", "Name for the task, unique across sandboxes (default: its first repository and a digest)")
@@ -107,7 +107,7 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(o.log, "profile %s changed what its image is built from; building it (unibox diff %s shows what)\n", p.Name, p.Name)
+				fmt.Fprintf(o.log, "profile %s changed what its image is built from; building it (unibox profile diff %s shows what)\n", p.Name, p.Name)
 				if err = o.manager.Build(cmd.Context(), p.Name, rt.Name(), false); err != nil {
 					return err
 				}
@@ -187,6 +187,7 @@ func (o *options) taskCommand(name string) *cobra.Command {
 		if len(req.Repositories) == 0 {
 			req.Repositories = []unibox.RepoInput{{Source: "."}}
 		}
+		o.defaultTarget(&req)
 		if name == "check" {
 			check, err := o.manager.Check(cmd.Context(), req)
 			if err != nil {
@@ -274,8 +275,13 @@ func (o *options) addRepoCommand() *cobra.Command {
 
 func (o *options) createCommand() *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: "create sandbox", Args: cobra.ExactArgs(1), Short: "Create a named environment without mounting a host workspace", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "create name", Args: cobra.ExactArgs(1), Short: "Create a named environment without mounting a host workspace", RunE: func(cmd *cobra.Command, args []string) error {
 		req.NewSandbox = args[0]
+		profile, err := o.profileName(req.Profile)
+		if err != nil {
+			return err
+		}
+		req.Profile = profile
 		if err := o.preflight(cmd, &req); err != nil {
 			return err
 		}
@@ -289,7 +295,7 @@ func (o *options) createCommand() *cobra.Command {
 		fmt.Fprintf(o.output, "created sandbox %s (%s: %s)\n", b.Name, b.Runtime, b.RuntimeName)
 		return nil
 	}}
-	c.Flags().StringVar(&req.Profile, "profile", "", "Environment profile")
+	profileFlag(c, &req.Profile)
 	c.Flags().StringVar(&req.Runtime, "runtime", "", "Runtime adapter")
 	c.Flags().StringSliceVar(&req.Instructions, "instructions", nil, "Named instruction texts to attach")
 	return c
@@ -301,14 +307,25 @@ func scriptFlag(c *cobra.Command, r *unibox.Request) {
 
 // scriptCommand lists a sandbox's scripts, or runs them at once.
 func (o *options) scriptCommand() *cobra.Command {
-	return &cobra.Command{Use: "script sandbox [name...]", Args: cobra.MinimumNArgs(1), Short: "List the scripts of a sandbox's profile, or run them in it now", Long: "List the scripts a sandbox's profile names under scripts, or run them in the sandbox now, in /work, one after another; the first to fail stops the rest. unibox run and resume take --script to run them before the agent starts instead.", RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 1 {
-			if o.json {
-				return fmt.Errorf("a script writes to the terminal; omit --json")
-			}
-			return o.manager.RunScripts(cmd.Context(), args[0], args[1:], o.output)
+	c := &cobra.Command{Use: "script", Short: "List the scripts of a sandbox's profile, or run them in it now", Long: "The scripts a profile names under scripts run in its sandbox, in /work, one after another; the first to fail stops the rest. unibox run and resume take --script to run them before the agent starts instead."}
+	var sandbox string
+	run := &cobra.Command{Use: "run name...", Args: cobra.MinimumNArgs(1), Short: "Run scripts in the sandbox now, in order", RunE: func(cmd *cobra.Command, args []string) error {
+		if o.json {
+			return fmt.Errorf("a script writes to the terminal; omit --json")
 		}
-		profile, scripts, err := o.manager.SandboxScripts(args[0])
+		name, err := o.sandboxName(sandbox)
+		if err != nil {
+			return err
+		}
+		return o.manager.RunScripts(cmd.Context(), name, args, o.output)
+	}}
+	sandboxFlag(run, &sandbox)
+	ls := &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List the scripts of the sandbox's profile", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(sandbox)
+		if err != nil {
+			return err
+		}
+		profile, scripts, err := o.manager.SandboxScripts(name)
 		if err != nil {
 			return err
 		}
@@ -316,7 +333,7 @@ func (o *options) scriptCommand() *cobra.Command {
 			if scripts == nil {
 				scripts = map[string]string{}
 			}
-			return o.write(map[string]any{"api_version": api.Version, "sandbox": args[0], "profile": profile, "scripts": scripts})
+			return o.write(map[string]any{"api_version": api.Version, "sandbox": name, "profile": profile, "scripts": scripts})
 		}
 		if len(scripts) == 0 {
 			fmt.Fprintf(o.output, "profile %s has no scripts; name them under scripts in its sandbox.yaml\n", profile)
@@ -334,4 +351,7 @@ func (o *options) scriptCommand() *cobra.Command {
 		}
 		return w.Flush()
 	}}
+	sandboxFlag(ls, &sandbox)
+	c.AddCommand(run, ls)
+	return c
 }

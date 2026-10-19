@@ -91,7 +91,7 @@ var Agents = []Agent{
 			{Name: "settings.json", Path: ".claude/settings.json"},
 		}},
 	// codex works unasked - the VM is the boundary - so one started by hand
-	// in unibox shell is as free as one unibox runs.
+	// in unibox sandbox shell is as free as one unibox runs.
 	{ID: "codex", Command: "codex", Instructions: ".codex/AGENTS.md", CoAuthor: "Codex <noreply@openai.com>", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, Setup: codexSetup,
 		Configs: []AgentFile{
 			{Name: "config.toml", Path: ".codex/config.toml"},
@@ -117,5 +117,5 @@ func FindAgent(id string) (Agent, error) {
 			return a, nil
 		}
 	}
-	return Agent{}, fmt.Errorf("unknown agent %q; choose one listed by unibox profiles", id)
+	return Agent{}, fmt.Errorf("unknown agent %q; choose one listed by unibox profile ls", id)
 }

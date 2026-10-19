@@ -53,10 +53,12 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 		o.manager = m
 		return m.RefreshPlugin()
 	}
-	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.renameTaskCommand(), o.herdrCommand(), o.secretCommand(), o.varCommand(), o.templateCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand(), o.versionCommand())
-	for _, name := range []string{"check", "prepare", "run"} {
-		root.AddCommand(o.taskCommand(name))
-	}
+	// What a command works on is a word of a group (unibox task rm); only
+	// the everyday ones stand alone.
+	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
+		o.taskGroup(), o.sandboxGroup(), o.profileGroup(), o.runtimeGroup(),
+		o.instructionsCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.scriptCommand(),
+		o.secretCommand(), o.varCommand(), o.templateCommand(), o.herdrCommand(), o.pruneCommand(), o.versionCommand())
 	// unibox runs itself as this under the shell that fetched a running
 	// msb sandbox's tokens, to hand them to msb; it is no command for people.
 	root.AddCommand(&cobra.Command{Use: unibox.MSBSecretsCommand + " sandbox spec...", Hidden: true, Args: cobra.MinimumNArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
@@ -168,7 +170,7 @@ for a new sandbox.`, Example: "  unibox config set default_runtime sbx\n  unibox
 			cfg.Environments = path
 		case "default_runtime":
 			if _, ok := o.manager.Runtimes[value]; !ok {
-				return fmt.Errorf("unknown runtime %s; use unibox runtimes", value)
+				return fmt.Errorf("unknown runtime %s; unibox runtime ls lists them", value)
 			}
 			cfg.DefaultRuntime = value
 		default:
@@ -256,7 +258,7 @@ func configValue(c unibox.Config, key string) (any, error) {
 }
 
 func (o *options) profilesCommand() *cobra.Command {
-	return &cobra.Command{Use: "profiles", Args: cobra.NoArgs, Short: "List profiles, agents and builds", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List profiles, agents and builds", RunE: func(cmd *cobra.Command, args []string) error {
 		// Without a repository there is nothing to list; say how to start.
 		if _, err := o.manager.Environments(); err != nil {
 			if o.json {
@@ -281,7 +283,7 @@ func (o *options) profilesCommand() *cobra.Command {
 	}}
 }
 func (o *options) runtimesCommand() *cobra.Command {
-	return &cobra.Command{Use: "runtimes", Args: cobra.NoArgs, Short: "Show the runtimes, which is the default, and whether each can be used", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "Show the runtimes, which is the default, and whether each can be used", RunE: func(cmd *cobra.Command, args []string) error {
 		rows := []map[string]any{}
 		for name, r := range o.manager.Runtimes {
 			reason := ""
@@ -319,8 +321,12 @@ func (o *options) runtimesCommand() *cobra.Command {
 func (o *options) buildCommand() *cobra.Command {
 	var rt string
 	var rebuild bool
-	c := &cobra.Command{Use: "build profile", Args: cobra.ExactArgs(1), Short: "Build, validate and load a profile image", RunE: func(cmd *cobra.Command, args []string) error {
-		if err := o.manager.Build(cmd.Context(), args[0], rt, rebuild); err != nil {
+	c := &cobra.Command{Use: "build [profile]", Args: cobra.MaximumNArgs(1), Short: "Build, validate and load a profile image", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.profileName(first(args))
+		if err != nil {
+			return err
+		}
+		if err := o.manager.Build(cmd.Context(), name, rt, rebuild); err != nil {
 			return err
 		}
 		return o.success("image ready")
@@ -331,18 +337,24 @@ func (o *options) buildCommand() *cobra.Command {
 }
 func (o *options) diffCommand() *cobra.Command {
 	var rt string
-	c := &cobra.Command{Use: "diff profile", Args: cobra.ExactArgs(1), Short: "Show changes since the last build", RunE: func(cmd *cobra.Command, args []string) error {
-		return o.manager.Diff(cmd.Context(), args[0], rt, o.output)
+	c := &cobra.Command{Use: "diff [profile]", Args: cobra.MaximumNArgs(1), Short: "Show changes since the last build", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.profileName(first(args))
+		if err != nil {
+			return err
+		}
+		return o.manager.Diff(cmd.Context(), name, rt, o.output)
 	}}
 	c.Flags().StringVar(&rt, "runtime", "", "Runtime of the previous build")
 	return c
 }
 
 func (o *options) instructionsCommand() *cobra.Command {
-	var sandbox string
-	c := &cobra.Command{Use: "instructions [profile]", Args: cobra.MaximumNArgs(1), Short: "Read assembled instructions or attach named texts to a sandbox", Long: "Print the instructions an agent gets: a profile's, or with --sandbox those of a sandbox - its profile's and the texts attached to it. instructions attach <sandbox> <name>... sets what is attached.", RunE: func(cmd *cobra.Command, args []string) error {
-		profile := ""
+	var sandbox, profile string
+	c := &cobra.Command{Use: "instructions", Args: cobra.NoArgs, Short: "Read assembled instructions or attach named texts to a sandbox", Long: "Print the instructions an agent gets: a profile's, or with -s those of a sandbox - its profile's and the texts attached to it. unibox instructions attach <name>... -s <sandbox> sets what is attached.", RunE: func(cmd *cobra.Command, args []string) error {
 		attached := []string{}
+		if sandbox != "" && profile != "" {
+			return fmt.Errorf("pass -p or -s, not both")
+		}
 		if sandbox != "" {
 			boxes, err := o.manager.List(cmd.Context())
 			if err != nil {
@@ -355,12 +367,14 @@ func (o *options) instructionsCommand() *cobra.Command {
 				}
 			}
 			if profile == "" {
-				return fmt.Errorf("sandbox %s not found", sandbox)
+				return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
 			}
-		} else if len(args) == 1 {
-			profile = args[0]
 		} else {
-			return fmt.Errorf("pass a profile or --sandbox")
+			name, err := o.profileName(profile)
+			if err != nil {
+				return err
+			}
+			profile = name
 		}
 		p, err := unibox.LoadProfile(o.manager.Config.Environments, profile)
 		if err != nil {
@@ -376,18 +390,26 @@ func (o *options) instructionsCommand() *cobra.Command {
 		_, err = io.WriteString(o.output, text)
 		return err
 	}}
-	c.Flags().StringVar(&sandbox, "sandbox", "", "Show the instructions as this sandbox's agents get them, its attached texts included")
-	c.AddCommand(&cobra.Command{Use: "attach sandbox [instruction...]", Args: cobra.MinimumNArgs(1), Short: "Replace the sandbox's list of attached instruction names", RunE: func(cmd *cobra.Command, args []string) error {
-		if err := o.manager.AttachInstructions(args[0], args[1:]); err != nil {
+	c.Flags().StringVarP(&sandbox, "sandbox", "s", "", "Show the instructions as this sandbox's agents get them, its attached texts included")
+	profileFlag(c, &profile)
+	var target string
+	attach := &cobra.Command{Use: "attach [instruction...]", Args: cobra.ArbitraryArgs, Short: "Replace the sandbox's list of attached instruction names (none clears it)", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(target)
+		if err != nil {
 			return err
 		}
-		return o.success("instructions updated; they apply before the next session")
-	}})
+		if err := o.manager.AttachInstructions(name, args); err != nil {
+			return err
+		}
+		return o.success("instructions of sandbox " + name + " updated; they apply before the next session")
+	}}
+	sandboxFlag(attach, &target)
+	c.AddCommand(attach)
 	return c
 }
 
 func (o *options) listCommand() *cobra.Command {
-	return &cobra.Command{Use: "sandboxes", Aliases: []string{"ls"}, Args: cobra.NoArgs, Short: "List unibox's sandboxes and their runtime state (also: ls)", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List unibox's sandboxes and their runtime state", RunE: func(cmd *cobra.Command, args []string) error {
 		boxes, err := o.manager.List(cmd.Context())
 		if err != nil {
 			return err
@@ -407,7 +429,8 @@ func (o *options) listCommand() *cobra.Command {
 	}}
 }
 func (o *options) tasksCommand() *cobra.Command {
-	return &cobra.Command{Use: "tasks [sandbox]", Args: cobra.MaximumNArgs(1), Short: "List prepared tasks, in every sandbox or in one", RunE: func(cmd *cobra.Command, args []string) error {
+	var sandbox string
+	c := &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List prepared tasks, in every sandbox or with -s in one", RunE: func(cmd *cobra.Command, args []string) error {
 		boxes, err := o.manager.List(cmd.Context())
 		if err != nil {
 			return err
@@ -415,7 +438,7 @@ func (o *options) tasksCommand() *cobra.Command {
 		tasks, runs := []api.Task{}, []api.Run{}
 		found := false
 		for _, b := range boxes {
-			if len(args) == 1 && b.Name != args[0] {
+			if sandbox != "" && b.Name != sandbox {
 				continue
 			}
 			found = true
@@ -424,8 +447,8 @@ func (o *options) tasksCommand() *cobra.Command {
 			tasks = append(tasks, sorted...)
 			runs = append(runs, b.Runs...)
 		}
-		if len(args) == 1 && !found {
-			return fmt.Errorf("sandbox %s not found; unibox sandboxes lists them", args[0])
+		if sandbox != "" && !found {
+			return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "tasks": tasks, "runs": runs})
@@ -464,6 +487,9 @@ func (o *options) tasksCommand() *cobra.Command {
 		}
 		return nil
 	}}
+	// Every sandbox's tasks unless told, whatever the context says.
+	c.Flags().StringVarP(&sandbox, "sandbox", "s", "", "Only this sandbox's tasks")
+	return c
 }
 
 func (o *options) resumeCommand() *cobra.Command {
@@ -488,16 +514,24 @@ func (o *options) resumeCommand() *cobra.Command {
 }
 
 func (o *options) shellCommand() *cobra.Command {
-	return &cobra.Command{Use: "shell sandbox", Args: cobra.ExactArgs(1), Short: "Open an interactive shell (counts as an active session)", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "shell [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Open an interactive shell (counts as an active session)", RunE: func(cmd *cobra.Command, args []string) error {
 		if o.json {
 			return fmt.Errorf("shell is interactive; omit --json")
 		}
-		return o.manager.Shell(cmd.Context(), args[0], o.input, o.output, o.log)
+		name, err := o.sandboxName(first(args))
+		if err != nil {
+			return err
+		}
+		return o.manager.Shell(cmd.Context(), name, o.input, o.output, o.log)
 	}}
 }
 func (o *options) stopCommand() *cobra.Command {
-	return &cobra.Command{Use: "stop sandbox", Args: cobra.ExactArgs(1), Short: "Stop an idle sandbox without deleting its disk", RunE: func(cmd *cobra.Command, args []string) error {
-		if err := o.manager.Stop(cmd.Context(), args[0]); err != nil {
+	return &cobra.Command{Use: "stop [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Stop an idle sandbox without deleting its disk", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(first(args))
+		if err != nil {
+			return err
+		}
+		if err := o.manager.Stop(cmd.Context(), name); err != nil {
 			return err
 		}
 		return o.success("sandbox stopped")
@@ -505,7 +539,12 @@ func (o *options) stopCommand() *cobra.Command {
 }
 func (o *options) recreateCommand() *cobra.Command {
 	var rebuild bool
-	c := &cobra.Command{Use: "recreate sandbox", Args: cobra.ExactArgs(1), Short: "Rebuild when needed and recreate an idle sandbox without discarding unpushed work", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "recreate [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Rebuild when needed and recreate an idle sandbox without discarding unpushed work", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(first(args))
+		if err != nil {
+			return err
+		}
+		args = []string{name}
 		if err := o.confirm("Recreate sandbox " + args[0] + " and discard its caches?"); err != nil {
 			return err
 		}
@@ -525,8 +564,9 @@ func (o *options) recreateCommand() *cobra.Command {
 func (o *options) removeCommand(task bool) *cobra.Command {
 	use, short := "rm sandbox", "Remove a sandbox, after checking for running sessions and unpushed work"
 	if task {
-		use, short = "rm-task task", "Remove a task from its sandbox, after checking for running sessions and unpushed work"
+		use, short = "rm task", "Remove a task from its sandbox, after checking for running sessions and unpushed work"
 	}
+	// What goes is always named, never taken from the context.
 	return &cobra.Command{Use: use, Args: cobra.ExactArgs(1), Short: short, RunE: func(cmd *cobra.Command, args []string) error {
 		sandbox, id := args[0], ""
 		if task {
@@ -547,15 +587,28 @@ func (o *options) removeCommand(task bool) *cobra.Command {
 		if err := o.manager.Remove(cmd.Context(), sandbox, id); err != nil {
 			return err
 		}
+		if id == "" {
+			if err := o.forgetContext(sandbox); err != nil {
+				return err
+			}
+		}
 		return o.success("removed")
 	}}
 }
 
-// renameTaskCommand gives a task a name of the user's. It is an alias: the
+// renameCommand gives a task a name of the user's. It is an alias: the
 // task keeps its ID and directory, so nothing in a running session moves.
-func (o *options) renameTaskCommand() *cobra.Command {
-	return &cobra.Command{Use: "rename-task task name", Args: cobra.ExactArgs(2), Short: "Give a task a name taken wherever its ID is; its own ID takes the name away", RunE: func(cmd *cobra.Command, args []string) error {
-		t, err := o.manager.AliasTask(args[0], args[1])
+func (o *options) renameCommand() *cobra.Command {
+	var reset bool
+	c := &cobra.Command{Use: "rename task [name]", Args: cobra.RangeArgs(1, 2), Short: "Give a task a name taken wherever its ID is; --reset takes it away", RunE: func(cmd *cobra.Command, args []string) error {
+		if reset == (len(args) == 2) {
+			return fmt.Errorf("give the task a name, or --reset to take its alias away")
+		}
+		alias := o.manager.TaskID(args[0])
+		if !reset {
+			alias = args[1]
+		}
+		t, err := o.manager.AliasTask(args[0], alias)
 		if err != nil {
 			return err
 		}
@@ -567,6 +620,8 @@ func (o *options) renameTaskCommand() *cobra.Command {
 		}
 		return o.success("task " + t.ID + " is also " + t.Alias)
 	}}
+	c.Flags().BoolVar(&reset, "reset", false, "Take the alias away; the task is its ID alone")
+	return c
 }
 
 // pruneCommand removes images unibox no longer needs; each can be built or

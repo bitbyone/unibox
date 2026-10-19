@@ -68,7 +68,7 @@ my-envs/
 └── README.md
 ```
 
-`.shared/` is unibox's and rewritten on `init`, `check`, `build` and a start;
+`.shared/` is unibox's and rewritten on `init`, `task check`, `profile build` and a start;
 `.templates/<template>/` is a template's, written by `init --from` and
 `template update`; everything else is yours. See
 [The Environments Repository](/guide/environments-repository).

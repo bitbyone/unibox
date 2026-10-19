@@ -22,5 +22,5 @@ func msbInstall(ctx context.Context) (string, error) {
 }
 
 func msbRotate(ctx context.Context, sandbox string, secrets []msbSecret) error {
-	return fmt.Errorf("this unibox was built without cgo and cannot rotate secrets live; restart sandbox %s with unibox stop, then run it again", sandbox)
+	return fmt.Errorf("this unibox was built without cgo and cannot rotate secrets live; restart sandbox %s with unibox sandbox stop, then run it again", sandbox)
 }

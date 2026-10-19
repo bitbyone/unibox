@@ -4,7 +4,7 @@ By default nothing of yours is mounted into a sandbox: the agent works on
 fresh clones from the forge. `--mount` is the exception, and it is your call.
 
 ```sh
-unibox run --sandbox dev --agent copilot --mount
+unibox run -s dev --agent copilot --mount
 ```
 
 mounts the current repository into the running sandbox `dev` at
@@ -12,7 +12,7 @@ mounts the current repository into the running sandbox `dev` at
 your `.git` as they are, on whatever is checked out, and what it writes there
 is on your machine at once.
 
-`--mount` is taken by `run`, `prepare`, `check` and `add-repo`, and applies to
+`--mount` is taken by `run`, `task prepare`, `task check` and `task add-repo`, and applies to
 every directory the command selects.
 
 ::: danger Use it knowingly
@@ -25,12 +25,12 @@ agent configure.
 ## With a branch
 
 ```sh
-unibox run --sandbox dev --agent claude --mount --branch feat/login
+unibox run -s dev --agent claude --mount --branch feat/login
 ```
 
 switches your checkout to `feat/login` when the task is prepared, making the
 branch from HEAD when you have none of that name. It need not be on the forge,
-since nothing is cloned from there. `check` only says it would switch
+since nothing is cloned from there. `task check` only says it would switch
 (`branch_switch`), and git refuses a switch that would overwrite uncommitted
 changes.
 
@@ -57,7 +57,7 @@ there would otherwise prune their records on your machine.
 ## Removing a mounted task
 
 ```sh
-unibox rm-task <task>
+unibox task rm <task>
 ```
 
 unmounts first, has the sandbox check every mount point is empty, and keeps

@@ -94,7 +94,7 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	if err := os.WriteFile(file, []byte("version: 6\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, log, err := run(t, paths, "glpat-tokenvalue\n", "service", "add", "node", "gitlab-2n", "--host", "gitlab.2n.cz", "--author", "Jan Tobola <jan@2n.example>")
+	_, log, err := run(t, paths, "glpat-tokenvalue\n", "service", "add", "gitlab-2n", "-p", "node", "--host", "gitlab.2n.cz", "--author", "Jan Tobola <jan@2n.example>")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
@@ -107,12 +107,12 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 			t.Fatalf("lacks %q:\n%s", want, data)
 		}
 	}
-	out, _, err := run(t, paths, "", "service", "ls", "node")
+	out, _, err := run(t, paths, "", "service", "ls", "-p", "node")
 	if err != nil || !strings.Contains(out, "gitlab-2n") || !strings.Contains(out, "stored") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	// A store unibox does not keep is the user's command, stored nowhere.
-	if _, log, err = run(t, paths, "", "service", "add", "node", "artifactory", "--host", "repo.example.com", "--command", "vault kv get -field=token secret/art"); err != nil {
+	if _, log, err = run(t, paths, "", "service", "add", "artifactory", "-p", "node", "--host", "repo.example.com", "--command", "vault kv get -field=token secret/art"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	data, _ = os.ReadFile(file)
@@ -120,7 +120,7 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 		t.Fatalf("%s\n%s", log, data)
 	}
 	// The variable carrying a service's placeholder goes with it.
-	if _, _, err = run(t, paths, "", "service", "rm", "node", "artifactory"); err != nil {
+	if _, _, err = run(t, paths, "", "service", "rm", "artifactory", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	if q, err := unibox.LoadProfile(root, "node"); err != nil || len(q.EnvValues) != 0 {
@@ -128,25 +128,25 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	}
 	// A token stored on its own is named, not asked for, and outlives the
 	// service.
-	if _, _, err = run(t, paths, "", "service", "add", "node", "jfrog", "--kind", "artifactory", "--host", "jfrog.example.com", "--secret", "jfrog-token"); err == nil || !strings.Contains(err.Error(), "unibox secret set jfrog-token") {
+	if _, _, err = run(t, paths, "", "service", "add", "jfrog", "-p", "node", "--kind", "artifactory", "--host", "jfrog.example.com", "--secret", "jfrog-token"); err == nil || !strings.Contains(err.Error(), "unibox secret set jfrog-token") {
 		t.Fatalf("a missing secret was named: %v", err)
 	}
 	if _, _, err = run(t, paths, "jf-tokenvalue\n", "secret", "set", "jfrog-token"); err != nil {
 		t.Fatal(err)
 	}
-	if _, log, err = run(t, paths, "", "service", "add", "node", "jfrog", "--kind", "artifactory", "--host", "jfrog.example.com", "--secret", "jfrog-token"); err != nil {
+	if _, log, err = run(t, paths, "", "service", "add", "jfrog", "-p", "node", "--kind", "artifactory", "--host", "jfrog.example.com", "--secret", "jfrog-token"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	if data, _ = os.ReadFile(file); !strings.Contains(string(data), "command: secret:jfrog-token") {
 		t.Fatalf("%s", data)
 	}
-	if _, _, err = run(t, paths, "", "service", "rm", "node", "jfrog"); err != nil {
+	if _, _, err = run(t, paths, "", "service", "rm", "jfrog", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	if out, _, _ = run(t, paths, "", "secret", "ls"); !strings.Contains(out, "jfrog-token") {
 		t.Fatal("a secret stored on its own went with the service")
 	}
-	if _, _, err = run(t, paths, "", "service", "rm", "node", "gitlab-2n"); err != nil {
+	if _, _, err = run(t, paths, "", "service", "rm", "gitlab-2n", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	if out, _, _ = run(t, paths, "", "secret", "ls"); strings.Contains(out, "gitlab-2n") {
@@ -158,7 +158,7 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	}
 	// A service that would break the profile is not written.
 	before, _ := os.ReadFile(file)
-	if _, _, err = run(t, paths, "x\n", "service", "add", "node", "broken", "--kind", "generic", "--git", "--host", "h.example"); err == nil {
+	if _, _, err = run(t, paths, "x\n", "service", "add", "broken", "-p", "node", "--kind", "generic", "--git", "--host", "h.example"); err == nil {
 		t.Fatal("a git service without a user was written")
 	}
 	if after, _ := os.ReadFile(file); !bytes.Equal(before, after) {
@@ -173,7 +173,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "agent", "login", "node", "claude")
+	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "agent", "login", "claude", "-p", "node")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
@@ -187,7 +187,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 		t.Fatalf("%s\n%s", recorded, log)
 	}
 	// Signed in already: no question, the token stays.
-	if _, log, err = run(t, paths, "", "agent", "login", "node", "claude"); err != nil || !strings.Contains(log, "secret claude is stored") {
+	if _, log, err = run(t, paths, "", "agent", "login", "claude", "-p", "node"); err != nil || !strings.Contains(log, "secret claude is stored") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	_ = io.Discard
@@ -200,22 +200,22 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude]\nnetwork:\n  allow: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, log, err := run(t, paths, "", "network", "allow", "node", "maven.google.com"); err != nil {
+	if _, log, err := run(t, paths, "", "network", "allow", "maven.google.com", "-p", "node"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	// Denying an allowed host moves it: sbx refuses both at once.
-	if _, log, err := run(t, paths, "", "network", "deny", "node", "jitpack.io", "gist.github.com"); err != nil {
+	if _, log, err := run(t, paths, "", "network", "deny", "jitpack.io", "gist.github.com", "-p", "node"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	data, _ := os.ReadFile(file)
 	if !strings.Contains(string(data), "  allow: [maven.google.com] # Kotlin") || !strings.Contains(string(data), "  deny: [jitpack.io, gist.github.com]") {
 		t.Fatalf("%s", data)
 	}
-	out, _, err := run(t, paths, "", "network", "ls", "node")
+	out, _, err := run(t, paths, "", "network", "ls", "-p", "node")
 	if err != nil || !strings.Contains(out, "deny   gist.github.com") || !strings.Contains(out, "allow  maven.google.com") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, _, err = run(t, paths, "", "network", "rm", "node", "jitpack.io", "gist.github.com", "maven.google.com"); err != nil {
+	if _, _, err = run(t, paths, "", "network", "rm", "jitpack.io", "gist.github.com", "maven.google.com", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\nnetwork:") {
@@ -223,23 +223,23 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	}
 
 	// Ports by name, on at start or only when switched on.
-	if _, log, err := run(t, paths, "", "network", "port", "node", "fe", "3000:3000"); err != nil {
+	if _, log, err := run(t, paths, "", "network", "port", "set", "fe", "--map", "3000:3000", "-p", "node"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
-	if _, log, err := run(t, paths, "", "network", "port", "node", "devtools", "9333:9222", "--off"); err != nil {
+	if _, log, err := run(t, paths, "", "network", "port", "set", "devtools", "--map", "9333:9222", "--off", "-p", "node"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
-	if _, _, err := run(t, paths, "", "network", "port", "node", "be", "x:1"); err == nil {
+	if _, _, err := run(t, paths, "", "network", "port", "set", "be", "--map", "x:1", "-p", "node"); err == nil {
 		t.Fatal("a bad spec was written")
 	}
 	data, _ = os.ReadFile(file)
 	if !strings.Contains(string(data), "  ports:\n    fe: '3000:3000'\n    devtools: {port: '9333:9222', default: off}\n") {
 		t.Fatalf("%s", data)
 	}
-	if out, _, err = run(t, paths, "", "network", "ls", "node"); err != nil || !strings.Contains(out, "devtools  9333:9222  off") || !strings.Contains(out, "fe        3000:3000  on") {
+	if out, _, err = run(t, paths, "", "network", "port", "ls", "-p", "node"); err != nil || !strings.Contains(out, "devtools  9333:9222  off") || !strings.Contains(out, "fe        3000:3000  on") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, _, err = run(t, paths, "", "network", "rm", "node", "fe", "devtools"); err != nil {
+	if _, _, err = run(t, paths, "", "network", "port", "unset", "fe", "devtools", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ = os.ReadFile(file); strings.Contains(string(data), "\nnetwork:") {
@@ -254,10 +254,10 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	if _, _, err := run(t, paths, "", "init", "web"); err == nil || !strings.Contains(err.Error(), "unibox init --dir") {
 		t.Fatalf("%v", err)
 	}
-	if _, log, err := run(t, paths, "", "profiles"); err != nil || !strings.Contains(log, "unibox init --dir") {
+	if _, log, err := run(t, paths, "", "profile", "ls"); err != nil || !strings.Contains(log, "unibox init --dir") {
 		t.Fatalf("%v %s", err, log)
 	}
-	if _, log, err := run(t, paths, "", "ls"); err != nil || !strings.Contains(log, "no environments repository is configured") {
+	if _, log, err := run(t, paths, "", "sandbox", "ls"); err != nil || !strings.Contains(log, "no environments repository is configured") {
 		t.Fatalf("%v %s", err, log)
 	}
 	// init --dir lays the repository out and configures it, with no profile.
@@ -303,7 +303,7 @@ func TestAFirstStartIsToldToInitAndInitSaysWhereItWrites(t *testing.T) {
 	if _, _, err = run(t, paths, "", "config", "set", "environments", gone); err != nil {
 		t.Fatal(err)
 	}
-	if _, log, err = run(t, paths, "", "profiles"); err != nil || !strings.Contains(log, gone+" does not exist") {
+	if _, log, err = run(t, paths, "", "profile", "ls"); err != nil || !strings.Contains(log, gone+" does not exist") {
 		t.Fatalf("%v %s", err, log)
 	}
 }
@@ -316,15 +316,15 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 		t.Fatal(err)
 	}
 	// gh not signed in: --gh says what to do.
-	if _, _, err := run(t, paths, "", "agent", "login", "node", "copilot", "--gh"); err == nil || !strings.Contains(err.Error(), "gh auth login") {
+	if _, _, err := run(t, paths, "", "agent", "login", "copilot", "--gh", "-p", "node"); err == nil || !strings.Contains(err.Error(), "gh auth login") {
 		t.Fatalf("%v", err)
 	}
 	ghSignedIn(t, argv)
-	_, log, err := run(t, paths, "", "agent", "login", "node", "copilot", "--gh")
+	_, log, err := run(t, paths, "", "agent", "login", "copilot", "--gh", "-p", "node")
 	if err != nil || !strings.Contains(log, "your whole gh login") {
 		t.Fatalf("%v\n%s", err, log)
 	}
-	if _, _, err = run(t, paths, "", "service", "add", "node", "github", "--gh"); err != nil {
+	if _, _, err = run(t, paths, "", "service", "add", "github", "--gh", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
@@ -340,7 +340,7 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 	if out, _, _ := run(t, paths, "", "secret", "ls"); strings.TrimSpace(out) != "no secrets in the login keychain" && strings.TrimSpace(out) != "no secrets in the Secret Service" {
 		t.Fatalf("%q", out)
 	}
-	if _, _, err = run(t, paths, "", "service", "add", "node", "gitlab", "--gh"); err == nil {
+	if _, _, err = run(t, paths, "", "service", "add", "gitlab", "--gh", "-p", "node"); err == nil {
 		t.Fatal("--gh was taken for gitlab")
 	}
 }
@@ -352,11 +352,11 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := run(t, paths, "", "agent", "co-author", "node")
+	out, _, err := run(t, paths, "", "agent", "co-author", "-p", "node")
 	if err != nil || !strings.Contains(out, "copilot\tCopilot <Copilot@users.noreply.github.com>\t(default)") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "GitHub Copilot <copilot@example.com>"); err != nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "copilot", "--as", "GitHub Copilot <copilot@example.com>", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(file)
@@ -364,26 +364,26 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	if !strings.Contains(string(data), "  copilot:\n    co_author: GitHub Copilot <copilot@example.com>") {
 		t.Fatalf("%s", data)
 	}
-	if out, _, _ = run(t, paths, "", "agent", "co-author", "node", "copilot"); !strings.Contains(out, "GitHub Copilot <copilot@example.com>\t(profile)") {
+	if out, _, _ = run(t, paths, "", "agent", "co-author", "copilot", "-p", "node"); !strings.Contains(out, "GitHub Copilot <copilot@example.com>\t(profile)") {
 		t.Fatalf("%s", out)
 	}
-	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "nobody"); err == nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "copilot", "--as", "nobody", "-p", "node"); err == nil {
 		t.Fatal("an identity without an address was taken")
 	}
 	// No address at all is a choice: credited, linked to no account.
-	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "claude", "Claude <>"); err != nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "claude", "--as", "Claude <>", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
-	if out, _, _ = run(t, paths, "", "agent", "ls", "node"); !strings.Contains(out, "Claude <>") {
+	if out, _, _ = run(t, paths, "", "agent", "ls", "-p", "node"); !strings.Contains(out, "Claude <>") {
 		t.Fatalf("%s", out)
 	}
-	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "claude", "--reset"); err != nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "claude", "--reset", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "codex", "Codex <c@example.com>"); err == nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "codex", "--as", "Codex <c@example.com>", "-p", "node"); err == nil {
 		t.Fatal("an agent the profile lacks was credited")
 	}
-	if _, _, err = run(t, paths, "", "agent", "co-author", "node", "copilot", "--reset"); err != nil {
+	if _, _, err = run(t, paths, "", "agent", "co-author", "copilot", "--reset", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ = os.ReadFile(file); strings.Contains(string(data), "co_author:") {

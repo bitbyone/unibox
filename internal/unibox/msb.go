@@ -506,7 +506,7 @@ func (r *MSB) RefreshSecrets(ctx context.Context, sandbox string, log io.Writer)
 		args = append(args, s.Env+"="+s.Source+"="+s.Placeholder)
 	}
 	if err = runQuiet(r.withSecrets(ctx, self, secrets, args...)); err != nil {
-		return fmt.Errorf("could not fetch the tokens of sandbox %s again; unibox stop %s starts it with fresh ones next time: %w", sandbox, sandbox, err)
+		return fmt.Errorf("could not fetch the tokens of sandbox %s again; unibox sandbox stop %s starts it with fresh ones next time: %w", sandbox, sandbox, err)
 	}
 	return nil
 }

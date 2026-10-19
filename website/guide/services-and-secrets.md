@@ -8,7 +8,7 @@ the host; the sandbox sees a placeholder the runtime's proxy swaps.
 ## Adding a service
 
 ```sh
-unibox service add web github
+unibox service add github -p web
 ```
 
 shows where the token is made and what to grant, asks for it on a hidden
@@ -32,10 +32,10 @@ Anything else is `--kind generic` with `--host`, and `--git` for a forge or
 `--env` for a tool that reads the placeholder from a variable.
 
 ```sh
-unibox service add web gitlab-work --kind gitlab --host gitlab.example.com
-unibox service add web registry --kind generic --host npm.example.com --env NPM_TOKEN
-unibox service ls web          # each service, and whether its token is stored
-unibox service rm web registry # its token too, unless another profile names it
+unibox service add gitlab-work -p web --kind gitlab --host gitlab.example.com
+unibox service add registry -p web --kind generic --host npm.example.com --env NPM_TOKEN
+unibox service ls -p web           # each service, and whether its token is stored
+unibox service rm registry -p web  # its token too, unless another profile names it
 ```
 
 ### Flags
@@ -74,8 +74,8 @@ organization. Repositories of several owners need a token each, told apart by
 path:
 
 ```sh
-unibox service add web github                                   # github.com
-unibox service add web github-acme --host github.com/acme       # github.com/acme/...
+unibox service add github -p web                                # github.com
+unibox service add github-acme -p web --host github.com/acme    # github.com/acme/...
 ```
 
 The most specific URL wins for each repository. One classic token for every
@@ -106,7 +106,7 @@ its service's author too.
 ## Your gh login
 
 ```sh
-unibox service add web github --gh
+unibox service add github -p web --gh
 ```
 
 writes a service with `command: gh auth token`. It reaches every owner your gh
@@ -139,7 +139,7 @@ profiles:
 
 ```sh
 unibox secret set artifactory
-unibox service add web artifactory --host artifactory.example.com --secret artifactory
+unibox service add artifactory -p web --host artifactory.example.com --secret artifactory
 ```
 
 `unibox service rm` removes a token it stored for the service itself, named
@@ -224,7 +224,7 @@ socket - not an environment variable of your shell. A short-lived token fits
 well with a `refresh` shorter than its lifetime.
 
 ```sh
-unibox service add web gitlab --command 'my-token-helper gitlab' --refresh 10m
+unibox service add gitlab -p web --command 'my-token-helper gitlab' --refresh 10m
 ```
 
 ## A host behind your VPN

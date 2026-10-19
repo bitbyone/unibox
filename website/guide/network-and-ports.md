@@ -12,10 +12,10 @@ unibox. A profile widens it with `allow` and
 narrows it with `deny`:
 
 ```sh
-unibox network allow web jitpack.io repo.example.com
-unibox network deny web gist.github.com
-unibox network rm web jitpack.io        # back to the runtime's policy
-unibox network ls web                   # the rules, with the hosts the services need
+unibox network allow jitpack.io repo.example.com -p web
+unibox network deny gist.github.com -p web
+unibox network rm jitpack.io -p web     # back to the runtime's policy
+unibox network ls -p web                # the rules, with the hosts the services need
 ```
 
 ```yaml
@@ -37,10 +37,11 @@ them.
 A port is published on the host's loopback **by name**:
 
 ```sh
-unibox network port web fe 3000:3000               # at every start
-unibox network port web api 8080                   # any free host port
-unibox network port web devtools 9333:9222 --off   # only when switched on
-unibox network rm web devtools                     # take it out
+unibox network port set fe --map 3000:3000 -p web               # at every start
+unibox network port set api --map 8080 -p web                    # any free host port
+unibox network port set devtools --map 9333:9222 --off -p web    # only when published by hand
+unibox network port unset devtools -p web                        # take it out
+unibox network port ls -p web                                    # the ports the profile declares
 ```
 
 ```yaml
@@ -48,24 +49,26 @@ network:
   ports:
     fe: '3000:3000'                              # host 3000 to sandbox 3000
     api: '8080'                                  # sandbox 8080 on any free host port
-    devtools: {port: '9333:9222', default: off}  # published only when switched on
+    devtools: {port: '9333:9222', default: off}  # published only when asked to
 ```
 
-The spec is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. A port is
+The mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. A port is
 published when a sandbox starts unless `--off`, and running sandboxes get a
 change at once. A port without a host port gets a free one, and another one
-at each start of the sandbox: `unibox port <sandbox>` shows where it is now.
+at each start of the sandbox: `unibox network port ls -s <sandbox>` shows where
+it is now.
 Give a host port for a page you keep open.
 
 ### Switching ports on a running sandbox
 
 ```sh
-unibox port web-1                          # its ports, with their URLs
-unibox port web-1 fe:off devtools:on       # by the profile's names
-unibox port web-1 8080:5173:on             # a spec the profile does not name
+unibox network port ls -s web-1                     # its ports, with their URLs
+unibox network port publish devtools -s web-1       # by the profile's names
+unibox network port unpublish fe -s web-1
+unibox network port publish --map 8080:5173 -s web-1  # a mapping the profile does not name
 ```
 
-`unibox port` changes the running sandbox and leaves the profile as it is; the
+`publish` and `unpublish` change the running sandbox and leaves the profile as it is; the
 sandbox's next start goes back to the profile's defaults. A switch on a stopped
 sandbox is refused, as publishing would start it. A port published with sbx's
 own command is left alone.
@@ -82,8 +85,8 @@ files.
 | Change | Applied |
 | --- | --- |
 | `network.allow`, `network.deny` | live, to running sandboxes |
-| `network.ports` | live through `unibox network port`; at the next start after a hand edit |
-| `unibox port <sandbox> ...` | live, until the sandbox next starts |
+| `network.ports` | live through `unibox network port set` and `unset`; at the next start after a hand edit |
+| `unibox network port publish`, `unpublish` | live, until the sandbox next starts |
 | `services`, an agent's `auth` | a recreation: sbx binds a token's placeholder when it makes the sandbox |
 | network rules and ports of an msb sandbox | a recreation, after unibox asks: msb sets them when it makes the sandbox |
 | `env`, `caches`, `agents`, the image | a recreation, told at the next start |

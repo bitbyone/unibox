@@ -369,7 +369,7 @@ func TestATaskNamedAloneFindsItsSandbox(t *testing.T) {
 	if _, _, _, err := m.Definition(Request{Task: "shared"}); err == nil || !strings.Contains(err.Error(), "ci, dev; remove the one not wanted") {
 		t.Fatalf("%v", err)
 	}
-	if _, _, _, err := m.Definition(Request{Task: "missing"}); err == nil || !strings.Contains(err.Error(), "unibox tasks lists them") {
+	if _, _, _, err := m.Definition(Request{Task: "missing"}); err == nil || !strings.Contains(err.Error(), "unibox task ls lists them") {
 		t.Fatalf("%v", err)
 	}
 	// A new task named by the user still needs to be told where to go.

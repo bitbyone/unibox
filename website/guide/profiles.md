@@ -137,8 +137,8 @@ Each person keeps the values in `~/.config/unibox/vars.yaml`, which
 
 ```sh
 unibox var set artifactory-user tobola                                   # every profile
-unibox var set gitlab-2n-author 'Jan Tobola <tobola@2n.com>' --profile dev  # one profile, over the shared one
-unibox var ls --profile dev       # what the profile asks, each value and where it comes from
+unibox var set gitlab-2n-author 'Jan Tobola <tobola@2n.com>' -p dev  # one profile, over the shared one
+unibox var ls -p dev              # what the profile asks, each value and where it comes from
 ```
 
 A run or a build stops while a value it refers to is missing, and says which
@@ -150,7 +150,7 @@ it stays a `secret:<name>`, and reaches a tool as a service's placeholder.
 
 An unknown field is an error naming it, never skipped: a misspelt `memmory`
 must not quietly change the environment. A profile that does not parse is
-listed with its error by `unibox profiles` and cannot be started.
+listed with its error by `unibox profile ls` and cannot be started.
 
 ## Yours to edit, by hand or by command
 
@@ -169,11 +169,11 @@ comment over a section stays.
 
 Nothing asks you to approve your own profile. When what it asks of the host
 changes - environment variables, mounted caches, logins, services, network
-rules - `unibox check` names it as a warning, and the next start says it once
+rules - `unibox task check` names it as a warning, and the next start says it once
 and what it leads to:
 
 - an image built from changed inputs is built without a question; `unibox
-  diff <profile>` shows what changed;
+  profile diff <profile>` shows what changed;
 - a sandbox made from changed settings is recreated, naming them, after the
   usual checks for running sessions and unpushed work;
 - what the runtime can change live - network rules and ports - is applied to

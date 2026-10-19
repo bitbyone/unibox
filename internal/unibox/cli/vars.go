@@ -28,7 +28,7 @@ secret belongs here; keep tokens with unibox secret set.`}
 		}
 		return "profile " + profile
 	}
-	c.PersistentFlags().StringVar(&profile, "profile", "", "One profile's own value, over the shared one")
+	c.PersistentFlags().StringVarP(&profile, "profile", "p", "", "One profile's own value, over the shared one")
 	c.AddCommand(&cobra.Command{Use: "set name value", Args: cobra.ExactArgs(2), Short: "Set a value", RunE: func(cmd *cobra.Command, args []string) error {
 		if err := unibox.ValidVar(args[0], args[1]); err != nil {
 			return err

@@ -215,7 +215,7 @@ func containsRepositories(have, want []api.Repository) bool {
 func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, []api.Repository, error) {
 	req.Task = m.taskID(req.Task)
 	if req.Task == "" {
-		return api.Task{}, nil, fmt.Errorf("name the task to add to; unibox tasks lists them")
+		return api.Task{}, nil, fmt.Errorf("name the task to add to; unibox task ls lists them")
 	}
 	if len(req.Repositories) == 0 {
 		return api.Task{}, nil, fmt.Errorf("no repository selected; pass --repo <path-or-url>")
@@ -245,7 +245,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 		}
 	}
 	if t.ID == "" {
-		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox tasks lists them", req.Task)
+		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox task ls lists them", req.Task)
 	}
 	req.services = p.Services
 	repos, err := resolveForTask(ctx, req)
@@ -603,7 +603,7 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("sandbox is missing; run unibox recreate %s", name)
+		return fmt.Errorf("sandbox is missing; run unibox sandbox recreate %s", name)
 	}
 	if err = m.startBox(ctx, r, b, box); err != nil {
 		guard.Close()
@@ -662,7 +662,7 @@ func (m *Manager) RunScripts(ctx context.Context, name string, scripts []string,
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("sandbox is missing; run unibox recreate %s", name)
+		return fmt.Errorf("sandbox is missing; run unibox sandbox recreate %s", name)
 	}
 	if err = m.startBox(ctx, r, b, box); err != nil {
 		guard.Close()
@@ -723,7 +723,7 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 		return nil
 	}
 	if _, err = runtimeOutput(ctx, r, b.RuntimeName, "sh", "-c", guestIdleScript); err != nil {
-		return Fail(4, "guest_busy", "a guest session may still be active; inspect it with unibox shell")
+		return Fail(4, "guest_busy", "a guest session may still be active; inspect it with unibox sandbox shell")
 	}
 	return r.Stop(ctx, b.RuntimeName)
 }

@@ -683,7 +683,7 @@ func TestOneSandboxFlagNamesASandboxThereOrOneToMake(t *testing.T) {
 	m, _ := managerFixture(t)
 	ctx := context.Background()
 	// Not there and no profile: what to do about it is said.
-	if _, _, _, err := m.Definition(Request{Sandbox: "fresh"}); err == nil || !strings.Contains(err.Error(), "pass --profile to make it") {
+	if _, _, _, err := m.Definition(Request{Sandbox: "fresh"}); err == nil || !strings.Contains(err.Error(), "pass -p to make it") {
 		t.Fatalf("%v", err)
 	}
 	// Not there with a profile: it is the one to make.

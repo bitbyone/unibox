@@ -87,7 +87,7 @@ func (m *Manager) Runtime(name string) (Runtime, error) {
 	}
 	r, ok := m.Runtimes[name]
 	if !ok {
-		return nil, fmt.Errorf("runtime %q is not supported; use unibox runtimes to list adapters", name)
+		return nil, fmt.Errorf("runtime %q is not supported; unibox runtime ls lists them", name)
 	}
 	if !m.Config.Enabled(name) {
 		return nil, fmt.Errorf("runtime %s is disabled; enable it with unibox config set runtimes.%s.on true", name, name)
@@ -189,7 +189,7 @@ func (m *Manager) Built(ctx context.Context, p Profile, r Runtime) (BuildRecord,
 	}
 	record, ok := s.Builds[buildKey(p, r)]
 	if !ok || record.Revision != p.Revision {
-		return BuildRecord{}, Fail(3, "image_required", "profile %s needs a build; run unibox build %s --runtime %s", p.Name, p.Name, r.Name())
+		return BuildRecord{}, Fail(3, "image_required", "profile %s needs a build; run unibox profile build %s --runtime %s", p.Name, p.Name, r.Name())
 	}
 	images, err := r.Images(ctx)
 	if err != nil {
@@ -200,7 +200,7 @@ func (m *Manager) Built(ctx context.Context, p Profile, r Runtime) (BuildRecord,
 			return record, nil
 		}
 	}
-	return BuildRecord{}, Fail(3, "image_required", "profile %s image is missing from %s; run unibox build %s", p.Name, r.Name(), p.Name)
+	return BuildRecord{}, Fail(3, "image_required", "profile %s image is missing from %s; run unibox profile build %s", p.Name, r.Name(), p.Name)
 }
 func (m *Manager) Build(ctx context.Context, name, rt string, force bool) error {
 	if err := m.syncManaged(); err != nil {
@@ -289,7 +289,7 @@ func (m *Manager) sandbox(name string) (api.Sandbox, error) {
 	}
 	b, ok := s.Sandboxes[name]
 	if !ok {
-		return b, fmt.Errorf("sandbox %s is not registered; create it with unibox create", name)
+		return b, fmt.Errorf("sandbox %s is not registered; create it with unibox sandbox create", name)
 	}
 	return b, nil
 }
@@ -400,11 +400,11 @@ func (m *Manager) taskSandbox(task string, preparing bool) (string, error) {
 	case len(found) == 1:
 		return found[0], nil
 	case len(found) > 1:
-		return "", fmt.Errorf("task %s exists in sandboxes %s; remove the one not wanted with unibox rm-task", task, strings.Join(found, ", "))
+		return "", fmt.Errorf("task %s exists in sandboxes %s; remove the one not wanted with unibox task rm", task, strings.Join(found, ", "))
 	case preparing:
 		return "", nil
 	}
-	return "", fmt.Errorf("task %s does not exist; unibox tasks lists them", task)
+	return "", fmt.Errorf("task %s does not exist; unibox task ls lists them", task)
 }
 
 func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error) {
@@ -434,7 +434,7 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 	if name != "" && req.NewSandbox == "" {
 		b, err := m.sandbox(name)
 		if err != nil {
-			return b, nil, Profile{}, fmt.Errorf("sandbox %s does not exist; pass --profile to make it (unibox profiles lists them)", name)
+			return b, nil, Profile{}, fmt.Errorf("sandbox %s does not exist; pass -p to make it (unibox profile ls lists them)", name)
 		}
 		if req.Runtime != "" && req.Runtime != b.Runtime {
 			return b, nil, Profile{}, fmt.Errorf("sandbox %s belongs to runtime %s", name, b.Runtime)
@@ -451,9 +451,9 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 	}
 	if req.Profile == "" {
 		if name == "" {
-			return api.Sandbox{}, nil, Profile{}, fmt.Errorf("no sandbox chosen; pass --sandbox (unibox sandboxes lists them) or --profile to make one (unibox profiles)")
+			return api.Sandbox{}, nil, Profile{}, fmt.Errorf("no sandbox chosen; pass -s (unibox sandbox ls lists them) or -p to make one (unibox profile ls), or set one with unibox context use")
 		}
-		return api.Sandbox{}, nil, Profile{}, fmt.Errorf("new sandbox %s needs --profile; list profiles with unibox profiles", name)
+		return api.Sandbox{}, nil, Profile{}, fmt.Errorf("new sandbox %s needs -p; unibox profile ls lists them", name)
 	}
 	if name == "" {
 		name = req.Profile
@@ -507,7 +507,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 				if ok, err := store.Has(ctx, name); err != nil {
 					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: err.Error()})
 				} else if !ok {
-					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: fmt.Sprintf("profile %s names secret %s, which %s does not hold; run unibox agent login %s or unibox secret set %s", p.Name, name, store.Name(), p.Name, name)})
+					result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: fmt.Sprintf("profile %s names secret %s, which %s does not hold; run unibox agent login -p %s or unibox secret set %s", p.Name, name, store.Name(), p.Name, name)})
 				}
 			}
 		}
@@ -990,7 +990,7 @@ func (m *Manager) safeBox(ctx context.Context, b api.Sandbox, r Runtime) error {
 		}
 	}
 	if err := runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(guestIdleScript)}), m.Log); err != nil {
-		return Fail(4, "guest_busy", "sandbox %s may still have a running guest session; inspect it with unibox shell", b.Name)
+		return Fail(4, "guest_busy", "sandbox %s may still have a running guest session; inspect it with unibox sandbox shell", b.Name)
 	}
 	for _, t := range b.Tasks {
 		if err := runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(safeToRemoveScript(t))}), m.Log); err != nil {

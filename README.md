@@ -67,33 +67,41 @@ adds the profile format and the API version it speaks.
 ```sh
 unibox init --dir ~/my-envs                       # lay out your environments repo and use it
 unibox init web --agents claude,codex             # add profile "web" (or: unibox init -i)
-unibox agent login web                            # sign its agents in
-unibox service add web github                     # sign its git in to a forge
-unibox network allow web jitpack.io               # reach a host the policy refuses, applied live
-unibox network port web fe 3000:3000              # publish a port on localhost at every start
-unibox build web                                  # build its image now (run builds when needed)
+unibox agent login -p web                         # sign its agents in
+unibox service add github -p web                  # sign its git in to a forge
+unibox network allow jitpack.io -p web            # reach a host the policy refuses, applied live
+unibox network port set fe --map 3000:3000 -p web # publish a port on localhost at every start
+unibox profile build web                          # build its image now (run builds when needed)
 
 # create sandbox "web-1" from profile "web", clone this repo, run claude
-unibox run --profile web --sandbox web-1 --branch feat/login --agent claude
+unibox run -p web -s web-1 --branch feat/login --agent claude
 
 # or work on this directory in place: mounted into sandbox "dev", not cloned
-unibox run --sandbox dev --agent copilot --mount
+unibox run -s dev --agent copilot --mount
 
-unibox sandboxes                                  # all sandboxes (also: ls)
-unibox tasks                                      # all tasks in all sandboxes
+unibox context use -s web-1 -p web                # work there when -s or -p is left out
+unibox sandbox ls                                 # all sandboxes
+unibox task ls                                    # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
 unibox resume <task> --shell                      # a shell in the task's repository instead
-unibox rename-task <task> <name>                  # an alias, taken wherever the ID is
-unibox add-repo <task> ../api --branch feat/login  # clone one more, even while it runs
-unibox shell web-1                                # shell inside the sandbox
-unibox recreate web-1                             # recreate now (a start does when the profile needs it)
+unibox task rename <task> <name>                  # an alias, taken wherever the ID is
+unibox task add-repo <task> ../api --branch feat/login  # clone one more, even while it runs
+unibox sandbox shell                              # shell inside the context's sandbox
+unibox sandbox recreate web-1                     # recreate now (a start does when the profile needs it)
 ```
 
-`unibox check` (same arguments as `run`) lists anything missing before a
+Commands are a noun, then a verb; only the everyday ones - `run`,
+`resume`, `init`, `context` - stand alone. The argument is what a command
+acts on; the profile it works in is `-p`, the sandbox `-s`. Left out, they
+come from `UNIBOX_PROFILE` and `UNIBOX_SANDBOX`, then from the context
+(`unibox context` shows it, `unibox context clear` forgets it), then from
+there being only one.
+
+`unibox task check` (same arguments as `run`) lists anything missing before a
 start: an image to build, logins and secrets, a branch the forge does not
 have, and what changed in the profile. `run` fixes what it can. Every command accepts `--json`.
 
-`--mount` (on `run`, `prepare` and `add-repo`) mounts the selected
+`--mount` (on `run`, `task prepare` and `task add-repo`) mounts the selected
 directories into a running sandbox, at `/work/<task>/<name>`, instead of
 cloning them: the agent works on your files and your `.git` as they are,
 on whatever is checked out, and what it writes there - a git hook
@@ -102,7 +110,7 @@ checkout to that branch first, making it from HEAD when you have none of
 that name; it need not be on the forge. Use it knowingly; without it
 nothing of yours is mounted. A git worktree cannot be mounted (its `.git`
 points into the main repository by path); mount the repository's own
-checkout. `rm-task` unmounts first and never deletes your files.
+checkout. `unibox task rm` unmounts first and never deletes your files.
 
 ## Environments repository
 
@@ -144,8 +152,8 @@ image - unibox hands them to the build as a build context of that name -
 and `agents/claude` runs `@install/agents/claude.sh`. The names can also
 come one per line in a heredoc (`RUN @install <<EOF`). Yours in `_shared` win over
 unibox's in `.shared` of the same name, so overriding one of its scripts
-is putting yours there. `.shared` is unibox's alone: `init`, `check`,
-`build` and a start rewrite it to this unibox's version when it differs,
+is putting yours there. `.shared` is unibox's alone: `init`, `task check`,
+`profile build` and a start rewrite it to this unibox's version when it differs,
 take out anything else in it, and say what they changed - an edit there is
 lost. `init` writes `_shared` once, with an example of each kind; from
 then on it is yours, as is everything a profile holds and anything else
@@ -213,8 +221,8 @@ Each person keeps the values in `~/.config/unibox/vars.yaml` (laid out by
 
 ```sh
 unibox var set artifactory-user tobola                                    # every profile
-unibox var set gitlab-2n-author 'Jan Tobola <tobola@2n.com>' --profile dev  # one profile, over it
-unibox var ls --profile dev
+unibox var set gitlab-2n-author 'Jan Tobola <tobola@2n.com>' -p dev  # one profile, over it
+unibox var ls -p dev
 ```
 
 A service's `user` and `author` may refer to a var too. Tokens stay in the
@@ -228,7 +236,7 @@ through its vars and tokens (`-i` asks which profile). The copy is yours to
 change. The template's shared install scripts and instruction texts are kept
 under `.templates/<template>/`, apart from your `_shared`, which wins by
 name; `unibox template update <template>` takes them anew and says how your
-profiles differ from the template's, `unibox template diff <profile>` shows
+profiles differ from the template's, `unibox template diff -p <profile>` shows
 how.
 
 ## Scripts
@@ -236,8 +244,8 @@ how.
 `start` runs in the VM at every boot of it. Anything else runs only when
 asked for: a profile names its scripts under `scripts`, and `unibox run` or
 `unibox resume` with `--script <name>` (repeatable) runs them before the
-agent starts, in its directory, while `unibox script <sandbox> <name>...`
-runs them now, in `/work`; `unibox script <sandbox>` lists them. What a
+agent starts, in its directory, while `unibox script run <name>... -s <sandbox>`
+runs them now, in `/work`; `unibox script ls -s <sandbox>` lists them. What a
 script does is yours - `npx -y skills update -g -y`, a database reset.
 It runs as the agent's user with `UNIBOX_SANDBOX`, `UNIBOX_SCRIPT` and,
 before a session, `UNIBOX_TASK` and `UNIBOX_TASK_DIR`; its `#!` line is
@@ -259,19 +267,19 @@ allowed to edit, run and fetch. No agent updates itself; the image fixes its
 version.
 Edit the seeds as you like. Commits carry your git identity and one
 co-author line for the agent of the session that commits - a task resumed
-with another agent credits that one, a commit you make in `unibox shell`
+with another agent credits that one, a commit you make in `unibox sandbox shell`
 none. unibox alone says it: claude's and copilot's own bylines are off in
 their seeds (`includeCoAuthoredBy: false`), and the hook takes out the trailer an agent
 adds of itself - copilot always does - before adding the profile's, or none
-where `co_author: false`. `unibox agent co-author <profile> <agent>
-"Name <email>"` says how an agent is credited (its `co_author`, which init
+where `co_author: false`. `unibox agent co-author <agent> --as
+"Name <email>" -p <profile>` says how an agent is credited (its `co_author`, which init
 writes out with the default); `Name <>` credits it with no address, linked
 to no account, and `--reset` takes it back to the default. `unibox agent ls
-<profile>` shows each agent's sign-in and credit.
+-p <profile>` shows each agent's sign-in and credit.
 
 ## Auth
 
-`unibox agent login <profile> [agent...]` signs agents in and writes their `auth`
+`unibox agent login [agent...] -p <profile>` signs agents in and writes their `auth`
 into the profile: codex through the runtime's ChatGPT login in the browser
 (sbx) or an OpenAI API key (msb, which keeps no OAuth logins),
 claude through `claude setup-token`, copilot through a fine-grained GitHub
@@ -301,7 +309,7 @@ without asking; an OAuth login or a key is asked for in your terminal.
 
 ## Services
 
-`unibox service add <profile> <name>` signs the sandbox in to a git forge or
+`unibox service add <name> -p <profile>` signs the sandbox in to a git forge or
 another host service: it shows where the token is made, asks for it, keeps it
 in the platform's store and writes the `services` entry. It knows `github`,
 `gitlab` and `artifactory` (from the name, or `--kind`), anything else is
@@ -312,7 +320,7 @@ gives one owner on a forge a token of its own; `--author` and `--no-co-author`
 say who commits; `--secret <name>` names a token stored before with `unibox
 secret set <name>` instead of asking for one; `--command` takes a store unibox does not keep; `--gh` signs a `github`
 service in through your gh login, which reaches every owner it can at once. `unibox
-service ls <profile>` shows each and whether its token is stored, `unibox
+service ls -p <profile>` shows each and whether its token is stored, `unibox
 service rm` takes one out.
 
 The profile stays yours: what these commands write is ordinary YAML, and a
@@ -324,28 +332,29 @@ itself. Your own comment over a section stays.
 
 ## Network
 
-`unibox network allow|deny <profile> <host...>` lets a profile's sandboxes
+`unibox network allow|deny <host...> -p <profile>` lets a profile's sandboxes
 reach hosts the runtime's policy refuses, or refuses ones it allows; `rm`
 takes hosts back to the policy and `ls` lists the rules with the hosts the
 services need. The change is written into the profile and applied to its
 running sandboxes at once - sbx changes rules live, so nothing is recreated;
 an msb sandbox is recreated for it, after unibox asks.
 
-`unibox network port <profile> <name> <spec> [--off]` publishes a sandbox
-port on the host's loopback by name; the spec is
+`unibox network port set <name> --map <mapping> [--off] -p <profile>`
+publishes a sandbox port on the host's loopback by name; the mapping is
 `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`, `3000` taking any free
 host port. A port is published when a sandbox starts unless `--off`, and
-running sandboxes get a change at once; `unibox network rm <profile>
-<name>` takes it out. `unibox port <sandbox>` lists a sandbox's ports with
-their URLs, and `unibox port <sandbox> fe:off devtools:on 8080:5173:on`
-switches them while it runs, by name or by a spec the profile does not
-name, without touching the profile: the next start goes back to the
-profile's defaults. A port published with sbx's own command is left
+running sandboxes get a change at once; `unibox network port unset <name>
+-p <profile>` takes it out. `unibox network port ls -s <sandbox>` lists a
+sandbox's ports with their URLs (with `-p`, those the profile declares), and
+`unibox network port publish devtools --map 8080:5173 -s <sandbox>` and
+`unibox network port unpublish fe -s <sandbox>` switch them while it runs,
+by name or by a mapping the profile does not name, without touching the
+profile: the next start goes back to the profile's defaults. A port published with sbx's own command is left
 alone.
 
 Sign copilot in by `token`, not `command`: `command` stores sbx's built-in
 `github` secret, and with it sbx signs every request to github.com in itself -
-over the git `services` of the profile. `unibox check` warns when it is stored.
+over the git `services` of the profile. `unibox task check` warns when it is stored.
 
 ## Runtimes
 
@@ -357,7 +366,7 @@ over the git `services` of the profile. `unibox check` warns when it is stored.
 
 Adding a runtime means implementing one Go interface (create, exec, stop,
 build, and optionally store logins). Profiles do not change.
-`unibox runtimes` shows what is installed and which runtime is the default.
+`unibox runtime ls` shows what is installed and which runtime is the default.
 `unibox config set default_runtime <name>` sets the default for new
 sandboxes, `--runtime <name>` asks for one sandbox, and a sandbox keeps the
 runtime it was made in.

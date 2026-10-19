@@ -11,7 +11,7 @@ unibox init --dir ~/my-envs      # lay it out here and configure it
 unibox init -i                   # ask where (here by default) when nothing is configured
 ```
 
-With nothing configured, `unibox sandboxes` and `unibox profiles` say so and how to
+With nothing configured, `unibox sandbox ls` and `unibox profile ls` say so and how to
 start, and `init` without `--dir` refuses rather than guess. Once configured,
 `init` names the repository it writes into.
 `unibox config set environments <path>` points unibox at an existing one; `unibox config unset environments`
@@ -75,7 +75,7 @@ The texts of `@instructions` are `.md` files, and none may be named
 
 ## What unibox manages
 
-`.shared/` is unibox's alone. `init`, `check`, `build` and a task's start -
+`.shared/` is unibox's alone. `init`, `task check`, `profile build` and a task's start -
 each once per command, before a profile is read - rewrite it to this unibox's
 version where it differs, take out anything else in it, and say what they
 changed.
@@ -117,7 +117,7 @@ See [Images](./images).
 ## Checking it
 
 ```sh
-unibox validate
+unibox profile validate
 ```
 
 checks the layout, every profile and every instruction text, and names what

@@ -113,6 +113,13 @@ about it. Keep command output short: pipe through `head`, `tail` or
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
+- **Commands are a noun, then a verb** (`unibox sandbox stop`); only
+  `run`, `resume`, `init`, `context`, `config`, `prune` and `version`
+  stand alone. The argument is what a command acts on; the profile it
+  works in is `-p`, the sandbox `-s`, which default to `UNIBOX_PROFILE`
+  and `UNIBOX_SANDBOX`, then the context (`unibox context use`), then
+  the only one. `sandbox rm`, `task ls` and `var` never take the default,
+  so a forgotten context cannot remove, hide or misplace anything.
 
 ## Tests
 

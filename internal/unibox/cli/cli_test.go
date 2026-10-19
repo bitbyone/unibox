@@ -74,7 +74,7 @@ func cliFixture(t *testing.T) (unibox.Paths, string) {
 func TestJSONListsAreSingleVersionedObjects(t *testing.T) {
 	t.Parallel()
 	paths, _ := cliFixture(t)
-	for _, args := range [][]string{{"profiles", "--json"}, {"config", "get", "--json"}, {"ls", "--json"}, {"instructions", "node", "--json"}} {
+	for _, args := range [][]string{{"profile", "ls", "--json"}, {"config", "get", "--json"}, {"sandbox", "ls", "--json"}, {"instructions", "-p", "node", "--json"}, {"context", "--json"}} {
 		var out, log bytes.Buffer
 		c := New(paths, strings.NewReader(""), &out, &log)
 		c.SetArgs(args)
@@ -101,7 +101,7 @@ func TestAChangedProfileIsNotAskedAboutAndJSONDoesNotPrompt(t *testing.T) {
 	paths, _ := cliFixture(t)
 	var out, log bytes.Buffer
 	c := New(paths, strings.NewReader("yes\n"), &out, &log)
-	c.SetArgs([]string{"create", "dev", "--profile", "node", "--json"})
+	c.SetArgs([]string{"sandbox", "create", "dev", "-p", "node", "--json"})
 	// The profile asks for host access; what stops this is the runtime
 	// missing here, not a question about the profile.
 	err := c.Execute()
@@ -234,7 +234,7 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	// validate approves the generated repository and names what breaks it.
 	var report bytes.Buffer
 	c = New(paths, strings.NewReader(""), &report, io.Discard)
-	c.SetArgs([]string{"validate"})
+	c.SetArgs([]string{"profile", "validate"})
 	if err := c.Execute(); err != nil {
 		t.Fatalf("%v: %s", err, report.String())
 	}
@@ -247,7 +247,7 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 	}
 	report.Reset()
 	c = New(paths, strings.NewReader(""), &report, io.Discard)
-	c.SetArgs([]string{"validate"})
+	c.SetArgs([]string{"profile", "validate"})
 	if err := c.Execute(); err == nil || !strings.Contains(report.String(), "_shared/@instructions/notes.txt") || strings.Contains(report.String(), "stray.txt") {
 		t.Fatalf("%v: %s", err, report.String())
 	}
@@ -285,7 +285,7 @@ func TestTasksListsEverySandboxAndResumeNeedsOnlyTheTask(t *testing.T) {
 	}
 	var out bytes.Buffer
 	c := New(paths, strings.NewReader(""), &out, io.Discard)
-	c.SetArgs([]string{"tasks"})
+	c.SetArgs([]string{"task", "ls"})
 	if err = c.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +296,7 @@ func TestTasksListsEverySandboxAndResumeNeedsOnlyTheTask(t *testing.T) {
 	}
 	out.Reset()
 	c = New(paths, strings.NewReader(""), &out, io.Discard)
-	c.SetArgs([]string{"tasks", "personal"})
+	c.SetArgs([]string{"task", "ls", "-s", "personal"})
 	if err = c.Execute(); err != nil || strings.Contains(out.String(), "work-task") || !strings.Contains(out.String(), "personal-task") {
 		t.Fatalf("%v:\n%s", err, out.String())
 	}
@@ -309,19 +309,19 @@ func TestTasksListsEverySandboxAndResumeNeedsOnlyTheTask(t *testing.T) {
 	}
 	c = New(paths, strings.NewReader(""), io.Discard, io.Discard)
 	c.SetArgs([]string{"resume", "nothing"})
-	if err = c.Execute(); err == nil || !strings.Contains(err.Error(), "unibox tasks lists them") {
+	if err = c.Execute(); err == nil || !strings.Contains(err.Error(), "unibox task ls lists them") {
 		t.Fatalf("%v", err)
 	}
 	// An alias is listed beside the ID and resumes as the ID does.
 	out.Reset()
 	c = New(paths, strings.NewReader(""), &out, io.Discard)
-	c.SetArgs([]string{"rename-task", "personal-task", "blog"})
+	c.SetArgs([]string{"task", "rename", "personal-task", "blog"})
 	if err = c.Execute(); err != nil || !strings.Contains(out.String(), "personal-task is also blog") {
 		t.Fatalf("%v:\n%s", err, out.String())
 	}
 	out.Reset()
 	c = New(paths, strings.NewReader(""), &out, io.Discard)
-	c.SetArgs([]string{"tasks"})
+	c.SetArgs([]string{"task", "ls"})
 	if err = c.Execute(); err != nil || !strings.Contains(out.String(), "ALIAS") || !strings.Contains(out.String(), "personal-task  blog   personal") || !strings.Contains(out.String(), "work-task      -      work") {
 		t.Fatalf("%v:\n%s", err, out.String())
 	}
@@ -348,5 +348,48 @@ func TestVersionIsTheReleaseAloneAndJSONAddsTheFormats(t *testing.T) {
 	c.SetArgs([]string{"version", "--json"})
 	if err := c.Execute(); err != nil || !strings.Contains(out.String(), fmt.Sprintf(`"profile_format": %d`, unibox.ProfileFormat)) || !strings.Contains(out.String(), `"version": "`+version.String()+`"`) {
 		t.Fatalf("%v %s", err, out.String())
+	}
+}
+
+func TestTheContextSaysTheSandboxAndProfileWhenNotTold(t *testing.T) {
+	t.Parallel()
+	paths, _ := cliFixture(t)
+	add := func(names ...string) {
+		err := paths.State(func(s *unibox.State) error {
+			for _, name := range names {
+				s.Sandboxes[name] = api.Sandbox{Name: name, Runtime: "gone", RuntimeName: "unibox-" + name, Profile: "node", Runs: []api.Run{}, Tasks: []api.Task{}}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("work")
+	// The only sandbox and the only profile need no flag.
+	out, _, err := run(t, paths, "", "context")
+	if err != nil || !strings.Contains(out, "sandbox  work (the only one)") || !strings.Contains(out, "profile  node (the only one)") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "agent", "ls"); err != nil {
+		t.Fatal(err)
+	}
+	add("personal")
+	if _, _, err = run(t, paths, "", "script", "ls"); err == nil || !strings.Contains(err.Error(), "pass -s (one of personal, work)") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err = run(t, paths, "", "context", "use", "-s", "missing"); err == nil {
+		t.Fatal("a missing sandbox became the context")
+	}
+	if out, _, err = run(t, paths, "", "context", "use", "-s", "personal"); err != nil || !strings.Contains(out, "sandbox  personal\n") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// The sandbox is found; the error then comes from its runtime, which
+	// this fixture does not have.
+	if _, _, err = run(t, paths, "", "sandbox", "stop"); err == nil || strings.Contains(err.Error(), "no sandbox chosen") {
+		t.Fatalf("%v", err)
+	}
+	if out, _, err = run(t, paths, "", "context", "clear"); err != nil || strings.Contains(out, "personal") {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }
