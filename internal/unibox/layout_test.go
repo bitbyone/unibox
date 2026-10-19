@@ -45,7 +45,8 @@ func TestAProfileIsLaidOutTheSameWhoeverWroteIt(t *testing.T) {
 			t.Fatalf("%q is not above the examples:\n%s", key, s)
 		}
 	}
-	if strings.Contains(s[tail:], "# services:") || strings.Contains(s[tail:], "# network:") || !strings.Contains(s[tail:], "# env:") {
+	// vars and env are shown where they go, above agents, not in the tail.
+	if strings.Contains(s[tail:], "# services:") || strings.Contains(s[tail:], "# network:") || strings.Contains(s[tail:], "# env:") || !strings.Contains(s[:strings.Index(s, "\nagents:")], "# env:") {
 		t.Fatalf("the examples were not recomputed:\n%s", s)
 	}
 	if !strings.Contains(s, "# Mine.\ninstructions:") || strings.Count(s, footerMarker) != 1 {

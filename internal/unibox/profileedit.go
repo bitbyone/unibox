@@ -322,7 +322,27 @@ func encodeProfile(doc *yaml.Node) ([]byte, error) {
 	if err := enc.Close(); err != nil {
 		return nil, err
 	}
-	return out.Bytes(), nil
+	return spaceSections(out.Bytes()), nil
+}
+
+// spaceSections puts an empty line between a top-level section and the
+// comment or key of the next, so the sections do not run into each other.
+// YAML keeps no empty lines, so they are laid in the text each time it is
+// written, the same each time.
+func spaceSections(text []byte) []byte {
+	lines := strings.Split(string(text), "\n")
+	out := make([]string, 0, len(lines)+16)
+	for i, line := range lines {
+		top := line != "" && line[0] != ' ' && line[0] != '-'
+		if top && i > 0 {
+			prev := lines[i-1]
+			if prev != "" && !strings.HasPrefix(prev, "#") {
+				out = append(out, "")
+			}
+		}
+		out = append(out, line)
+	}
+	return []byte(strings.Join(out, "\n"))
 }
 
 // arrangeText lays a profile's text out as ArrangeProfile does.
