@@ -77,9 +77,10 @@ holds without writing anything: each profile's agents, vars, services, tokens
 and variables, its shared files, and how it stands to the repository; with
 `--json` for a UI. A git template is cloned into a temporary directory, which
 goes when the command ends. `ls` lists the templates the repository keeps, where each comes from and the
-profiles copied from it. `update` fetches a template again, lists what
-changes in its shared files, writes them after asking, and says which files
-of each of its profiles now differ from the template's. `diff` shows how a
+profiles copied from it. `update` fetches a template again and merges it into its profiles three ways,
+from each as it was copied, with its shared files - all of it after asking, or
+nothing when you and the template changed the same place, which it leaves to
+resolve under `.templates/<template>/conflicts/`. `diff` shows how a
 profile differs from the template profile it was copied from.
 
 ### `unibox validate`

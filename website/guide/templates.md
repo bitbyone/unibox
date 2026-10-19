@@ -55,8 +55,9 @@ unibox init dev --from ~/src/agent-envs --use team
 | `--template <name>` | the name the template is kept under (default: its repository's) |
 
 The copy is an ordinary profile of yours, as the template has it, with one
-line added: `template: <template>/<profile>`. Change anything; nothing is
-written over it later.
+line added: `template: <template>/<profile>`. Change anything. unibox also
+keeps the copy as it was written, under `.templates/<template>/bases/`, the
+base an update merges from.
 
 ## What the template's profiles share
 
@@ -83,12 +84,31 @@ unibox template update agent-envs  # take its shared files anew
 unibox template diff dev           # how your profile differs from the template's
 ```
 
-`update` fetches the template again, lists what changes in its shared files
-and asks before writing them; the images of its profiles then build again, as
-their scripts changed. It does not change your profiles: it says, for each
-copied from the template, which files now differ from the template's profile,
-and `diff` shows how - the template's side first - so you take what you want
-by hand.
+`update` fetches the template again and merges it into every profile copied
+from it, three ways as git does, from the profile as it was copied:
+
+- a file only the template changed takes the template's version;
+- a file only you changed stays yours;
+- a file both changed is merged where the changes do not meet - your line
+  added at the end of `sandbox.dockerfile` and the template's new base image
+  both stay.
+
+It lists what it will write - the shared files and each profile's files - and
+asks; the images of the profiles that changed then build again.
+
+**A conflict writes nothing.** Where you and the template changed the same
+place, no profile and none of the template's shared files change, so every
+profile keeps working as it was. Beside the template, under
+`.templates/<template>/conflicts/<profile>/`, it leaves for each such file
+the template's version as `<file>.template` and a merge with markers as
+`<file>.merge`. Make your profile say what you want - from the `.merge`, say -
+and run `update` again: it merges cleanly then, writes everything, and clears
+what it left. A profile copied before unibox kept a base cannot tell whose a
+difference is, so each file that differs from the template's is a conflict
+once.
+
+`diff` shows how a profile differs from the template's, the template's side
+first.
 
 ## Writing a template
 
@@ -100,3 +120,8 @@ by hand.
   no prefix is needed against the user's own.
 - Describe each var for the person filling it in: the walkthrough shows the
   description as the question.
+- Leave a place for each person's own tools outside the Dockerfile, so an
+  update rarely conflicts: end it with `RUN @install custom`, which runs the
+  user's `_shared/@install/custom.sh`, theirs to fill, and ship an empty
+  `custom.sh` in the template's `_shared/@install` for those who have none.
+  Their values belong in vars and `env`, what runs at each boot in `start`.

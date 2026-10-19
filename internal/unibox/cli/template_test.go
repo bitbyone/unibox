@@ -50,7 +50,7 @@ func TestInitFromCopiesATemplateProfileAndSaysWhatItNeeds(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "_shared", "@install", "team", "thing.sh"), []byte("echo newer\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if out, _, err = run(t, paths, "", "template", "update", "acme", "--yes"); err != nil || !strings.Contains(out, "~ @install/team/thing.sh") || !strings.Contains(out, "profile dev is as the template's team") {
+	if out, _, err = run(t, paths, "", "template", "update", "acme", "--yes"); err != nil || !strings.Contains(out, "~ .templates/acme/@install/team/thing.sh") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if data, _ := os.ReadFile(filepath.Join(root, ".templates", "acme", "@install", "team", "thing.sh")); string(data) != "echo newer\n" {

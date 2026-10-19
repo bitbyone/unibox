@@ -912,9 +912,19 @@ other profile, so it goes to `.templates/<template>/` with `source.yaml`
 `template update`. A profile marked `template: <template>/<profile>` finds
 `@install` scripts and `@instructions` texts in the user's `_shared`, then
 its template's, then `.shared`; no other profile sees a template's files, so
-templates never meet and need no prefixes. `update` changes no profile: it
-tells which files differ from the template's profile now, and `template
-diff` shows how. The copy walks the user through the profile's vars and the
+templates never meet and need no prefixes.
+
+`update` merges three ways, as git does: the base is the copy as written,
+kept under `.templates/<template>/bases/<profile>`, ours the profile now,
+theirs the template's profile now (with the template line, as a copy of it
+would be written). A file one side changed takes that side; one both changed
+goes through `git merge-file`. A conflict anywhere writes nothing - no
+profile, and not the shared files either, as a new Dockerfile and new
+scripts belong together and the old ones must keep building - and leaves
+`<file>.template` and `<file>.merge` under `.templates/<template>/conflicts/`,
+outside the profile, which would refuse unknown files. Once the user's
+profile says what they want, the next update merges cleanly. A written update
+is checked by loading every profile, and put back when one fails. The copy walks the user through the profile's vars and the
 secrets it names (`init -i`), and without a terminal lists them.
 
 ### Values of each person's own

@@ -323,12 +323,20 @@ With --json it is the versioned contract a UI reads before it copies.`, RunE: fu
 	}}
 	inspect.Flags().StringVar(&name, "template", "", "The name the template would be kept under (default: its repository's)")
 	c.AddCommand(inspect)
-	c.AddCommand(&cobra.Command{Use: "update template", Args: cobra.ExactArgs(1), Short: "Take the template's shared files anew, and tell how its profiles now differ from it", RunE: func(cmd *cobra.Command, args []string) error {
+	c.AddCommand(&cobra.Command{Use: "update template", Args: cobra.ExactArgs(1), Short: "Take a template anew: its shared files, and its changes merged into the profiles copied from it", Long: `Fetch the template again and merge it into the profiles copied from it, three
+ways as git does: from the profile as it was copied, a file only the template
+changed takes the template's, one only you changed stays yours, and one both
+changed is merged where the changes do not meet. Its shared files are taken
+anew too. All of it is written, or none: where both changed the same place,
+nothing changes, the template's version and a merge with markers are left
+under .templates/<template>/conflicts/<profile>/, and once your profile says
+what you want, update again.`, RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := o.manager.Environments()
 		if err != nil {
 			return err
 		}
-		src, err := unibox.ReadTemplateSource(root, args[0])
+		name := args[0]
+		src, err := unibox.ReadTemplateSource(root, name)
 		if err != nil {
 			return err
 		}
@@ -337,42 +345,60 @@ With --json it is the versioned contract a UI reads before it copies.`, RunE: fu
 			return err
 		}
 		defer t.Close()
-		changes, err := t.SharedChanges(root, args[0])
+		plan, err := t.PlanUpdate(cmd.Context(), root, name)
 		if err != nil {
 			return err
 		}
-		if changes.Empty() {
-			fmt.Fprintf(o.output, "template %s's shared files are as kept\n", args[0])
-		} else {
-			for _, f := range []struct {
-				sign string
-				list []string
-			}{{"+", changes.Added}, {"~", changes.Changed}, {"-", changes.Removed}} {
-				for _, rel := range f.list {
-					fmt.Fprintf(o.output, "  %s %s\n", f.sign, rel)
+		changes := 0
+		for _, f := range []struct {
+			sign string
+			list []string
+		}{{"+", plan.Shared.Added}, {"~", plan.Shared.Changed}, {"-", plan.Shared.Removed}} {
+			for _, rel := range f.list {
+				fmt.Fprintf(o.output, "  %s .templates/%s/%s\n", f.sign, name, rel)
+				changes++
+			}
+		}
+		for _, m := range plan.Profiles {
+			for _, rel := range sorted(m.Write) {
+				what := "merged"
+				if m.Write[rel] == nil {
+					what = "removed, as the template did"
+				}
+				fmt.Fprintf(o.output, "  ~ profile %s: %s %s\n", m.Profile.Name, rel, what)
+				changes++
+			}
+		}
+		if plan.Conflicted() {
+			written, err := plan.WriteConflicts(root)
+			if err != nil {
+				return err
+			}
+			for _, m := range plan.Profiles {
+				for _, rel := range sorted(m.Conflicts) {
+					why := "you and the template changed the same place"
+					if m.NoBase {
+						why = "it differs from the template's, and the profile was copied before unibox kept what it was copied as"
+					}
+					fmt.Fprintf(o.output, "  ! profile %s: %s: %s\n", m.Profile.Name, rel, why)
 				}
 			}
-			if err := o.confirm("Write these into .templates/" + args[0] + "? Images of its profiles build again."); err != nil {
-				return err
+			for _, path := range written {
+				fmt.Fprintf(o.output, "    %s\n", path)
 			}
-			if err = t.WriteShared(root, args[0]); err != nil {
-				return err
-			}
-			fmt.Fprintf(o.output, "updated template %s to %s\n", args[0], shortCommit(t.Commit))
+			return unibox.Fail(4, "template_conflict", "nothing was written: resolve each file into your profile - the template's version is the .template beside it, a merge with markers the .merge - then run unibox template update %s again", name)
 		}
-		for _, p := range unibox.TemplateProfiles(root, args[0]) {
-			differ, err := t.ProfileDiff(root, p)
-			if err != nil {
-				fmt.Fprintf(o.output, "profile %s: %v\n", p.Name, err)
-				continue
-			}
-			if len(differ) == 0 {
-				fmt.Fprintf(o.output, "profile %s is as the template's %s\n", p.Name, p.TemplateProfile())
-				continue
-			}
-			fmt.Fprintf(o.output, "profile %s differs from the template's %s in %s; unibox template diff %s shows how\n", p.Name, p.TemplateProfile(), strings.Join(differ, ", "), p.Name)
+		if changes == 0 {
+			fmt.Fprintf(o.output, "template %s and the profiles copied from it are as the template is\n", name)
+			return nil
 		}
-		return nil
+		if err := o.confirm("Write these? Images of its profiles build again where they changed."); err != nil {
+			return err
+		}
+		if err = plan.Apply(root, t); err != nil {
+			return err
+		}
+		return o.success(fmt.Sprintf("updated template %s to %s", name, shortCommit(t.Commit)))
 	}})
 	c.AddCommand(&cobra.Command{Use: "diff profile", Args: cobra.ExactArgs(1), Short: "Show how a profile differs from the template profile it was copied from", RunE: func(cmd *cobra.Command, args []string) error {
 		p, err := o.manager.Profile(args[0])

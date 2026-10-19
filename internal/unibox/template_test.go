@@ -134,3 +134,85 @@ func TestATemplateIsClonedFromGit(t *testing.T) {
 		t.Fatal(TemplateNameOf("git@gitlab.example.com:team/Agent_Templates.git"))
 	}
 }
+
+func TestAnUpdateMergesTheTemplatesChangesWithTheUsersAllOrNothing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	if _, err := Init(root, "", nil, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	src := templateFixture(t)
+	docker := filepath.Join(src, "sandboxes", "team", "sandbox.dockerfile")
+	write(t, docker, "FROM example/shell\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one\nRUN echo two\n")
+	tpl, _ := FetchTemplate(ctx, src)
+	if _, err := tpl.CopyProfile(root, "dev", "team", "acme"); err != nil {
+		t.Fatal(err)
+	}
+	mine := filepath.Join(root, "sandboxes", "dev", "sandbox.dockerfile")
+	// The user adds a line at the end; the template changes its base image
+	// and its shared script: both merge.
+	write(t, mine, "FROM example/shell\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one\nRUN echo two\nRUN echo mine\n")
+	write(t, docker, "FROM example/shell:2\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one\nRUN echo two\n")
+	write(t, filepath.Join(src, "_shared", "@install", "team", "gradle.sh"), "echo gradle 2\n")
+	plan, err := tpl.PlanUpdate(ctx, root, "acme")
+	if err != nil || plan.Conflicted() {
+		t.Fatalf("%+v %v", plan, err)
+	}
+	if err = plan.Apply(root, tpl); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(mine); string(data) != "FROM example/shell:2\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one\nRUN echo two\nRUN echo mine\n" {
+		t.Fatalf("%s", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, ".templates", "acme", "@install", "team", "gradle.sh")); string(data) != "echo gradle 2\n" {
+		t.Fatalf("%s", data)
+	}
+	// Both change the same line: nothing is written - neither the profile
+	// nor the shared files - and what resolves it is left beside the
+	// template.
+	write(t, mine, "FROM example/shell:2\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo ONE mine\nRUN echo two\nRUN echo mine\n")
+	write(t, docker, "FROM example/shell:2\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one template\nRUN echo two\n")
+	write(t, filepath.Join(src, "_shared", "@install", "team", "gradle.sh"), "echo gradle 3\n")
+	plan, err = tpl.PlanUpdate(ctx, root, "acme")
+	if err != nil || !plan.Conflicted() {
+		t.Fatalf("%+v %v", plan, err)
+	}
+	if err = plan.Apply(root, tpl); err == nil {
+		t.Fatal("a conflicted update was written")
+	}
+	written, err := plan.WriteConflicts(root)
+	if err != nil || len(written) != 2 {
+		t.Fatalf("%v %v", written, err)
+	}
+	merge, _ := os.ReadFile(filepath.Join(root, ".templates", "acme", "conflicts", "dev", "sandbox.dockerfile.merge"))
+	if !strings.Contains(string(merge), "<<<<<<< yours") || !strings.Contains(string(merge), "RUN echo mine") {
+		t.Fatalf("%s", merge)
+	}
+	if _, err := LoadProfile(root, "dev"); err != nil {
+		t.Fatalf("the profile stopped loading: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, ".templates", "acme", "@install", "team", "gradle.sh")); string(data) != "echo gradle 2\n" {
+		t.Fatal("the shared files went ahead of the profile")
+	}
+	// Resolved, the next update goes through and clears what was left.
+	write(t, mine, "FROM example/shell:2\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one template\nRUN echo two\nRUN echo mine\n")
+	plan, err = tpl.PlanUpdate(ctx, root, "acme")
+	if err != nil || plan.Conflicted() {
+		t.Fatalf("%+v %v", plan, err)
+	}
+	if err = plan.Apply(root, tpl); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".templates", "acme", "conflicts", "dev")); err == nil {
+		t.Fatal("the conflicts stayed")
+	}
+	// A profile without a base cannot tell whose a difference is.
+	if err := os.RemoveAll(filepath.Join(root, ".templates", "acme", "bases", "dev")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, docker, "FROM example/shell:3\nCOPY --from=unibox / /\nRUN @install team/gradle\nRUN echo one template\nRUN echo two\n")
+	if plan, _ = tpl.PlanUpdate(ctx, root, "acme"); !plan.Conflicted() || !plan.Profiles[0].NoBase {
+		t.Fatalf("%+v", plan)
+	}
+}

@@ -3,6 +3,7 @@ package unibox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -177,16 +178,11 @@ func (t Template) SharedChanges(root, name string) (TemplateChanges, error) {
 	}
 	kept := map[string][]byte{}
 	dir := templateDir(root, name)
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
+	for _, sub := range []string{"@install", "@instructions"} {
+		for rel, data := range readTree(filepath.Join(dir, sub)) {
+			kept[sub+"/"+rel] = data
 		}
-		rel, _ := filepath.Rel(dir, path)
-		if rel = filepath.ToSlash(rel); rel != "source.yaml" {
-			kept[rel], _ = os.ReadFile(path)
-		}
-		return nil
-	})
+	}
 	for _, rel := range sortedKeys(files) {
 		old, ok := kept[rel]
 		switch {
@@ -219,8 +215,12 @@ func (t Template) WriteShared(root, name string) error {
 	if err != nil {
 		return err
 	}
-	if err = os.RemoveAll(dir); err != nil {
-		return err
+	// The shared files are replaced whole; the bases of the profiles copied
+	// from the template, and any conflict left to resolve, stay.
+	for _, old := range []string{"@install", "@instructions", "source.yaml"} {
+		if err = os.RemoveAll(filepath.Join(dir, old)); err != nil {
+			return err
+		}
 	}
 	for rel, f := range files {
 		mode := os.FileMode(f.Mode)
@@ -307,6 +307,11 @@ func (t Template) CopyProfile(root, name, use, template string) (InitReport, err
 	if _, err = LoadProfile(root, name); err != nil {
 		return undo(fmt.Errorf("the copy of template profile %s does not load, so it was not kept: %w", use, err))
 	}
+	// The copy as written is the base an update merges the user's changes
+	// and the template's from.
+	if err = writeTree(baseDir(root, template, name), readTree(to), nil); err != nil {
+		return undo(err)
+	}
 	return report, nil
 }
 
@@ -332,22 +337,7 @@ func (t Template) ProfileDiff(root string, p Profile) ([]string, error) {
 	if _, err := os.Stat(from); err != nil {
 		return nil, fmt.Errorf("template %s has no profile %s any more", t.Source, p.TemplateProfile())
 	}
-	read := func(dir string) map[string][]byte {
-		out := map[string][]byte{}
-		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				if d != nil && d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			rel, _ := filepath.Rel(dir, path)
-			out[filepath.ToSlash(rel)], _ = os.ReadFile(path)
-			return nil
-		})
-		return out
-	}
-	theirs, ours := read(from), read(p.Dir)
+	theirs, ours := readTree(from), readTree(p.Dir)
 	normal := func(b []byte) []byte {
 		var doc yaml.Node
 		if yaml.Unmarshal(b, &doc) != nil || len(doc.Content) != 1 {
@@ -451,4 +441,287 @@ func (t Template) Inspect(root, name string) (api.Template, error) {
 		}
 	}
 	return out, nil
+}
+
+// readTree reads a directory's files by their slash path under it, without
+// .git; nil for a directory that is not there.
+func readTree(dir string) map[string][]byte {
+	out := map[string][]byte{}
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		out[filepath.ToSlash(rel)], _ = os.ReadFile(path)
+		return nil
+	})
+	return out
+}
+
+func writeTree(dir string, files map[string][]byte, modes map[string]os.FileMode) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	for rel, data := range files {
+		mode := modes[rel]
+		if mode == 0 {
+			mode = 0o644
+		}
+		if err := AtomicWrite(filepath.Join(dir, filepath.FromSlash(rel)), data, mode); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func baseDir(root, template, profile string) string {
+	return filepath.Join(templateDir(root, template), "bases", profile)
+}
+
+func conflictDir(root, template, profile string) string {
+	return filepath.Join(templateDir(root, template), "conflicts", profile)
+}
+
+// theirs is the template's profile as a copy of it would be written: its
+// files, with the template line in sandbox.yaml.
+func (t Template) theirs(p Profile) (map[string][]byte, error) {
+	files := readTree(filepath.Join(t.Dir, "sandboxes", p.TemplateProfile()))
+	if len(files) == 0 {
+		return nil, fmt.Errorf("template %s has no profile %s any more", t.Source, p.TemplateProfile())
+	}
+	if y, ok := files["sandbox.yaml"]; ok {
+		marked, err := markTemplate(y, p.Name, p.Template)
+		if err != nil {
+			return nil, err
+		}
+		files["sandbox.yaml"] = marked
+	}
+	return files, nil
+}
+
+// ProfileMerge is what an update does to one profile copied from the
+// template: the files it writes or removes, and those both the user and the
+// template changed in the same place.
+type ProfileMerge struct {
+	Profile Profile
+	// Write are the profile's files with their merged content; nil
+	// removes one.
+	Write map[string][]byte
+	// Conflicts are the files both changed alike, with the template's
+	// version and the merge with markers, when one could be made.
+	Conflicts map[string][2][]byte
+	// NoBase says the profile was copied before unibox kept a base, so a
+	// file both sides have otherwise is a conflict.
+	NoBase bool
+	theirs map[string][]byte
+}
+
+// TemplateUpdate is what unibox template update does: the template's shared
+// files, and every profile copied from it, all at once or not at all.
+type TemplateUpdate struct {
+	Template string
+	Shared   TemplateChanges
+	Profiles []ProfileMerge
+}
+
+func (u TemplateUpdate) Conflicted() bool {
+	for _, m := range u.Profiles {
+		if len(m.Conflicts) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// PlanUpdate merges each profile copied from the template three ways: the
+// base it was copied as, the user's, and the template's now. A file one side
+// changed takes that side; one both changed is merged by git merge-file, and
+// a conflict there is reported, never written.
+func (t Template) PlanUpdate(ctx context.Context, root, template string) (TemplateUpdate, error) {
+	u := TemplateUpdate{Template: template}
+	var err error
+	if u.Shared, err = t.SharedChanges(root, template); err != nil {
+		return u, err
+	}
+	for _, p := range TemplateProfiles(root, template) {
+		theirs, err := t.theirs(p)
+		if err != nil {
+			return u, fmt.Errorf("profile %s: %w", p.Name, err)
+		}
+		ours := readTree(p.Dir)
+		base := readTree(baseDir(root, template, p.Name))
+		m := ProfileMerge{Profile: p, Write: map[string][]byte{}, Conflicts: map[string][2][]byte{}, NoBase: len(base) == 0, theirs: theirs}
+		names := map[string]bool{}
+		for _, tree := range []map[string][]byte{base, ours, theirs} {
+			for rel := range tree {
+				names[rel] = true
+			}
+		}
+		for _, rel := range sortedKeys(names) {
+			b, inBase := base[rel]
+			o, inOurs := ours[rel]
+			th, inTheirs := theirs[rel]
+			same := func(x []byte, inX bool, y []byte, inY bool) bool { return inX == inY && bytes.Equal(x, y) }
+			switch {
+			case same(o, inOurs, th, inTheirs):
+				// Alike already.
+			case !m.NoBase && same(th, inTheirs, b, inBase):
+				// Only the user changed it.
+			case !m.NoBase && same(o, inOurs, b, inBase):
+				if inTheirs {
+					m.Write[rel] = th
+				} else {
+					m.Write[rel] = nil
+				}
+			case m.NoBase || !inBase || !inOurs || !inTheirs:
+				m.Conflicts[rel] = [2][]byte{th, nil}
+			default:
+				merged, clean, err := mergeFile(ctx, o, b, th)
+				if err != nil {
+					return u, err
+				}
+				if clean {
+					m.Write[rel] = merged
+				} else {
+					m.Conflicts[rel] = [2][]byte{th, merged}
+				}
+			}
+		}
+		u.Profiles = append(u.Profiles, m)
+	}
+	return u, nil
+}
+
+// mergeFile merges the user's file and the template's from their base with
+// git merge-file; clean says no part conflicted.
+func mergeFile(ctx context.Context, ours, base, theirs []byte) ([]byte, bool, error) {
+	dir, err := os.MkdirTemp("", "unibox-merge-")
+	if err != nil {
+		return nil, false, err
+	}
+	defer os.RemoveAll(dir)
+	paths := []string{}
+	for i, data := range [][]byte{ours, base, theirs} {
+		path := filepath.Join(dir, fmt.Sprint(i))
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			return nil, false, err
+		}
+		paths = append(paths, path)
+	}
+	cmd := exec.CommandContext(ctx, "git", "merge-file", "-p", "-L", "yours", "-L", "as copied", "-L", "template", paths[0], paths[1], paths[2])
+	out, err := cmd.Output()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return out, true, nil
+	case errors.As(err, &exit) && exit.ExitCode() > 0 && exit.ExitCode() < 128:
+		return out, false, nil
+	}
+	return nil, false, fmt.Errorf("git merge-file failed: %w", err)
+}
+
+// WriteConflicts leaves what the user needs to resolve each conflict beside
+// the template, never in the profile, which keeps working as it was: the
+// template's version as <file>.template and a merge with markers as
+// <file>.merge. The ones of an earlier update go first.
+func (u TemplateUpdate) WriteConflicts(root string) ([]string, error) {
+	written := []string{}
+	for _, m := range u.Profiles {
+		dir := conflictDir(root, u.Template, m.Profile.Name)
+		if err := os.RemoveAll(dir); err != nil {
+			return nil, err
+		}
+		for _, rel := range sortedKeys(m.Conflicts) {
+			c := m.Conflicts[rel]
+			if c[0] != nil {
+				path := filepath.Join(dir, filepath.FromSlash(rel)+".template")
+				if err := AtomicWrite(path, c[0], 0o644); err != nil {
+					return nil, err
+				}
+				written = append(written, path)
+			}
+			if c[1] != nil {
+				path := filepath.Join(dir, filepath.FromSlash(rel)+".merge")
+				if err := AtomicWrite(path, c[1], 0o644); err != nil {
+					return nil, err
+				}
+				written = append(written, path)
+			}
+		}
+	}
+	return written, nil
+}
+
+// Apply writes the update: the merged files of every profile, its new base,
+// and the template's shared files. Every profile must load afterwards, or
+// all of it is put back as it was.
+func (u TemplateUpdate) Apply(root string, t Template) error {
+	if u.Conflicted() {
+		return fmt.Errorf("the update of template %s has conflicts to resolve first", u.Template)
+	}
+	type saved struct {
+		path string
+		data []byte
+		mode os.FileMode
+		was  bool
+	}
+	undo := []saved{}
+	restore := func() {
+		for i := len(undo) - 1; i >= 0; i-- {
+			s := undo[i]
+			if s.was {
+				_ = AtomicWrite(s.path, s.data, s.mode)
+			} else {
+				_ = os.Remove(s.path)
+			}
+		}
+	}
+	for _, m := range u.Profiles {
+		for _, rel := range sortedKeys(m.Write) {
+			path := filepath.Join(m.Profile.Dir, filepath.FromSlash(rel))
+			s := saved{path: path, mode: 0o644}
+			if info, err := os.Stat(path); err == nil {
+				s.data, _ = os.ReadFile(path)
+				s.mode, s.was = info.Mode().Perm(), true
+			}
+			undo = append(undo, s)
+			var err error
+			if m.Write[rel] == nil {
+				err = os.Remove(path)
+			} else {
+				mode := s.mode
+				if th, ok := m.theirs[rel]; ok && !s.was && th != nil {
+					mode = 0o644
+				}
+				err = AtomicWrite(path, m.Write[rel], mode)
+			}
+			if err != nil {
+				restore()
+				return err
+			}
+		}
+	}
+	for _, m := range u.Profiles {
+		if _, err := LoadProfile(root, m.Profile.Name); err != nil {
+			restore()
+			return fmt.Errorf("profile %s would not load after the update, so nothing was written: %w", m.Profile.Name, err)
+		}
+	}
+	if err := t.WriteShared(root, u.Template); err != nil {
+		restore()
+		return err
+	}
+	for _, m := range u.Profiles {
+		if err := writeTree(baseDir(root, u.Template, m.Profile.Name), m.theirs, nil); err != nil {
+			return err
+		}
+		_ = os.RemoveAll(conflictDir(root, u.Template, m.Profile.Name))
+	}
+	return nil
 }

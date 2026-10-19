@@ -748,8 +748,13 @@ func LoadProfile(root, name string) (Profile, error) {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			return p, fmt.Errorf("profile %s was copied from template %s, which .templates no longer has; run unibox template update %s, or take template: out of the profile", name, t, t)
 		}
-		if err = snapshot(dir, ".templates/"+t+"/"); err != nil {
-			return p, err
+		for _, sub := range []string{"@install", "@instructions"} {
+			if _, err := os.Stat(filepath.Join(dir, sub)); err != nil {
+				continue
+			}
+			if err = snapshot(filepath.Join(dir, sub), ".templates/"+t+"/"+sub+"/"); err != nil {
+				return p, err
+			}
 		}
 	}
 	if p.Start != "" {
