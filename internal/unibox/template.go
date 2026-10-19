@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
 // A template is an environments repository others copy profiles from. A
@@ -399,4 +401,54 @@ func KeptTemplates(root string) []string {
 		}
 	}
 	return out
+}
+
+// Inspect tells what the template holds and how it stands to the
+// repository at root - empty for none - without writing anything.
+func (t Template) Inspect(root, name string) (api.Template, error) {
+	out := api.Template{APIVersion: api.Version, Name: name, Source: t.Source, Commit: t.Commit, Shared: []string{}, Profiles: []api.TemplateProfile{}}
+	files, err := t.sharedFiles()
+	if err != nil {
+		return out, err
+	}
+	out.Shared = sortedKeys(files)
+	profiles, err := t.Profiles()
+	if err != nil {
+		return out, err
+	}
+	for _, n := range profiles {
+		row := api.TemplateProfile{Name: n, Agents: []string{}, Vars: map[string]string{}, Services: []api.TemplateService{}, Secrets: []string{}, Env: []string{}, Instructions: []string{}}
+		data, _ := os.ReadFile(filepath.Join(t.Dir, "sandboxes", n, "sandbox.yaml"))
+		row.Format = profileVersion(data)
+		if root != "" {
+			_, err := os.Stat(filepath.Join(root, "sandboxes", n))
+			row.Exists = err == nil
+		}
+		p, err := LoadProfile(t.Dir, n)
+		if err != nil {
+			row.Error = err.Error()
+			out.Profiles = append(out.Profiles, row)
+			continue
+		}
+		row.Image, row.Agents, row.Instructions = p.Image, p.Agents, p.Instructions
+		for k, v := range p.Vars {
+			row.Vars[k] = v
+		}
+		for _, s := range sortedKeys(p.Services) {
+			row.Services = append(row.Services, api.TemplateService{Name: s, Hosts: p.Services[s].ProxyHosts(), Git: p.Services[s].Git})
+		}
+		row.Secrets = p.SecretRefs()
+		row.Env = append(slices.Clone(p.Env), sortedKeys(p.EnvValues)...)
+		out.Profiles = append(out.Profiles, row)
+	}
+	if root != "" {
+		if kept, err := ReadTemplateSource(root, name); err == nil {
+			k := &api.TemplateKept{Source: kept.Source, Commit: kept.Commit, Profiles: []string{}}
+			for _, p := range TemplateProfiles(root, name) {
+				k.Profiles = append(k.Profiles, p.Name)
+			}
+			out.Kept = k
+		}
+	}
+	return out, nil
 }

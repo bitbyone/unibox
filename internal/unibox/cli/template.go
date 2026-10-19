@@ -250,6 +250,79 @@ your _shared, which wins, and unibox's .shared.`}
 		}
 		return w.Flush()
 	}})
+	var name string
+	inspect := &cobra.Command{Use: "inspect source", Args: cobra.ExactArgs(1), Short: "Tell what a template holds - its profiles, what each needs, its shared files - writing nothing", Long: `Fetch a template - a git URL or a directory - and tell what it holds, writing
+nothing: each profile's agents, its vars with what each is for, its services
+and the tokens it needs, the variables its sessions get; the shared install
+scripts and instruction texts; and how it stands to your repository - a
+template of that name kept already, a profile of that name there already.
+With --json it is the versioned contract a UI reads before it copies.`, RunE: func(cmd *cobra.Command, args []string) error {
+		t, err := unibox.FetchTemplate(cmd.Context(), args[0])
+		if err != nil {
+			return err
+		}
+		defer t.Close()
+		if name == "" {
+			name = unibox.TemplateNameOf(t.Source)
+		}
+		root := o.manager.Config.Environments
+		if _, err := os.Stat(root); root == "" || err != nil {
+			root = ""
+		}
+		info, err := t.Inspect(root, name)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(info)
+		}
+		fmt.Fprintf(o.output, "template %s from %s", info.Name, info.Source)
+		if info.Commit != "" {
+			fmt.Fprintf(o.output, " at %s", shortCommit(info.Commit))
+		}
+		fmt.Fprintln(o.output)
+		if info.Kept != nil {
+			if info.Kept.Source == info.Source {
+				fmt.Fprintf(o.output, "  kept already, at %s, by profiles %s\n", shortCommit(info.Kept.Commit), strings.Join(info.Kept.Profiles, ", "))
+			} else {
+				fmt.Fprintf(o.output, "  the name is taken by a template from %s; copy with --template <another>\n", info.Kept.Source)
+			}
+		}
+		if len(info.Shared) > 0 {
+			fmt.Fprintf(o.output, "  shared: %s\n", strings.Join(info.Shared, ", "))
+		}
+		for _, p := range info.Profiles {
+			fmt.Fprintf(o.output, "\nprofile %s", p.Name)
+			if p.Exists {
+				fmt.Fprint(o.output, " (you have a profile of this name; copy it under another)")
+			}
+			fmt.Fprintln(o.output)
+			if p.Error != "" {
+				fmt.Fprintf(o.output, "  does not load here: %s\n", p.Error)
+				continue
+			}
+			fmt.Fprintf(o.output, "  agents: %s\n", strings.Join(p.Agents, ", "))
+			for _, v := range sorted(p.Vars) {
+				fmt.Fprintf(o.output, "  var %s: %s\n", v, p.Vars[v])
+			}
+			for _, s := range p.Services {
+				kind := "a tool's token"
+				if s.Git {
+					kind = "git"
+				}
+				fmt.Fprintf(o.output, "  service %s: %s, %s\n", s.Name, strings.Join(s.Hosts, ", "), kind)
+			}
+			if len(p.Secrets) > 0 {
+				fmt.Fprintf(o.output, "  tokens: %s\n", strings.Join(p.Secrets, ", "))
+			}
+			if len(p.Env) > 0 {
+				fmt.Fprintf(o.output, "  env: %s\n", strings.Join(p.Env, ", "))
+			}
+		}
+		return nil
+	}}
+	inspect.Flags().StringVar(&name, "template", "", "The name the template would be kept under (default: its repository's)")
+	c.AddCommand(inspect)
 	c.AddCommand(&cobra.Command{Use: "update template", Args: cobra.ExactArgs(1), Short: "Take the template's shared files anew, and tell how its profiles now differ from it", RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := o.manager.Environments()
 		if err != nil {

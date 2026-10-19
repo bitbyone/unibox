@@ -13,6 +13,24 @@ A profile meant for a team holds nothing personal - each person's values are
 [vars](./profiles#vars-env-and-build-args), tokens are `secret:<name>` - so it
 works either way.
 
+## Looking before copying
+
+```sh
+unibox template inspect git@gitlab.example.com:team/agent-envs.git
+```
+
+fetches the template and tells what it holds, writing nothing: each profile's
+agents, its vars with what each is for, its services and the tokens it needs,
+the variables its sessions get, the shared install scripts and instruction
+texts, and how it stands to your repository - a template of that name kept
+already, a profile of that name you have. With `--json` it is part of the
+versioned contract, for a UI to show before it copies.
+
+A git template is cloned shallowly into a temporary directory, which goes
+when the command ends; a directory is read where it is. Only what a copy
+takes stays: the profile under `sandboxes/`, and the shared files with their
+source under `.templates/<template>/`.
+
 ## Copying a profile
 
 ```sh

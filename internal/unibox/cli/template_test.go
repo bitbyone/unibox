@@ -24,6 +24,14 @@ func TestInitFromCopiesATemplateProfileAndSaysWhatItNeeds(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Inspecting first writes nothing.
+	out, _, err := run(t, paths, "", "template", "inspect", src, "--template", "acme", "--json")
+	if err != nil || !strings.Contains(out, `"artifactory-user": "your Artifactory user name"`) || !strings.Contains(out, `"api_version": 1`) {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".templates")); err == nil {
+		t.Fatal("inspect wrote into the repository")
+	}
 	out, log, err := run(t, paths, "", "init", "dev", "--from", src, "--use", "team", "--template", "acme")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)

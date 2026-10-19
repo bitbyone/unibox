@@ -129,3 +129,51 @@ type Error struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 }
+
+// Template is what unibox template inspect tells of a template before
+// anything is copied from it, and how it stands to the repository.
+type Template struct {
+	APIVersion int    `json:"api_version"`
+	Name       string `json:"name"`
+	Source     string `json:"source"`
+	Commit     string `json:"commit,omitempty"`
+	// Shared are the template's shared install scripts and instruction
+	// texts, as kept under .templates/<name>.
+	Shared   []string          `json:"shared"`
+	Profiles []TemplateProfile `json:"profiles"`
+	// Kept is the template of this name the repository keeps already, if
+	// any; a different source means the name is taken.
+	Kept *TemplateKept `json:"kept,omitempty"`
+}
+
+type TemplateKept struct {
+	Source   string   `json:"source"`
+	Commit   string   `json:"commit,omitempty"`
+	Profiles []string `json:"profiles"`
+}
+
+type TemplateProfile struct {
+	Name   string `json:"name"`
+	Format int    `json:"format"`
+	// Image is the image named instead of a Dockerfile, empty when the
+	// profile builds its own.
+	Image    string            `json:"image,omitempty"`
+	Agents   []string          `json:"agents"`
+	Vars     map[string]string `json:"vars"`
+	Services []TemplateService `json:"services"`
+	// Secrets are the names of the tokens it needs stored, each once.
+	Secrets []string `json:"secrets"`
+	// Env are the variables its sessions get, by name.
+	Env          []string `json:"env"`
+	Instructions []string `json:"instructions"`
+	// Exists says the repository has a profile of this name already, so a
+	// copy needs another.
+	Exists bool   `json:"exists"`
+	Error  string `json:"error,omitempty"`
+}
+
+type TemplateService struct {
+	Name  string   `json:"name"`
+	Hosts []string `json:"hosts"`
+	Git   bool     `json:"git"`
+}

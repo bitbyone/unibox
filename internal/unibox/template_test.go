@@ -102,6 +102,16 @@ func TestAProfileIsCopiedFromATemplateWithItsSharedFilesApart(t *testing.T) {
 	if names := TemplateProfiles(root, "acme"); len(names) != 1 || names[0].Name != "dev" {
 		t.Fatalf("%v", names)
 	}
+	// Inspecting tells what a copy would need, and how the template stands
+	// to the repository, writing nothing.
+	info, err := tpl.Inspect(root, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	team := info.Profiles[0]
+	if info.Kept == nil || info.Kept.Source != src || !slices.Equal(info.Kept.Profiles, []string{"dev"}) || team.Exists || team.Error != "" || team.Vars["artifactory-user"] == "" || !slices.Equal(team.Secrets, []string{"artifactory"}) || len(team.Services) != 1 || team.Services[0].Git || !slices.Contains(info.Shared, "@install/team/node.sh") {
+		t.Fatalf("%+v", info)
+	}
 }
 
 func TestATemplateIsClonedFromGit(t *testing.T) {
