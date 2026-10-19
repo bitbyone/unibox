@@ -59,7 +59,9 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 		}
 	}
 	if req.Agent == "" {
-		if len(p.Agents) == 1 {
+		// A task opened in a shell still names the agent a later resume
+		// runs: the profile's first.
+		if len(p.Agents) == 1 || req.Shell && len(p.Agents) > 0 {
 			req.Agent = p.Agents[0]
 		} else {
 			return api.Task{}, fmt.Errorf("profile %s offers %s; pass --agent", p.Name, strings.Join(p.Agents, ", "))
@@ -478,6 +480,9 @@ func RunChild(cmd *exec.Cmd) error {
 }
 
 func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errout io.Writer, extra []string) error {
+	if req.Shell && len(extra) > 0 {
+		return fmt.Errorf("a shell takes no agent arguments; leave out what follows --")
+	}
 	if len(req.Scripts) > 0 {
 		_, _, p, err := m.Definition(req)
 		if err != nil {
@@ -491,34 +496,52 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if err != nil {
 		return err
 	}
-	run, lease, err := m.recordRun(b, t, t.Agent)
+	agent := t.Agent
+	if req.Shell {
+		agent = ""
+	}
+	run, lease, err := m.recordRun(b, t, agent)
 	if err != nil {
 		usage.Close()
 		taskLock.Close()
 		return err
 	}
 	defer m.finishRun(b, r, run, lease, usage, taskLock)
-	a, _ := FindAgent(t.Agent)
-	args := append([]string{a.Command}, a.Args...)
-	args = append(args, extra...)
 	p, err := m.profile(b.Profile)
 	if err != nil {
 		return err
-	}
-	// The commit hook credits the agent of this session, not the one the
-	// task was prepared with, as the profile names it.
-	name, _, _ := strings.Cut(a.CoAuthor, " <")
-	env := append(slices.Clone(a.Env), "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
-	if s, ok := r.(SessionEnver); ok {
-		env = append(env, s.SessionEnv(p, a.ID)...)
-	}
-	if len(env) > 0 {
-		args = append(append([]string{"env"}, env...), args...)
 	}
 	dir := t.Directory
 	if len(t.Repositories) == 1 {
 		dir = path.Join(dir, t.Repositories[0].Name)
 	}
+	if len(req.Scripts) > 0 {
+		env := append([]string{"UNIBOX_SANDBOX=" + b.Name, "UNIBOX_TASK=" + t.ID, "UNIBOX_TASK_DIR=" + t.Directory}, p.ServiceSessionEnv()...)
+		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", scriptsScript(p, req.Scripts, env)}, Directory: dir}), errout); err != nil {
+			what := t.Agent
+			if req.Shell {
+				what = "the shell"
+			}
+			return fmt.Errorf("a script failed, so %s was not started: %w", what, err)
+		}
+	}
+	if req.Shell {
+		// A shell is the user's own session: no agent is credited in its
+		// commits.
+		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(p.ServiceSessionEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
+	}
+	a, _ := FindAgent(t.Agent)
+	args := append([]string{a.Command}, a.Args...)
+	args = append(args, extra...)
+	// The commit hook credits the agent of this session, not the one the
+	// task was prepared with, as the profile names it.
+	name, _, _ := strings.Cut(a.CoAuthor, " <")
+	env := append(slices.Clone(a.Env), "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
+	env = append(env, p.ServiceSessionEnv()...)
+	if s, ok := r.(SessionEnver); ok {
+		env = append(env, s.SessionEnv(p, a.ID)...)
+	}
+	args = withEnv(env, args)
 	if a.Trust != nil && a.Config != "" {
 		dirs := []string{"/work", t.Directory}
 		for _, repo := range t.Repositories {
@@ -526,12 +549,6 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		}
 		if err := m.mergeAgentConfig(ctx, b, r, a, a.Trust(dirs)); err != nil {
 			fmt.Fprintf(errout, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
-		}
-	}
-	if len(req.Scripts) > 0 {
-		env := []string{"UNIBOX_SANDBOX=" + b.Name, "UNIBOX_TASK=" + t.ID, "UNIBOX_TASK_DIR=" + t.Directory}
-		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", scriptsScript(p, req.Scripts, env)}, Directory: dir}), errout); err != nil {
-			return fmt.Errorf("a script failed, so %s was not started: %w", a.ID, err)
 		}
 	}
 	script := sessionScript(run.ID, args)
@@ -549,6 +566,14 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		return &Failure{code, "agent_exit", fmt.Sprintf("agent exited with status %d", code)}
 	}
 	return err
+}
+
+// withEnv runs a command with the variables set, through env(1).
+func withEnv(env, args []string) []string {
+	if len(env) == 0 {
+		return args
+	}
+	return append(append([]string{"env"}, env...), args...)
 }
 
 func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, errout io.Writer) error {
@@ -593,7 +618,11 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		return err
 	}
 	defer m.finishRun(b, r, run, lease, usage, nil)
-	return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, []string{"bash", "-l"})}, Interactive: true, Input: in, Output: out, Error: errout}))
+	var env []string
+	if p, err := m.profile(b.Profile); err == nil {
+		env = p.ServiceSessionEnv()
+	}
+	return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(env, []string{"bash", "-l"}))}, Interactive: true, Input: in, Output: out, Error: errout}))
 }
 
 // RunScripts runs a profile's scripts in its sandbox at once, in /work,
@@ -648,7 +677,7 @@ func (m *Manager) RunScripts(ctx context.Context, name string, scripts []string,
 		return err
 	}
 	defer m.finishRun(b, r, run, lease, usage, nil)
-	env := []string{"UNIBOX_SANDBOX=" + b.Name}
+	env := append([]string{"UNIBOX_SANDBOX=" + b.Name}, p.ServiceSessionEnv()...)
 	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, []string{"sh", "-c", scriptsScript(p, scripts, env)})}, Directory: "/work"}), out)
 }
 

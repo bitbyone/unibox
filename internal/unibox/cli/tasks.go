@@ -39,6 +39,13 @@ func (v *orderedValue) Set(value string) error {
 	return nil
 }
 
+// shellFlag lets run and resume open a shell in the task's directory
+// instead of the agent; the two exclude each other.
+func shellFlag(c *cobra.Command, r *unibox.Request) {
+	c.Flags().BoolVar(&r.Shell, "shell", false, "Open a shell in the task's directory instead of running an agent")
+	c.MarkFlagsMutuallyExclusive("agent", "shell")
+}
+
 func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f := c.Flags()
 	f.StringVar(&r.Sandbox, "sandbox", "", "Sandbox to work in; one that does not exist yet is made from --profile (default: the profile's name)")
@@ -159,10 +166,11 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 
 func (o *options) taskCommand(name string) *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: name + " [directory...] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare independent forge clones inside a sandbox", "run": "Prepare a task and run its agent in this terminal (unibox resume runs it again)"}[name]}
+	c := &cobra.Command{Use: name + " [directory...] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare independent forge clones inside a sandbox", "run": "Prepare a task and run its agent, or a shell, in this terminal (unibox resume runs it again)"}[name]}
 	taskFlags(c, &req)
 	if name == "run" {
 		scriptFlag(c, &req)
+		shellFlag(c, &req)
 	}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		extra := []string{}

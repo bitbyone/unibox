@@ -493,6 +493,13 @@ and the design turns on it:
   2026-10-19), so a build's `credentials { username; password }` can take
   the placeholder as its password. A service's `env` is the tool's own
   variable in its own case (`ORG_GRADLE_PROJECT_artifactoryPassword2N`).
+  sbx takes upper-case names only (`^[A-Z_][A-Z0-9_]*$`), so it gets
+  `UNIBOX_SVC_<NAME>` then, and unibox sets every env service's variable
+  with its placeholder in each session it starts - agent, shell, scripts.
+  The placeholder is deterministic and no secret, and so the variable is
+  there in a sandbox made before the service, too. Checked on sbx: the
+  variable held the placeholder and Basic authentication carried the
+  value.
 - A **bearer or raw** service needs no git wiring: the tool reads the
   placeholder from `env` and sends it as its own Authorization, which the
   proxy substitutes. One caveat found and not yet closed: the custom

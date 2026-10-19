@@ -457,6 +457,38 @@ func TestClaudeTrustsTheTaskItRunsIn(t *testing.T) {
 	}
 }
 
+func TestRunOpensAShellInTheTaskInsteadOfTheAgent(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	bin := t.TempDir()
+	seen := filepath.Join(t.TempDir(), "shell")
+	mustWriteExecutable(t, filepath.Join(bin, "bash"), []byte("#!/bin/sh\nprintf '%s|%s|%s' \"$*\" \"${PWD##*/}\" \"${UNIBOX_AGENT:-none}\" > "+Quote(seen)+"\n"))
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\necho claude ran >&2\nexit 9\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Sandbox: "dev", Task: "refunds", Shell: true, Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
+	if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	// A login shell in the repository, crediting no agent.
+	if got, _ := os.ReadFile(seen); string(got) != "-l|payments|none" {
+		t.Fatalf("the shell saw %q", got)
+	}
+	// The task still names the agent a later resume runs.
+	b, err := m.sandbox("dev")
+	if err != nil || len(b.Tasks) != 1 || b.Tasks[0].Agent != "claude" {
+		t.Fatalf("%+v %v", b.Tasks, err)
+	}
+	if err := m.Run(ctx, Request{Task: "refunds", Shell: true}, strings.NewReader(""), io.Discard, io.Discard, []string{"--x"}); err == nil {
+		t.Fatal("a shell took agent arguments")
+	}
+}
+
 func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
 	t.Parallel()
 	payments, _ := remoteFixture(t)

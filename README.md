@@ -82,6 +82,7 @@ unibox run --sandbox dev --agent copilot --mount
 unibox sandboxes                                  # all sandboxes (also: ls)
 unibox tasks                                      # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
+unibox resume <task> --shell                      # a shell in the task's repository instead
 unibox add-repo <task> ../api --branch feat/login  # clone one more, even while it runs
 unibox shell web-1                                # shell inside the sandbox
 unibox recreate web-1                             # recreate now (a start does when the profile needs it)

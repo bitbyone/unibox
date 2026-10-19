@@ -138,7 +138,8 @@ unibox prepare [directory...] [-- agent-args...] [flags]
 unibox check [directory...] [-- agent-args...] [flags]
 ```
 
-`run` prepares a task and runs its agent in this terminal. `prepare` makes
+`run` prepares a task and runs its agent in this terminal, or with `--shell`
+a login shell in the task's directory. `prepare` makes
 the sandbox and the task ready and prints both. `check` explains what a task
 needs before it can start. The directories are the task's repositories; the
 current directory when none is named. Arguments after `--` go to the agent.
@@ -148,6 +149,7 @@ current directory when none is named. Arguments after `--` go to the agent.
 | `--profile <name>` | the profile a new sandbox is made from |
 | `--sandbox <name>` | the sandbox to work in; one that does not exist yet is made from `--profile` (default: the profile's name) |
 | `--agent <name>` | the coding agent, one the profile declares |
+| `--shell` | `run` only: open a shell in the task's directory instead of the agent; excludes `--agent`, and a new task names the profile's first agent for a later `resume` |
 | `--task <name>` | the task's name, unique across sandboxes (default: its first repository and a digest) |
 | `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone |
 | `--repo <[name=]source>` | a repository path or https URL, optionally `name=source` (repeatable) |
@@ -165,11 +167,13 @@ current directory when none is named. Arguments after `--` go to the agent.
 unibox resume <task> [-- agent-args...] [flags]
 ```
 
-Runs a prepared task's agent again, in the sandbox that holds it.
+Runs a prepared task's agent again, or a shell in its directory, in the
+sandbox that holds it.
 
 | Flag | Meaning |
 | --- | --- |
 | `--agent <name>` | a coding agent to run instead of the task's own |
+| `--shell` | open a shell in the task's directory instead of the agent; excludes `--agent` |
 | `--script <name>` | run one of the profile's scripts before the agent starts (repeatable, in order) |
 
 ### `unibox add-repo`

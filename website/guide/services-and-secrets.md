@@ -152,7 +152,10 @@ password }` does, sends them as Basic authentication. The proxy finds the
 placeholder inside it too (checked with sbx), so the password can be the
 service's placeholder and the user an ordinary setting. Gradle reads a
 project property from `ORG_GRADLE_PROJECT_<property>`, so for a build that
-names `artifactoryUser2N` and `artifactoryPassword2N`:
+names `artifactoryUser2N` and `artifactoryPassword2N`, the service's `env` is
+that variable. sbx takes upper-case names only, so unibox gives sbx a name
+of its own and sets the variable itself in every session it starts - an
+agent's, a shell's, the scripts':
 
 ```sh
 unibox secret set artifactory-2n        # the password, or an identity token

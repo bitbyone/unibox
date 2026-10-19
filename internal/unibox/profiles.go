@@ -846,6 +846,34 @@ func ServiceEnv(name string, s Service) string {
 	return "UNIBOX_SVC_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 }
 
+// RuntimeServiceEnv is the variable a runtime gets for a service's
+// placeholder: the service's own when the runtime takes it, else the derived
+// UNIBOX_SVC_ one. sbx takes upper-case names only, and a tool's own may
+// not be, as Gradle's ORG_GRADLE_PROJECT_<property> is not; unibox then sets
+// the tool's variable itself in every session (ServiceSessionEnv).
+func RuntimeServiceEnv(name string, s Service) string {
+	if env := ServiceEnv(name, s); envName.MatchString(env) {
+		return env
+	}
+	return "UNIBOX_SVC_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+}
+
+// ServiceSessionEnv is each env service's variable with its placeholder,
+// which unibox sets in every session it starts: an agent's, a shell's and
+// the scripts'. The placeholder is no secret and is the same on every
+// runtime, so the variable is there in any case of name and in a sandbox
+// made before the service was added.
+func (p Profile) ServiceSessionEnv() []string {
+	out := []string{}
+	for _, name := range sortedKeys(p.Services) {
+		s := p.Services[name]
+		if s.Env != "" {
+			out = append(out, s.Env+"="+ServicePlaceholder(name, s))
+		}
+	}
+	return out
+}
+
 // serviceSecretCommand is the host command whose output sbx stores for the
 // service. For a git service unibox owns the whole Authorization header, so
 // it is composed here; for an env service the tool builds the header and

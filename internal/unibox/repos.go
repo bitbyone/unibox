@@ -20,6 +20,8 @@ type Request struct {
 	Push, IgnoreLocal, Yes                                             bool
 	// Scripts are the profile's scripts to run before the agent's session.
 	Scripts []string
+	// Shell opens a shell in the task's directory instead of its agent.
+	Shell bool
 	// Mount mounts the selected directories of the host into the sandbox
 	// instead of cloning them, at the user's word.
 	Mount bool

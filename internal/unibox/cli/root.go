@@ -456,7 +456,7 @@ func (o *options) tasksCommand() *cobra.Command {
 
 func (o *options) resumeCommand() *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: "resume task [-- agent-args...]", Args: cobra.MinimumNArgs(1), Short: "Run a prepared task's agent again, in the sandbox that holds it", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "resume task [-- agent-args...]", Args: cobra.MinimumNArgs(1), Short: "Run a prepared task's agent again, or a shell in it, in the sandbox that holds it", RunE: func(cmd *cobra.Command, args []string) error {
 		if n := cmd.ArgsLenAtDash(); n > 1 || (n < 0 && len(args) > 1) {
 			return fmt.Errorf("resume takes one task; agent arguments go after --")
 		}
@@ -471,6 +471,7 @@ func (o *options) resumeCommand() *cobra.Command {
 	}}
 	c.Flags().StringVar(&req.Agent, "agent", "", "Coding agent to run instead of the task's own")
 	scriptFlag(c, &req)
+	shellFlag(c, &req)
 	return c
 }
 

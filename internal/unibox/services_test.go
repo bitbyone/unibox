@@ -56,6 +56,16 @@ func TestAServiceFillsAToolsOwnVariableInItsOwnCase(t *testing.T) {
 	if _, err := LoadProfile(root, "node"); err != nil {
 		t.Fatal(err)
 	}
+	p, _ := LoadProfile(root, "node")
+	svc := p.Services["artifactory-2n"]
+	// sbx takes upper-case names only, so it gets a derived one, and
+	// unibox sets Gradle's variable itself in each session.
+	if RuntimeServiceEnv("artifactory-2n", svc) != "UNIBOX_SVC_ARTIFACTORY_2N" {
+		t.Fatalf("runtime env %s", RuntimeServiceEnv("artifactory-2n", svc))
+	}
+	if env := p.ServiceSessionEnv(); len(env) != 1 || env[0] != "ORG_GRADLE_PROJECT_artifactoryPassword2N="+ServicePlaceholder("artifactory-2n", svc) {
+		t.Fatalf("session env %v", env)
+	}
 	// A password is still no plain variable of the profile.
 	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nenv: [ORG_GRADLE_PROJECT_artifactoryPassword2N]\n")
 	if _, err := LoadProfile(root, "node"); err == nil {
