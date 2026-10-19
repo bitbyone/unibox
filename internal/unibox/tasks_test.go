@@ -554,3 +554,59 @@ func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
 		t.Fatal("added to a task that does not exist")
 	}
 }
+
+func TestATaskAliasIsTakenWhereverItsIDIs(t *testing.T) {
+	t.Parallel()
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	ctx := context.Background()
+	for _, name := range []string{"dev", "ci"} {
+		if _, err := m.Create(ctx, Request{NewSandbox: name, Profile: "node"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	req := func(sandbox, task string) Request {
+		return Request{Sandbox: sandbox, Task: task, Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
+	}
+	for sandbox, task := range map[string]string{"dev": "refunds", "ci": "audit"} {
+		if _, err := m.Prepare(ctx, req(sandbox, task)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	task, err := m.AliasTask("refunds", "billing")
+	if err != nil || task.ID != "refunds" || task.Alias != "billing" {
+		t.Fatalf("%+v %v", task, err)
+	}
+	if b, _, _, err := m.Definition(Request{Task: "billing"}); err != nil || b.Name != "dev" {
+		t.Fatalf("%s %v", b.Name, err)
+	}
+	if p, err := m.Prepare(ctx, Request{Task: "billing"}); err != nil || p.Task != "refunds" {
+		t.Fatalf("%+v %v", p, err)
+	}
+	for _, name := range []string{"audit", "billing"} {
+		if _, err := m.AliasTask("audit", name); name == "billing" && (err == nil || !strings.Contains(err.Error(), "names task refunds already")) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if _, err := m.AliasTask("refunds", "audit"); err == nil || !strings.Contains(err.Error(), "names task audit already") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := m.AliasTask("billing", "Not A Name"); err == nil {
+		t.Fatal("an invalid name was taken")
+	}
+	// Its own ID takes the alias away.
+	if task, err := m.AliasTask("billing", "refunds"); err != nil || task.Alias != "" {
+		t.Fatalf("%+v %v", task, err)
+	}
+	if _, err := m.AliasTask("refunds", "billing"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove(ctx, "dev", "billing"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := m.sandbox("dev"); len(b.Tasks) != 0 {
+		t.Fatalf("%+v", b.Tasks)
+	}
+}

@@ -312,6 +312,24 @@ func TestTasksListsEverySandboxAndResumeNeedsOnlyTheTask(t *testing.T) {
 	if err = c.Execute(); err == nil || !strings.Contains(err.Error(), "unibox tasks lists them") {
 		t.Fatalf("%v", err)
 	}
+	// An alias is listed beside the ID and resumes as the ID does.
+	out.Reset()
+	c = New(paths, strings.NewReader(""), &out, io.Discard)
+	c.SetArgs([]string{"rename-task", "personal-task", "blog"})
+	if err = c.Execute(); err != nil || !strings.Contains(out.String(), "personal-task is also blog") {
+		t.Fatalf("%v:\n%s", err, out.String())
+	}
+	out.Reset()
+	c = New(paths, strings.NewReader(""), &out, io.Discard)
+	c.SetArgs([]string{"tasks"})
+	if err = c.Execute(); err != nil || !strings.Contains(out.String(), "ALIAS") || !strings.Contains(out.String(), "personal-task  blog   personal") || !strings.Contains(out.String(), "work-task      -      work") {
+		t.Fatalf("%v:\n%s", err, out.String())
+	}
+	c = New(paths, strings.NewReader(""), io.Discard, io.Discard)
+	c.SetArgs([]string{"resume", "blog"})
+	if err = c.Execute(); err == nil || !strings.Contains(err.Error(), "gone") {
+		t.Fatalf("%v", err)
+	}
 }
 
 func TestVersionIsTheReleaseAloneAndJSONAddsTheFormats(t *testing.T) {

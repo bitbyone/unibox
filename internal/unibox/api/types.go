@@ -23,7 +23,10 @@ type Repository struct {
 }
 
 type Task struct {
-	ID           string       `json:"id"`
+	ID string `json:"id"`
+	// Alias is a name the user gave the task, taken wherever its ID is;
+	// its directory keeps the ID.
+	Alias        string       `json:"alias,omitempty"`
 	Sandbox      string       `json:"sandbox"`
 	Directory    string       `json:"directory"`
 	Repositories []Repository `json:"repositories"`

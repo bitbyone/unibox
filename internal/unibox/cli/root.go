@@ -3,6 +3,7 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,7 +53,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 		o.manager = m
 		return m.RefreshPlugin()
 	}
-	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.varCommand(), o.templateCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand(), o.versionCommand())
+	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.renameTaskCommand(), o.herdrCommand(), o.secretCommand(), o.varCommand(), o.templateCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand(), o.versionCommand())
 	for _, name := range []string{"check", "prepare", "run"} {
 		root.AddCommand(o.taskCommand(name))
 	}
@@ -430,7 +431,14 @@ func (o *options) tasksCommand() *cobra.Command {
 			return o.write(map[string]any{"api_version": api.Version, "tasks": tasks, "runs": runs})
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "TASK\tSANDBOX\tAGENT\tSTATE\tSESSIONS\tREPOSITORIES")
+		// The alias column shows only once a task has one.
+		aliased := slices.ContainsFunc(tasks, func(t api.Task) bool { return t.Alias != "" })
+		if aliased {
+			fmt.Fprint(w, "TASK\tALIAS\t")
+		} else {
+			fmt.Fprint(w, "TASK\t")
+		}
+		fmt.Fprintln(w, "SANDBOX\tAGENT\tSTATE\tSESSIONS\tREPOSITORIES")
 		for _, t := range tasks {
 			sessions := 0
 			for _, r := range runs {
@@ -442,7 +450,11 @@ func (o *options) tasksCommand() *cobra.Command {
 			for _, r := range t.Repositories {
 				repos = append(repos, r.Name+"@"+r.Branch)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n", t.ID, t.Sandbox, t.Agent, t.State, sessions, strings.Join(repos, ", "))
+			fmt.Fprintf(w, "%s\t", t.ID)
+			if aliased {
+				fmt.Fprintf(w, "%s\t", cmp.Or(t.Alias, "-"))
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", t.Sandbox, t.Agent, t.State, sessions, strings.Join(repos, ", "))
 		}
 		if err = w.Flush(); err != nil {
 			return err
@@ -523,7 +535,7 @@ func (o *options) removeCommand(task bool) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			sandbox, id = name, args[0]
+			sandbox, id = name, o.manager.TaskID(args[0])
 		}
 		what := "sandbox " + sandbox
 		if id != "" {
@@ -536,6 +548,24 @@ func (o *options) removeCommand(task bool) *cobra.Command {
 			return err
 		}
 		return o.success("removed")
+	}}
+}
+
+// renameTaskCommand gives a task a name of the user's. It is an alias: the
+// task keeps its ID and directory, so nothing in a running session moves.
+func (o *options) renameTaskCommand() *cobra.Command {
+	return &cobra.Command{Use: "rename-task task name", Args: cobra.ExactArgs(2), Short: "Give a task a name taken wherever its ID is; its own ID takes the name away", RunE: func(cmd *cobra.Command, args []string) error {
+		t, err := o.manager.AliasTask(args[0], args[1])
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "task": t})
+		}
+		if t.Alias == "" {
+			return o.success("task " + t.ID + " has no alias")
+		}
+		return o.success("task " + t.ID + " is also " + t.Alias)
 	}}
 }
 

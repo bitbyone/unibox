@@ -8,7 +8,7 @@ unibox [command] [flags]
 
 **One rule for arguments.** What a command works on is its argument - a
 sandbox (`shell`, `stop`, `recreate`, `rm`, `inspect`, `port`, `script`,
-`tasks`, `create`), a task (`resume`, `add-repo`, `rm-task`), a profile
+`tasks`, `create`), a task (`resume`, `add-repo`, `rename-task`, `rm-task`), a profile
 (`build`, `diff`, `init`, `agent`, `network`, `service`, `instructions`) -
 and a flag says where or how. `run`, `check` and `prepare` make a task, so
 their arguments are its directories and the sandbox is a flag, `--sandbox`.
@@ -224,7 +224,19 @@ directories as `run` takes them, or `--repo` for a URL or `name=source`.
 unibox tasks [sandbox]
 ```
 
-Lists prepared tasks, in every sandbox or in one.
+Lists prepared tasks, in every sandbox or in one. An `ALIAS` column shows
+once a task has one.
+
+### `unibox rename-task`
+
+```
+unibox rename-task <task> <name>
+```
+
+Gives a task an alias, taken wherever its ID is (`resume`, `add-repo`,
+`rm-task`). The task keeps its ID and its directory `/work/<id>`, so a
+running session is not disturbed. A name is unique across sandboxes, as an
+ID is; the task's own ID as the name takes the alias away.
 
 ### `unibox rm-task`
 

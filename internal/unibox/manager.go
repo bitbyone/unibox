@@ -306,7 +306,81 @@ func (m *Manager) usage(name string, shared bool) (*FileLock, error) {
 // A task's name is unique across sandboxes, so naming the task is enough to
 // find it. State from before that rule may still hold one name twice.
 // TaskSandbox names the sandbox holding a task.
-func (m *Manager) TaskSandbox(task string) (string, error) { return m.taskSandbox(task, false) }
+func (m *Manager) TaskSandbox(task string) (string, error) {
+	return m.taskSandbox(m.taskID(task), false)
+}
+
+// TaskID is the ID of the task a name says, its own or its alias.
+func (m *Manager) TaskID(name string) string { return m.taskID(name) }
+
+// taskID is the ID of the task a name says: its own, or one the user gave
+// it as an alias. A name of no task is itself, for a task to be made.
+func (m *Manager) taskID(name string) string {
+	s, err := m.Paths.ReadState()
+	if err != nil || name == "" {
+		return name
+	}
+	for _, b := range s.Sandboxes {
+		for _, t := range b.Tasks {
+			if t.ID == name {
+				return name
+			}
+		}
+	}
+	for _, b := range s.Sandboxes {
+		for _, t := range b.Tasks {
+			if t.Alias == name {
+				return t.ID
+			}
+		}
+	}
+	return name
+}
+
+// AliasTask gives a task a name of the user's, taken wherever its ID is
+// and shown in its place; the task keeps its ID and its directory. A name
+// is unique across sandboxes, as a task's ID is; the task's own ID takes
+// the alias away.
+func (m *Manager) AliasTask(task, alias string) (api.Task, error) {
+	if err := ValidName(alias); err != nil {
+		return api.Task{}, err
+	}
+	id := m.taskID(task)
+	name, err := m.taskSandbox(id, false)
+	if err != nil {
+		return api.Task{}, err
+	}
+	if s, err := m.Paths.ReadState(); err == nil {
+		for _, b := range s.Sandboxes {
+			for _, t := range b.Tasks {
+				if t.ID != id && (t.ID == alias || t.Alias == alias) {
+					return api.Task{}, fmt.Errorf("%s names task %s already, in sandbox %s; a task's name is unique across sandboxes", alias, t.ID, b.Name)
+				}
+			}
+		}
+	}
+	guard, err := m.guard(name)
+	if err != nil {
+		return api.Task{}, err
+	}
+	defer guard.Close()
+	b, err := m.sandbox(name)
+	if err != nil {
+		return api.Task{}, err
+	}
+	i := slices.IndexFunc(b.Tasks, func(t api.Task) bool { return t.ID == id })
+	if i < 0 {
+		return api.Task{}, fmt.Errorf("task %s not found", task)
+	}
+	b.Tasks[i].Alias = alias
+	if alias == id {
+		b.Tasks[i].Alias = ""
+	}
+	if err = m.saveBox(b); err != nil {
+		return api.Task{}, err
+	}
+	return b.Tasks[i], nil
+}
 
 func (m *Manager) taskSandbox(task string, preparing bool) (string, error) {
 	s, err := m.Paths.ReadState()
@@ -338,7 +412,7 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 		return api.Sandbox{}, nil, Profile{}, err
 	}
 	if req.Sandbox == "" && req.NewSandbox == "" && req.Profile == "" && req.Task != "" {
-		name, err := m.taskSandbox(req.Task, len(req.Repositories) > 0)
+		name, err := m.taskSandbox(m.taskID(req.Task), len(req.Repositories) > 0)
 		if err != nil {
 			return api.Sandbox{}, nil, Profile{}, err
 		}
@@ -403,6 +477,7 @@ func (m *Manager) Definition(req Request) (api.Sandbox, Runtime, Profile, error)
 }
 
 func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
+	req.Task = m.taskID(req.Task)
 	if err := m.syncManaged(); err != nil {
 		return api.Check{}, err
 	}

@@ -148,6 +148,19 @@ A repository the agent clones by itself gets its service's author, but no
 co-author hook, and is not in the task's record: what must be kept belongs in
 `add-repo`.
 
+## Naming a task
+
+A task's ID comes from its repositories, or `--task` when it is made. An
+alias gives it a name of your own afterwards, taken wherever the ID is:
+
+```sh
+unibox rename-task payments-3f2a9c1e refunds
+unibox resume refunds
+```
+
+The ID and the directory `/work/<id>` stay, so a running agent is not
+disturbed. `unibox rename-task refunds payments-3f2a9c1e` takes the alias away.
+
 ## Removing work
 
 ```sh

@@ -213,6 +213,7 @@ func containsRepositories(have, want []api.Repository) bool {
 // preparations, and the task's record grows so removal still checks every
 // clone for unpushed work.
 func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, []api.Repository, error) {
+	req.Task = m.taskID(req.Task)
 	if req.Task == "" {
 		return api.Task{}, nil, fmt.Errorf("name the task to add to; unibox tasks lists them")
 	}
@@ -303,6 +304,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 // The guard serializes preparation and lifecycle changes. Usage locks survive
 // the guard while sessions run, allowing other tasks to prepare beside them.
 func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sandbox, api.Task, Runtime, *FileLock, *FileLock, error) {
+	req.Task = m.taskID(req.Task)
 	b, r, p, err := m.Definition(req)
 	if err != nil {
 		return b, api.Task{}, r, nil, nil, err
@@ -726,6 +728,7 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 	return r.Stop(ctx, b.RuntimeName)
 }
 func (m *Manager) Remove(ctx context.Context, name, task string) error {
+	task = m.taskID(task)
 	l, err := m.guard(name)
 	if err != nil {
 		return err
