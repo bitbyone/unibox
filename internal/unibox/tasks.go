@@ -533,12 +533,12 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(p.SessionEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
 	a, _ := FindAgent(t.Agent)
-	args := append([]string{a.Command}, a.Args...)
+	args, agentEnv := p.AgentCommand(a)
 	args = append(args, extra...)
 	// The commit hook credits the agent of this session, not the one the
 	// task was prepared with, as the profile names it.
 	name, _, _ := strings.Cut(a.CoAuthor, " <")
-	env := append(slices.Clone(a.Env), "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
+	env := append(agentEnv, "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
 	env = append(env, p.SessionEnv()...)
 	if s, ok := r.(SessionEnver); ok {
 		env = append(env, s.SessionEnv(p, a.ID)...)

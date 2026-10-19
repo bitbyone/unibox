@@ -286,7 +286,7 @@ unibox agent co-author [agent] [--as "Name <email>" | --reset] [-p <profile>]
 `login` signs a profile's agents in: tokens into the platform's store, the
 profile's `auth` written. `co-author` shows how the profile credits each
 agent in its commits, or with `--as` sets it (`Name <>` for no address). `ls`
-lists the agents, how each signs in and is credited.
+lists the agents, how each signs in, is credited and the arguments it starts with.
 
 | Flag | Command | Meaning |
 | --- | --- | --- |

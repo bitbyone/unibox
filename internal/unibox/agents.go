@@ -9,7 +9,13 @@ type Agent struct {
 	ID, Command, Instructions, CoAuthor string
 	// Config is the JSON file Trust is merged into.
 	Config string
-	Args   []string
+	// Args leave the agent to work unasked, the sandbox being the
+	// boundary; a profile adds its own to them, or with args_override puts
+	// its own in their place.
+	Args []string
+	// ArgsEnv goes with Args: what grants the same through the
+	// environment, left out when a profile overrides them.
+	ArgsEnv []string
 	// Setup runs in the guest before every session of the agent, for what
 	// depends on the sandbox's credentials rather than on the profile.
 	Setup string
@@ -98,7 +104,7 @@ var Agents = []Agent{
 		}},
 	// Its settings.json, per copilot help config; config.json is the state
 	// it keeps itself, seeded only by a profile that wants to.
-	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Args: []string{"--allow-all"}, Env: []string{"COPILOT_ALLOW_ALL=true"},
+	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Args: []string{"--allow-all"}, ArgsEnv: []string{"COPILOT_ALLOW_ALL=true"},
 		Configs: []AgentFile{
 			{Name: "settings.json", Path: ".copilot/settings.json"},
 			{Name: "config.json", Path: ".copilot/config.json"},

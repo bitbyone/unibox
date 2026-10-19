@@ -43,7 +43,24 @@ run the task with any of the profile's agents.
 | `copilot` | `copilot --allow-all`, with `COPILOT_ALLOW_ALL=true` | `~/.copilot/copilot-instructions.md` |
 | `opencode` | `opencode --auto` | `~/.config/opencode/AGENTS.md` |
 
-Arguments after `--` on `run` or `resume` go to the agent:
+Every agent starts with all permissions: the sandbox is the boundary, not
+the agent's questions. A profile adds arguments of its own with `args`, or
+with `args_override: true` puts them in place of unibox's - then unibox gives
+the agent nothing of its own, not `COPILOT_ALLOW_ALL` either:
+
+```yaml
+agents:
+  claude:
+    args: [--model, opus]          # claude --dangerously-skip-permissions --model opus
+  copilot:
+    args: [--allow-tool, shell]
+    args_override: true            # copilot --allow-tool shell
+```
+
+`unibox agent ls` shows what each agent starts with. Init writes no `args`.
+Both are read at each session's start, so a change needs no recreation.
+
+Arguments after `--` on `run` or `resume` go to the agent, after all of these:
 
 ```sh
 unibox run -p web --agent claude -- --model opus
@@ -53,7 +70,7 @@ No agent stops to ask whether to trust what unibox prepared: before every
 session codex gets `trust_level = "trusted"` for `/work`'s task directories in
 its `config.toml`, claude `hasTrustDialogAccepted` for `/work`, the task and
 its repositories in `~/.claude.json`, and copilot reads `COPILOT_ALLOW_ALL` as
-trust for every folder.
+trust for every folder (unless the profile overrides its arguments).
 
 No agent updates itself; the image fixes its version. A new version is a
 rebuild.

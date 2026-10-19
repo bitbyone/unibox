@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"net/url"
 	"os"
@@ -828,9 +829,10 @@ func (o *options) agentCommand() *cobra.Command {
 			return err
 		}
 		type row struct {
-			Agent    string `json:"agent"`
-			Auth     string `json:"auth"`
-			CoAuthor string `json:"co_author"`
+			Agent    string   `json:"agent"`
+			Auth     string   `json:"auth"`
+			CoAuthor string   `json:"co_author"`
+			Args     []string `json:"args"`
 		}
 		rows := []row{}
 		for _, id := range p.Agents {
@@ -841,15 +843,17 @@ func (o *options) agentCommand() *cobra.Command {
 					auth += " " + a.Command
 				}
 			}
-			rows = append(rows, row{id, auth, p.CoAuthor(id)})
+			a, _ := unibox.FindAgent(id)
+			args, _ := p.AgentCommand(a)
+			rows = append(rows, row{id, auth, p.CoAuthor(id), args[1:]})
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "profile": p.Name, "agents": rows})
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "AGENT\tAUTH\tCO-AUTHOR")
+		fmt.Fprintln(w, "AGENT\tAUTH\tCO-AUTHOR\tARGS")
 		for _, r := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%s\n", r.Agent, r.Auth, r.CoAuthor)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Agent, r.Auth, r.CoAuthor, cmp.Or(strings.Join(r.Args, " "), "-"))
 		}
 		return w.Flush()
 	}}

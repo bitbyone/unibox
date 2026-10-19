@@ -105,6 +105,8 @@ func settingsSnapshot(p Profile, r Runtime) json.RawMessage {
 	// scripts read when they run.
 	s.AgentConfig = nil
 	s.Scripts = nil
+	// An agent's arguments are its command line at each session's start.
+	s.AgentArgs = nil
 	if _, live := r.(NetworkUpdater); live {
 		s.AllowNetwork, s.DenyNetwork = nil, nil
 	}

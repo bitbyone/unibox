@@ -41,6 +41,19 @@ func ValidCoAuthor(s string) bool {
 }
 
 // CoAuthor is how the profile credits an agent in a commit's trailer.
+// AgentCommand is the command line and environment an agent starts with:
+// unibox's own arguments and the profile's after them, or the profile's
+// alone when it overrides them.
+func (p Profile) AgentCommand(a Agent) (args, env []string) {
+	own := p.AgentArgs[a.ID]
+	args = append([]string{a.Command}, a.Args...)
+	env = append(slices.Clone(a.Env), a.ArgsEnv...)
+	if own.Override {
+		args, env = []string{a.Command}, slices.Clone(a.Env)
+	}
+	return append(args, own.Args...), env
+}
+
 func (p Profile) CoAuthor(agent string) string {
 	if c := p.Git.CoAuthors[agent]; c != "" {
 		return c
@@ -245,6 +258,16 @@ type AgentSpec struct {
 	Auth     *AgentAuth        `yaml:"auth"`
 	CoAuthor string            `yaml:"co_author"`
 	Config   map[string]string `yaml:"config"`
+	// Args are added to those unibox starts the agent with, or with
+	// ArgsOverride are all it gets.
+	Args         []string `yaml:"args"`
+	ArgsOverride bool     `yaml:"args_override"`
+}
+
+// AgentArgs is what a profile says of an agent's command line.
+type AgentArgs struct {
+	Args     []string `json:"args,omitempty"`
+	Override bool     `json:"override,omitempty"`
 }
 
 // AgentList is a profile's agents in their order - which matters, sbx
@@ -261,7 +284,7 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 	case yaml.SequenceNode:
 		for _, c := range n.Content {
 			if c.Kind != yaml.ScalarNode {
-				return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", c.Line)
+				return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author, config and args", c.Line)
 			}
 			l.IDs = append(l.IDs, c.Value)
 		}
@@ -272,7 +295,7 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 			var spec AgentSpec
 			if !(body.Kind == yaml.ScalarNode && body.Tag == "!!null") {
 				if body.Kind != yaml.MappingNode {
-					return fmt.Errorf("line %d: agent %s takes auth, co_author and config", body.Line, id)
+					return fmt.Errorf("line %d: agent %s takes auth, co_author, config, args and args_override", body.Line, id)
 				}
 				// Strict, as the profile is: a misspelt field is named.
 				if err := decodeStrict(body, &spec); err != nil {
@@ -284,7 +307,7 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", n.Line)
+	return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author, config and args", n.Line)
 }
 
 // EnvList is a profile's env: a list whose items are a host variable's
@@ -368,6 +391,7 @@ type Profile struct {
 	SetEnv         map[string]string       `yaml:"-" json:"-"`
 	BuildArgValues map[string]string       `yaml:"-" json:"-"`
 	AgentConfig    map[string]string       `yaml:"-" json:"agent_config,omitempty"`
+	AgentArgs      map[string]AgentArgs    `yaml:"-" json:"agent_args,omitempty"`
 	Git            GitOptions              `yaml:"git" json:"git"`
 	Name           string                  `yaml:"-" json:"-"`
 	Dir            string                  `yaml:"-" json:"-"`
@@ -477,6 +501,12 @@ func LoadProfile(root, name string) (Profile, error) {
 				p.Git.CoAuthors = map[string]string{}
 			}
 			p.Git.CoAuthors[id] = spec.CoAuthor
+		}
+		if len(spec.Args) > 0 || spec.ArgsOverride {
+			if p.AgentArgs == nil {
+				p.AgentArgs = map[string]AgentArgs{}
+			}
+			p.AgentArgs[id] = AgentArgs{Args: spec.Args, Override: spec.ArgsOverride}
 		}
 		for file, seed := range spec.Config {
 			if p.AgentConfig == nil {

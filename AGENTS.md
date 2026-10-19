@@ -109,7 +109,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
   placeholder as it is. docs/design.md has the evidence for each.
 - **Agents are prepared before every session**: codex's login and trust
   in its config.toml, claude's trust in `~/.claude.json`, copilot's
-  through `COPILOT_ALLOW_ALL`. What unibox writes into an agent's own file
+  through `COPILOT_ALLOW_ALL`, which goes with its default arguments and
+  is left out when a profile's `args_override` replaces them. What unibox writes into an agent's own file
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).

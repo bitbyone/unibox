@@ -272,3 +272,40 @@ func TestEveryAgentStartsWithAllPermissions(t *testing.T) {
 		}
 	}
 }
+
+func TestAProfileAddsToAnAgentsArgsOrPutsItsOwnInTheirPlace(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude:\n    args: [--model, opus]\n  copilot:\n    args: [--allow-tool, shell]\n    args_override: true\n  codex:\n")
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]struct{ args, env string }{
+		"claude":  {"claude --dangerously-skip-permissions --model opus", "DISABLE_AUTOUPDATER=1"},
+		"codex":   {"codex --dangerously-bypass-approvals-and-sandbox", ""},
+		"copilot": {"copilot --allow-tool shell", ""},
+	} {
+		a, _ := FindAgent(id)
+		args, env := p.AgentCommand(a)
+		if strings.Join(args, " ") != want.args || strings.Join(env, " ") != want.env {
+			t.Errorf("%s: %q %q", id, args, env)
+		}
+	}
+	// What overrides unibox's arguments overrides the environment granting
+	// the same, or copilot would still be free of every question.
+	a, _ := FindAgent("copilot")
+	if _, env := (Profile{}).AgentCommand(a); !slices.Contains(env, "COPILOT_ALLOW_ALL=true") {
+		t.Fatalf("%q", env)
+	}
+	// Given at each session's start, so a change needs no recreation.
+	other := p
+	other.AgentArgs = nil
+	if string(settingsSnapshot(p, &fakeRuntime{})) != string(settingsSnapshot(other, &fakeRuntime{})) {
+		t.Fatal("an args change would recreate the sandbox")
+	}
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude: {args: --model}\n")
+	if _, err := LoadProfile(root, "node"); err == nil {
+		t.Fatal("args that are no list were taken")
+	}
+}

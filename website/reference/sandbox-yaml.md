@@ -82,6 +82,8 @@ one.
 | `auth` | `oauth`, `api-key`, `{command: <cmd>}` or `{token: <cmd>}`; `<cmd>` is `secret:<name>` or a host command |
 | `co_author` | `Name <email>`, or `Name <>` for no address |
 | `config` | the agent's file name to a seed's path in the profile |
+| `args` | a list of arguments added after those unibox starts the agent with |
+| `args_override` | `true` to start the agent with `args` alone, without unibox's arguments or the environment granting the same (default `false`) |
 
 The files a `config` may name:
 
