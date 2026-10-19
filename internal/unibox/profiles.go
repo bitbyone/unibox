@@ -633,7 +633,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 	}
 	for _, key := range sortedKeys(p.BuildArgSpec) {
-		if !toolEnvName.MatchString(key) || sensitiveEnv.MatchString(key) || key == "AGENTBOX_RUNTIME" || key == "UNIBOX_RUNTIME" {
+		if !toolEnvName.MatchString(key) || sensitiveEnv.MatchString(key) || key == "UNIBOX_RUNTIME" {
 			return p, fmt.Errorf("profile %s: build argument %s is reserved or names a secret, which a build argument would leave in the image", name, key)
 		}
 		if err := p.checkRefs("build argument "+key, p.BuildArgSpec[key], false); err != nil {
@@ -966,7 +966,7 @@ func serviceSecretCommand(s Service) string {
 	}
 }
 func (p Profile) BuildArgs(runtime string) ([]string, error) {
-	args := []string{"AGENTBOX_RUNTIME=" + runtime, "UNIBOX_RUNTIME=" + runtime}
+	args := []string{"UNIBOX_RUNTIME=" + runtime}
 	// The profile's own go first, so a runtime's file says the last word.
 	for _, k := range sortedKeys(p.BuildArgValues) {
 		args = append(args, k+"="+p.BuildArgValues[k])
@@ -981,7 +981,7 @@ func (p Profile) BuildArgs(runtime string) ([]string, error) {
 			continue
 		}
 		k, _, ok := strings.Cut(line, "=")
-		if !ok || !envName.MatchString(k) || sensitiveEnv.MatchString(k) || k == "AGENTBOX_RUNTIME" || k == "UNIBOX_RUNTIME" {
+		if !ok || !envName.MatchString(k) || sensitiveEnv.MatchString(k) || k == "UNIBOX_RUNTIME" {
 			return nil, fmt.Errorf("invalid build argument %q; use NAME=value without credentials", k)
 		}
 		args = append(args, line)
