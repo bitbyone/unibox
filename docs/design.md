@@ -897,6 +897,26 @@ git:
   and the network rules do not map onto it) and sbx's `sbxenv.yaml`
   (sbx's alone, and experimental).
 
+### Templates
+
+An environments repository a team keeps can be used as the configuration
+itself, or as a template others copy profiles from (`unibox init <profile>
+--from <git-url|directory>`). A copy is the user's: inheriting from the
+template instead (`extends:`) was weighed and left, since a profile made of
+two places reads worse, merging lists has no obvious rule, and a team's
+change would reach a sandbox - its network, its services - unseen.
+
+The template's `_shared` would collide with the user's own and reach every
+other profile, so it goes to `.templates/<template>/` with `source.yaml`
+(source and commit), the template's alone and rewritten whole by
+`template update`. A profile marked `template: <template>/<profile>` finds
+`@install` scripts and `@instructions` texts in the user's `_shared`, then
+its template's, then `.shared`; no other profile sees a template's files, so
+templates never meet and need no prefixes. `update` changes no profile: it
+tells which files differ from the template's profile now, and `template
+diff` shows how. The copy walks the user through the profile's vars and the
+secrets it names (`init -i`), and without a terminal lists them.
+
 ### Values of each person's own
 
 A profile is meant to be shared by a team, so it holds nothing personal.

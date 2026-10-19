@@ -87,8 +87,8 @@ func (o *options) validateCommand() *cobra.Command {
 func (o *options) initCommand() *cobra.Command {
 	var interactive bool
 	var agents []string
-	var cpus, memory, dir string
-	c := &cobra.Command{Use: "init [profile]", Args: cobra.MaximumNArgs(1), Short: "Lay out the environments repository, and add a profile to it", RunE: func(cmd *cobra.Command, args []string) error {
+	var cpus, memory, dir, from, use, template string
+	c := &cobra.Command{Use: "init [profile]", Args: cobra.MaximumNArgs(1), Short: "Lay out the environments repository, and add a profile to it - or copy one from a template", RunE: func(cmd *cobra.Command, args []string) error {
 		name := ""
 		if len(args) == 1 {
 			name = args[0]
@@ -133,6 +133,15 @@ func (o *options) initCommand() *cobra.Command {
 			}
 		case root == "":
 			return fmt.Errorf("no environments repository is configured; say where with unibox init --dir <path>, or be asked with unibox init -i")
+		}
+		if from != "" {
+			if _, err := unibox.Init(root, "", nil, "", ""); err != nil {
+				return err
+			}
+			return o.initFrom(cmd, root, previous, name, from, use, template, interactive)
+		}
+		if use != "" || template != "" {
+			return fmt.Errorf("--use and --template go with --from")
 		}
 		if interactive {
 			if name == "" {
@@ -230,6 +239,9 @@ func (o *options) initCommand() *cobra.Command {
 		return nil
 	}}
 	c.Flags().StringVar(&dir, "dir", "", "The environments repository to lay out and configure (default: the configured one)")
+	c.Flags().StringVar(&from, "from", "", "A template to copy the profile from: a git URL or a directory, an environments repository of someone else's")
+	c.Flags().StringVar(&use, "use", "", "The template's profile to copy (default: the profile's name; -i asks)")
+	c.Flags().StringVar(&template, "template", "", "The name the template is kept under in .templates (default: its repository's)")
 	c.Flags().BoolVarP(&interactive, "interactive", "i", false, "Ask for the repository when none is configured, and the profile's name, agents and resources")
 	c.Flags().StringSliceVar(&agents, "agents", []string{"copilot"}, "Agents the profile declares and installs")
 	c.Flags().StringVar(&cpus, "cpus", "4", "CPUs for the profile's sandboxes, or a share of the host's (50%)")

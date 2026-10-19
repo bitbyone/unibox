@@ -49,7 +49,8 @@ unibox init [profile] [flags]
 
 Lays out the environments repository, and adds a profile to it. On a profile
 that exists it completes it to what `init` writes today, and migrates an
-older format.
+older format. With `--from` it copies the profile from a
+[template](/guide/templates) instead, and walks you through what it needs.
 
 | Flag | Meaning |
 | --- | --- |
@@ -57,7 +58,24 @@ older format.
 | `--agents <list>` | agents the profile declares and installs (default `copilot`) |
 | `--cpus <n\|n%>` | CPUs for the profile's sandboxes, or a share of the host's (default `4`) |
 | `--memory <size\|n%>` | memory for the profile's sandboxes, `8g` or a share like `50%` (default `8g`) |
-| `-i`, `--interactive` | ask for the repository when none is configured, and the profile's name, agents and resources |
+| `-i`, `--interactive` | ask for the repository when none is configured, and the profile's name, agents and resources; with `--from`, which profile to copy and what it needs |
+| `--from <source>` | copy the profile from a template: a git URL or a directory |
+| `--use <profile>` | the template's profile to copy (default: the profile's name) |
+| `--template <name>` | the name the template is kept under in `.templates` (default: its repository's) |
+
+### `unibox template`
+
+```
+unibox template ls
+unibox template update <template>
+unibox template diff <profile>
+```
+
+`ls` lists the templates the repository keeps, where each comes from and the
+profiles copied from it. `update` fetches a template again, lists what
+changes in its shared files, writes them after asking, and says which files
+of each of its profiles now differ from the template's. `diff` shows how a
+profile differs from the template profile it was copied from.
 
 ### `unibox validate`
 

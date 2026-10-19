@@ -326,6 +326,10 @@ const ProfileFormat = 6
 
 type Profile struct {
 	Version int `yaml:"version" json:"-"`
+	// Template is where the profile was copied from, <template>/<profile>:
+	// its install scripts and instruction texts are in .templates/<template>,
+	// between the user's _shared and unibox's .shared.
+	Template string `yaml:"template" json:"-"`
 	// Dockerfile is sandbox.dockerfile when the profile has it, which a
 	// profile no longer names; empty when it names a built image instead.
 	Dockerfile string `yaml:"-" json:"dockerfile"`
@@ -733,6 +737,21 @@ func LoadProfile(root, name string) (Profile, error) {
 			}
 		}
 	}
+	// A profile copied from a template sees that template's shared files
+	// too, and no other template's.
+	if p.Template != "" {
+		t := p.TemplateName()
+		if ValidName(t) != nil {
+			return p, fmt.Errorf("profile %s: template %q is <template>/<profile>, as unibox init --from writes it", name, p.Template)
+		}
+		dir := filepath.Join(p.Root, ".templates", t)
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			return p, fmt.Errorf("profile %s was copied from template %s, which .templates no longer has; run unibox template update %s, or take template: out of the profile", name, t, t)
+		}
+		if err = snapshot(dir, ".templates/"+t+"/"); err != nil {
+			return p, err
+		}
+	}
 	if p.Start != "" {
 		if _, ok := p.Files[filepath.ToSlash(p.Start)]; !ok {
 			return p, fmt.Errorf("profile %s: missing %s", name, p.Start)
@@ -822,7 +841,7 @@ func (p Profile) BuildFiles() map[string]SnapshotFile {
 	out := make(map[string]SnapshotFile, len(p.Files))
 	for name, file := range p.Files {
 		// The shared instruction texts go to the agent, not into the image.
-		if strings.HasPrefix(name, ".shared/@instructions/") || strings.HasPrefix(name, "_shared/@instructions/") {
+		if strings.HasPrefix(name, ".shared/@instructions/") || strings.HasPrefix(name, "_shared/@instructions/") || strings.HasPrefix(name, ".templates/") && strings.Contains(name, "/@instructions/") || strings.HasSuffix(name, "/source.yaml") && strings.HasPrefix(name, ".templates/") {
 			continue
 		}
 		if !skip[name] {
@@ -843,7 +862,12 @@ func (p Profile) InstallContext() (map[string]SnapshotFile, error) {
 		return nil, err
 	}
 	out := map[string]SnapshotFile{"usr/local/bin/@install": {runner, 0o755}}
-	for _, from := range []string{".shared/@install/", "_shared/@install/"} {
+	// Later wins: the template's over unibox's, the user's over both.
+	froms := []string{".shared/@install/"}
+	if p.Template != "" {
+		froms = append(froms, ".templates/"+p.TemplateName()+"/@install/")
+	}
+	for _, from := range append(froms, "_shared/@install/") {
 		for name, file := range p.Files {
 			if rest, ok := strings.CutPrefix(name, from); ok {
 				out["usr/local/lib/unibox/install/"+rest] = file
@@ -851,6 +875,18 @@ func (p Profile) InstallContext() (map[string]SnapshotFile, error) {
 		}
 	}
 	return out, nil
+}
+
+// TemplateName is the template the profile was copied from, "" for none.
+func (p Profile) TemplateName() string {
+	name, _, _ := strings.Cut(p.Template, "/")
+	return name
+}
+
+// TemplateProfile is the template's profile this one was copied from.
+func (p Profile) TemplateProfile() string {
+	_, profile, _ := strings.Cut(p.Template, "/")
+	return profile
 }
 
 // OAuthAgent is the agent the profile signs in by OAuth; the first in the
@@ -955,7 +991,7 @@ func (p Profile) BuildArgs(runtime string) ([]string, error) {
 // confined to it when read.
 func (p Profile) instructionFile(entry string) (string, error) {
 	if ValidName(entry) == nil {
-		return sharedText(p.Root, entry)
+		return sharedText(p.Root, p.TemplateName(), entry)
 	}
 	if filepath.IsAbs(entry) || !strings.HasSuffix(entry, ".md") {
 		return "", fmt.Errorf("instruction %q is neither a name of _shared/@instructions or .shared/@instructions nor a relative .md path", entry)
@@ -964,9 +1000,14 @@ func (p Profile) instructionFile(entry string) (string, error) {
 }
 
 // sharedText is the file of a shared instruction text: the user's when
-// _shared/@instructions has it, else unibox's.
-func sharedText(root, name string) (string, error) {
-	for _, dir := range []string{"_shared", ".shared"} {
+// _shared/@instructions has it, else the profile's template's, else
+// unibox's.
+func sharedText(root, template, name string) (string, error) {
+	dirs := []string{"_shared"}
+	if template != "" {
+		dirs = append(dirs, filepath.Join(".templates", template))
+	}
+	for _, dir := range append(dirs, ".shared") {
 		file := filepath.Join(root, dir, "@instructions", name+".md")
 		if _, err := os.Lstat(file); err == nil {
 			return file, nil
@@ -996,7 +1037,7 @@ func (p Profile) InstructionText(attached []string) (string, error) {
 		if err := ValidName(name); err != nil {
 			return "", fmt.Errorf("attached instructions are names of shared texts: %w", err)
 		}
-		path, err := sharedText(p.Root, name)
+		path, err := sharedText(p.Root, p.TemplateName(), name)
 		if err != nil {
 			return "", err
 		}

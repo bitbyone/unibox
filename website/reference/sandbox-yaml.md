@@ -8,6 +8,7 @@ unibox lays them out. An unknown key is an error, at any level.
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `version` | integer | the profile's format; first in the file. Absent means format 0 |
+| `template` | string | `<template>/<profile>` it was copied from, written by `init --from` |
 | `image` | string | an image built elsewhere; nothing is built. Without it, the image builds from `sandbox.dockerfile` |
 | `resources` | mapping | `cpus` and `memory` for each sandbox |
 | `agents` | list or mapping | the agents the image has, in order |

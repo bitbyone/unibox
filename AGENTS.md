@@ -72,6 +72,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   service's `user` and `author`. A run stops while one is missing. `env`
   is the one place a variable is set; a service's placeholder goes there
   as `${services.<name>}`. Tokens stay `secret:<name>`.
+- **A template is copied, never inherited.** `init --from` copies a
+  profile, which is then the user's; the template's `_shared` goes to
+  `.templates/<template>/`, unibox's to rewrite, looked up between the
+  user's `_shared` and `.shared` for profiles with `template:` alone.
 - **msb is an experimental runtime.** sbx is the supported one and the
   default; msb shows that profiles carry over, and is used only when set
   as `default_runtime` or asked for with `--runtime` (`Experimental`). The

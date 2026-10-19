@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,11 +58,13 @@ func (p Paths) SaveVars(u UserVars) error {
 			delete(u.Profiles, name)
 		}
 	}
-	b, err := yaml.Marshal(u)
-	if err != nil {
+	var b bytes.Buffer
+	enc := yaml.NewEncoder(&b)
+	enc.SetIndent(2)
+	if err := enc.Encode(u); err != nil {
 		return err
 	}
-	return AtomicWrite(p.VarsFile(), append([]byte(varsHeader), b...), 0o600)
+	return AtomicWrite(p.VarsFile(), append([]byte(varsHeader), b.Bytes()...), 0o600)
 }
 
 // EnsureVarsFile lays the file out when there is none, so a person finds

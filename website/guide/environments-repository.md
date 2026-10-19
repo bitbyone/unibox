@@ -36,6 +36,8 @@ my-envs/
 ├── .shared/                     unibox's, kept at its own version
 │   ├── @install/                base, agents/claude, tools/nvm, ...
 │   └── @instructions/unibox.md
+├── .templates/                  templates' shared files (unibox init --from)
+│   └── <template>/              @install, @instructions, source.yaml
 └── README.md
 ```
 
@@ -63,7 +65,9 @@ a file by its path from `sandbox.yaml` - `../../notes/style.md`.
   `@instructions/unibox.md`.
 
 Both exist twice: in `_shared/`, which is yours, and in `.shared/`, which is
-unibox's. **Yours win by name.** Overriding one of unibox's scripts or texts
+unibox's. **Yours win by name.** A profile copied from a
+[template](./templates) also finds its template's, in `.templates/<template>/`,
+between the two. Overriding one of unibox's scripts or texts
 is putting one of the same name into `_shared`, never editing `.shared`.
 
 The texts of `@instructions` are `.md` files, and none may be named

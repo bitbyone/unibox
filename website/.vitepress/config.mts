@@ -21,6 +21,7 @@ const guideSidebar = [
       { text: 'Profiles', link: '/guide/profiles' },
       { text: 'Images', link: '/guide/images' },
       { text: 'Scripts and Instructions', link: '/guide/scripts-and-instructions' },
+      { text: 'Templates', link: '/guide/templates' },
     ],
   },
   {

@@ -219,6 +219,17 @@ unibox var ls --profile dev
 A service's `user` and `author` may refer to a var too. Tokens stay in the
 platform's store as `secret:<name>`.
 
+## Templates
+
+Any environments repository is a template too: `unibox init <profile> --from
+<git-url|directory>` copies one of its profiles into yours and walks you
+through its vars and tokens (`-i` asks which profile). The copy is yours to
+change. The template's shared install scripts and instruction texts are kept
+under `.templates/<template>/`, apart from your `_shared`, which wins by
+name; `unibox template update <template>` takes them anew and says how your
+profiles differ from the template's, `unibox template diff <profile>` shows
+how.
+
 ## Scripts
 
 `start` runs in the VM at every boot of it. Anything else runs only when

@@ -1,0 +1,345 @@
+package cli
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/spf13/cobra"
+
+	"github.com/tobola/unibox/internal/unibox"
+	"github.com/tobola/unibox/internal/unibox/api"
+)
+
+// readLine takes one line of input a byte at a time, so nothing after it is
+// taken from a reader the next question reads.
+func (o *options) readLine(prompt string) (string, error) {
+	fmt.Fprint(o.log, prompt)
+	var line []byte
+	one := make([]byte, 1)
+	for {
+		n, err := o.input.Read(one)
+		if n == 1 {
+			if one[0] == '\n' {
+				break
+			}
+			line = append(line, one[0])
+		}
+		if err != nil {
+			if len(line) == 0 {
+				return "", fmt.Errorf("input ended before an answer")
+			}
+			break
+		}
+	}
+	return strings.TrimSpace(string(line)), nil
+}
+
+// initFrom copies a template's profile into the repository and walks the
+// user through what it needs of them.
+func (o *options) initFrom(cmd *cobra.Command, root, previous, name, from, use, template string, interactive bool) error {
+	ctx := cmd.Context()
+	t, err := unibox.FetchTemplate(ctx, from)
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+	if template == "" {
+		template = unibox.TemplateNameOf(t.Source)
+	}
+	profiles, err := t.Profiles()
+	if err != nil {
+		return err
+	}
+	if use == "" {
+		use = name
+	}
+	if use == "" {
+		if !interactive || len(profiles) == 0 {
+			return fmt.Errorf("say which of template %s's profiles to copy: %s (--use, or the profile's name)", template, strings.Join(profiles, ", "))
+		}
+		fmt.Fprintf(o.log, "Template %s has the profiles %s.\n", template, strings.Join(profiles, ", "))
+		if use, err = o.readLine("Profile to copy [" + profiles[0] + "]: "); err != nil {
+			return err
+		}
+		if use == "" {
+			use = profiles[0]
+		}
+	}
+	if name == "" {
+		name = use
+		if interactive {
+			v, err := o.readLine("Name of your copy [" + use + "]: ")
+			if err != nil {
+				return err
+			}
+			if v != "" {
+				name = v
+			}
+		}
+	}
+	if err = os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	if _, err = t.CopyProfile(root, name, use, template); err != nil {
+		return err
+	}
+	if root != previous {
+		cfg := o.manager.Config
+		cfg.Environments = root
+		if err := o.paths.SaveConfig(cfg); err != nil {
+			return err
+		}
+		o.manager.Config = cfg
+	}
+	if _, err := o.paths.EnsureVarsFile(); err != nil {
+		return err
+	}
+	fmt.Fprintf(o.output, "copied profile %s of template %s as %s into %s\n", use, template, name, root)
+	if err = o.completeProfile(cmd, name, interactive); err != nil {
+		return err
+	}
+	return nil
+}
+
+// completeProfile asks for what a profile needs of the user before it can
+// run - their own values and its tokens - and offers the build. Without a
+// terminal it says what is missing and how to give it.
+func (o *options) completeProfile(cmd *cobra.Command, name string, interactive bool) error {
+	ctx := cmd.Context()
+	p, err := o.manager.Profile(name)
+	if err != nil {
+		return err
+	}
+	todo := []string{}
+	if missing := p.MissingVars(); len(missing) > 0 {
+		u, err := o.paths.LoadVars()
+		if err != nil {
+			return err
+		}
+		for _, v := range missing {
+			if !interactive {
+				todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
+				continue
+			}
+			value, err := o.readLine(fmt.Sprintf("%s (%s): ", v, p.Vars[v]))
+			if err != nil {
+				return err
+			}
+			if err = unibox.ValidVar(v, value); err != nil || value == "" {
+				todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
+				continue
+			}
+			u.Vars[v] = value
+		}
+		if err = o.paths.SaveVars(u); err != nil {
+			return err
+		}
+	}
+	if refs := p.SecretRefs(); len(refs) > 0 {
+		store, err := o.secretStore()
+		if err != nil {
+			return err
+		}
+		for _, ref := range refs {
+			if ok, _ := store.Has(ctx, ref); ok {
+				continue
+			}
+			what, explain, page := secretUse(p, ref)
+			if !interactive {
+				todo = append(todo, fmt.Sprintf("unibox secret set %s   # %s", ref, what))
+				continue
+			}
+			fmt.Fprintf(o.log, "%s:\n", what)
+			if err := o.ensureSecret(cmd, store, ref, false, explain, page); err != nil {
+				return err
+			}
+		}
+	}
+	if len(todo) > 0 {
+		fmt.Fprintf(o.output, "profile %s needs, before it runs:\n", name)
+		for _, line := range todo {
+			fmt.Fprintf(o.output, "  %s\n", line)
+		}
+		return nil
+	}
+	if interactive && o.ask("Build the image of profile "+name+" now?") {
+		if err := o.manager.Build(ctx, name, "", false); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(o.output, "profile %s is ready; start with unibox run --profile %s --agent <agent> in a repository\n", name, name)
+	return nil
+}
+
+// secretUse says what a profile uses a secret for, and where a service's
+// token is made when unibox knows the kind.
+func secretUse(p unibox.Profile, ref string) (what string, explain []string, page string) {
+	for _, svc := range sortedNames(p.Services) {
+		s := p.Services[svc]
+		if s.Command != unibox.SecretPrefix+ref {
+			continue
+		}
+		for kind, k := range serviceKinds {
+			if kind != "generic" && strings.HasPrefix(svc, kind) {
+				explain = k.explain
+				if k.page != nil && len(s.Host) > 0 {
+					host, _, _ := strings.Cut(s.Host[0], "/")
+					page = k.page(host, svc)
+				}
+			}
+		}
+		return "the token of service " + svc + " (" + strings.Join(s.ProxyHosts(), ", ") + ")", explain, page
+	}
+	for _, id := range p.Agents {
+		if p.Auth[id].Command == unibox.SecretPrefix+ref {
+			switch id {
+			case "claude":
+				explain = []string{"run claude setup-token where claude is installed; it prints a token for your subscription"}
+			case "copilot":
+				explain = []string{"a fine-grained GitHub token: no repositories, Account permissions > Copilot Requests: Read-only"}
+				page = "https://github.com/settings/personal-access-tokens/new"
+			}
+			return "the " + p.Auth[id].Method + " login of agent " + id, explain, page
+		}
+	}
+	return "secret " + ref, nil, ""
+}
+
+func sortedNames[V any](m map[string]V) []string { return sorted(m) }
+
+// templateCommand lists the templates the repository keeps profiles from,
+// updates their shared files and tells how a profile differs from its own.
+func (o *options) templateCommand() *cobra.Command {
+	c := &cobra.Command{Use: "template", Short: "The templates profiles were copied from: list them, update their shared files, compare a profile", Long: `A profile copied with unibox init --from is yours to change. What the
+template's profiles share - its install scripts and instruction texts - is
+kept under .templates/<template>, rewritten only from the template, between
+your _shared, which wins, and unibox's .shared.`}
+	c.AddCommand(&cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List the templates kept, where they come from and the profiles copied from each", RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := o.manager.Environments()
+		if err != nil {
+			return err
+		}
+		rows := []map[string]any{}
+		for _, name := range unibox.KeptTemplates(root) {
+			src, _ := unibox.ReadTemplateSource(root, name)
+			profiles := []string{}
+			for _, p := range unibox.TemplateProfiles(root, name) {
+				profiles = append(profiles, p.Name)
+			}
+			rows = append(rows, map[string]any{"name": name, "source": src.Source, "commit": src.Commit, "profiles": profiles})
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "templates": rows})
+		}
+		if len(rows) == 0 {
+			fmt.Fprintln(o.output, "no templates; unibox init <profile> --from <repository> copies a profile from one")
+			return nil
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "TEMPLATE\tSOURCE\tCOMMIT\tPROFILES")
+		for _, r := range rows {
+			commit := r["commit"].(string)
+			if len(commit) > 12 {
+				commit = commit[:12]
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r["name"], r["source"], commit, strings.Join(r["profiles"].([]string), ", "))
+		}
+		return w.Flush()
+	}})
+	c.AddCommand(&cobra.Command{Use: "update template", Args: cobra.ExactArgs(1), Short: "Take the template's shared files anew, and tell how its profiles now differ from it", RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := o.manager.Environments()
+		if err != nil {
+			return err
+		}
+		src, err := unibox.ReadTemplateSource(root, args[0])
+		if err != nil {
+			return err
+		}
+		t, err := unibox.FetchTemplate(cmd.Context(), src.Source)
+		if err != nil {
+			return err
+		}
+		defer t.Close()
+		changes, err := t.SharedChanges(root, args[0])
+		if err != nil {
+			return err
+		}
+		if changes.Empty() {
+			fmt.Fprintf(o.output, "template %s's shared files are as kept\n", args[0])
+		} else {
+			for _, f := range []struct {
+				sign string
+				list []string
+			}{{"+", changes.Added}, {"~", changes.Changed}, {"-", changes.Removed}} {
+				for _, rel := range f.list {
+					fmt.Fprintf(o.output, "  %s %s\n", f.sign, rel)
+				}
+			}
+			if err := o.confirm("Write these into .templates/" + args[0] + "? Images of its profiles build again."); err != nil {
+				return err
+			}
+			if err = t.WriteShared(root, args[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(o.output, "updated template %s to %s\n", args[0], shortCommit(t.Commit))
+		}
+		for _, p := range unibox.TemplateProfiles(root, args[0]) {
+			differ, err := t.ProfileDiff(root, p)
+			if err != nil {
+				fmt.Fprintf(o.output, "profile %s: %v\n", p.Name, err)
+				continue
+			}
+			if len(differ) == 0 {
+				fmt.Fprintf(o.output, "profile %s is as the template's %s\n", p.Name, p.TemplateProfile())
+				continue
+			}
+			fmt.Fprintf(o.output, "profile %s differs from the template's %s in %s; unibox template diff %s shows how\n", p.Name, p.TemplateProfile(), strings.Join(differ, ", "), p.Name)
+		}
+		return nil
+	}})
+	c.AddCommand(&cobra.Command{Use: "diff profile", Args: cobra.ExactArgs(1), Short: "Show how a profile differs from the template profile it was copied from", RunE: func(cmd *cobra.Command, args []string) error {
+		p, err := o.manager.Profile(args[0])
+		if err != nil {
+			return err
+		}
+		if p.Template == "" {
+			return fmt.Errorf("profile %s was not copied from a template", p.Name)
+		}
+		src, err := unibox.ReadTemplateSource(p.Root, p.TemplateName())
+		if err != nil {
+			return err
+		}
+		t, err := unibox.FetchTemplate(cmd.Context(), src.Source)
+		if err != nil {
+			return err
+		}
+		defer t.Close()
+		// git's own diff, the template's side first: what was taken out
+		// of it shows as removed, what the user added as added.
+		diff := exec.CommandContext(cmd.Context(), "git", "diff", "--no-index", "--", filepath.Join(t.Dir, "sandboxes", p.TemplateProfile()), p.Dir)
+		diff.Stdout, diff.Stderr = o.output, o.log
+		if err := diff.Run(); err != nil {
+			if e, ok := err.(*exec.ExitError); ok && e.ExitCode() == 1 {
+				return nil
+			}
+			return err
+		}
+		fmt.Fprintf(o.output, "profile %s is as the template's %s\n", p.Name, p.TemplateProfile())
+		return nil
+	}})
+	return c
+}
+
+func shortCommit(c string) string {
+	if len(c) > 12 {
+		return c[:12]
+	}
+	if c == "" {
+		return "its current state"
+	}
+	return c
+}
