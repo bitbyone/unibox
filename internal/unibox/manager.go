@@ -129,8 +129,17 @@ func (m *Manager) defaultRuntime() string {
 	return ""
 }
 
+// profile loads a profile with its person's values in it.
 func (m *Manager) profile(name string) (Profile, error) {
-	return LoadProfile(m.Config.Environments, name)
+	p, err := LoadProfile(m.Config.Environments, name)
+	if err != nil {
+		return p, err
+	}
+	vars, err := m.Paths.LoadVars()
+	if err != nil {
+		return p, err
+	}
+	return p.withVars(vars.For(p.Name))
 }
 
 // Environments says where the environments repository is, or, when there is
@@ -425,6 +434,9 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 			}
 		}
 	}
+	if err := p.missingVarsError(); err != nil {
+		result.Needs = append(result.Needs, api.Need{Code: "var_missing", Message: err.Error()})
+	}
 	if IsExperimental(r) {
 		result.Needs = append(result.Needs, api.Need{Code: "runtime_experimental", Warning: true, Message: fmt.Sprintf("runtime %s is experimental; sbx is the supported runtime", r.Name())})
 	}
@@ -506,6 +518,9 @@ func (m *Manager) findBox(ctx context.Context, r Runtime, b api.Sandbox) (Box, b
 
 func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, r Runtime, p Profile, force, rebuild bool) error {
 	if err := r.Available(ctx); err != nil {
+		return err
+	}
+	if err := p.missingVarsError(); err != nil {
 		return err
 	}
 	if err := m.noteAccess(p, m.Log); err != nil {

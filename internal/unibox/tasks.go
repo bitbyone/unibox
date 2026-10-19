@@ -516,7 +516,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		dir = path.Join(dir, t.Repositories[0].Name)
 	}
 	if len(req.Scripts) > 0 {
-		env := append([]string{"UNIBOX_SANDBOX=" + b.Name, "UNIBOX_TASK=" + t.ID, "UNIBOX_TASK_DIR=" + t.Directory}, p.ServiceSessionEnv()...)
+		env := append([]string{"UNIBOX_SANDBOX=" + b.Name, "UNIBOX_TASK=" + t.ID, "UNIBOX_TASK_DIR=" + t.Directory}, p.SessionEnv()...)
 		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", scriptsScript(p, req.Scripts, env)}, Directory: dir}), errout); err != nil {
 			what := t.Agent
 			if req.Shell {
@@ -528,7 +528,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if req.Shell {
 		// A shell is the user's own session: no agent is credited in its
 		// commits.
-		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(p.ServiceSessionEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
+		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(p.SessionEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
 	a, _ := FindAgent(t.Agent)
 	args := append([]string{a.Command}, a.Args...)
@@ -537,7 +537,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	// task was prepared with, as the profile names it.
 	name, _, _ := strings.Cut(a.CoAuthor, " <")
 	env := append(slices.Clone(a.Env), "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
-	env = append(env, p.ServiceSessionEnv()...)
+	env = append(env, p.SessionEnv()...)
 	if s, ok := r.(SessionEnver); ok {
 		env = append(env, s.SessionEnv(p, a.ID)...)
 	}
@@ -620,7 +620,7 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 	defer m.finishRun(b, r, run, lease, usage, nil)
 	var env []string
 	if p, err := m.profile(b.Profile); err == nil {
-		env = p.ServiceSessionEnv()
+		env = p.SessionEnv()
 	}
 	return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(env, []string{"bash", "-l"}))}, Interactive: true, Input: in, Output: out, Error: errout}))
 }
@@ -677,7 +677,7 @@ func (m *Manager) RunScripts(ctx context.Context, name string, scripts []string,
 		return err
 	}
 	defer m.finishRun(b, r, run, lease, usage, nil)
-	env := append([]string{"UNIBOX_SANDBOX=" + b.Name}, p.ServiceSessionEnv()...)
+	env := append([]string{"UNIBOX_SANDBOX=" + b.Name}, p.SessionEnv()...)
 	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, []string{"sh", "-c", scriptsScript(p, scripts, env)})}, Directory: "/work"}), out)
 }
 

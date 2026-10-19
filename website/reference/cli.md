@@ -387,6 +387,20 @@ Keeps tokens in the platform's store, for profiles to name as
 `secret:<name>`. `set` asks on a hidden prompt or reads stdin; `ls` lists the
 names, never the values.
 
+### `unibox var`
+
+```
+unibox var set <name> <value> [--profile <name>]
+unibox var ls [--profile <name>]
+unibox var rm <name> [--profile <name>]
+```
+
+Keeps your own values for what profiles ask of you (`vars`), in
+`~/.config/unibox/vars.yaml`. Without `--profile` a value applies to every
+profile; with it, to that profile alone, over the shared one. `ls --profile`
+lists what the profile asks, each value and where it comes from, and what is
+missing.
+
 ## unibox itself
 
 ### `unibox config`

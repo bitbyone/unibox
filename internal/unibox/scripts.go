@@ -31,7 +31,7 @@ func initializeScript(p Profile, instructions string) string {
 	}
 	s += "boot=$(cat /proc/sys/kernel/random/boot_id)\nprevious=$(cat /var/lib/unibox/started 2>/dev/null || true)\nif [ \"$boot\" != \"$previous\" ]; then\n"
 	if p.Start != "" {
-		s += "  /bin/sh /var/lib/unibox/start.sh\n"
+		s += "  " + strings.Join(withEnv(quoteAll(p.SessionEnv()), []string{"/bin/sh", "/var/lib/unibox/start.sh"}), " ") + "\n"
 	}
 	s += "  printf '%s\\n' \"$boot\" > /var/lib/unibox/started\nfi\n"
 	return s

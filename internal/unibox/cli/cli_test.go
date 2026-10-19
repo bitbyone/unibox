@@ -152,6 +152,10 @@ func TestInitLaysTheRepositoryOutAndKeepsWhatExists(t *testing.T) {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
 	}
+	// Each person's values get a file of their own in their home.
+	if _, err := os.Stat(paths.VarsFile()); err != nil || !strings.Contains(out.String(), "unibox var set") {
+		t.Fatalf("no vars file: %v\n%s", err, out.String())
+	}
 	p, err := unibox.LoadProfile(root, "my2n")
 	if err != nil {
 		t.Fatal(err)

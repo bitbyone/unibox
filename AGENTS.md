@@ -65,6 +65,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
 
 ## Decisions worth knowing
 
+- **A profile holds nothing personal.** What each person sets for
+  themselves it declares under `vars`; the values are in the user's
+  `~/.config/unibox/vars.yaml`, set in every session and for `start`, and
+  a run stops while one is missing. Tokens stay `secret:<name>`.
 - **msb is an experimental runtime.** sbx is the supported one and the
   default; msb shows that profiles carry over, and is used only when set
   as `default_runtime` or asked for with `--runtime` (`Experimental`). The

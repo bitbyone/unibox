@@ -899,6 +899,21 @@ git:
   and the network rules do not map onto it) and sbx's `sbxenv.yaml`
   (sbx's alone, and experimental).
 
+### Values of each person's own
+
+A profile is meant to be shared by a team, so it holds nothing personal.
+What each person has to set - a user name a build reads, a commit identity
+on one forge - the profile declares under `vars`, by name with what it is
+for. The values live in the user's `~/.config/unibox/vars.yaml`: shared ones
+under `vars`, a profile's own under `profiles.<name>`, which win. A run stops
+while one is missing (`var_missing`, and `ensure` refuses), since a sandbox
+without it would fail later and less clearly. The values reach the sandbox
+as variables of every session unibox starts and of `start`, not as build
+arguments: a build argument stays in the image's layers and history, and a
+change of it would rebuild; and a service's `user` and `author` may name one
+as `${NAME}`, filled when the profile is loaded. A secret is never a var -
+a name that says one is refused - it stays `secret:<name>`.
+
 ### Scripts
 
 Each at its own moment, all running inside the VM:

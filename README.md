@@ -190,6 +190,23 @@ mounted caches, logins, services, network rules), the next start says what
 changed and what it leads to - an image built, a sandbox recreated, or rules
 applied to the running sandbox live.
 
+## Your own values
+
+A profile a team shares holds nothing personal. What each person sets for
+themselves - a user name, a commit identity - it declares under `vars`, by
+name with what it is for; each person keeps the values in
+`~/.config/unibox/vars.yaml` (laid out by `unibox init`):
+
+```sh
+unibox var set ORG_GRADLE_PROJECT_artifactoryUser2N tobola              # every profile
+unibox var set GIT_AUTHOR_2N 'Jan Tobola <tobola@2n.com>' --profile dev  # one profile, over it
+unibox var ls --profile dev
+```
+
+A run stops while a value is missing. unibox sets the values in every
+session and for `start`; a service's `user` and `author` may name one as
+`${NAME}`. Tokens stay in the platform's store as `secret:<name>`.
+
 ## Scripts
 
 `start` runs in the VM at every boot of it. Anything else runs only when

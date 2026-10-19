@@ -112,6 +112,24 @@ read-only dependency cache, say: what the host already has is not downloaded
 again, and what is missing goes to the sandbox's own cache. Read-write would
 let the agent plant a file the host's next build runs.
 
+### `vars`
+
+What each person sets for themselves - a user name, a commit identity -
+declared by name with what it is for, so the profile holds nothing personal
+and a team shares it as it is. Each person keeps the values in
+`~/.config/unibox/vars.yaml`, which `unibox init` lays out:
+
+```sh
+unibox var set ORG_GRADLE_PROJECT_artifactoryUser2N tobola     # every profile
+unibox var set GIT_AUTHOR_2N 'Jan Tobola <tobola@2n.com>' --profile dev   # one profile, over the shared one
+unibox var ls --profile dev       # what the profile asks, each value and where it comes from
+```
+
+A run stops while a value is missing and says which and what for. unibox
+sets the values in every session and for `start`, so a start script can
+write them into a tool's configuration; a service's `user` and `author` may
+name one as `${NAME}`. A token is never a var: it stays a `secret:<name>`.
+
 ## Strict by design
 
 An unknown field is an error naming it, never skipped: a misspelt `memmory`

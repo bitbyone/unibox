@@ -311,15 +311,20 @@ type Profile struct {
 	// repository had to carry, which none did, and format 4 has none. It
 	// stays in JSON so the settings recorded of a sandbox before then
 	// compare equal, and do not recreate it.
-	Bootstrap    string                  `yaml:"-" json:"bootstrap"`
-	Instructions []string                `yaml:"instructions" json:"instructions"`
-	AgentConfig  map[string]string       `yaml:"-" json:"agent_config,omitempty"`
-	Git          GitOptions              `yaml:"git" json:"git"`
-	Name         string                  `yaml:"-" json:"-"`
-	Dir          string                  `yaml:"-" json:"-"`
-	Root         string                  `yaml:"-" json:"-"`
-	Revision     string                  `yaml:"-" json:"-"`
-	Files        map[string]SnapshotFile `yaml:"-" json:"-"`
+	Bootstrap    string   `yaml:"-" json:"bootstrap"`
+	Instructions []string `yaml:"instructions" json:"instructions"`
+	// Vars are what each person sets for themselves, by name, with what
+	// each is for; their values live in the user's vars.yaml, never in the
+	// profile. VarValues are the values found for them.
+	Vars        map[string]string       `yaml:"vars" json:"-"`
+	VarValues   map[string]string       `yaml:"-" json:"-"`
+	AgentConfig map[string]string       `yaml:"-" json:"agent_config,omitempty"`
+	Git         GitOptions              `yaml:"git" json:"git"`
+	Name        string                  `yaml:"-" json:"-"`
+	Dir         string                  `yaml:"-" json:"-"`
+	Root        string                  `yaml:"-" json:"-"`
+	Revision    string                  `yaml:"-" json:"-"`
+	Files       map[string]SnapshotFile `yaml:"-" json:"-"`
 }
 type SnapshotFile struct {
 	Data []byte `json:"data"`
@@ -552,7 +557,14 @@ func LoadProfile(root, name string) (Profile, error) {
 		if (s.Author != "" || s.CoAuthor != nil) && !s.Git {
 			return p, fmt.Errorf("profile %s: service %s sets author or co_author, which only a git service has", name, svc)
 		}
-		if s.Author != "" {
+		for _, field := range []string{s.User, s.Author} {
+			for _, ref := range VarRefs(field) {
+				if _, ok := p.Vars[ref]; !ok {
+					return p, fmt.Errorf("profile %s: service %s names ${%s}, which its vars do not declare", name, svc, ref)
+				}
+			}
+		}
+		if s.Author != "" && len(VarRefs(s.Author)) == 0 {
 			if _, _, err := AuthorParts(s.Author); err != nil {
 				return p, fmt.Errorf("profile %s: service %s author must be 'Name <email>'", name, svc)
 			}
@@ -567,6 +579,14 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 		if !ValidCoAuthor(c) {
 			return p, fmt.Errorf("profile %s: co_author of %s must be Name <email>, or Name <> for none", name, id)
+		}
+	}
+	for _, key := range sortedKeys(p.Vars) {
+		if !toolEnvName.MatchString(key) || key == "HOME" || key == "PATH" || strings.HasPrefix(key, "UNIBOX_") || slices.Contains(p.Env, key) {
+			return p, fmt.Errorf("profile %s: var %q must be a variable name of its own, not HOME, PATH, UNIBOX_ or one of env", name, key)
+		}
+		if sensitiveEnv.MatchString(key) {
+			return p, fmt.Errorf("profile %s: var %s names a secret; keep it with unibox secret set and name it as secret:<name>", name, key)
 		}
 	}
 	for _, key := range p.Env {

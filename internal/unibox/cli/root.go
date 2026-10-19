@@ -52,7 +52,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 		o.manager = m
 		return m.RefreshPlugin()
 	}
-	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand(), o.versionCommand())
+	root.AddCommand(o.configCommand(), o.initCommand(), o.validateCommand(), o.inspectCommand(), o.profilesCommand(), o.runtimesCommand(), o.buildCommand(), o.diffCommand(), o.instructionsCommand(), o.createCommand(), o.listCommand(), o.tasksCommand(), o.addRepoCommand(), o.resumeCommand(), o.shellCommand(), o.recreateCommand(), o.stopCommand(), o.removeCommand(false), o.removeCommand(true), o.herdrCommand(), o.secretCommand(), o.varCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.portCommand(), o.scriptCommand(), o.pruneCommand(), o.versionCommand())
 	for _, name := range []string{"check", "prepare", "run"} {
 		root.AddCommand(o.taskCommand(name))
 	}

@@ -163,14 +163,20 @@ unibox service add dev artifactory-2n --kind generic --host artifactory.example.
   --env ORG_GRADLE_PROJECT_artifactoryPassword2N --scheme raw --secret artifactory-2n
 ```
 
-and the user and the repository's URL in the sandbox's
-`~/.gradle/gradle.properties`, written by the profile's Dockerfile or start
-script:
+The user is each person's own, so the profile asks for it under `vars`
+rather than naming it, and Gradle reads it from the same kind of variable:
 
-```properties
-artifactoryUrl2N=https://artifactory.example.com/artifactory/maven-release
-artifactoryUser2N=jan.tobola
+```yaml
+vars:
+  ORG_GRADLE_PROJECT_artifactoryUser2N: your Artifactory user name
 ```
+
+```sh
+unibox var set ORG_GRADLE_PROJECT_artifactoryUser2N tobola
+```
+
+The repository's URL is the team's, so it can sit in the image's
+`~/.gradle/gradle.properties` or be a var too.
 
 ## Stores unibox does not keep
 

@@ -171,6 +171,11 @@ func (o *options) initCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		// Each person's values go in their home, laid out for them here.
+		varsWritten, err := o.paths.EnsureVarsFile()
+		if err != nil {
+			return err
+		}
 		if root != previous {
 			cfg := o.manager.Config
 			cfg.Environments = root
@@ -188,6 +193,9 @@ func (o *options) initCommand() *cobra.Command {
 			fmt.Fprintf(o.output, "environments repository: %s (configured; was %s)\n", root, previous)
 		default:
 			fmt.Fprintf(o.output, "environments repository: %s\n", root)
+		}
+		if varsWritten {
+			fmt.Fprintf(o.output, "wrote %s, for your own values of what profiles ask (unibox var set)\n", o.paths.VarsFile())
 		}
 		for i, line := range report.Migrated {
 			if i == 0 {

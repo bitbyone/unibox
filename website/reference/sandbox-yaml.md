@@ -19,6 +19,7 @@ unibox lays them out. An unknown key is an error, at any level.
 | `network` | mapping | `allow`, `deny` and `ports` |
 | `env` | list | host environment variables passed in by name |
 | `caches` | list | host directories mounted read-only |
+| `vars` | mapping | name to what it is for: values each person sets for themselves |
 
 `env`, `caches`, the agents' `auth`, `services` and `network` are **host
 access**: what the profile asks of the host. A change of them is told at the
@@ -193,6 +194,29 @@ caches:
 `env` names host variables whose values pass in. Each cache is a host
 directory mounted read-only at its absolute path, its path given to the
 sandbox in `env`.
+
+### `vars`
+
+```yaml
+vars:
+  ORG_GRADLE_PROJECT_artifactoryUser2N: your Artifactory user name
+  GIT_AUTHOR_2N: you on gitlab.2n.cz, as Name <email>
+services:
+  gitlab-2n:
+    git: true
+    host: gitlab.2n.cz
+    user: oauth2
+    command: secret:gitlab-2n
+    author: ${GIT_AUTHOR_2N}
+```
+
+What each person sets for themselves, by name, with what it is for. The
+values are not in the profile: each person keeps theirs in
+`~/.config/unibox/vars.yaml` with `unibox var set`. unibox sets them in every
+session it starts and for `start`, and a service's `user` and `author` may
+name one as `${NAME}`. A run stops while a value is missing. A name is a
+variable name; one that names a secret - a token, a password - is refused,
+as that belongs in `secret:<name>`.
 
 ## Files beside it
 
