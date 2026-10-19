@@ -26,13 +26,14 @@ unibox knows three kinds, from the name or from `--kind`:
 | --- | --- | --- |
 | `github` | git on `github.com`, user `x-access-token` | a fine-grained token with Contents read and write, or a classic one with `repo`; leave `workflow` unticked so the agent cannot change GitHub Actions |
 | `gitlab` | git on `gitlab.com`, user `oauth2` | a personal access token with `read_repository` and `write_repository`, or a project or group access token |
-| `artifactory` | scheme `bearer`, placeholder in `ARTIFACTORY_TOKEN` | an identity token from your Artifactory user profile |
+| `artifactory` | placeholder in `ARTIFACTORY_TOKEN` | an identity token from your Artifactory user profile |
 
-Anything else is `--kind generic` with `--host` and either `--git` or `--env`.
+Anything else is `--kind generic` with `--host`, and `--git` for a forge or
+`--env` for a tool that reads the placeholder from a variable.
 
 ```sh
 unibox service add web gitlab-work --kind gitlab --host gitlab.example.com
-unibox service add web registry --kind generic --host npm.example.com --env NPM_TOKEN --scheme bearer
+unibox service add web registry --kind generic --host npm.example.com --env NPM_TOKEN
 unibox service ls web          # each service, and whether its token is stored
 unibox service rm web registry # its token too, unless another profile names it
 ```
@@ -44,9 +45,9 @@ unibox service rm web registry # its token too, unless another profile names it
 | `--kind` | `github`, `gitlab`, `artifactory` or `generic` |
 | `--host` | a host, or `host/path` for one owner on a git forge (repeatable) |
 | `--git` | wire the sandbox's git to the hosts (generic services) |
-| `--env` | the variable a tool reads the placeholder from, instead of git |
-| `--scheme` | `basic`, `bearer` or `raw` |
-| `--user` | the user the forge pairs with the token (basic scheme) |
+| `--env` | the variable a tool reads the placeholder from: written into the profile's `env` as `NAME: ${services.<name>}` |
+| `--scheme` | a git service's header: `basic`, `bearer` or `raw` |
+| `--user` | the user a git forge pairs with the token (basic scheme) |
 | `--author` | who commits under the service, as `Name <email>`; `--author` on a run wins |
 | `--no-co-author` | no `Co-Authored-By` trailer for the agent in its repositories |
 | `--command` | a host command printing the token, for a store unibox does not keep |
@@ -145,34 +146,51 @@ unibox service add web artifactory --host artifactory.example.com --secret artif
 after it, unless another profile names it; a token stored on its own and
 named with `--secret` stays until `unibox secret rm`.
 
+## How a tool gets the placeholder
+
+A service holds one token for HTTP requests to its hosts. git signs in
+through a git service by itself: unibox puts its placeholder into the
+sandbox's git configuration. Any other tool finds the placeholder in a
+variable the profile's `env` sets to `${services.<name>}`:
+
+```yaml
+services:
+  artifactory:
+    host: artifactory.example.com
+    command: secret:artifactory
+env:
+  - ARTIFACTORY_TOKEN: ${services.artifactory}
+```
+
+The tool sends it in a header as it likes - `Authorization: Bearer`, its own
+header, or Basic authentication - and the proxy puts the token in its place
+on requests to the service's hosts. A token in a URL or a body, a request
+the tool signs with the token, and protocols other than HTTP are not served.
+
 ## A build's own credentials
 
 A tool that takes a user and a password, as Gradle's `credentials { username;
 password }` does, sends them as Basic authentication. The proxy finds the
 placeholder inside it too (checked with sbx), so the password can be the
-service's placeholder and the user an ordinary setting. Gradle reads a
+service's placeholder and the user each person's own value. Gradle reads a
 project property from `ORG_GRADLE_PROJECT_<property>`, so for a build that
-names `artifactoryUser2N` and `artifactoryPassword2N`, the service's `env` is
-that variable. sbx takes upper-case names only, so unibox gives sbx a name
-of its own and sets the variable itself in every session it starts - an
-agent's, a shell's, the scripts':
-
-```sh
-unibox secret set artifactory-2n        # the password, or an identity token
-unibox service add dev artifactory-2n --kind generic --host artifactory.example.com \
-  --env ORG_GRADLE_PROJECT_artifactoryPassword2N --scheme raw --secret artifactory-2n
-```
-
-The user is each person's own, so the profile asks for it under `vars`
-rather than naming it, and Gradle reads it from the same kind of variable:
+names `artifactoryUser2N` and `artifactoryPassword2N`:
 
 ```yaml
 vars:
-  ORG_GRADLE_PROJECT_artifactoryUser2N: your Artifactory user name
+  artifactory-user: your Artifactory user name
+services:
+  artifactory-2n:
+    host: artifactory.example.com
+    command: secret:artifactory-2n
+env:
+  - ORG_GRADLE_PROJECT_artifactoryUser2N: ${vars.artifactory-user}
+  - ORG_GRADLE_PROJECT_artifactoryPassword2N: ${services.artifactory-2n}
 ```
 
 ```sh
-unibox var set ORG_GRADLE_PROJECT_artifactoryUser2N tobola
+unibox secret set artifactory-2n          # the password, or an identity token
+unibox var set artifactory-user tobola    # each person their own
 ```
 
 The repository's URL is the team's, so it can sit in the image's
@@ -192,8 +210,6 @@ services:
     command: vault kv get -field=token secret/ci/gitlab
   artifactory:
     host: [artifactory.example.com, "*.jfrog.io"]
-    scheme: bearer
-    env: ARTIFACTORY_TOKEN
     command: op read op://vault/artifactory/token
 ```
 

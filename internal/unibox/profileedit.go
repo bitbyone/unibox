@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -164,7 +165,7 @@ func SetService(profile *yaml.Node, name string, s Service) {
 		}
 		add("host", hosts)
 	}
-	for _, f := range []struct{ key, value string }{{"scheme", s.Scheme}, {"user", s.User}, {"env", s.Env}, {"command", s.Command}, {"refresh", s.Refresh}, {"author", s.Author}} {
+	for _, f := range []struct{ key, value string }{{"scheme", s.Scheme}, {"user", s.User}, {"command", s.Command}, {"refresh", s.Refresh}, {"author", s.Author}} {
 		if f.value != "" {
 			add(f.key, scalarNode(f.value))
 		}
@@ -186,6 +187,49 @@ func RemoveService(profile *yaml.Node, name string) bool {
 		deleteMapKey(profile, "services")
 	}
 	return true
+}
+
+// SetEnvValue sets a variable in the profile's env - NAME: value, replacing
+// one it sets already - and keeps the host variables it passes in.
+func SetEnvValue(profile *yaml.Node, name, value string) {
+	env := mapValue(profile, "env")
+	if env == nil || env.Kind != yaml.SequenceNode {
+		env = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		setMapValue(profile, "env", env)
+	}
+	env.Style = 0
+	item := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{scalarNode(name), scalarNode(value)}}
+	for i, c := range env.Content {
+		if c.Kind == yaml.MappingNode && len(c.Content) == 2 && c.Content[0].Value == name {
+			env.Content[i] = item
+			return
+		}
+	}
+	env.Content = append(env.Content, item)
+}
+
+// RemoveEnvRefersTo takes out the variables of env whose value refers to
+// ref, such as ${services.artifactory}, and env with the last one; the
+// names it took out.
+func RemoveEnvRefersTo(profile *yaml.Node, ref string) []string {
+	env := mapValue(profile, "env")
+	if env == nil || env.Kind != yaml.SequenceNode {
+		return nil
+	}
+	removed := []string{}
+	kept := env.Content[:0]
+	for _, c := range env.Content {
+		if c.Kind == yaml.MappingNode && len(c.Content) == 2 && strings.Contains(c.Content[1].Value, ref) {
+			removed = append(removed, c.Content[0].Value)
+			continue
+		}
+		kept = append(kept, c)
+	}
+	env.Content = kept
+	if len(env.Content) == 0 {
+		deleteMapKey(profile, "env")
+	}
+	return removed
 }
 
 // SetStringList writes a list of the profile, on one line as the scaffold

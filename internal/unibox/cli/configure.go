@@ -367,7 +367,7 @@ var serviceKinds = map[string]serviceKind{
 	"gitlab": {git: true, host: "gitlab.com", user: "oauth2", page: func(host, name string) string {
 		return "https://" + host + "/-/user_settings/personal_access_tokens?name=" + url.QueryEscape("unibox "+name) + "&scopes=read_repository,write_repository"
 	}, explain: []string{"a personal access token with read_repository and write_repository"}},
-	"artifactory": {scheme: unibox.SchemeBearer, env: "ARTIFACTORY_TOKEN", explain: []string{
+	"artifactory": {env: "ARTIFACTORY_TOKEN", explain: []string{
 		"an identity token from your Artifactory user profile (Edit Profile > Generate an Identity Token)",
 	}},
 	"generic": {},
@@ -397,21 +397,29 @@ func (o *options) serviceCommand() *cobra.Command {
 		if !ok {
 			return fmt.Errorf("unknown --kind %s; use github, gitlab, artifactory or generic", kind)
 		}
-		s := unibox.Service{Git: k.git || git, Scheme: k.scheme, User: k.user, Env: k.env, Author: author, Refresh: refresh}
+		s := unibox.Service{Git: k.git || git, Scheme: k.scheme, User: k.user, Author: author, Refresh: refresh}
 		if len(hosts) > 0 {
 			s.Host = hosts
 		} else if k.host != "" {
 			s.Host = unibox.HostList{k.host}
 		}
-		for flag, set := range map[string]func(string){"user": func(v string) { s.User = v }, "scheme": func(v string) { s.Scheme = v }, "env": func(v string) { s.Env = v; s.Git = false }} {
+		envName := k.env
+		if cmd.Flags().Changed("env") {
+			envName = env
+			s.Git, s.User, s.Scheme = false, "", ""
+		}
+		for flag, set := range map[string]func(string){"user": func(v string) { s.User = v }, "scheme": func(v string) { s.Scheme = v }} {
 			if cmd.Flags().Changed(flag) {
-				set(map[string]string{"user": user, "scheme": scheme, "env": env}[flag])
+				set(map[string]string{"user": user, "scheme": scheme}[flag])
 			}
 		}
-		if s.Env != "" && s.Scheme == "" {
-			s.Scheme = unibox.SchemeBearer
+		if !s.Git && (s.User != "" || s.Scheme != "") {
+			return fmt.Errorf("--user and --scheme are a git service's; a tool makes its own header from the variable --env names")
 		}
-		if s.Git && s.Scheme == unibox.SchemeBearer || s.Scheme == unibox.SchemeRaw {
+		if s.Git {
+			envName = ""
+		}
+		if s.Git && (s.Scheme == unibox.SchemeBearer || s.Scheme == unibox.SchemeRaw) {
 			s.User = ""
 		}
 		if noCoAuthor {
@@ -477,6 +485,10 @@ func (o *options) serviceCommand() *cobra.Command {
 		}
 		if err := o.manager.EditProfile(profile, func(doc *yaml.Node) error {
 			unibox.SetService(doc, name, s)
+			// A tool finds the placeholder in the variable env names.
+			if envName != "" {
+				unibox.SetEnvValue(doc, envName, "${services."+name+"}")
+			}
 			return nil
 		}); err != nil {
 			return err
@@ -484,6 +496,10 @@ func (o *options) serviceCommand() *cobra.Command {
 		where := strings.Join(s.ProxyHosts(), ", ")
 		if s.Git {
 			where = "git at " + strings.Join(s.GitURLs(), ", ")
+		} else if envName != "" {
+			where += ", through " + envName
+		} else {
+			fmt.Fprintf(o.log, "name its placeholder in the profile's env for a tool to send it: - NAME: ${services.%s}, or add it again with --env NAME\n", name)
 		}
 		return o.success(fmt.Sprintf("profile %s signs %s in to %s; the next start applies it", profile, name, where))
 	}}
@@ -491,9 +507,9 @@ func (o *options) serviceCommand() *cobra.Command {
 	f.StringVar(&kind, "kind", "", "github, gitlab, artifactory or generic (default: from the name)")
 	f.StringSliceVar(&hosts, "host", nil, "Host, or host/path for one owner on a git forge (repeatable)")
 	f.BoolVar(&git, "git", false, "Wire the sandbox's git to the hosts (generic services)")
-	f.StringVar(&user, "user", "", "User the forge pairs with the token (basic scheme)")
-	f.StringVar(&scheme, "scheme", "", "basic, bearer or raw")
-	f.StringVar(&env, "env", "", "Variable a tool reads the placeholder from, instead of git")
+	f.StringVar(&user, "user", "", "User a git forge pairs with the token (basic scheme)")
+	f.StringVar(&scheme, "scheme", "", "A git service's header: basic, bearer or raw")
+	f.StringVar(&env, "env", "", "Variable a tool reads the placeholder from, written into the profile's env as NAME: ${services.<name>}")
 	f.StringVar(&author, "author", "", "Who commits under the service, as Name <email> (--author on a run wins)")
 	f.BoolVar(&noCoAuthor, "no-co-author", false, "No Co-Authored-By trailer for the agent in its repositories")
 	f.StringVar(&refresh, "refresh", "", "How often the runtime fetches the token again, e.g. 10m")
@@ -562,6 +578,10 @@ func (o *options) serviceCommand() *cobra.Command {
 		}
 		if err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
 			unibox.RemoveService(doc, args[1])
+			// A variable carrying the service's placeholder goes with it.
+			for _, v := range unibox.RemoveEnvRefersTo(doc, "${services."+args[1]+"}") {
+				fmt.Fprintf(o.log, "took %s out of env\n", v)
+			}
 			return nil
 		}); err != nil {
 			return err

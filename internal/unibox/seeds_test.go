@@ -92,7 +92,7 @@ func TestCopilotsCommentedConfigTakesItsSeed(t *testing.T) {
 	t.Parallel()
 	m, f := managerFixture(t)
 	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 5\nagents: [claude, codex]\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nagents: [claude, codex]\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
 	// copilot is not among the fixture's agents, so its seed is merged the
 	// way a session does it.
 	home := filepath.Join(f.root, "unibox-dev", "home")
@@ -208,7 +208,7 @@ func TestAnOldHookIsRewrittenBeforeASession(t *testing.T) {
 func TestTheSessionCreditsTheAgentAsTheProfileSays(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 5\nstart: start.sh\nagents:\n  claude: {co_author: Claude Code <claude@example.com>}\n  codex:\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude: {co_author: Claude Code <claude@example.com>}\n  codex:\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +228,7 @@ func TestTheSessionCreditsTheAgentAsTheProfileSays(t *testing.T) {
 	if string(settingsSnapshot(p, &fakeRuntime{})) != string(settingsSnapshot(other, &fakeRuntime{})) {
 		t.Fatal("a seed change would recreate the sandbox")
 	}
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 5\nstart: start.sh\nagents:\n  claude: {co_author: nobody}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude: {co_author: nobody}\n")
 	if _, err := LoadProfile(root, "node"); err == nil {
 		t.Fatal("a co-author without an address was taken")
 	}

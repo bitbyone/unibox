@@ -159,7 +159,7 @@ version --json` names it) and refuses another. `unibox init <profile>` migrates 
 one, format by format, best effort: what it cannot carry over it names.
 
 ```yaml
-version: 5
+version: 6
 resources: {cpus: 4, memory: 50%}    # fixed, or a share of the host's
 agents:                              # or a list: [claude, codex]
   claude:
@@ -193,19 +193,31 @@ applied to the running sandbox live.
 ## Your own values
 
 A profile a team shares holds nothing personal. What each person sets for
-themselves - a user name, a commit identity - it declares under `vars`, by
-name with what it is for; each person keeps the values in
-`~/.config/unibox/vars.yaml` (laid out by `unibox init`):
+themselves - a user name, a commit identity - it declares under `vars`, by a
+name of its own with what it is for, and refers to it where it is needed:
+
+```yaml
+vars:
+  artifactory-user: your Artifactory user name
+env:                                     # every session's variables, and start's
+  - BUILD_MODE                           # from the host
+  - ORG_GRADLE_PROJECT_artifactoryUser2N: ${vars.artifactory-user}
+  - ORG_GRADLE_PROJECT_artifactoryPassword2N: ${services.artifactory-2n}   # a service's placeholder
+build_args:
+  NPM_MIRROR: ${vars.npm-mirror}         # stays in the image's history: never a secret
+```
+
+Each person keeps the values in `~/.config/unibox/vars.yaml` (laid out by
+`unibox init`); a run or a build stops while one it refers to is missing:
 
 ```sh
-unibox var set ORG_GRADLE_PROJECT_artifactoryUser2N tobola              # every profile
-unibox var set GIT_AUTHOR_2N 'Jan Tobola <tobola@2n.com>' --profile dev  # one profile, over it
+unibox var set artifactory-user tobola                                    # every profile
+unibox var set gitlab-2n-author 'Jan Tobola <tobola@2n.com>' --profile dev  # one profile, over it
 unibox var ls --profile dev
 ```
 
-A run stops while a value is missing. unibox sets the values in every
-session and for `start`; a service's `user` and `author` may name one as
-`${NAME}`. Tokens stay in the platform's store as `secret:<name>`.
+A service's `user` and `author` may refer to a var too. Tokens stay in the
+platform's store as `secret:<name>`.
 
 ## Scripts
 
@@ -281,7 +293,9 @@ without asking; an OAuth login or a key is asked for in your terminal.
 another host service: it shows where the token is made, asks for it, keeps it
 in the platform's store and writes the `services` entry. It knows `github`,
 `gitlab` and `artifactory` (from the name, or `--kind`), anything else is
-`--kind generic` with `--host`, `--git` or `--env`. `--host github.com/<owner>`
+`--kind generic` with `--host`, and `--git` for a forge or `--env <NAME>` for
+a tool, which writes `NAME: ${services.<name>}` into the profile's `env` so the
+tool finds the placeholder there. `--host github.com/<owner>`
 gives one owner on a forge a token of its own; `--author` and `--no-co-author`
 say who commits; `--secret <name>` names a token stored before with `unibox
 secret set <name>` instead of asking for one; `--command` takes a store unibox does not keep; `--gh` signs a `github`

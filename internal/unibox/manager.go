@@ -210,6 +210,9 @@ func (m *Manager) Build(ctx context.Context, name, rt string, force bool) error 
 	if err != nil {
 		return err
 	}
+	if err = p.missingVarsError(); err != nil {
+		return err
+	}
 	r, err := m.Runtime(rt)
 	if err != nil {
 		return err
@@ -436,6 +439,13 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	}
 	if err := p.missingVarsError(); err != nil {
 		result.Needs = append(result.Needs, api.Need{Code: "var_missing", Message: err.Error()})
+	}
+	vars, services := p.Unused()
+	if len(vars) > 0 {
+		result.Needs = append(result.Needs, api.Need{Code: "var_unused", Warning: true, Message: fmt.Sprintf("profile %s declares vars nothing refers to: %s; refer to them as ${vars.<name>} or take them out", p.Name, strings.Join(vars, ", "))})
+	}
+	for _, s := range services {
+		result.Needs = append(result.Needs, api.Need{Code: "service_unused", Service: s, Warning: true, Message: fmt.Sprintf("no variable of profile %s carries service %s's placeholder, so no tool sends its token; add - NAME: ${services.%s} to env", p.Name, s, s)})
 	}
 	if IsExperimental(r) {
 		result.Needs = append(result.Needs, api.Need{Code: "runtime_experimental", Warning: true, Message: fmt.Sprintf("runtime %s is experimental; sbx is the supported runtime", r.Name())})

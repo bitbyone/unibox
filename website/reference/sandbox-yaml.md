@@ -17,7 +17,8 @@ unibox lays them out. An unknown key is an error, at any level.
 | `git` | mapping | `author` and `co_author` |
 | `services` | mapping | name to a forge or host service |
 | `network` | mapping | `allow`, `deny` and `ports` |
-| `env` | list | host environment variables passed in by name |
+| `env` | list | every session's variables: a host variable by name, or `NAME: value` |
+| `build_args` | mapping | build arguments for every runtime |
 | `caches` | list | host directories mounted read-only |
 | `vars` | mapping | name to what it is for: values each person sets for themselves |
 
@@ -141,25 +142,26 @@ services:
     command: secret:github
   artifactory:
     host: [artifactory.example.com, "*.jfrog.io"]
-    scheme: bearer
-    env: ARTIFACTORY_TOKEN
     command: secret:artifactory
     refresh: 30m
+env:
+  - ARTIFACTORY_TOKEN: ${services.artifactory}
 ```
 
 | Key | Value |
 | --- | --- |
 | `git` | `true` to wire the sandbox's git to the hosts |
 | `host` | a host or a list; a git service's may carry a path, `github.com/some-org` |
-| `scheme` | `basic`, `bearer` or `raw` - how the `Authorization` header is formed |
-| `user` | the user paired with the token, for `basic` |
-| `env` | the variable a tool reads the placeholder from |
+| `scheme` | a git service's: `basic`, `bearer` or `raw` - how git's `Authorization` header is formed |
+| `user` | a git service's: the user paired with the token, for `basic`; may be `${vars.<name>}` |
 | `command` | `secret:<name>`, or a host command that prints the token |
 | `refresh` | how often the runtime fetches the token again; on demand when absent |
-| `author` | who commits in the service's repositories, `Name <email>` |
+| `author` | who commits in the service's repositories, `Name <email>`; may be `${vars.<name>}` |
 | `co_author` | `false` for no agent trailer in its repositories |
 
-Exactly one of `git` or `env` is set.
+A service holds one token for HTTP requests to its hosts. git signs in through
+a git service by itself; a tool finds another service's placeholder in a
+variable `env` sets to `${services.<name>}`, and sends it in a header.
 
 ### `network`
 
@@ -182,41 +184,54 @@ network:
 A port spec is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. A spec alone is
 published at every start.
 
-### `env` and `caches`
+### `vars`, `env` and `build_args`
 
 ```yaml
-env: [SPRING_PROFILES_ACTIVE]
+vars:
+  artifactory-user: your Artifactory user name
+  gitlab-2n-author: you on gitlab.2n.cz, as Name <email>
+  npm-mirror: your npm mirror
+services:
+  gitlab-2n: {git: true, host: gitlab.2n.cz, user: oauth2, command: secret:gitlab-2n, author: '${vars.gitlab-2n-author}'}
+  artifactory-2n: {host: artifactory.2n.cz, command: secret:artifactory-2n}
+env:
+  - SPRING_PROFILES_ACTIVE
+  - ORG_GRADLE_PROJECT_artifactoryUser2N: ${vars.artifactory-user}
+  - ORG_GRADLE_PROJECT_artifactoryPassword2N: ${services.artifactory-2n}
+build_args:
+  NPM_MIRROR: ${vars.npm-mirror}
+```
+
+`vars` are what each person sets for themselves, by a name of their own with
+what each is for: lower-case letters, digits and hyphens, and never a secret
+(a name that says one is refused; a token stays `secret:<name>`). The values
+are not in the profile: each person keeps theirs in
+`~/.config/unibox/vars.yaml` with `unibox var set`. A var reaches nothing on
+its own; the profile refers to it as `${vars.<name>}`.
+
+`env` is every session's variables - an agent's, a shell's, the scripts' and
+`start`'s. An item is a host variable by name, whose value passes in, or
+`NAME: value`, where the value may refer to `${vars.<name>}` and to
+`${services.<name>}`, the placeholder of a service's token.
+
+`build_args` are passed to the build for every runtime, before a runtime's
+`.<runtime>/build.args`; a value may refer to `${vars.<name>}`, and a change
+of it builds the image again. A build argument stays in the image's history,
+so it is never a secret.
+
+A run or a build stops while a var it refers to has no value; a var nothing
+refers to, and a service no variable carries, is told as a warning.
+
+### `caches`
+
+```yaml
 caches:
   - host: ~/.gradle/caches
     env: GRADLE_RO_DEP_CACHE
 ```
 
-`env` names host variables whose values pass in. Each cache is a host
-directory mounted read-only at its absolute path, its path given to the
-sandbox in `env`.
-
-### `vars`
-
-```yaml
-vars:
-  ORG_GRADLE_PROJECT_artifactoryUser2N: your Artifactory user name
-  GIT_AUTHOR_2N: you on gitlab.2n.cz, as Name <email>
-services:
-  gitlab-2n:
-    git: true
-    host: gitlab.2n.cz
-    user: oauth2
-    command: secret:gitlab-2n
-    author: ${GIT_AUTHOR_2N}
-```
-
-What each person sets for themselves, by name, with what it is for. The
-values are not in the profile: each person keeps theirs in
-`~/.config/unibox/vars.yaml` with `unibox var set`. unibox sets them in every
-session it starts and for `start`, and a service's `user` and `author` may
-name one as `${NAME}`. A run stops while a value is missing. A name is a
-variable name; one that names a secret - a token, a password - is refused,
-as that belongs in `secret:<name>`.
+Each cache is a host directory mounted read-only at its absolute path, its
+path given to the sandbox in `env`.
 
 ## Files beside it
 
@@ -248,5 +263,6 @@ and named, and a result that does not load is not kept.
 | 2 | 3 | `allow_network` and `deny_network` moved under `network` as `allow` and `deny`; `network.ports` arrived, ports published by name |
 | 3 | 4 | `bootstrap` - a script each worked-on repository was to carry - was dropped, and the migration says so |
 | 4 | 5 | `dockerfile:` was dropped: the image builds from `sandbox.dockerfile` beside `sandbox.yaml`, and the file the profile named is renamed to it |
+| 5 | 6 | A service lost `env`: every variable is set in the profile's `env`, a service's placeholder as `NAME: ${services.<name>}`, and a service without git lost `scheme` and `user`. `vars` and `build_args` arrived |
 
 A released migration is frozen: it names the files of its own time.

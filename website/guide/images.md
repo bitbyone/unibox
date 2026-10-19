@@ -164,7 +164,7 @@ that does not load keeps its builds, as which is current cannot be told.
 ## An image built elsewhere
 
 ```yaml
-version: 5
+version: 6
 image: registry.example.com/team/agents:2026-10
 agents: [claude, codex]
 ```

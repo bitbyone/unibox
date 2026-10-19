@@ -189,7 +189,7 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 	// a placeholder the proxy swaps. unibox never sees the value - the
 	// command runs on the host and sbx keeps the result.
 	for name, svc := range s.Access.Services {
-		args := []string{"secret", "set-custom", "--sandbox", s.Name, "--env", RuntimeServiceEnv(name, svc), "--placeholder", ServicePlaceholder(name, svc)}
+		args := []string{"secret", "set-custom", "--sandbox", s.Name, "--env", ServiceEnv(name, svc), "--placeholder", ServicePlaceholder(name, svc)}
 		// Two services may share a host, told apart by path; sbx keeps a
 		// secret for each and swaps each placeholder for its own value.
 		for _, h := range svc.ProxyHosts() {
@@ -214,7 +214,7 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 		if svc.Git {
 			fmt.Fprintf(log, "service %s: git signs in at %s through the proxy\n", name, strings.Join(svc.GitURLs(), ", "))
 		} else {
-			fmt.Fprintf(log, "service %s: %s carries its placeholder to %s\n", name, ServiceEnv(name, svc), strings.Join(svc.ProxyHosts(), ", "))
+			fmt.Fprintf(log, "service %s: its placeholder, ${services.%s} in env, is swapped on requests to %s\n", name, name, strings.Join(svc.ProxyHosts(), ", "))
 		}
 	}
 	return nil

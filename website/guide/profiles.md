@@ -8,7 +8,7 @@ means.
 ## A walkthrough
 
 ```yaml
-version: 5
+version: 6
 resources: {cpus: 4, memory: 50%}    # fixed, or a share of the host's
 agents:                              # or a list: [claude, codex]
   claude:
@@ -112,23 +112,39 @@ read-only dependency cache, say: what the host already has is not downloaded
 again, and what is missing goes to the sandbox's own cache. Read-write would
 let the agent plant a file the host's next build runs.
 
-### `vars`
+### `vars`, `env` and `build_args`
 
-What each person sets for themselves - a user name, a commit identity -
-declared by name with what it is for, so the profile holds nothing personal
-and a team shares it as it is. Each person keeps the values in
-`~/.config/unibox/vars.yaml`, which `unibox init` lays out:
+A profile a team shares holds nothing personal. What each person sets for
+themselves - a user name, a commit identity - it declares under `vars`, by a
+name of its own with what it is for, and refers to it where it is needed:
+
+```yaml
+vars:
+  artifactory-user: your Artifactory user name
+  gitlab-2n-author: you on gitlab.2n.cz, as Name <email>
+env:
+  - ORG_GRADLE_PROJECT_artifactoryUser2N: ${vars.artifactory-user}    # every session's variable
+  - ORG_GRADLE_PROJECT_artifactoryPassword2N: ${services.artifactory-2n}   # a service's placeholder
+services:
+  gitlab-2n: {git: true, host: gitlab.2n.cz, user: oauth2, command: secret:gitlab-2n, author: '${vars.gitlab-2n-author}'}
+  artifactory-2n: {host: artifactory.2n.cz, command: secret:artifactory-2n}
+build_args:
+  NPM_MIRROR: ${vars.npm-mirror}    # stays in the image's history: never a secret
+```
+
+Each person keeps the values in `~/.config/unibox/vars.yaml`, which
+`unibox init` lays out:
 
 ```sh
-unibox var set ORG_GRADLE_PROJECT_artifactoryUser2N tobola     # every profile
-unibox var set GIT_AUTHOR_2N 'Jan Tobola <tobola@2n.com>' --profile dev   # one profile, over the shared one
+unibox var set artifactory-user tobola                                   # every profile
+unibox var set gitlab-2n-author 'Jan Tobola <tobola@2n.com>' --profile dev  # one profile, over the shared one
 unibox var ls --profile dev       # what the profile asks, each value and where it comes from
 ```
 
-A run stops while a value is missing and says which and what for. unibox
-sets the values in every session and for `start`, so a start script can
-write them into a tool's configuration; a service's `user` and `author` may
-name one as `${NAME}`. A token is never a var: it stays a `secret:<name>`.
+A run or a build stops while a value it refers to is missing, and says which
+and what for. `env` is every session's variables and `start`'s, so a start
+script can write them into a tool's configuration. A token is never a var:
+it stays a `secret:<name>`, and reaches a tool as a service's placeholder.
 
 ## Strict by design
 

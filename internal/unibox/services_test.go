@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,7 +16,7 @@ import (
 func TestProfilesSayWhichServicesTheSandboxReaches(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 5\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    scheme: basic\n    user: x-access-token\n    command: gh auth token\n  artifactory:\n    host: [\"artifactory.example.com\", \"*.jfrog.io\"]\n    scheme: bearer\n    env: ARTIFACTORY_TOKEN\n    command: op read op://vault/artifactory/token\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    scheme: basic\n    user: x-access-token\n    command: gh auth token\n  artifactory:\n    host: [\"artifactory.example.com\", \"*.jfrog.io\"]\n    command: op read op://vault/artifactory/token\nenv:\n  - ARTIFACTORY_TOKEN: ${services.artifactory}\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +25,7 @@ func TestProfilesSayWhichServicesTheSandboxReaches(t *testing.T) {
 	if !gh.Git || gh.Scheme != SchemeBasic || gh.User != "x-access-token" || len(gh.Host) != 1 || gh.Host[0] != "github.com" {
 		t.Fatalf("github service parsed wrong: %+v", gh)
 	}
-	if art.Git || art.Env != "ARTIFACTORY_TOKEN" || art.Scheme != SchemeBearer || len(art.Host) != 2 {
+	if art.Git || art.Scheme != "" || len(art.Host) != 2 || p.EnvValues["ARTIFACTORY_TOKEN"] != "${services.artifactory}" {
 		t.Fatalf("artifactory service parsed wrong: %+v", art)
 	}
 	// A service is host access: it changes what the user approves.
@@ -41,35 +42,54 @@ func TestProfilesSayWhichServicesTheSandboxReaches(t *testing.T) {
 	if ph != ServicePlaceholder("github", gh) || !strings.HasPrefix(ph, "unibox-svc-github-") || strings.Contains(ph, "x-access-token") {
 		t.Fatalf("placeholder is unstable or revealing: %q", ph)
 	}
-	if ServiceEnv("github", gh) != "UNIBOX_SVC_GITHUB" || ServiceEnv("artifactory", art) != "ARTIFACTORY_TOKEN" {
+	if ServiceEnv("github", gh) != "UNIBOX_SVC_GITHUB" || ServiceEnv("artifactory", art) != "UNIBOX_SVC_ARTIFACTORY" {
 		t.Fatal("service env derived wrong")
 	}
 }
 
-func TestAServiceFillsAToolsOwnVariableInItsOwnCase(t *testing.T) {
+func TestAToolFindsAServicesPlaceholderInTheVariableEnvNames(t *testing.T) {
 	t.Parallel()
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	// Gradle reads a project property from ORG_GRADLE_PROJECT_<property>,
-	// so the password of a build's credentials block comes from a service.
-	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nenv: [ORG_GRADLE_PROJECT_artifactoryUser2N]\nservices:\n  artifactory-2n:\n    host: artifactory.example.com\n    scheme: raw\n    env: ORG_GRADLE_PROJECT_artifactoryPassword2N\n    command: secret:artifactory-2n\n")
-	if _, err := LoadProfile(root, "node"); err != nil {
+	// in the property's case: the password of a build's credentials
+	// block is a service's placeholder, the user a person's own value.
+	write(t, file, "version: 6\nstart: start.sh\nagents: [claude]\nvars:\n  artifactory-user: your Artifactory user name\nservices:\n  artifactory-2n:\n    host: artifactory.example.com\n    command: secret:artifactory-2n\nenv:\n  - BUILD_MODE\n  - ORG_GRADLE_PROJECT_artifactoryUser2N: ${vars.artifactory-user}\n  - ORG_GRADLE_PROJECT_artifactoryPassword2N: ${services.artifactory-2n}\n")
+	orig, err := LoadProfile(root, "node")
+	if err != nil {
 		t.Fatal(err)
 	}
-	p, _ := LoadProfile(root, "node")
-	svc := p.Services["artifactory-2n"]
-	// sbx takes upper-case names only, so it gets a derived one, and
-	// unibox sets Gradle's variable itself in each session.
-	if RuntimeServiceEnv("artifactory-2n", svc) != "UNIBOX_SVC_ARTIFACTORY_2N" {
-		t.Fatalf("runtime env %s", RuntimeServiceEnv("artifactory-2n", svc))
+	if !slices.Equal(orig.Env, []string{"BUILD_MODE"}) {
+		t.Fatalf("host variables %v", orig.Env)
 	}
-	if env := p.ServiceSessionEnv(); len(env) != 1 || env[0] != "ORG_GRADLE_PROJECT_artifactoryPassword2N="+ServicePlaceholder("artifactory-2n", svc) {
+	p, err := orig.withVars(map[string]string{"artifactory-user": "tobola"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := p.Services["artifactory-2n"]
+	// The runtime gets a name of unibox's, upper case as sbx requires.
+	if ServiceEnv("artifactory-2n", svc) != "UNIBOX_SVC_ARTIFACTORY_2N" {
+		t.Fatalf("runtime env %s", ServiceEnv("artifactory-2n", svc))
+	}
+	want := []string{"ORG_GRADLE_PROJECT_artifactoryPassword2N=" + ServicePlaceholder("artifactory-2n", svc), "ORG_GRADLE_PROJECT_artifactoryUser2N=tobola"}
+	if env := p.SessionEnv(); !slices.Equal(env, want) {
 		t.Fatalf("session env %v", env)
 	}
-	// A password is still no plain variable of the profile.
-	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nenv: [ORG_GRADLE_PROJECT_artifactoryPassword2N]\n")
-	if _, err := LoadProfile(root, "node"); err == nil {
-		t.Fatal("a password was passed as a plain variable")
+	for _, bad := range []string{
+		// A password is no variable the profile sets, unless a service's.
+		"version: 6\nstart: start.sh\nagents: [claude]\nenv:\n  - ARTIFACTORY_PASSWORD: hunter2\n",
+		// A git service signs git in by itself.
+		"version: 6\nstart: start.sh\nagents: [claude]\nservices:\n  gitlab: {git: true, host: gitlab.com, user: oauth2, command: secret:gitlab}\nenv:\n  - TOKEN: ${services.gitlab}\n",
+		// A reference says where it comes from.
+		"version: 6\nstart: start.sh\nagents: [claude]\nenv:\n  - X: ${artifactory-user}\n",
+		"version: 6\nstart: start.sh\nagents: [claude]\nenv:\n  - X: ${services.missing}\n",
+		// A service without git has no header of its own.
+		"version: 6\nstart: start.sh\nagents: [claude]\nservices:\n  art: {host: a.example, scheme: bearer, command: c}\n",
+	} {
+		write(t, file, bad)
+		if _, err := LoadProfile(root, "node"); err == nil {
+			t.Fatalf("accepted:\n%s", bad)
+		}
 	}
 }
 
@@ -83,7 +103,7 @@ func TestServiceSecretCommandNeverCarriesTheTokenItself(t *testing.T) {
 	if !strings.Contains(bearer, "Bearer") || strings.Contains(bearer, "base64") {
 		t.Fatalf("bearer command wrong: %s", bearer)
 	}
-	raw := serviceSecretCommand(Service{Env: "TOK", Scheme: SchemeRaw, Command: "cmd"})
+	raw := serviceSecretCommand(Service{Command: "cmd"})
 	if strings.Contains(raw, "Bearer") || strings.Contains(raw, "Basic") {
 		t.Fatalf("env command should store the raw token: %s", raw)
 	}
@@ -138,7 +158,7 @@ func TestGitServicesWireTheSandboxGitWithTheirPlaceholder(t *testing.T) {
 		t.Fatal("a task rewrites the sandbox's git wiring")
 	}
 	// An env service builds its own header; git is not touched for it.
-	envOnly := Profile{Name: "node", Agents: []string{"claude"}, HostAccess: HostAccess{Services: map[string]Service{"art": {Host: HostList{"a.example"}, Scheme: SchemeBearer, Env: "ART", Command: "c"}}}}
+	envOnly := Profile{Name: "node", Agents: []string{"claude"}, HostAccess: HostAccess{Services: map[string]Service{"art": {Host: HostList{"a.example"}, Command: "c"}}}}
 	if strings.Contains(initializeScript(envOnly, ""), "extraHeader") {
 		t.Fatal("an env service should not wire git")
 	}
@@ -148,7 +168,7 @@ func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)
 	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 5\nstart: start.sh\nagents: [claude]\nservices: {artifactory: {host: a.example, scheme: bearer, env: ART_TOKEN, command: true}}\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents: [claude]\nservices: {artifactory: {host: a.example, command: true}}\nenv:\n  - ART_TOKEN: ${services.artifactory}\n")
 	if err := m.RecordAccess("node"); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +192,7 @@ func TestAProxylessRuntimeWarnsTheTokenWillBeReadable(t *testing.T) {
 
 func TestOwnersOnOneForgeUseTokensOfTheirOwn(t *testing.T) {
 	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 5\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    user: x-access-token\n    command: security find-generic-password -s gh-me -w\n  github-acme:\n    git: true\n    host: github.com/acme\n    user: x-access-token\n    command: security find-generic-password -s gh-acme -w\n")
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents: [claude]\nservices:\n  github:\n    git: true\n    host: github.com\n    user: x-access-token\n    command: security find-generic-password -s gh-me -w\n  github-acme:\n    git: true\n    host: github.com/acme\n    user: x-access-token\n    command: security find-generic-password -s gh-acme -w\n")
 	p, err := LoadProfile(root, "node")
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +237,7 @@ func TestAGitServiceSaysWhoCommitsUnderIt(t *testing.T) {
 	services := map[string]Service{
 		"github":      {Git: true, Host: HostList{"github.com"}, Author: "Jan Personal <jan@example.com>", CoAuthor: &no},
 		"github-acme": {Git: true, Host: HostList{"github.com/acme"}, Author: "Jan Work <jan@acme.example>"},
-		"artifactory": {Env: "ART", Host: HostList{"a.example"}, Scheme: SchemeBearer},
+		"artifactory": {Host: HostList{"a.example"}},
 	}
 	author, co := GitIdentity(services, "https://github.com/acme/api.git")
 	if author != "Jan Work <jan@acme.example>" || co == nil || *co {
@@ -316,5 +336,27 @@ func TestStoringAServiceSaysOneLineAndKeepsSbxForAFailure(t *testing.T) {
 	err := r.Create(context.Background(), Spec{Name: "unibox-home", Image: "x", Agent: "claude", Agents: []string{"claude"}, Access: acc}, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "no such item") || !strings.Contains(err.Error(), "broken") {
 		t.Fatalf("a failure must say what sbx said: %v", err)
+	}
+}
+
+func TestFormat5ServiceVariablesMoveIntoEnv(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nservices:\n  github: {git: true, host: github.com, user: x-access-token, command: secret:github}\n  # Our Artifactory.\n  artifactory-2n:\n    host: artifactory.2n.example\n    scheme: raw\n    env: ORG_GRADLE_PROJECT_artifactoryPassword2N\n    command: secret:artifactory-2n\nenv: [BUILD_MODE]\n")
+	if _, err := Init(root, "node", nil, "2", "1g"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := LoadProfile(root, "node")
+	if err != nil {
+		data, _ := os.ReadFile(file)
+		t.Fatalf("%v\n%s", err, data)
+	}
+	art := p.Services["artifactory-2n"]
+	if art.Scheme != "" || p.EnvValues["ORG_GRADLE_PROJECT_artifactoryPassword2N"] != "${services.artifactory-2n}" || !slices.Equal(p.Env, []string{"BUILD_MODE"}) || p.Services["github"].User != "x-access-token" {
+		t.Fatalf("%+v %v %v", art, p.EnvValues, p.Env)
+	}
+	if data, _ := os.ReadFile(file); !strings.Contains(string(data), "# Our Artifactory.") {
+		t.Fatalf("the user's comment went:\n%s", data)
 	}
 }

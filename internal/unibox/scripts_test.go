@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-const scriptsProfile = "version: 5\nstart: start.sh\nagents: [claude]\nscripts:\n  greet: greet.sh\n  plain: _data/plain.sh\n  fail: fail.sh\n"
+const scriptsProfile = "version: 6\nstart: start.sh\nagents: [claude]\nscripts:\n  greet: greet.sh\n  plain: _data/plain.sh\n  fail: fail.sh\n"
 
 func writeScripts(t *testing.T, dir string) {
 	t.Helper()
@@ -99,7 +99,7 @@ func TestScriptsAreNeitherTheImageNorWhatMakesASandbox(t *testing.T) {
 		"scripts: {greet: ../x.sh}":        "must stay inside their directory",
 		"scripts: {greet: ''}":             "names no file",
 	} {
-		write(t, filepath.Join(dir, "sandbox.yaml"), "version: 5\nstart: start.sh\nagents: [claude]\n"+body+"\n")
+		write(t, filepath.Join(dir, "sandbox.yaml"), "version: 6\nstart: start.sh\nagents: [claude]\n"+body+"\n")
 		if _, err := LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", body, err)
 		}

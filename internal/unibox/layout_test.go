@@ -63,7 +63,7 @@ func TestInitCompletesAnExistingProfileAndKeepsWhatItSays(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	write(t, filepath.Join(root, "sandboxes", "node", "_data", "mine.json"), `{"theme": "light"}`)
-	write(t, file, "version: 5\n# Mine, from before.\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\nnetwork:\n  allow: [jitpack.io] # Kotlin\n")
+	write(t, file, "version: 6\n# Mine, from before.\nagents:\n  claude:\n    config: {.claude.json: _data/mine.json}\n  codex: {co_author: Codex Bot <bot@example.com>}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\nnetwork:\n  allow: [jitpack.io] # Kotlin\n")
 	// A repository init laid out already, as a real one is.
 	if _, err := Init(root, "", nil, "0", ""); err != nil {
 		t.Fatal(err)
@@ -122,10 +122,10 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 	root := profileFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
 	for version, want := range map[string]string{
-		"":             "is of format none and this unibox reads format 5; run unibox init node to migrate it",
-		"version: 0\n": "is of format 0 and this unibox reads format 5; run unibox init node",
-		"version: 4\n": "is of format 4 and this unibox reads format 5; run unibox init node",
-		"version: 6\n": "is of format 6, newer than the 5 this unibox reads; upgrade unibox",
+		"":             "is of format none and this unibox reads format 6; run unibox init node to migrate it",
+		"version: 0\n": "is of format 0 and this unibox reads format 6; run unibox init node",
+		"version: 5\n": "is of format 5 and this unibox reads format 6; run unibox init node",
+		"version: 7\n": "is of format 7, newer than the 6 this unibox reads; upgrade unibox",
 	} {
 		// An older form fails on its version, not on a field it has.
 		write(t, file, version+"dockerfile: Dockerfile\nagents: [claude]\nstart: start.sh\nauth: {claude: oauth}\n")
@@ -134,7 +134,7 @@ func TestAProfileOfAnotherFormatIsRefusedUntilInitMigratesIt(t *testing.T) {
 		}
 	}
 	// A newer one init leaves alone.
-	write(t, file, "version: 6\nagents: [claude]\nstart: start.sh\n")
+	write(t, file, "version: 7\nagents: [claude]\nstart: start.sh\n")
 	if _, err := Init(root, "node", nil, "2", "1g"); err == nil || !strings.Contains(err.Error(), "upgrade unibox") {
 		t.Fatalf("%v", err)
 	}
@@ -171,7 +171,7 @@ instructions: [unibox]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 5|auth codex left out|agent_config copilot.theme left out" {
+	if strings.Join(report.Migrated, "|") != "sandboxes/node/sandbox.yaml from format 0 to 6|auth codex left out|agent_config copilot.theme left out" {
 		t.Fatalf("%q", report.Migrated)
 	}
 	p, err := LoadProfile(root, "node")
@@ -212,7 +212,7 @@ instructions: [unibox]
 	if _, err := Init(root, "fresh", []string{"claude"}, "2", "1g"); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 5\n") {
+	if data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "fresh", "sandbox.yaml")); !strings.Contains(string(data), "\nversion: 6\n") {
 		t.Fatalf("%s", data)
 	}
 }
@@ -341,7 +341,7 @@ func TestInstallRunsTheUsersScriptOverUnibox(t *testing.T) {
 func TestTheNetworkCommentShowsHowToWritePortsAndReplacesTheFormerOne(t *testing.T) {
 	t.Parallel()
 	var doc yaml.Node
-	text := "version: 5\nagents: [claude]\n" + strings.ReplaceAll(formerComments[0], "\\n", "\n") + "\nnetwork: {allow: [jitpack.io]}\n"
+	text := "version: 6\nagents: [claude]\n" + strings.ReplaceAll(formerComments[0], "\\n", "\n") + "\nnetwork: {allow: [jitpack.io]}\n"
 	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestTheNetworkCommentShowsHowToWritePortsAndReplacesTheFormerOne(t *testing
 		t.Fatalf("%s", s)
 	}
 	// Absent, it is an example in the footer, ports and all.
-	if err := yaml.Unmarshal([]byte("version: 5\nagents: [claude]\n"), &doc); err != nil {
+	if err := yaml.Unmarshal([]byte("version: 6\nagents: [claude]\n"), &doc); err != nil {
 		t.Fatal(err)
 	}
 	ArrangeProfile(&doc, "web")

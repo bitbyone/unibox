@@ -50,7 +50,9 @@ func (p Profile) CoAuthor(agent string) string {
 }
 
 type HostAccess struct {
-	Env     []string `yaml:"env" json:"env"`
+	// Env are host variables passed in by name; Profile.EnvList reads them
+	// from the profile with the variables it sets itself.
+	Env     []string `yaml:"-" json:"env"`
 	Caches  []Cache  `yaml:"caches" json:"caches"`
 	Network `yaml:"network"`
 	// Auth is how each agent signs in. It is host access: the runtime keeps
@@ -86,12 +88,14 @@ type Network struct {
 // one forge use tokens of their own: a fine-grained GitHub token covers one
 // owner only.
 type Service struct {
-	Git     bool     `yaml:"git" json:"git,omitempty"`
-	Host    HostList `yaml:"host" json:"host"`
-	Scheme  string   `yaml:"scheme" json:"scheme,omitempty"`
-	User    string   `yaml:"user" json:"user,omitempty"`
-	Env     string   `yaml:"env" json:"env,omitempty"`
-	Command string   `yaml:"command" json:"command"`
+	Git  bool     `yaml:"git" json:"git,omitempty"`
+	Host HostList `yaml:"host" json:"host"`
+	// Scheme and User are how a git service's header is made; a service
+	// without git has its token named in the profile's env instead, as
+	// ${services.<name>.token}, and the tool makes its own header.
+	Scheme  string `yaml:"scheme" json:"scheme,omitempty"`
+	User    string `yaml:"user" json:"user,omitempty"`
+	Command string `yaml:"command" json:"command"`
 	// Refresh is how often sbx fetches the token again: a duration shorter
 	// than a short-lived token's lifetime, or on-demand (sbx's default).
 	Refresh string `yaml:"refresh" json:"refresh,omitempty"`
@@ -283,13 +287,42 @@ func (l *AgentList) UnmarshalYAML(n *yaml.Node) error {
 	return fmt.Errorf("line %d: agents is a list of names, or a mapping of names to auth, co_author and config", n.Line)
 }
 
+// EnvList is a profile's env: a list whose items are a host variable's
+// name, passed in, or NAME: value, set by the profile.
+type EnvList struct {
+	Names  []string
+	Values map[string]string
+}
+
+func (l *EnvList) UnmarshalYAML(n *yaml.Node) error {
+	l.Names, l.Values = []string{}, map[string]string{}
+	bad := fmt.Errorf("line %d: env is a list of host variables by name, or NAME: value to set one", n.Line)
+	if n.Kind != yaml.SequenceNode {
+		return bad
+	}
+	for _, c := range n.Content {
+		switch {
+		case c.Kind == yaml.ScalarNode:
+			l.Names = append(l.Names, c.Value)
+		case c.Kind == yaml.MappingNode && len(c.Content) == 2 && c.Content[1].Kind == yaml.ScalarNode:
+			if _, ok := l.Values[c.Content[0].Value]; ok {
+				return fmt.Errorf("line %d: env sets %s twice", c.Line, c.Content[0].Value)
+			}
+			l.Values[c.Content[0].Value] = c.Content[1].Value
+		default:
+			return bad
+		}
+	}
+	return nil
+}
+
 // ProfileDockerfile is the file a profile's image builds from.
 const ProfileDockerfile = "sandbox.dockerfile"
 
 // ProfileFormat is the form of sandbox.yaml this unibox reads. A profile
 // says its own in version; one of an older form is not read until unibox
 // init migrates it (migrations.go).
-const ProfileFormat = 5
+const ProfileFormat = 6
 
 type Profile struct {
 	Version int `yaml:"version" json:"-"`
@@ -313,18 +346,30 @@ type Profile struct {
 	// compare equal, and do not recreate it.
 	Bootstrap    string   `yaml:"-" json:"bootstrap"`
 	Instructions []string `yaml:"instructions" json:"instructions"`
-	// Vars are what each person sets for themselves, by name, with what
-	// each is for; their values live in the user's vars.yaml, never in the
-	// profile. VarValues are the values found for them.
-	Vars        map[string]string       `yaml:"vars" json:"-"`
-	VarValues   map[string]string       `yaml:"-" json:"-"`
-	AgentConfig map[string]string       `yaml:"-" json:"agent_config,omitempty"`
-	Git         GitOptions              `yaml:"git" json:"git"`
-	Name        string                  `yaml:"-" json:"-"`
-	Dir         string                  `yaml:"-" json:"-"`
-	Root        string                  `yaml:"-" json:"-"`
-	Revision    string                  `yaml:"-" json:"-"`
-	Files       map[string]SnapshotFile `yaml:"-" json:"-"`
+	// EnvList is how env reads in YAML: host variables by name, and
+	// variables the profile sets to a value that may refer to a var or a
+	// service's token. LoadProfile spreads it into Env and EnvValues.
+	EnvList   EnvList           `yaml:"env" json:"-"`
+	EnvValues map[string]string `yaml:"-" json:"-"`
+	// BuildArgSpec are build arguments for every runtime, whose values may
+	// refer to a var.
+	BuildArgSpec map[string]string `yaml:"build_args" json:"-"`
+	// Vars are what each person sets for themselves, by a name of its own
+	// with what each is for. The values live in the user's vars.yaml, never
+	// in the profile, and reach a sandbox only where the profile refers to
+	// them as ${vars.<name>}. VarValues are the values found; SetEnv and
+	// BuildArgValues are env and build_args with every reference filled.
+	Vars           map[string]string       `yaml:"vars" json:"-"`
+	VarValues      map[string]string       `yaml:"-" json:"-"`
+	SetEnv         map[string]string       `yaml:"-" json:"-"`
+	BuildArgValues map[string]string       `yaml:"-" json:"-"`
+	AgentConfig    map[string]string       `yaml:"-" json:"agent_config,omitempty"`
+	Git            GitOptions              `yaml:"git" json:"git"`
+	Name           string                  `yaml:"-" json:"-"`
+	Dir            string                  `yaml:"-" json:"-"`
+	Root           string                  `yaml:"-" json:"-"`
+	Revision       string                  `yaml:"-" json:"-"`
+	Files          map[string]SnapshotFile `yaml:"-" json:"-"`
 }
 type SnapshotFile struct {
 	Data []byte `json:"data"`
@@ -413,6 +458,7 @@ func LoadProfile(root, name string) (Profile, error) {
 	if err = DecodeYAML(b, &p); err != nil {
 		return p, fmt.Errorf("profile %s: %w", name, err)
 	}
+	p.Env, p.EnvValues = p.EnvList.Names, p.EnvList.Values
 	p.Agents = p.AgentList.IDs
 	for _, id := range p.AgentList.IDs {
 		spec := p.AgentList.Specs[id]
@@ -520,8 +566,8 @@ func LoadProfile(root, name string) (Profile, error) {
 		if !validCommand(s.Command) {
 			return p, fmt.Errorf("profile %s: service %s needs command: one host command that prints its token, or secret:<name> for one unibox keeps", name, svc)
 		}
-		if s.Git == (s.Env != "") {
-			return p, fmt.Errorf("profile %s: service %s is either git: true or env: NAME, not both or neither", name, svc)
+		if !s.Git && (s.Scheme != "" || s.User != "") {
+			return p, fmt.Errorf("profile %s: service %s sets scheme or user, which only a git service has; a tool makes its own header from ${services.%s.token} in env", name, svc, svc)
 		}
 		scheme := s.Scheme
 		if scheme == "" {
@@ -532,22 +578,11 @@ func LoadProfile(root, name string) (Profile, error) {
 		default:
 			return p, fmt.Errorf("profile %s: service %s scheme must be basic, bearer or raw", name, svc)
 		}
-		if scheme == SchemeBasic && strings.TrimSpace(s.User) == "" {
+		if s.Git && scheme == SchemeBasic && strings.TrimSpace(s.User) == "" {
 			return p, fmt.Errorf("profile %s: service %s uses basic auth; give it the user to pair with the token", name, svc)
 		}
-		if scheme != SchemeBasic && strings.TrimSpace(s.User) != "" {
+		if s.Git && scheme != SchemeBasic && strings.TrimSpace(s.User) != "" {
 			return p, fmt.Errorf("profile %s: service %s sets user, which only the basic scheme uses", name, svc)
-		}
-		// An env service lets the tool build the header, so basic would make
-		// it base64 the placeholder and the proxy would never find it.
-		if s.Env != "" && scheme == SchemeBasic {
-			return p, fmt.Errorf("profile %s: service %s reads its token from env, so it cannot use basic; use bearer or raw", name, svc)
-		}
-		// The env name is the tool's own for an env service, derived for a
-		// git one; sensitiveEnv does not apply - a service variable is a
-		// token by design.
-		if s.Env != "" && (!toolEnvName.MatchString(s.Env) || s.Env == "HOME" || s.Env == "PATH") {
-			return p, fmt.Errorf("profile %s: service %s env %q is not a valid environment name", name, svc, s.Env)
 		}
 		if s.Refresh != "" && s.Refresh != "on-demand" {
 			if d, err := time.ParseDuration(s.Refresh); err != nil || d < time.Minute {
@@ -558,13 +593,11 @@ func LoadProfile(root, name string) (Profile, error) {
 			return p, fmt.Errorf("profile %s: service %s sets author or co_author, which only a git service has", name, svc)
 		}
 		for _, field := range []string{s.User, s.Author} {
-			for _, ref := range VarRefs(field) {
-				if _, ok := p.Vars[ref]; !ok {
-					return p, fmt.Errorf("profile %s: service %s names ${%s}, which its vars do not declare", name, svc, ref)
-				}
+			if err := p.checkRefs("service "+svc, field, false); err != nil {
+				return p, err
 			}
 		}
-		if s.Author != "" && len(VarRefs(s.Author)) == 0 {
+		if s.Author != "" && !hasRefs(s.Author) {
 			if _, _, err := AuthorParts(s.Author); err != nil {
 				return p, fmt.Errorf("profile %s: service %s author must be 'Name <email>'", name, svc)
 			}
@@ -582,11 +615,25 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 	}
 	for _, key := range sortedKeys(p.Vars) {
-		if !toolEnvName.MatchString(key) || key == "HOME" || key == "PATH" || strings.HasPrefix(key, "UNIBOX_") || slices.Contains(p.Env, key) {
-			return p, fmt.Errorf("profile %s: var %q must be a variable name of its own, not HOME, PATH, UNIBOX_ or one of env", name, key)
+		if err := ValidVarName(key); err != nil {
+			return p, fmt.Errorf("profile %s: var %w", name, err)
 		}
-		if sensitiveEnv.MatchString(key) {
-			return p, fmt.Errorf("profile %s: var %s names a secret; keep it with unibox secret set and name it as secret:<name>", name, key)
+	}
+	for _, key := range sortedKeys(p.EnvValues) {
+		token := strings.HasPrefix(strings.TrimSpace(p.EnvValues[key]), "${services.")
+		if !toolEnvName.MatchString(key) || sensitiveEnv.MatchString(key) && !token || key == "HOME" || key == "PATH" || strings.HasPrefix(key, "UNIBOX_") || slices.Contains(p.Env, key) {
+			return p, fmt.Errorf("profile %s: env %s is reserved, passed from the host already, or names a secret that is not a service's token", name, key)
+		}
+		if err := p.checkRefs("env "+key, p.EnvValues[key], true); err != nil {
+			return p, err
+		}
+	}
+	for _, key := range sortedKeys(p.BuildArgSpec) {
+		if !toolEnvName.MatchString(key) || sensitiveEnv.MatchString(key) || key == "AGENTBOX_RUNTIME" || key == "UNIBOX_RUNTIME" {
+			return p, fmt.Errorf("profile %s: build argument %s is reserved or names a secret, which a build argument would leave in the image", name, key)
+		}
+		if err := p.checkRefs("build argument "+key, p.BuildArgSpec[key], false); err != nil {
+			return p, err
 		}
 	}
 	for _, key := range p.Env {
@@ -855,43 +902,12 @@ func ServicePlaceholder(name string, s Service) string {
 	return "unibox-svc-" + name + "-" + hex.EncodeToString(sum[:4])
 }
 
-// ServiceEnv is the environment variable the placeholder is set in: the
-// tool's own for an env service, a derived UNIBOX_SVC_ name for a git one
-// (the runtime wants a variable, but git reads the placeholder from its
-// config, not the environment).
+// ServiceEnv is the variable a runtime is given a service's placeholder
+// in, as it wants one: UNIBOX_SVC_<NAME>, upper case as sbx requires. Git
+// reads a git service's from its config, and the profile's env names the
+// tool's own variable for any other, which unibox sets in each session.
 func ServiceEnv(name string, s Service) string {
-	if s.Env != "" {
-		return s.Env
-	}
 	return "UNIBOX_SVC_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-}
-
-// RuntimeServiceEnv is the variable a runtime gets for a service's
-// placeholder: the service's own when the runtime takes it, else the derived
-// UNIBOX_SVC_ one. sbx takes upper-case names only, and a tool's own may
-// not be, as Gradle's ORG_GRADLE_PROJECT_<property> is not; unibox then sets
-// the tool's variable itself in every session (ServiceSessionEnv).
-func RuntimeServiceEnv(name string, s Service) string {
-	if env := ServiceEnv(name, s); envName.MatchString(env) {
-		return env
-	}
-	return "UNIBOX_SVC_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-}
-
-// ServiceSessionEnv is each env service's variable with its placeholder,
-// which unibox sets in every session it starts: an agent's, a shell's and
-// the scripts'. The placeholder is no secret and is the same on every
-// runtime, so the variable is there in any case of name and in a sandbox
-// made before the service was added.
-func (p Profile) ServiceSessionEnv() []string {
-	out := []string{}
-	for _, name := range sortedKeys(p.Services) {
-		s := p.Services[name]
-		if s.Env != "" {
-			out = append(out, s.Env+"="+ServicePlaceholder(name, s))
-		}
-	}
-	return out
 }
 
 // serviceSecretCommand is the host command whose output sbx stores for the
@@ -910,6 +926,10 @@ func serviceSecretCommand(s Service) string {
 }
 func (p Profile) BuildArgs(runtime string) ([]string, error) {
 	args := []string{"AGENTBOX_RUNTIME=" + runtime, "UNIBOX_RUNTIME=" + runtime}
+	// The profile's own go first, so a runtime's file says the last word.
+	for _, k := range sortedKeys(p.BuildArgValues) {
+		args = append(args, k+"="+p.BuildArgValues[k])
+	}
 	f, ok := p.Files["."+runtime+"/build.args"]
 	if !ok {
 		return args, nil

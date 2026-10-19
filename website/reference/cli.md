@@ -342,9 +342,9 @@ service out of the profile, and its token unless another profile names it.
 | `--kind <kind>` | `add` | `github`, `gitlab`, `artifactory` or `generic` (default: from the name) |
 | `--host <host>` | `add` | a host, or `host/path` for one owner on a git forge (repeatable) |
 | `--git` | `add` | wire the sandbox's git to the hosts (generic services) |
-| `--env <name>` | `add` | the variable a tool reads the placeholder from, instead of git |
-| `--scheme <s>` | `add` | `basic`, `bearer` or `raw` |
-| `--user <name>` | `add` | the user the forge pairs with the token (basic scheme) |
+| `--env <name>` | `add` | the variable a tool reads the placeholder from: written into the profile's `env` as `NAME: ${services.<name>}` |
+| `--scheme <s>` | `add` | a git service's header: `basic`, `bearer` or `raw` |
+| `--user <name>` | `add` | the user a git forge pairs with the token (basic scheme) |
 | `--author "Name <email>"` | `add` | who commits under the service (`--author` on a run wins) |
 | `--no-co-author` | `add` | no `Co-Authored-By` trailer for the agent in its repositories |
 | `--command <cmd>` | `add` | a host command printing the token, for a store unibox does not keep |

@@ -91,7 +91,7 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 5\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 6\n# My profile.\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, log, err := run(t, paths, "glpat-tokenvalue\n", "service", "add", "node", "gitlab-2n", "--host", "gitlab.2n.cz", "--author", "Jan Tobola <jan@2n.example>")
@@ -116,8 +116,15 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	data, _ = os.ReadFile(file)
-	if !strings.Contains(string(data), "env: ARTIFACTORY_TOKEN") || !strings.Contains(string(data), "command: vault kv get -field=token secret/art") {
-		t.Fatalf("%s", data)
+	if !strings.Contains(string(data), "ARTIFACTORY_TOKEN: ${services.artifactory}") || !strings.Contains(string(data), "command: vault kv get -field=token secret/art") || strings.Contains(string(data), "scheme") {
+		t.Fatalf("%s\n%s", log, data)
+	}
+	// The variable carrying a service's placeholder goes with it.
+	if _, _, err = run(t, paths, "", "service", "rm", "node", "artifactory"); err != nil {
+		t.Fatal(err)
+	}
+	if q, err := unibox.LoadProfile(root, "node"); err != nil || len(q.EnvValues) != 0 {
+		t.Fatalf("%v %v", err, q.EnvValues)
 	}
 	// A token stored on its own is named, not asked for, and outlives the
 	// service.
@@ -163,7 +170,7 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 5\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, log, err := run(t, paths, "sk-ant-oat01-tokenvalue\n", "agent", "login", "node", "claude")
@@ -190,7 +197,7 @@ func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 5\nimage: example/image\nagents: [claude]\nnetwork:\n  allow: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude]\nnetwork:\n  allow: [jitpack.io] # Kotlin\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, log, err := run(t, paths, "", "network", "allow", "node", "maven.google.com"); err != nil {
@@ -305,7 +312,7 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 5\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// gh not signed in: --gh says what to do.
@@ -342,7 +349,7 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
-	if err := os.WriteFile(file, []byte("version: 5\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out, _, err := run(t, paths, "", "agent", "co-author", "node")

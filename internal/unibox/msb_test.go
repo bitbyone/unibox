@@ -101,7 +101,7 @@ func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
 			Auth:    map[string]AgentAuth{"claude": {Method: AuthToken, Command: "printf %s-%s claude value"}, "copilot": {Method: AuthToken, Command: "printf %s-%s copilot value"}},
 			Services: map[string]Service{
 				"gitlab": {Git: true, Host: HostList{"gitlab.example.com"}, User: "oauth2", Command: "printf %s-%s gitlab value"},
-				"jfrog":  {Env: "ARTIFACTORY_TOKEN", Host: HostList{"jfrog.example.com"}, Command: "printf %s-%s jfrog value"},
+				"jfrog":  {Host: HostList{"jfrog.example.com"}, Command: "printf %s-%s jfrog value"},
 				"corp":   {Git: true, Host: HostList{"git.corp.example"}, User: "oauth2", Command: "printf %s-%s corp value"},
 			},
 		}}
@@ -120,7 +120,7 @@ func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
 			t.Errorf("value %s outside msb's environment", v)
 		}
 	}
-	for _, want := range []string{"UNIBOX_MSB_CLAUDE_CODE_OAUTH_TOKEN=claude-value", "UNIBOX_MSB_COPILOT_GITHUB_TOKEN=copilot-value", "UNIBOX_MSB_ARTIFACTORY_TOKEN=jfrog-value", "UNIBOX_MSB_UNIBOX_SVC_GITLAB=Basic "} {
+	for _, want := range []string{"UNIBOX_MSB_CLAUDE_CODE_OAUTH_TOKEN=claude-value", "UNIBOX_MSB_COPILOT_GITHUB_TOKEN=copilot-value", "UNIBOX_MSB_UNIBOX_SVC_JFROG=jfrog-value", "UNIBOX_MSB_UNIBOX_SVC_GITLAB=Basic "} {
 		if !strings.Contains(string(environment), want) {
 			t.Errorf("msb's environment lacks %s", want)
 		}
@@ -176,7 +176,7 @@ func TestMSBCreatesFromAConfigurationAndHandsSecretsOnlyToMSB(t *testing.T) {
 	if git := c.Secrets["UNIBOX_SVC_GITLAB"]; git.Placeholder != ServicePlaceholder("gitlab", spec.Access.Services["gitlab"]) || git.Substitution["header_fields"] == nil {
 		t.Errorf("git service secret %+v", git)
 	}
-	if jfrog := c.Secrets["ARTIFACTORY_TOKEN"]; jfrog.Substitution["header_fields"] != nil {
+	if jfrog := c.Secrets["UNIBOX_SVC_JFROG"]; jfrog.Substitution["header_fields"] != nil {
 		t.Errorf("an env service's token is held to headers unibox does not know: %+v", jfrog)
 	}
 }

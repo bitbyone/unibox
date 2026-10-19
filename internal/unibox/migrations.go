@@ -22,6 +22,7 @@ var migrations = []func(profile *yaml.Node) (moves []seedMove, notes []string){
 	2: migrateFrom2,
 	3: migrateFrom3,
 	4: migrateFrom4,
+	5: migrateFrom5,
 }
 
 // seedMove is a file of a profile a migration renames, both relative to
@@ -322,6 +323,34 @@ func migrateFrom4(profile *yaml.Node) (moves []seedMove, notes []string) {
 		moves = append(moves, seedMove{v.Value, ProfileDockerfile})
 	}
 	return moves, nil
+}
+
+// migrateFrom5 moves a service's env into the profile's env: format 6
+// sets every variable there, a service's placeholder as ${services.<name>}.
+// A service without git keeps no scheme or user, as the tool makes its own
+// header.
+func migrateFrom5(profile *yaml.Node) (moves []seedMove, notes []string) {
+	services := mapValue(profile, "services")
+	if services == nil || services.Kind != yaml.MappingNode {
+		return nil, nil
+	}
+	for i := 0; i+1 < len(services.Content); i += 2 {
+		name, body := services.Content[i].Value, services.Content[i+1]
+		if body.Kind != yaml.MappingNode {
+			continue
+		}
+		env := mapValue(body, "env")
+		if env == nil {
+			continue
+		}
+		deleteMapKey(body, "env")
+		if g := mapValue(body, "git"); g == nil || g.Value != "true" {
+			deleteMapKey(body, "scheme")
+			deleteMapKey(body, "user")
+		}
+		SetEnvValue(profile, env.Value, "${services."+name+"}")
+	}
+	return nil, nil
 }
 
 // dropKeepingComment takes a key out of the profile and gives the comment

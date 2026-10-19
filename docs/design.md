@@ -2,7 +2,7 @@
 
 ## Where it stands
 
-Built and in daily use (2026-10-15): profiles of format 5, sbx as the
+Built and in daily use (2026-10-15): profiles of format 6, sbx as the
 supported runtime, microsandbox as an experimental one that shows profiles
 carry over (2026-10-17), tasks, the agents' logins, services and network rules, the herdr
 plugin. This began as unagit's plan - it replaced "Agents in a container"
@@ -396,9 +396,9 @@ services:
     command: gh auth token      # a host command that prints the token
   artifactory:                  # any host service
     host: ["artifactory.example.com", "*.jfrog.io"]
-    scheme: bearer              # Authorization: Bearer <token>
-    env: ARTIFACTORY_TOKEN      # the tool reads the placeholder here
     command: op read op://vault/artifactory/token
+env:
+  - ARTIFACTORY_TOKEN: ${services.artifactory}   # the tool reads the placeholder here
 ```
 
 unibox turns each into one `sbx secret set-custom`, scoped to the sandbox,
@@ -491,23 +491,21 @@ and the design turns on it:
   `curl -u user:<placeholder>` reached httpbin.org with the real value
   inside the Basic header (checked on a throwaway sbx sandbox,
   2026-10-19), so a build's `credentials { username; password }` can take
-  the placeholder as its password. A service's `env` is the tool's own
-  variable in its own case (`ORG_GRADLE_PROJECT_artifactoryPassword2N`).
-  sbx takes upper-case names only (`^[A-Z_][A-Z0-9_]*$`), so it gets
-  `UNIBOX_SVC_<NAME>` then, and unibox sets every env service's variable
-  with its placeholder in each session it starts - agent, shell, scripts.
+  the placeholder as its password. The variable is the tool's own in its
+  own case (`ORG_GRADLE_PROJECT_artifactoryPassword2N`), set in the
+  profile's `env` to `${services.<name>}`. sbx takes upper-case names only
+  (`^[A-Z_][A-Z0-9_]*$`), so it gets `UNIBOX_SVC_<NAME>`, and unibox sets
+  the tool's variable with the placeholder in each session it starts -
+  agent, shell, scripts.
   The placeholder is deterministic and no secret, and so the variable is
   there in a sandbox made before the service, too. Checked on sbx: the
   variable held the placeholder and Basic authentication carried the
   value.
-- A **bearer or raw** service needs no git wiring: the tool reads the
-  placeholder from `env` and sends it as its own Authorization, which the
-  proxy substitutes. One caveat found and not yet closed: the custom
-  secret's env var is injected at create, not into a running sandbox, and
-  did not appear in a bare `shell` sandbox's `sbx exec` environment in the
-  test (the built-in `GH_TOKEN=******` did). The header substitution is
-  the reliable channel; the env path wants confirming in a real unibox kit
-  before the first non-git service ships.
+- A service **without git** needs no git wiring: the tool reads the
+  placeholder from the variable the profile's `env` names and sends it in
+  its own header, which the proxy substitutes. sbx injects a custom
+  secret's variable only at create, so unibox sets the variable itself in
+  each session instead.
 
 A runtime without a credential proxy (`CredentialProxy` is a capability;
 sbx has it, a later podman adapter may not) cannot keep the value off the
@@ -907,12 +905,22 @@ on one forge - the profile declares under `vars`, by name with what it is
 for. The values live in the user's `~/.config/unibox/vars.yaml`: shared ones
 under `vars`, a profile's own under `profiles.<name>`, which win. A run stops
 while one is missing (`var_missing`, and `ensure` refuses), since a sandbox
-without it would fail later and less clearly. The values reach the sandbox
-as variables of every session unibox starts and of `start`, not as build
-arguments: a build argument stays in the image's layers and history, and a
-change of it would rebuild; and a service's `user` and `author` may name one
-as `${NAME}`, filled when the profile is loaded. A secret is never a var -
-a name that says one is refused - it stays `secret:<name>`.
+without it would fail later and less clearly. A value reaches the sandbox
+where the profile refers to it, most often as a variable of every session
+and of `start`; a build argument is for what is not personal or secret, as
+it stays in the image's layers and history. A secret is never a
+var - a name that says one is refused - it stays `secret:<name>`.
+
+A var has a name of its own, such as `artifactory-user`, and reaches nothing
+until the profile refers to it: `${vars.<name>}` in `env` (every session's
+variables), in `build_args` (the build's, which join the image's revision,
+so a change builds again) and in a service's `user` and `author`. `env` is
+the one place a variable is set; an item is a host variable by name or
+`NAME: value`, and a value may also refer to `${services.<name>}`, the
+placeholder of a service's token. That replaced a service's own `env`
+(format 6): a service holds one token for HTTP requests to its hosts and
+says no more than where it may go and where it comes from. A var nothing
+refers to, and a service without git no variable carries, are warnings.
 
 ### Scripts
 
