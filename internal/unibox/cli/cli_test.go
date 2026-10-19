@@ -412,19 +412,22 @@ func TestEveryFieldOfAProfileIsReadAndWrittenThroughUnibox(t *testing.T) {
 		{"network.ports.web", "{port: '3000', default: off}"},
 		{"env[0]", "BUILD_KIND"},
 		{"vars.artifactory-user", "your Artifactory user name"},
+		{"env[]", "SPRING_PROFILES_ACTIVE"},
+		{"network.allow[]", "jitpack.io"},
+		{"agents[]", "codex"},
 	} {
 		if _, _, err := run(t, paths, "", append([]string{"profile", "set"}, args...)...); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
 	data, _ := os.ReadFile(file)
-	for _, want := range []string{"cpus: 6", "  claude:\n    args: [--model, opus]\n    args_override: true\n    config:\n      settings.json: _data/settings.json", "web: {port: '3000', default: off}", "env: [BUILD_KIND]", "artifactory-user: your Artifactory user name"} {
+	for _, want := range []string{"cpus: 6", "  claude:\n    args: [--model, opus]\n    args_override: true\n    config:\n      settings.json: _data/settings.json", "web: {port: '3000', default: off}", "env: [BUILD_KIND, SPRING_PROFILES_ACTIVE]", "allow: [jitpack.io]", "  codex: {}", "artifactory-user: your Artifactory user name"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("no %q in\n%s", want, data)
 		}
 	}
 	// A field the profile has not, or a value of the wrong form, is not kept.
-	for _, args := range [][]string{{"resources.gpus", "1"}, {"resources.cpus", "lots"}, {"agents.claude.args", "--model"}, {"env[3]", "X"}, {"version", "1"}, {"image.name", "x"}} {
+	for _, args := range [][]string{{"resources.gpus", "1"}, {"resources.cpus", "lots"}, {"agents.claude.args", "--model"}, {"env[3]", "X"}, {"version", "1"}, {"image.name", "x"}, {"resources[]", "1"}, {"env[]x", "Y"}} {
 		if _, _, err := run(t, paths, "", append([]string{"profile", "set"}, args...)...); err == nil {
 			t.Fatalf("%v was kept", args)
 		}
@@ -448,7 +451,7 @@ func TestEveryFieldOfAProfileIsReadAndWrittenThroughUnibox(t *testing.T) {
 	if err != nil || shown.Profile != "node" || !strings.Contains(compact.String(), `"args":["--model","opus"],"args_override":true`) {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	for _, path := range []string{"agents.claude.config[settings.json]", "agents.claude.args", "agents.claude.args_override", "network.ports.web", "vars.artifactory-user"} {
+	for _, path := range []string{"agents.claude.config[settings.json]", "agents.claude.args", "agents.claude.args_override", "network.ports.web", "network.allow[0]", "vars.artifactory-user", "agents.codex"} {
 		if _, _, err = run(t, paths, "", "profile", "unset", path); err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}

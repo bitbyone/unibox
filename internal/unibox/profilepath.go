@@ -17,7 +17,8 @@ import (
 // list by its index, goes in brackets: agents.claude.config[settings.json],
 // env[0]. Any field can so be read and written by a program, as an editor
 // would; what the value must be is the profile's own validation, applied
-// before anything is kept.
+// before anything is kept. Empty brackets at the end, env[], add an item to
+// the end of a list.
 
 // ParseProfilePath splits a path into its keys.
 func ParseProfilePath(path string) ([]string, error) {
@@ -27,8 +28,11 @@ func ParseProfilePath(path string) ([]string, error) {
 		switch {
 		case rest[0] == '[':
 			end := strings.IndexByte(rest, ']')
-			if end < 2 {
+			if end < 0 {
 				return nil, fmt.Errorf("path %q: a bracket holds a key or an index, as config[settings.json] or env[0]", path)
+			}
+			if end == 1 && len(rest) > 2 {
+				return nil, fmt.Errorf("path %q: empty brackets add to a list, so they come last", path)
 			}
 			keys = append(keys, rest[1:end])
 			rest = rest[end+1:]
@@ -58,7 +62,7 @@ func ParseProfilePath(path string) ([]string, error) {
 			}
 		}
 	}
-	if len(keys) == 0 {
+	if len(keys) == 0 || keys[0] == "" {
 		return nil, fmt.Errorf("no path given; name a field, as resources.cpus")
 	}
 	switch keys[0] {
@@ -84,7 +88,16 @@ func ParseProfileValue(value string) (*yaml.Node, error) {
 // SetProfilePath puts a value at a path, making the mappings on the way.
 func SetProfilePath(profile *yaml.Node, keys []string, value *yaml.Node) error {
 	node, keys := profile, keys
-	if keys[0] == "agents" && len(keys) > 1 {
+	if len(keys) == 2 && keys[0] == "agents" && keys[1] == "" {
+		// agents[] codex declares one more agent, whichever form agents has.
+		if value.Kind != yaml.ScalarNode {
+			return fmt.Errorf("agents[] takes an agent's name")
+		}
+		if agents := mapValue(profile, "agents"); agents != nil && agents.Kind == yaml.MappingNode {
+			setMapValue(agents, value.Value, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+			return nil
+		}
+	} else if keys[0] == "agents" && len(keys) > 1 {
 		// A list of agents' names becomes a mapping, as for auth, keeping
 		// the order sbx signs in by.
 		body := agentNode(profile, keys[1])
@@ -98,6 +111,9 @@ func SetProfilePath(profile *yaml.Node, keys []string, value *yaml.Node) error {
 		last := i == len(keys)-1
 		switch node.Kind {
 		case yaml.MappingNode:
+			if key == "" {
+				return fmt.Errorf("%s is a mapping, not a list; name the key in it", strings.Join(keys[:i], "."))
+			}
 			if last {
 				setMapValue(node, key, value)
 				return nil
@@ -105,10 +121,17 @@ func SetProfilePath(profile *yaml.Node, keys []string, value *yaml.Node) error {
 			child := mapValue(node, key)
 			if child == nil {
 				child = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+				if keys[i+1] == "" {
+					child = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+				}
 				setMapValue(node, key, child)
 			}
 			node = child
 		case yaml.SequenceNode:
+			if key == "" {
+				node.Content = append(node.Content, value)
+				return nil
+			}
 			n, err := index(node, key)
 			if err != nil {
 				return err
@@ -128,6 +151,9 @@ func SetProfilePath(profile *yaml.Node, keys []string, value *yaml.Node) error {
 // UnsetProfilePath takes the value at a path out, and the mappings it
 // leaves empty, but never an agent the profile declares.
 func UnsetProfilePath(profile *yaml.Node, keys []string) error {
+	if keys[len(keys)-1] == "" {
+		return fmt.Errorf("empty brackets add to a list; take an item out by its index, as env[0]")
+	}
 	chain := []*yaml.Node{profile}
 	node := profile
 	for i, key := range keys {

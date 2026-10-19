@@ -247,7 +247,8 @@ layout, every profile, every instruction text. The profile of `show`,
 its keys as in the file and in the file's order, under `document`. `set` and
 `unset` change any field of it, so a program configures a profile through
 unibox alone. A path is the field's keys joined by dots; a key holding a dot,
-or a list's item by its index, goes in brackets. A value is YAML:
+or a list's item by its index, goes in brackets, as in jq; empty brackets
+at the end add an item to a list. A value is YAML:
 
 ```sh
 unibox profile set resources.cpus 6
@@ -255,6 +256,8 @@ unibox profile set agents.claude.args '[--model, opus]'
 unibox profile set agents.claude.config[settings.json] _data/claude/settings.json
 unibox profile set network.ports.web "{port: '3000', default: off}"
 unibox profile set env[0] SPRING_PROFILES_ACTIVE
+unibox profile set env[] BUILD_KIND
+unibox profile set agents[] codex
 unibox profile unset agents.claude.args
 ```
 

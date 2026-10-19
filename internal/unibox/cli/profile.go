@@ -14,8 +14,9 @@ import (
 )
 
 const profilePathHelp = `A path names a field of sandbox.yaml by its keys joined by dots; a key
-holding a dot, or a list's item by its index, goes in brackets. A value is
-YAML: a number, true, a string, [a, b] or {key: value}.
+holding a dot, or a list's item by its index, goes in brackets, as in jq;
+empty brackets at the end add an item to a list. A value is YAML: a number,
+true, a string, [a, b] or {key: value}.
 
 What is written is checked as unibox reads a profile - the field must exist
 and its value be of the right form - and nothing is kept otherwise.
@@ -53,7 +54,7 @@ func (o *options) profileShowCommand() *cobra.Command {
 
 func (o *options) profileSetCommand() *cobra.Command {
 	var profile string
-	c := &cobra.Command{Use: "set path value", Args: cobra.ExactArgs(2), Short: "Set any field of a profile", Long: "Set any field of a profile.\n\n" + profilePathHelp, Example: "  unibox profile set resources.cpus 6\n  unibox profile set agents.claude.args '[--model, opus]'\n  unibox profile set agents.claude.config[settings.json] _data/claude/settings.json\n  unibox profile set network.ports.web \"{port: '3000', default: off}\"", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "set path value", Args: cobra.ExactArgs(2), Short: "Set any field of a profile", Long: "Set any field of a profile.\n\n" + profilePathHelp, Example: "  unibox profile set resources.cpus 6\n  unibox profile set agents.claude.args '[--model, opus]'\n  unibox profile set agents.claude.config[settings.json] _data/claude/settings.json\n  unibox profile set network.ports.web \"{port: '3000', default: off}\"\n  unibox profile set env[] BUILD_KIND", RunE: func(cmd *cobra.Command, args []string) error {
 		keys, err := unibox.ParseProfilePath(args[0])
 		if err != nil {
 			return err
