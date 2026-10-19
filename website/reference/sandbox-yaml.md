@@ -1,7 +1,9 @@
 # sandbox.yaml
 
 Every key a profile's `sandboxes/<name>/sandbox.yaml` may hold, in the order
-unibox lays them out. An unknown key is an error, at any level.
+unibox lays them out. An unknown key is an error, at any level. Any of them
+can be read with `unibox profile show --json` and written with `unibox profile
+set` and `unset`, as well as in an editor.
 
 ## Top-level keys
 

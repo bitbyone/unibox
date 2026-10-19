@@ -18,7 +18,7 @@ func (o *options) sandboxGroup() *cobra.Command {
 
 func (o *options) profileGroup() *cobra.Command {
 	c := &cobra.Command{Use: "profile", Short: "List, build and check profiles; unibox init adds one"}
-	c.AddCommand(o.profilesCommand(), o.buildCommand(), o.diffCommand(), o.validateCommand())
+	c.AddCommand(o.profilesCommand(), o.profileShowCommand(), o.profileSetCommand(), o.profileUnsetCommand(), o.buildCommand(), o.diffCommand(), o.validateCommand())
 	return c
 }
 

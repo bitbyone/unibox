@@ -228,6 +228,9 @@ older format. With `--from` it copies the profile from a
 
 ```
 unibox profile ls
+unibox profile show [profile]
+unibox profile set <path> <value> [-p <profile>]
+unibox profile unset <path> [-p <profile>]
 unibox profile build [profile] [flags]
 unibox profile diff [profile] [flags]
 unibox profile validate
@@ -237,8 +240,28 @@ unibox profile validate
 commit. `build` builds a profile's image, checks the declared agents and
 loads it. `diff` shows what changed in the profile since its image was last
 built, as a unified diff. `validate` checks the environments repository: its
-layout, every profile, every instruction text. The profile of `build` and
-`diff` is optional: left out, it is the default.
+layout, every profile, every instruction text. The profile of `show`,
+`build` and `diff` is optional: left out, it is the default.
+
+`show` prints the profile's `sandbox.yaml`; with `--json` the same document,
+its keys as in the file and in the file's order, under `document`. `set` and
+`unset` change any field of it, so a program configures a profile through
+unibox alone. A path is the field's keys joined by dots; a key holding a dot,
+or a list's item by its index, goes in brackets. A value is YAML:
+
+```sh
+unibox profile set resources.cpus 6
+unibox profile set agents.claude.args '[--model, opus]'
+unibox profile set agents.claude.config[settings.json] _data/claude/settings.json
+unibox profile set network.ports.web "{port: '3000', default: off}"
+unibox profile set env[0] SPRING_PROFILES_ACTIVE
+unibox profile unset agents.claude.args
+```
+
+What is written is read back as unibox reads a profile - the field must
+exist, its value be of the right form, a file it names be there - and kept
+only then. `unset` takes out the mappings it leaves empty too; `version` is
+unibox's own. `validate` checks the whole repository.
 
 | Flag | Command | Meaning |
 | --- | --- | --- |

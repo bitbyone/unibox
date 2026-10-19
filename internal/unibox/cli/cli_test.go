@@ -393,3 +393,75 @@ func TestTheContextSaysTheSandboxAndProfileWhenNotTold(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+func TestEveryFieldOfAProfileIsReadAndWrittenThroughUnibox(t *testing.T) {
+	t.Parallel()
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.MkdirAll(filepath.Join(root, "sandboxes", "node", "_data"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sandboxes", "node", "_data", "settings.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"resources.cpus", "6"},
+		{"agents.claude.args", "[--model, opus]"},
+		{"agents.claude.args_override", "true"},
+		{"agents.claude.config[settings.json]", "_data/settings.json"},
+		{"network.ports.web", "{port: '3000', default: off}"},
+		{"env[0]", "BUILD_KIND"},
+		{"vars.artifactory-user", "your Artifactory user name"},
+	} {
+		if _, _, err := run(t, paths, "", append([]string{"profile", "set"}, args...)...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	data, _ := os.ReadFile(file)
+	for _, want := range []string{"cpus: 6", "  claude:\n    args: [--model, opus]\n    args_override: true\n    config:\n      settings.json: _data/settings.json", "web: {port: '3000', default: off}", "env: [BUILD_KIND]", "artifactory-user: your Artifactory user name"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("no %q in\n%s", want, data)
+		}
+	}
+	// A field the profile has not, or a value of the wrong form, is not kept.
+	for _, args := range [][]string{{"resources.gpus", "1"}, {"resources.cpus", "lots"}, {"agents.claude.args", "--model"}, {"env[3]", "X"}, {"version", "1"}, {"image.name", "x"}} {
+		if _, _, err := run(t, paths, "", append([]string{"profile", "set"}, args...)...); err == nil {
+			t.Fatalf("%v was kept", args)
+		}
+	}
+	if after, _ := os.ReadFile(file); string(after) != string(data) {
+		t.Fatalf("a refused change was written:\n%s", after)
+	}
+	// The document in JSON, in the file's order, for a program to render.
+	out, _, err := run(t, paths, "", "profile", "show", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shown struct {
+		Profile  string          `json:"profile"`
+		Document json.RawMessage `json:"document"`
+	}
+	var compact bytes.Buffer
+	if err = json.Unmarshal([]byte(out), &shown); err == nil {
+		err = json.Compact(&compact, shown.Document)
+	}
+	if err != nil || shown.Profile != "node" || !strings.Contains(compact.String(), `"args":["--model","opus"],"args_override":true`) {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, path := range []string{"agents.claude.config[settings.json]", "agents.claude.args", "agents.claude.args_override", "network.ports.web", "vars.artifactory-user"} {
+		if _, _, err = run(t, paths, "", "profile", "unset", path); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	data, _ = os.ReadFile(file)
+	if strings.Contains(string(data), "\nnetwork:") || strings.Contains(string(data), "\nvars:") || !strings.Contains(string(data), "agents: [claude]") {
+		t.Fatalf("%s", data)
+	}
+	if _, _, err = run(t, paths, "", "profile", "unset", "caches"); err == nil || !strings.Contains(err.Error(), "sets no caches") {
+		t.Fatalf("%v", err)
+	}
+	// A profile without a Dockerfile keeps its image.
+	if _, _, err = run(t, paths, "", "profile", "unset", "image"); err == nil || !strings.Contains(err.Error(), "was not kept") {
+		t.Fatalf("%v", err)
+	}
+}

@@ -114,6 +114,12 @@ about it. Keep command output short: pipe through `head`, `tail` or
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
+- **Every field of sandbox.yaml is a command's to write.** A program
+  configuring unibox needs no YAML of its own: `unibox profile show --json`
+  gives the document, `profile set|unset <path>` changes any field,
+  validated as `LoadProfile` reads it. A new field needs nothing more than
+  its validation there; frequent ones get commands of their own
+  (`network`, `service`, `agent`), which stay the everyday way.
 - **Commands are a noun, then a verb** (`unibox sandbox stop`); only
   `run`, `resume`, `init`, `context`, `config`, `prune` and `version`
   stand alone. The argument is what a command acts on; the profile it
