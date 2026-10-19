@@ -145,6 +145,30 @@ unibox service add web artifactory --host artifactory.example.com --secret artif
 after it, unless another profile names it; a token stored on its own and
 named with `--secret` stays until `unibox secret rm`.
 
+## A build's own credentials
+
+A tool that takes a user and a password, as Gradle's `credentials { username;
+password }` does, sends them as Basic authentication. The proxy finds the
+placeholder inside it too (checked with sbx), so the password can be the
+service's placeholder and the user an ordinary setting. Gradle reads a
+project property from `ORG_GRADLE_PROJECT_<property>`, so for a build that
+names `artifactoryUser2N` and `artifactoryPassword2N`:
+
+```sh
+unibox secret set artifactory-2n        # the password, or an identity token
+unibox service add dev artifactory-2n --kind generic --host artifactory.example.com \
+  --env ORG_GRADLE_PROJECT_artifactoryPassword2N --scheme raw --secret artifactory-2n
+```
+
+and the user and the repository's URL in the sandbox's
+`~/.gradle/gradle.properties`, written by the profile's Dockerfile or start
+script:
+
+```properties
+artifactoryUrl2N=https://artifactory.example.com/artifactory/maven-release
+artifactoryUser2N=jan.tobola
+```
+
 ## Stores unibox does not keep
 
 A profile may name any host command instead - written by hand, or with

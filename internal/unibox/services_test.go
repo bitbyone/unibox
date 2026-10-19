@@ -46,6 +46,23 @@ func TestProfilesSayWhichServicesTheSandboxReaches(t *testing.T) {
 	}
 }
 
+func TestAServiceFillsAToolsOwnVariableInItsOwnCase(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	// Gradle reads a project property from ORG_GRADLE_PROJECT_<property>,
+	// so the password of a build's credentials block comes from a service.
+	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nenv: [ORG_GRADLE_PROJECT_artifactoryUser2N]\nservices:\n  artifactory-2n:\n    host: artifactory.example.com\n    scheme: raw\n    env: ORG_GRADLE_PROJECT_artifactoryPassword2N\n    command: secret:artifactory-2n\n")
+	if _, err := LoadProfile(root, "node"); err != nil {
+		t.Fatal(err)
+	}
+	// A password is still no plain variable of the profile.
+	write(t, file, "version: 5\nstart: start.sh\nagents: [claude]\nenv: [ORG_GRADLE_PROJECT_artifactoryPassword2N]\n")
+	if _, err := LoadProfile(root, "node"); err == nil {
+		t.Fatal("a password was passed as a plain variable")
+	}
+}
+
 func TestServiceSecretCommandNeverCarriesTheTokenItself(t *testing.T) {
 	t.Parallel()
 	basic := serviceSecretCommand(Service{Git: true, Scheme: SchemeBasic, User: "x-access-token", Command: "gh auth token"})

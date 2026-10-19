@@ -487,6 +487,12 @@ and the design turns on it:
   does not refuse private addresses. A service's hosts join the
   sandbox's allow policy, so nothing more is needed but the VPN being up
   when the sandbox reaches the host.
+- **Basic authentication is substituted too.** A request with
+  `curl -u user:<placeholder>` reached httpbin.org with the real value
+  inside the Basic header (checked on a throwaway sbx sandbox,
+  2026-10-19), so a build's `credentials { username; password }` can take
+  the placeholder as its password. A service's `env` is the tool's own
+  variable in its own case (`ORG_GRADLE_PROJECT_artifactoryPassword2N`).
 - A **bearer or raw** service needs no git wiring: the tool reads the
   placeholder from `env` and sends it as its own Authorization, which the
   proxy substitutes. One caveat found and not yet closed: the custom

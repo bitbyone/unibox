@@ -334,6 +334,11 @@ func digest(v any) string {
 
 var envName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
+// toolEnvName is a variable a tool reads, whose name is the tool's: Gradle
+// reads a project property from ORG_GRADLE_PROJECT_<property>, in the
+// property's own case.
+var toolEnvName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 // A network rule is a host, a domain wildcard, an IP or a CIDR prefix, with
 // an optional port: one pattern, never a list or anything with spaces.
 var networkPattern = regexp.MustCompile(`^[A-Za-z0-9.*?\[\]!:/_-]+$`)
@@ -536,7 +541,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		// The env name is the tool's own for an env service, derived for a
 		// git one; sensitiveEnv does not apply - a service variable is a
 		// token by design.
-		if s.Env != "" && (!envName.MatchString(s.Env) || s.Env == "HOME" || s.Env == "PATH") {
+		if s.Env != "" && (!toolEnvName.MatchString(s.Env) || s.Env == "HOME" || s.Env == "PATH") {
 			return p, fmt.Errorf("profile %s: service %s env %q is not a valid environment name", name, svc, s.Env)
 		}
 		if s.Refresh != "" && s.Refresh != "on-demand" {
@@ -565,7 +570,7 @@ func LoadProfile(root, name string) (Profile, error) {
 		}
 	}
 	for _, key := range p.Env {
-		if !envName.MatchString(key) || sensitiveEnv.MatchString(key) || key == "HOME" || key == "PATH" {
+		if !toolEnvName.MatchString(key) || sensitiveEnv.MatchString(key) || key == "HOME" || key == "PATH" {
 			return p, fmt.Errorf("profile %s: environment name %q is reserved or sensitive; configure credentials through the runtime", name, key)
 		}
 	}
