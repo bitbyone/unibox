@@ -288,6 +288,9 @@ and kept in the platform's store - the login keychain on macOS, the Secret
 Service on Linux - where the profile names it as `secret:<name>`. It never
 enters a sandbox: the runtime reads it on the host and the sandbox sees a
 placeholder its proxy swaps. `unibox secret set|ls|rm` keeps any other.
+A token another program keeps is named by the command that prints it,
+`--command` with one agent (unagit's vault does this through `unagit
+credential get`): unibox asks for nothing and stores nothing.
 
 Copilot can sign in through your gh login instead (`--gh`, or the question
 unibox asks at a terminal when gh is signed in): `copilot: {token: gh auth

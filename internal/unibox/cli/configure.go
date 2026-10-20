@@ -206,7 +206,7 @@ func (o *options) applyPorts(cmd *cobra.Command, profile string) error {
 
 func (o *options) loginCommand() *cobra.Command {
 	var renew, viaGH bool
-	var rt, profile string
+	var rt, profile, command string
 	c := &cobra.Command{Use: "login [agent...]", Args: cobra.ArbitraryArgs, Short: "Sign a profile's agents in: tokens into the platform's store, the profile's auth written", RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		name, err := o.profileName(profile)
@@ -222,6 +222,9 @@ func (o *options) loginCommand() *cobra.Command {
 		if len(agents) == 0 {
 			agents = p.Agents
 		}
+		if command != "" && len(args) != 1 {
+			return fmt.Errorf("--command signs one agent in; name it, as in unibox agent login claude --command ...")
+		}
 		store, err := o.secretStore()
 		if err != nil {
 			return err
@@ -232,6 +235,17 @@ func (o *options) loginCommand() *cobra.Command {
 				return fmt.Errorf("profile %s does not offer agent %s", p.Name, id)
 			}
 			fmt.Fprintf(o.log, "%s:\n", id)
+			if command != "" {
+				// A store of the user's own - another program's vault -
+				// prints the token; unibox neither asks for it nor keeps it.
+				method, ok := commandAuth[id]
+				if !ok {
+					return fmt.Errorf("unibox cannot sign %s in by a command; set its auth in sandbox.yaml", id)
+				}
+				auths[id] = unibox.AgentAuth{Method: method, Command: command}
+				fmt.Fprintf(o.log, "  its token comes from %s\n", command)
+				continue
+			}
 			switch id {
 			case "codex":
 				if r.Name() == "msb" {
@@ -348,8 +362,20 @@ func (o *options) loginCommand() *cobra.Command {
 	c.Flags().BoolVar(&renew, "renew", false, "Ask for every token again, replacing the stored ones")
 	c.Flags().BoolVar(&viaGH, "gh", false, "Sign copilot in through your gh login (gh auth token) instead of a token of its own")
 	c.Flags().StringVar(&rt, "runtime", "", "Runtime that keeps the logins (default: the configured one)")
+	c.Flags().StringVar(&command, "command", "", "A host command printing the agent's token, for a store unibox does not keep")
+	c.MarkFlagsMutuallyExclusive("command", "gh")
+	c.MarkFlagsMutuallyExclusive("command", "renew")
 	profileFlag(c, &profile)
 	return c
+}
+
+// commandAuth is how an agent signs in by a command's token: claude and
+// copilot read a login token from their environment, codex an API key
+// the runtime keeps.
+var commandAuth = map[string]string{
+	"claude":  unibox.AuthToken,
+	"copilot": unibox.AuthToken,
+	"codex":   unibox.AuthCommand,
 }
 
 // serviceKind is what unibox knows of a particular service: its defaults

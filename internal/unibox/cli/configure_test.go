@@ -193,6 +193,36 @@ func TestLoginStoresAnAgentsTokenAndWritesItsAuth(t *testing.T) {
 	_ = io.Discard
 }
 
+// TestLoginTakesAnAgentsTokenFromACommand: a token another program keeps
+// - unagit's vault - is named by the command that prints it; unibox asks
+// for nothing and the runtime is told the command.
+func TestLoginTakesAnAgentsTokenFromACommand(t *testing.T) {
+	argv := fakeHostTools(t)
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude, copilot]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, log, err := run(t, paths, "", "agent", "login", "--command", "/usr/local/bin/unagit credential get claude", "-p", "node"); err == nil || !strings.Contains(err.Error(), "name it") {
+		t.Fatalf("a command for every agent was taken: %v\n%s", err, log)
+	}
+	_, log, err := run(t, paths, "", "agent", "login", "claude", "--command", "/usr/local/bin/unagit credential get claude", "-p", "node")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), "  claude:\n    auth: {token: /usr/local/bin/unagit credential get claude}") {
+		t.Fatalf("%s", data)
+	}
+	recorded, _ := os.ReadFile(argv)
+	if !strings.Contains(string(recorded), "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN") || !strings.Contains(string(recorded), "unagit credential get claude") {
+		t.Fatalf("%s\n%s", recorded, log)
+	}
+	if out, _, _ := run(t, paths, "", "secret", "ls"); strings.Contains(out, "claude") {
+		t.Fatal("unibox stored a token it was told another program keeps")
+	}
+}
+
 func TestNetworkRulesAreChangedThroughUnibox(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)

@@ -81,6 +81,7 @@ rebuild.
 unibox agent login -p web              # every agent of profile web
 unibox agent login claude -p web       # one
 unibox agent login --renew -p web      # ask for every token again
+unibox agent login claude -p web --command '/path/to/unagit credential get claude'
 unibox agent ls -p web                 # how each signs in and is credited
 ```
 
@@ -97,7 +98,9 @@ unibox agent ls -p web                 # how each signs in and is credited
 A token is kept in the platform's store - the login keychain on macOS, the
 Secret Service on Linux - where the profile names it as `secret:<name>`. It
 never enters a sandbox: the runtime reads it on the host, and the sandbox
-sees a placeholder the proxy swaps.
+sees a placeholder the proxy swaps. With `--command`, for one agent, the
+token comes from another program's store instead - the command prints it
+whenever the runtime asks, and unibox asks for nothing and stores nothing.
 
 ### `auth` values
 
