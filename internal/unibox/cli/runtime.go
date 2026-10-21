@@ -42,7 +42,7 @@ func (o *options) checkRuntime(cmd *cobra.Command, interactive bool) error {
 		return fmt.Errorf("%s", missing)
 	}
 	choice, err := o.askPick("No sandbox runtime", missing+"\n\nmicrosandbox (msb) can run sandboxes here instead; it is experimental: logins, the network policy and live changes are not what sbx gives.", []pick{
-		{"stop", "Stop - I will install sbx first"},
+		{"stop", "Stop - I will install sbx first (recommended)"},
 		{"msb", "Go on with microsandbox (msb), experimental"},
 	}, "stop")
 	if err != nil {
