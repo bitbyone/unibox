@@ -728,6 +728,13 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 	return r.Stop(ctx, b.RuntimeName)
 }
 func (m *Manager) Remove(ctx context.Context, name, task string) error {
+	return m.remove(ctx, name, task, false)
+}
+
+// remove takes a task or a sandbox away. Forced, it neither waits for the
+// sessions nor checks for unpushed work: what is in the sandbox goes, the
+// host's mounted directories never.
+func (m *Manager) remove(ctx context.Context, name, task string, force bool) error {
 	task = m.taskID(task)
 	l, err := m.guard(name)
 	if err != nil {
@@ -735,10 +742,12 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 	}
 	defer l.Close()
 	u, err := m.usage(name, false)
-	if err != nil {
+	if err != nil && !force {
 		return err
 	}
-	defer u.Close()
+	if u != nil {
+		defer u.Close()
+	}
 	b, err := m.sandbox(name)
 	if err != nil {
 		return err
@@ -751,7 +760,7 @@ func (m *Manager) Remove(ctx context.Context, name, task string) error {
 	if err != nil {
 		return err
 	}
-	if exists {
+	if exists && !force {
 		if err = m.safeBox(ctx, b, r); err != nil {
 			return err
 		}

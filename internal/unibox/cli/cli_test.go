@@ -531,3 +531,33 @@ func TestInitWithoutSbxSaysSoAndOffersTheExperimentalRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDestroyAsksAndAllLeavesTheRepository(t *testing.T) {
+	t.Parallel()
+	paths, root := cliFixture(t)
+	err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["old"] = api.Sandbox{Name: "old", Runtime: "gone", RuntimeName: "unibox-old", Profile: "node", Runs: []api.Run{}, Tasks: []api.Task{{ID: "t", Sandbox: "old", Directory: "/work/t", Agent: "claude", State: "ready"}}}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = run(t, paths, "", "destroy"); err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("%v", err)
+	}
+	if out, _, err := run(t, paths, "", "destroy", "--yes"); err != nil || !strings.Contains(out, "every sandbox and task removed") {
+		t.Fatalf("%v %s", err, out)
+	}
+	if s, _ := paths.ReadState(); len(s.Sandboxes) != 0 {
+		t.Fatalf("%+v", s.Sandboxes)
+	}
+	if out, _, err := run(t, paths, "", "destroy", "--all", "--yes"); err != nil || !strings.Contains(out, "environments repository stays") {
+		t.Fatalf("%v %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(paths.Config, "config.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("config stayed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "sandbox.yaml")); err != nil {
+		t.Fatal(err)
+	}
+}

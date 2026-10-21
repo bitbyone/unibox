@@ -11,7 +11,7 @@ unibox [command] [flags]
 `script`, `instructions`, `template`, `secret`, `var`, `herdr` - and the verb
 follows: `unibox sandbox stop`, `unibox network port publish`. Only the
 everyday commands stand alone: `run`, `resume`, `init`, `context`, `config`,
-`prune` and `version`.
+`prune`, `destroy` and `version`.
 
 **The argument is what the command acts on.** One name - a task, a sandbox,
 a service, a host's rule - or a list of the same kind, such as directories or
@@ -280,6 +280,26 @@ unibox prune
 
 Removes the images unibox no longer needs: older builds, and those of
 profiles and sandboxes that are gone.
+
+### `unibox destroy`
+
+```
+unibox destroy [--all] [--secrets] [--msb] [--force]
+```
+
+Removes every sandbox, and so every task, and sandboxes named `unibox-*` the
+state no longer knows. Every sandbox is checked first for running sessions
+and unpushed work; one with either stops it before anything is removed,
+unless `--force` discards them. A mounted host directory is never deleted.
+
+| Flag | Also removes |
+| --- | --- |
+| `--all` | unibox's images; in sbx, the custom secrets carrying unibox's placeholders, a secret read by unibox's lookup and the domain approvals it added to `credentials.yaml` - a login or secret made with sbx stays; the herdr plugin; `~/.config/unibox` (state, configuration, `vars.toml`) and `~/.cache/unibox`. The environments repository stays where it is; only the configuration naming it goes |
+| `--secrets` | the tokens unibox keeps in the platform's store (`unibox secret ls`) |
+| `--msb` | the microsandbox runtime in `~/.microsandbox` |
+| `--force` | sandboxes with running sessions or unpushed work, discarding it |
+
+It asks first; `--yes` answers.
 
 ### `unibox template`
 
