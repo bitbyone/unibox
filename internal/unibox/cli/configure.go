@@ -283,157 +283,14 @@ func (o *options) loginCommand() *cobra.Command {
 	var renew, viaGH bool
 	var rt, profile, command string
 	c := &cobra.Command{Use: "login [agent...]", Args: cobra.ArbitraryArgs, Short: "Sign a profile's agents in: tokens into the platform's store, the profile's auth written", RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
 		name, err := o.profileName(profile)
 		if err != nil {
 			return err
 		}
-		req := unibox.Request{Profile: name, Runtime: rt}
-		_, r, p, err := o.manager.Definition(req)
-		if err != nil {
+		if err = o.login(cmd, name, args, renew, viaGH, rt, command); err != nil {
 			return err
 		}
-		o.secretsVia = p.SecretCommand
-		agents := args
-		if len(agents) == 0 {
-			agents = p.Agents
-		}
-		if command != "" && len(args) != 1 {
-			return fmt.Errorf("--command signs one agent in; name it, as in unibox agent login claude --command ...")
-		}
-		store, err := o.secretStore()
-		if err != nil {
-			return err
-		}
-		auths := map[string]unibox.AgentAuth{}
-		for _, id := range agents {
-			if !slices.Contains(p.Agents, id) {
-				return fmt.Errorf("profile %s does not offer agent %s", p.Name, id)
-			}
-			fmt.Fprintf(o.log, "%s:\n", id)
-			if command != "" {
-				// A store of the user's own - another program's vault -
-				// prints the token; unibox neither asks for it nor keeps it.
-				method, ok := commandAuth[id]
-				if !ok {
-					return fmt.Errorf("unibox cannot sign %s in by a command; set its auth in sandbox.yaml", id)
-				}
-				auths[id] = unibox.AgentAuth{Method: method, Command: command}
-				fmt.Fprintf(o.log, "  its token comes from %s\n", command)
-				continue
-			}
-			switch id {
-			case "codex":
-				if r.Name() == "msb" {
-					// msb keeps no ChatGPT login; an API key from the
-					// platform's store signs codex in, in sbx as well.
-					if err := o.ensureSecret(cmd, store, "openai", renew, []string{
-						"msb signs codex in by an OpenAI API key, not a ChatGPT login",
-					}, "https://platform.openai.com/api-keys"); err != nil {
-						return err
-					}
-					auths[id] = unibox.AgentAuth{Method: unibox.AuthCommand, Command: unibox.SecretPrefix + "openai"}
-					continue
-				}
-				auths[id] = unibox.AgentAuth{Method: unibox.AuthOAuth}
-				fmt.Fprintln(o.log, "  the ChatGPT login is kept by the runtime, which opens the browser for it")
-			case "claude":
-				if ok, _ := store.Has(ctx, "claude"); o.secretsVia == "" && (!ok || renew) {
-					if _, err := exec.LookPath("claude"); err == nil && o.interactive {
-						fmt.Fprintln(o.log, "  claude setup-token signs your subscription in for a year and prints the token")
-						setup := exec.CommandContext(ctx, "claude", "setup-token")
-						if f, ok := o.input.(*os.File); ok {
-							setup.Stdin = f
-						}
-						setup.Stdout, setup.Stderr = o.log, o.log
-						if err := setup.Run(); err != nil {
-							return fmt.Errorf("claude setup-token did not finish; run it yourself and paste the token: %w", err)
-						}
-					} else {
-						fmt.Fprintln(o.log, "  run claude setup-token where claude is installed; it prints a token for your subscription")
-					}
-				}
-				if err := o.ensureSecret(cmd, store, "claude", renew, nil, ""); err != nil {
-					return err
-				}
-				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "claude"}
-			case "copilot":
-				stored, _ := store.Has(ctx, "copilot")
-				gh, err := o.useGH(cmd, viaGH, "copilot", stored && !renew)
-				if err != nil {
-					return err
-				}
-				if gh {
-					// A token login, so copilot's hosts alone get it; the
-					// github secret of command would take github.com over.
-					auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: GHCommand}
-					continue
-				}
-				err = o.ensureSecret(cmd, store, "copilot", renew, []string{
-					"make a fine-grained token on GitHub: no repositories, Account permissions > Copilot Requests: Read-only, nothing else",
-					"it signs copilot in alone; git reaches GitHub through the profile's services",
-				}, "https://github.com/settings/personal-access-tokens/new")
-				if err != nil {
-					return err
-				}
-				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "copilot"}
-			default:
-				fmt.Fprintf(o.log, "  unibox has no guided login for %s; set its auth in sandbox.yaml\n", id)
-			}
-		}
-		changed := false
-		err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
-			for id, a := range auths {
-				if old := p.Auth[id]; old.Method != a.Method || old.Command != a.Command {
-					unibox.SetAgentAuth(doc, id, a)
-					changed = true
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		if changed {
-			fmt.Fprintf(o.log, "wrote the agents' auth into profile %s\n", p.Name)
-			if p, err = o.manager.Profile(p.Name); err != nil {
-				return err
-			}
-		}
-		// The runtime is told each source now, so the first run starts
-		// straight away; a token's is stored again, as its command may
-		// have changed.
-		if a, ok := r.(unibox.Authenticator); ok {
-			needs := a.AuthNeeds(ctx, "unibox-"+p.Name, p)
-			for _, id := range agents {
-				method := p.Auth[id].Method
-				missing := slices.ContainsFunc(needs, func(n api.Need) bool { return n.Code == "login_required" && n.Agent == id })
-				switch method {
-				case unibox.AuthToken, unibox.AuthCommand:
-					// sbx's notes on a stored secret are kept for a failure.
-					var said bytes.Buffer
-					if err := o.manager.Login(ctx, req, id, strings.NewReader(""), &said, &said); err != nil {
-						fmt.Fprint(o.log, said.String())
-						return err
-					}
-				case unibox.AuthOAuth, unibox.AuthAPIKey:
-					if !missing && !renew {
-						continue
-					}
-					if err := o.manager.Login(ctx, req, id, o.input, o.log, o.log); err != nil {
-						return err
-					}
-				default:
-					continue
-				}
-				if r.Name() == "msb" && method != unibox.AuthAPIKey {
-					fmt.Fprintf(o.log, "%s's %s login is fetched each time msb boots the sandbox\n", id, method)
-					continue
-				}
-				fmt.Fprintf(o.log, "stored %s's %s login in %s\n", id, method, r.Name())
-			}
-		}
-		return o.success(fmt.Sprintf("profile %s signs its agents in", p.Name))
+		return o.success(fmt.Sprintf("profile %s signs its agents in", name))
 	}}
 	c.Flags().BoolVar(&renew, "renew", false, "Ask for every token again, replacing the stored ones")
 	c.Flags().BoolVar(&viaGH, "gh", false, "Sign copilot in through your gh login (gh auth token) instead of a token of its own")
@@ -443,6 +300,169 @@ func (o *options) loginCommand() *cobra.Command {
 	c.MarkFlagsMutuallyExclusive("command", "renew")
 	profileFlag(c, &profile)
 	return c
+}
+
+// offerLogin asks, at the end of an interactive init, whether to sign the
+// profile's agents in now, as unibox agent login would, and does.
+func (o *options) offerLogin(cmd *cobra.Command, name string) (bool, error) {
+	sign, err := o.askYes("Sign the agents of profile "+name+" in now?", true)
+	if err != nil || !sign {
+		return false, err
+	}
+	return true, o.login(cmd, name, nil, false, false, "", "")
+}
+
+// login signs a profile's agents in, the named ones or all: a token into
+// the platform's store where unibox knows how to get one, the profile's
+// auth written, and the runtime told each source.
+func (o *options) login(cmd *cobra.Command, name string, args []string, renew, viaGH bool, rt, command string) error {
+	ctx := cmd.Context()
+	req := unibox.Request{Profile: name, Runtime: rt}
+	_, r, p, err := o.manager.Definition(req)
+	if err != nil {
+		return err
+	}
+	o.secretsVia = p.SecretCommand
+	agents := args
+	if len(agents) == 0 {
+		agents = p.Agents
+	}
+	if command != "" && len(args) != 1 {
+		return fmt.Errorf("--command signs one agent in; name it, as in unibox agent login claude --command ...")
+	}
+	store, err := o.secretStore()
+	if err != nil {
+		return err
+	}
+	auths := map[string]unibox.AgentAuth{}
+	for _, id := range agents {
+		if !slices.Contains(p.Agents, id) {
+			return fmt.Errorf("profile %s does not offer agent %s", p.Name, id)
+		}
+		fmt.Fprintf(o.log, "%s:\n", id)
+		if command != "" {
+			// A store of the user's own - another program's vault -
+			// prints the token; unibox neither asks for it nor keeps it.
+			method, ok := commandAuth[id]
+			if !ok {
+				return fmt.Errorf("unibox cannot sign %s in by a command; set its auth in sandbox.yaml", id)
+			}
+			auths[id] = unibox.AgentAuth{Method: method, Command: command}
+			fmt.Fprintf(o.log, "  its token comes from %s\n", command)
+			continue
+		}
+		switch id {
+		case "codex":
+			if r.Name() == "msb" {
+				// msb keeps no ChatGPT login; an API key from the
+				// platform's store signs codex in, in sbx as well.
+				if err := o.ensureSecret(cmd, store, "openai", renew, []string{
+					"msb signs codex in by an OpenAI API key, not a ChatGPT login",
+				}, "https://platform.openai.com/api-keys"); err != nil {
+					return err
+				}
+				auths[id] = unibox.AgentAuth{Method: unibox.AuthCommand, Command: unibox.SecretPrefix + "openai"}
+				continue
+			}
+			auths[id] = unibox.AgentAuth{Method: unibox.AuthOAuth}
+			fmt.Fprintln(o.log, "  the ChatGPT login is kept by the runtime, which opens the browser for it")
+		case "claude":
+			if ok, _ := store.Has(ctx, "claude"); o.secretsVia == "" && (!ok || renew) {
+				if _, err := exec.LookPath("claude"); err == nil && o.interactive {
+					fmt.Fprintln(o.log, "  claude setup-token signs your subscription in for a year and prints the token")
+					setup := exec.CommandContext(ctx, "claude", "setup-token")
+					if f, ok := o.input.(*os.File); ok {
+						setup.Stdin = f
+					}
+					setup.Stdout, setup.Stderr = o.log, o.log
+					if err := setup.Run(); err != nil {
+						return fmt.Errorf("claude setup-token did not finish; run it yourself and paste the token: %w", err)
+					}
+				} else {
+					fmt.Fprintln(o.log, "  run claude setup-token where claude is installed; it prints a token for your subscription")
+				}
+			}
+			if err := o.ensureSecret(cmd, store, "claude", renew, nil, ""); err != nil {
+				return err
+			}
+			auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "claude"}
+		case "copilot":
+			stored, _ := store.Has(ctx, "copilot")
+			gh, err := o.useGH(cmd, viaGH, "copilot", stored && !renew)
+			if err != nil {
+				return err
+			}
+			if gh {
+				// A token login, so copilot's hosts alone get it; the
+				// github secret of command would take github.com over.
+				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: GHCommand}
+				continue
+			}
+			err = o.ensureSecret(cmd, store, "copilot", renew, []string{
+				"make a fine-grained token on GitHub: no repositories, Account permissions > Copilot Requests: Read-only, nothing else",
+				"it signs copilot in alone; git reaches GitHub through the profile's services",
+			}, "https://github.com/settings/personal-access-tokens/new")
+			if err != nil {
+				return err
+			}
+			auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "copilot"}
+		default:
+			fmt.Fprintf(o.log, "  unibox has no guided login for %s; set its auth in sandbox.yaml\n", id)
+		}
+	}
+	changed := false
+	err = o.manager.EditProfile(p.Name, func(doc *yaml.Node) error {
+		for id, a := range auths {
+			if old := p.Auth[id]; old.Method != a.Method || old.Command != a.Command {
+				unibox.SetAgentAuth(doc, id, a)
+				changed = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if changed {
+		fmt.Fprintf(o.log, "wrote the agents' auth into profile %s\n", p.Name)
+		if p, err = o.manager.Profile(p.Name); err != nil {
+			return err
+		}
+	}
+	// The runtime is told each source now, so the first run starts
+	// straight away; a token's is stored again, as its command may
+	// have changed.
+	if a, ok := r.(unibox.Authenticator); ok {
+		needs := a.AuthNeeds(ctx, "unibox-"+p.Name, p)
+		for _, id := range agents {
+			method := p.Auth[id].Method
+			missing := slices.ContainsFunc(needs, func(n api.Need) bool { return n.Code == "login_required" && n.Agent == id })
+			switch method {
+			case unibox.AuthToken, unibox.AuthCommand:
+				// sbx's notes on a stored secret are kept for a failure.
+				var said bytes.Buffer
+				if err := o.manager.Login(ctx, req, id, strings.NewReader(""), &said, &said); err != nil {
+					fmt.Fprint(o.log, said.String())
+					return err
+				}
+			case unibox.AuthOAuth, unibox.AuthAPIKey:
+				if !missing && !renew {
+					continue
+				}
+				if err := o.manager.Login(ctx, req, id, o.input, o.log, o.log); err != nil {
+					return err
+				}
+			default:
+				continue
+			}
+			if r.Name() == "msb" && method != unibox.AuthAPIKey {
+				fmt.Fprintf(o.log, "%s's %s login is fetched each time msb boots the sandbox\n", id, method)
+				continue
+			}
+			fmt.Fprintf(o.log, "stored %s's %s login in %s\n", id, method, r.Name())
+		}
+	}
+	return nil
 }
 
 // commandAuth is how an agent signs in by a command's token: claude and

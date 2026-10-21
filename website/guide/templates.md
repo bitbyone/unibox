@@ -40,7 +40,8 @@ unibox init -i --from git@gitlab.example.com:team/agent-envs.git
 asks which of the template's profiles to copy and what to name your copy,
 then walks you through what it needs of you: each of its vars, with what the
 profile says it is for, and each token it names that your platform's store
-does not hold yet, with where it is made. Last it offers to build the image.
+does not hold yet, with where it is made. Last it offers to sign the agents
+in, as `unibox agent login` does, and to build the image.
 
 Without `-i` it copies and lists what is left to do:
 

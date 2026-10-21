@@ -420,3 +420,22 @@ func TestAProfileSaysHowEachAgentIsCredited(t *testing.T) {
 		t.Fatalf("a reset co-author stayed:\n%s", data)
 	}
 }
+
+func TestInteractiveInitSignsTheAgentsInWhenAsked(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	argv := fakeHostTools(t)
+	paths, root := cliFixture(t)
+	// The profile node, claude alone (copilot off, claude on), the offered
+	// resources, sign in now, and claude's token.
+	out, log, err := run(t, paths, "node\n3\n1\n0\n\n\ny\nsk-ant-oat01-tokenvalue\n", "init", "-i", "--dir", root)
+	if err != nil || !strings.Contains(out, "profile node is ready and signs its agents in") {
+		t.Fatalf("%v\n%s\n%s", err, out, log)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "sandbox.yaml"))
+	if !strings.Contains(string(data), "auth: {token: 'secret:claude'}") {
+		t.Fatalf("%s", data)
+	}
+	if recorded, _ := os.ReadFile(argv); !strings.Contains(string(recorded), "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN") || strings.Contains(string(recorded)+log, "tokenvalue") {
+		t.Fatalf("%s\n%s", recorded, log)
+	}
+}

@@ -476,7 +476,7 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 	paths, root := cliFixture(t)
 	// Name; agents: claude besides the preset copilot, then done; CPUs:
 	// something else, 3; memory: the second offered, 8g.
-	answers := "web\n1\n0\n6\n3\n2\n"
+	answers := "web\n1\n0\n6\n3\n2\nn\n"
 	out, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
@@ -487,13 +487,13 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 			t.Fatalf("no %q in\n%s\n%s", want, data, out)
 		}
 	}
-	for _, want := range []string{"Profile name", "Agents", "something else", "Memory"} {
+	for _, want := range []string{"Profile name", "Agents", "something else", "Memory", "Sign the agents of profile web in now?"} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("not asked %q:\n%s", want, log)
 		}
 	}
 	// An answer of the wrong form is asked again, not taken.
-	if _, log, err = run(t, paths, "Bad Name\nmobile\n0\n1\n1\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "invalid name") {
+	if _, log, err = run(t, paths, "Bad Name\nmobile\n0\n1\n1\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "invalid name") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	if _, err = os.Stat(filepath.Join(root, "sandboxes", "mobile", "sandbox.yaml")); err != nil {

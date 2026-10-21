@@ -191,6 +191,7 @@ func (o *options) initCommand() *cobra.Command {
 			if err := o.paths.SaveConfig(cfg); err != nil {
 				return err
 			}
+			o.manager.Config = cfg
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed, "migrated": report.Migrated, "updated": report.Updated, "removed": report.Removed, "relaid": report.Relaid})
@@ -234,6 +235,16 @@ func (o *options) initCommand() *cobra.Command {
 		if name == "" {
 			fmt.Fprintln(o.output, "add a profile with unibox init <profile>, or be asked with unibox init -i")
 			return nil
+		}
+		if interactive {
+			signed, err := o.offerLogin(cmd, name)
+			if err != nil {
+				return err
+			}
+			if signed {
+				fmt.Fprintf(o.output, "profile %s is ready and signs its agents in; add forges with unibox service add <name> -p %s, then unibox run builds and starts it\n", name, name)
+				return nil
+			}
 		}
 		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox agent login -p %s, add forges with unibox service add <name> -p %s, then unibox run builds and starts it\n", name, name, name)
 		return nil

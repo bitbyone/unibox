@@ -147,6 +147,9 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 		return nil
 	}
 	if interactive {
+		if _, err := o.offerLogin(cmd, name); err != nil {
+			return err
+		}
 		build, err := o.askYes("Build the image of profile "+name+" now?", true)
 		if err != nil {
 			return err
