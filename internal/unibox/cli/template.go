@@ -8,7 +8,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/tobola/unibox/internal/unibox"
@@ -38,12 +37,11 @@ func (o *options) initFrom(cmd *cobra.Command, root, previous, name, from, use, 
 		if !interactive || len(profiles) == 0 {
 			return fmt.Errorf("say which of template %s's profiles to copy: %s (--use, or the profile's name)", template, strings.Join(profiles, ", "))
 		}
-		opts := []huh.Option[string]{}
+		picks := []pick{}
 		for _, p := range profiles {
-			opts = append(opts, huh.NewOption(p, p))
+			picks = append(picks, pick{p, p})
 		}
-		use = profiles[0]
-		if err = o.runField(huh.NewSelect[string]().Title("Profile to copy").Description("The profiles of template " + template + ".").Options(opts...).Value(&use)); err != nil {
+		if use, err = o.askPick("Profile to copy", "The profiles of template "+template+".", picks, profiles[0]); err != nil {
 			return err
 		}
 	}

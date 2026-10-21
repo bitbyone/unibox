@@ -475,9 +475,9 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 	t.Setenv("ACCESSIBLE", "1")
 	fakeHostTools(t)
 	paths, root := cliFixture(t)
-	// Name; agents: claude besides the preset copilot, then done; CPUs:
-	// something else, 3; memory: the second offered, 8g.
-	answers := "web\n1\n0\n6\n3\n2\nn\n"
+	// Name; agents: claude besides the preset copilot, which comes first,
+	// then done; CPUs: something else, 3; memory: the preset, 8g.
+	answers := "web\n2\n0\n6\n3\n1\nn\n"
 	out, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)

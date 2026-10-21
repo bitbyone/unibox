@@ -425,9 +425,9 @@ func TestInteractiveInitSignsTheAgentsInWhenAsked(t *testing.T) {
 	t.Setenv("ACCESSIBLE", "1")
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
-	// The profile node, claude alone (copilot off, claude on), the offered
-	// resources, sign in now, and claude's token.
-	out, log, err := run(t, paths, "node\n3\n1\n0\n\n\ny\nsk-ant-oat01-tokenvalue\n", "init", "-i", "--dir", root)
+	// The profile node, claude alone (the preset copilot, first, off;
+	// claude on), the offered resources, sign in now, and claude's token.
+	out, log, err := run(t, paths, "node\n1\n2\n0\n\n\ny\nsk-ant-oat01-tokenvalue\n", "init", "-i", "--dir", root)
 	if err != nil || !strings.Contains(out, "profile node is ready and signs its agents in") {
 		t.Fatalf("%v\n%s\n%s", err, out, log)
 	}

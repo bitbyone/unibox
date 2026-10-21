@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -61,8 +62,10 @@ func (o *options) askText(title, description, preset string, validate func(strin
 // askChoice offers the options, the preset chosen, and an answer of one's
 // own after them, checked by validate.
 func (o *options) askChoice(title, description string, options []string, preset string, validate func(string) error) (string, error) {
-	if preset != "" && !slices.Contains(options, preset) {
-		options = append([]string{preset}, options...)
+	// huh scrolls a list to its chosen option, hiding those above it, so
+	// the preset comes first.
+	if preset != "" {
+		options = append([]string{preset}, slices.DeleteFunc(slices.Clone(options), func(v string) bool { return v == preset })...)
 	}
 	opts := []huh.Option[string]{}
 	for _, v := range options {
@@ -73,7 +76,7 @@ func (o *options) askChoice(title, description string, options []string, preset 
 	if value == "" && len(options) > 0 {
 		value = options[0]
 	}
-	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)); err != nil {
+	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value).Height(fieldHeight(len(opts), description))); err != nil {
 		return "", err
 	}
 	if value == otherChoice {
@@ -94,10 +97,14 @@ type pick struct{ value, label string }
 func (o *options) askPick(title, description string, options []pick, preset string) (string, error) {
 	opts := []huh.Option[string]{}
 	for _, p := range options {
-		opts = append(opts, huh.NewOption(p.label, p.value))
+		if p.value == preset {
+			opts = append([]huh.Option[string]{huh.NewOption(p.label, p.value)}, opts...)
+		} else {
+			opts = append(opts, huh.NewOption(p.label, p.value))
+		}
 	}
 	value := preset
-	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)); err != nil {
+	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value).Height(fieldHeight(len(opts), description))); err != nil {
 		return "", err
 	}
 	return value, nil
@@ -105,19 +112,27 @@ func (o *options) askPick(title, description string, options []pick, preset stri
 
 // askChoices offers options to pick any of, the preset ones picked.
 func (o *options) askChoices(title, description string, options, preset []string, validate func([]string) error) ([]string, error) {
-	opts := []huh.Option[string]{}
+	// The picked ones first, as huh scrolls to the first picked.
+	picked, rest := []huh.Option[string]{}, []huh.Option[string]{}
 	for _, v := range options {
-		opts = append(opts, huh.NewOption(v, v).Selected(slices.Contains(preset, v)))
+		if slices.Contains(preset, v) {
+			picked = append(picked, huh.NewOption(v, v).Selected(true))
+		} else {
+			rest = append(rest, huh.NewOption(v, v))
+		}
 	}
+	opts := append(picked, rest...)
 	value := slices.Clone(preset)
-	field := huh.NewMultiSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)
+	field := huh.NewMultiSelect[string]().Title(title).Description(description).Options(opts...).Value(&value).Height(fieldHeight(len(opts), description))
 	if validate != nil {
 		field.Validate(validate)
 	}
 	if err := o.runField(field); err != nil {
 		return nil, err
 	}
-	return value, nil
+	// In the order offered, whatever was shown first: the order of agents
+	// matters.
+	return slices.DeleteFunc(slices.Clone(options), func(v string) bool { return !slices.Contains(value, v) }), nil
 }
 
 // askYes asks a yes or no question.
@@ -127,6 +142,12 @@ func (o *options) askYes(title string, preset bool) (bool, error) {
 		return false, err
 	}
 	return value, nil
+}
+
+// fieldHeight is a list's height with every option in sight, its title
+// and description besides.
+func fieldHeight(options int, description string) int {
+	return options + 2 + strings.Count(description, "\n") + 1
 }
 
 type byteReader struct{ r io.Reader }
