@@ -27,15 +27,21 @@ type UserVars struct {
 	// for the name; ProfileSecrets a profile's own, over it.
 	Secrets        string
 	ProfileSecrets map[string]string
+	// Names are commands for one secret each, by its name - gh auth token
+	// for copilot - over the commands above; ProfileNames a profile's own.
+	Names        map[string]string
+	ProfileNames map[string]map[string]string
 }
 
 const varsHeader = `# Your own values for what profiles ask of you (their vars), kept here and
 # never in the environments repository. Values under [global] apply to every
 # profile; those under [profiles.<name>] to that profile alone, and win.
 # [secrets] command = "..." reads a profile's secret:<name> by a command of
-# yours, {name} in it, instead of the platform's store; [profiles.<name>.secrets]
-# for one profile. unibox var and unibox secret source change this file; no
-# secret belongs here - keep tokens with unibox secret set or your own store.
+# yours, {name} in it, instead of the platform's store, and [secrets.names]
+# one secret by its own command (copilot = "gh auth token"); the same under
+# [profiles.<name>.secrets] for one profile. unibox var and unibox secret
+# source change this file; no secret belongs here - keep tokens with unibox
+# secret set or your own store.
 
 `
 
@@ -46,7 +52,7 @@ func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.toml") }
 func (p Paths) legacyVarsFile() string { return filepath.Join(p.Config, "vars.yaml") }
 
 func emptyVars() UserVars {
-	return UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}, ProfileSecrets: map[string]string{}}
+	return UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}, ProfileSecrets: map[string]string{}, Names: map[string]string{}, ProfileNames: map[string]map[string]string{}}
 }
 
 func (p Paths) LoadVars() (UserVars, error) {
@@ -88,17 +94,38 @@ func (u *UserVars) read(doc map[string]any) error {
 		}
 		return out, nil
 	}
-	command := func(where string, v any) (string, error) {
-		t, err := strs(where, v, "")
+	// A secrets table: a command for every secret, and one for each by
+	// its name.
+	command := func(where string, v any) (string, map[string]string, error) {
+		t, err := strs(where, v, "names")
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		for k := range t {
 			if k != "command" {
-				return "", fmt.Errorf("%s takes command alone, not %s", where, k)
+				return "", nil, fmt.Errorf("%s takes command and names, not %s", where, k)
 			}
 		}
-		return t["command"], ValidSecretCommand(t["command"])
+		if c, ok := t["command"]; ok {
+			if err = ValidSecretCommand(c); err != nil {
+				return "", nil, fmt.Errorf("%s.command: %w", where, err)
+			}
+		}
+		names := map[string]string{}
+		if n, ok := v.(map[string]any)["names"]; ok {
+			if names, err = strs(where+".names", n, ""); err != nil {
+				return "", nil, err
+			}
+			for name, c := range names {
+				if err = ValidName(name); err != nil {
+					return "", nil, fmt.Errorf("%s.names: %w", where, err)
+				}
+				if strings.TrimSpace(c) == "" || strings.ContainsAny(c, "\n\r") {
+					return "", nil, fmt.Errorf("%s.names.%s is a command of one line", where, name)
+				}
+			}
+		}
+		return t["command"], names, nil
 	}
 	for key, v := range doc {
 		var err error
@@ -106,7 +133,7 @@ func (u *UserVars) read(doc map[string]any) error {
 		case "global":
 			u.Vars, err = strs("global", v, "")
 		case "secrets":
-			u.Secrets, err = command("secrets", v)
+			u.Secrets, u.Names, err = command("secrets", v)
 		case "profiles":
 			profiles, ok := v.(map[string]any)
 			if !ok {
@@ -118,7 +145,7 @@ func (u *UserVars) read(doc map[string]any) error {
 					return err
 				}
 				if sec, ok := body.(map[string]any)["secrets"]; ok {
-					if u.ProfileSecrets[name], err = command(where+".secrets", sec); err != nil {
+					if u.ProfileSecrets[name], u.ProfileNames[name], err = command(where+".secrets", sec); err != nil {
 						return err
 					}
 				}
@@ -145,8 +172,21 @@ func ValidSecretCommand(command string) error {
 	return nil
 }
 
-// SecretsFor is the command a profile's secret:<name> is read by, or ""
-// for the platform's store.
+// SecretVia is the command a profile's secret:<name> is read by, or "" for
+// the platform's store: the secret's own command, the profile's before the
+// global one, then the command for every secret, the profile's first.
+func (u UserVars) SecretVia(profile, name string) string {
+	if c := u.ProfileNames[profile][name]; c != "" {
+		return c
+	}
+	if c := u.Names[name]; c != "" {
+		return c
+	}
+	return u.SecretsFor(profile)
+}
+
+// SecretsFor is the command for every secret of a profile, or "" for the
+// platform's store.
 func (u UserVars) SecretsFor(profile string) string {
 	if c := u.ProfileSecrets[profile]; c != "" {
 		return c
@@ -183,17 +223,21 @@ func (p Paths) migrateVars(u UserVars) (UserVars, error) {
 
 func (p Paths) SaveVars(u UserVars) error {
 	// A struct keeps the tables in the order the header tells them.
+	type secrets struct {
+		Command string            `toml:"command,omitempty"`
+		Names   map[string]string `toml:"names,omitempty"`
+	}
 	var doc struct {
 		Global   map[string]string `toml:"global"`
-		Secrets  map[string]string `toml:"secrets,omitempty"`
+		Secrets  *secrets          `toml:"secrets,omitempty"`
 		Profiles map[string]any    `toml:"profiles,omitempty"`
 	}
 	doc.Global = u.Vars
 	if doc.Global == nil {
 		doc.Global = map[string]string{}
 	}
-	if u.Secrets != "" {
-		doc.Secrets = map[string]string{"command": u.Secrets}
+	if u.Secrets != "" || len(u.Names) > 0 {
+		doc.Secrets = &secrets{u.Secrets, u.Names}
 	}
 	profiles := map[string]any{}
 	for name, values := range u.Profiles {
@@ -205,8 +249,9 @@ func (p Paths) SaveVars(u UserVars) error {
 			profiles[name] = t
 		}
 	}
-	for name, command := range u.ProfileSecrets {
-		if command == "" {
+	for _, name := range sortedKeys(mergeKeys(u.ProfileSecrets, u.ProfileNames)) {
+		command, names := u.ProfileSecrets[name], u.ProfileNames[name]
+		if command == "" && len(names) == 0 {
 			continue
 		}
 		t, _ := profiles[name].(map[string]any)
@@ -214,7 +259,7 @@ func (p Paths) SaveVars(u UserVars) error {
 			t = map[string]any{}
 			profiles[name] = t
 		}
-		t["secrets"] = map[string]string{"command": command}
+		t["secrets"] = secrets{command, names}
 	}
 	if len(profiles) > 0 {
 		doc.Profiles = profiles
@@ -386,17 +431,27 @@ func (p Profile) fill(value string) string {
 	})
 }
 
-// withSecrets has the profile's secret:<name> read by the person's own
-// command, if they keep their secrets elsewhere than the platform's store.
-func (p Profile) withSecrets(command string) Profile {
-	if command == "" {
-		return p
+// withSecrets has each of the profile's secret:<name> read by the person's
+// own command for it, if they keep it elsewhere than the platform's store.
+func (p Profile) withSecrets(u UserVars) Profile {
+	via := func(command string) string {
+		name, ok := SecretRef(command)
+		if !ok {
+			return ""
+		}
+		c := u.SecretVia(p.Name, name)
+		if c != "" {
+			if p.SecretVia == nil {
+				p.SecretVia = map[string]string{}
+			}
+			p.SecretVia[name] = c
+		}
+		return c
 	}
-	p.SecretCommand = command
 	if len(p.Auth) > 0 {
 		auth := map[string]AgentAuth{}
 		for id, a := range p.Auth {
-			a.Via = command
+			a.Via = via(a.Command)
 			auth[id] = a
 		}
 		p.Auth = auth
@@ -404,12 +459,27 @@ func (p Profile) withSecrets(command string) Profile {
 	if len(p.Services) > 0 {
 		services := map[string]Service{}
 		for name, s := range p.Services {
-			s.Via = command
+			s.Via = via(s.Command)
 			services[name] = s
 		}
 		p.Services = services
 	}
 	return p
+}
+
+// ReadBy is the person's own command a secret of the profile is read by,
+// or "" when it is in the platform's store.
+func (p Profile) ReadBy(name string) string { return p.SecretVia[name] }
+
+func mergeKeys[A, B any](a map[string]A, b map[string]B) map[string]bool {
+	out := map[string]bool{}
+	for k := range a {
+		out[k] = true
+	}
+	for k := range b {
+		out[k] = true
+	}
+	return out
 }
 
 // withVars gives the profile its person's values, filled into env,

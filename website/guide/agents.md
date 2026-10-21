@@ -79,21 +79,28 @@ rebuild.
 
 ```sh
 unibox agent login -p web              # every agent of profile web
+unibox agent login -i -p web           # walked through: pages opened, gh offered
 unibox agent login claude -p web       # one
 unibox agent login --renew -p web      # ask for every token again
 unibox agent login claude -p web --command '/path/to/unagit credential get claude'
 unibox agent ls -p web                 # how each signs in and is credited
 ```
 
-`agent login` signs agents in and writes their `auth` into the profile:
+`agent login` signs agents in and writes their `auth` into the profile. A
+token is asked for on a hidden prompt, or read from stdin
+(`op read … | unibox agent login copilot -p web`) - never an argument, which
+`ps` and the shell's history would show. With `-i` it walks you through each
+agent: the page where a token is made opened in the browser, `claude
+setup-token` run, and gh offered for copilot. `unibox init -i` ends with the
+same, if you want it.
 
 - **codex** - through the runtime's ChatGPT login, in the browser, with sbx;
   with msb, which keeps no OAuth logins, through an OpenAI API key;
-- **claude** - through `claude setup-token` on your terminal, then a hidden
-  prompt for the long-lived token it prints;
+- **claude** - through `claude setup-token` on your terminal (with `-i`),
+  then a hidden prompt for the long-lived token it prints;
 - **copilot** - through a fine-grained GitHub token with the **Copilot
-  Requests** permission alone: unibox opens the page where it is made, says
-  what to grant, then asks for it on a hidden prompt.
+  Requests** permission alone: unibox says what to grant and where it is made
+  (opening the page with `-i`), then asks for it on a hidden prompt.
 
 A token is kept in the platform's store - the login keychain on macOS, the
 Secret Service on Linux - where the profile names it as `secret:<name>`. It
@@ -141,11 +148,22 @@ session, so a new token reaches a running sandbox.
 unibox agent login copilot --gh -p web
 ```
 
-writes `copilot: {token: gh auth token}`. At a terminal where gh is signed in,
-unibox asks whether you want this. It is your whole gh login - every
-repository and scope it has - but as a token login it reaches only Copilot's
-hosts, not github.com, so git on github.com is still left to the profile's
-[services](./services-and-secrets).
+has copilot read its token by `gh auth token`. `agent login -i` offers it
+where gh is installed and signed in; a token of its own stays the
+recommended choice. The profile keeps `copilot: {token: secret:copilot}`, as
+a template's would, and the choice is yours, in your `vars.toml`:
+
+```toml
+[secrets.names]
+copilot = "gh auth token"
+```
+
+so a profile shared with people without gh stays as it is. It is your whole
+gh login - every repository and scope it has - but as a token login it
+reaches only Copilot's hosts, not github.com, so git on github.com is still
+left to the profile's [services](./services-and-secrets). `unibox secret
+source --reset --name copilot`, or choosing a token with `--renew`, takes it
+back.
 
 ::: tip
 Sign copilot in by `token`, not `command`. `command` stores sbx's built-in

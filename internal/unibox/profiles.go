@@ -397,9 +397,9 @@ type Profile struct {
 	BuildArgValues map[string]string    `yaml:"-" json:"-"`
 	AgentConfig    map[string]string    `yaml:"-" json:"agent_config,omitempty"`
 	AgentArgs      map[string]AgentArgs `yaml:"-" json:"agent_args,omitempty"`
-	// SecretCommand is the person's own command its secret:<name> are read
-	// by; a change of it gives the sandbox the new source.
-	SecretCommand string `yaml:"-" json:"secret_command,omitempty"`
+	// SecretVia are the person's own commands its secret:<name> are read
+	// by, by name; a change of one gives the sandbox the new source.
+	SecretVia map[string]string `yaml:"-" json:"secret_via,omitempty"`
 	// ResourceSpec is resources as the profile writes them, references to
 	// vars and all; Resources has them filled in.
 	ResourceSpec Resources               `yaml:"-" json:"-"`

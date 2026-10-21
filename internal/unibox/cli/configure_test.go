@@ -357,9 +357,15 @@ func TestCopilotAndGitHubCanSignInThroughGh(t *testing.T) {
 	if _, _, err = run(t, paths, "", "service", "add", "github", "--gh", "-p", "node"); err != nil {
 		t.Fatal(err)
 	}
+	// The profile names the secrets, as a template's would; that gh reads
+	// them is the person's choice, in their vars.toml.
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "auth: {token: gh auth token}") || !strings.Contains(string(data), "command: gh auth token") || !strings.Contains(string(data), "user: x-access-token") {
+	if !strings.Contains(string(data), "auth: {token: 'secret:copilot'}") || !strings.Contains(string(data), "command: secret:github") || !strings.Contains(string(data), "user: x-access-token") {
 		t.Fatalf("%s", data)
+	}
+	vars, _ := os.ReadFile(filepath.Join(paths.Config, "vars.toml"))
+	if !strings.Contains(string(vars), "[secrets.names]\ncopilot = 'gh auth token'\ngithub = 'gh auth token'\n") {
+		t.Fatalf("%s", vars)
 	}
 	// Copilot's token login keeps gh's token off github.com, and nothing
 	// was stored of unibox's own.
@@ -437,5 +443,42 @@ func TestInteractiveInitSignsTheAgentsInWhenAsked(t *testing.T) {
 	}
 	if recorded, _ := os.ReadFile(argv); !strings.Contains(string(recorded), "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN") || strings.Contains(string(recorded)+log, "tokenvalue") {
 		t.Fatalf("%s\n%s", recorded, log)
+	}
+}
+
+func TestAGuidedLoginOffersGhAndKeepsTheChoiceInVars(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	argv := fakeHostTools(t)
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [copilot]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ghSignedIn(t, argv)
+	// Without -i nothing is asked: the token comes on stdin.
+	if _, log, err := run(t, paths, "ghp_tokenvalue\n", "agent", "login", "copilot", "-p", "node"); err != nil || strings.Contains(log, "How copilot signs in") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	// With -i gh is offered; the token stays the recommended choice, gh
+	// the second.
+	_, log, err := run(t, paths, "2\n", "agent", "login", "copilot", "-i", "--renew", "-p", "node")
+	if err != nil || !strings.Contains(log, "How copilot signs in") || !strings.Contains(log, "recommended") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	vars, _ := os.ReadFile(filepath.Join(paths.Config, "vars.toml"))
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(vars), "copilot = 'gh auth token'") || !strings.Contains(string(data), "auth: {token: 'secret:copilot'}") {
+		t.Fatalf("%s\n%s\n%s", vars, data, log)
+	}
+	// Asked again without --renew, the choice stands.
+	if _, log, err = run(t, paths, "", "agent", "login", "copilot", "-i", "-p", "node"); err != nil || strings.Contains(log, "How copilot signs in") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	// A token of its own takes the gh choice back.
+	if _, _, err = run(t, paths, "1\nghp_tokenvalue\n", "agent", "login", "copilot", "-i", "--renew", "-p", "node"); err != nil {
+		t.Fatal(err)
+	}
+	if vars, _ = os.ReadFile(filepath.Join(paths.Config, "vars.toml")); strings.Contains(string(vars), "copilot = 'gh auth token'") {
+		t.Fatalf("%s", vars)
 	}
 }

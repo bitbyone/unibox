@@ -151,7 +151,7 @@ func TestSecretsAreReadByThePersonsOwnCommandWithoutAnotherApproval(t *testing.T
 	u := emptyVars()
 	u.Secrets = "op read op://Work/{name}/credential"
 	u.ProfileSecrets["other"] = "pass show {name}"
-	p := orig.withSecrets(u.SecretsFor("node"))
+	p := orig.withSecrets(u)
 	if p.AccessHash() != orig.AccessHash() {
 		t.Fatal("where a person keeps their secrets asked for another approval")
 	}
@@ -200,5 +200,54 @@ func TestVarsTOMLKeepsSecretsCommandsBesideTheValues(t *testing.T) {
 		if _, err := paths.LoadVars(); err == nil {
 			t.Errorf("%q was taken", bad)
 		}
+	}
+}
+
+func TestASecretsOwnCommandWinsOverTheCommandForEverySecret(t *testing.T) {
+	t.Parallel()
+	u := emptyVars()
+	u.Secrets = "op read op://Work/{name}/credential"
+	u.ProfileSecrets["dev"] = "pass show {name}"
+	u.Names["copilot"] = "gh auth token"
+	u.ProfileNames["dev"] = map[string]string{"github": "gh auth token --hostname github.com"}
+	for _, c := range []struct{ profile, name, want string }{
+		{"dev", "github", "gh auth token --hostname github.com"},
+		{"dev", "copilot", "gh auth token"},
+		{"dev", "art", "pass show {name}"},
+		{"web", "art", "op read op://Work/{name}/credential"},
+		{"web", "github", "op read op://Work/{name}/credential"},
+	} {
+		if got := u.SecretVia(c.profile, c.name); got != c.want {
+			t.Errorf("%s %s: %q", c.profile, c.name, got)
+		}
+	}
+	paths := Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if err := paths.SaveVars(u); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(paths.VarsFile())
+	for _, want := range []string{"[secrets]\ncommand = 'op read op://Work/{name}/credential'\n", "[secrets.names]\ncopilot = 'gh auth token'\n", "[profiles.dev.secrets]\ncommand = 'pass show {name}'\n", "[profiles.dev.secrets.names]\ngithub = 'gh auth token --hostname github.com'\n"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("no %q in\n%s", want, data)
+		}
+	}
+	back, err := paths.LoadVars()
+	if err != nil || back.SecretVia("dev", "github") != "gh auth token --hostname github.com" || back.SecretVia("web", "copilot") != "gh auth token" {
+		t.Fatalf("%v %+v", err, back)
+	}
+	// A profile whose secret:copilot is read by gh: neither stored nor
+	// approved anew.
+	root := profileFixture(t)
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  copilot: {auth: {token: 'secret:copilot'}}\n")
+	orig, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := orig.withSecrets(u)
+	if p.ReadBy("copilot") != "gh auth token" || p.AccessHash() != orig.AccessHash() {
+		t.Fatalf("%v", p.SecretVia)
+	}
+	if got, _ := ResolveCommand(p.Auth["copilot"].Command, p.Auth["copilot"].Via); got != "gh auth token" {
+		t.Fatal(got)
 	}
 }

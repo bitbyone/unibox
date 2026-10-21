@@ -292,10 +292,12 @@ A token another program keeps is named by the command that prints it,
 `--command` with one agent (unagit's vault does this through `unagit
 credential get`): unibox asks for nothing and stores nothing.
 
-Copilot can sign in through your gh login instead (`--gh`, or the question
-unibox asks at a terminal when gh is signed in): `copilot: {token: gh auth
-token}`. It is your whole gh login, every repository and scope it has, but
-as a token login it reaches only Copilot's hosts, not github.com.
+Copilot can sign in through your gh login instead (`--gh`, or the choice
+`agent login -i` offers when gh is signed in). The profile keeps
+`secret:copilot` and your `vars.toml` says gh reads it (`[secrets.names]
+copilot = "gh auth token"`), so a profile shared from a template stays as it
+is. It is your whole gh login, every repository and scope it has, but as a
+token login it reaches only Copilot's hosts, not github.com.
 
 A missing `token` or `command` login is stored in the runtime on `run`
 without asking; an OAuth login or a key is asked for in your terminal.

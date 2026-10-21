@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -117,7 +118,7 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 		}
 	}
 	// Secrets read by the person's own command are theirs to keep there.
-	if refs := p.SecretRefs(); len(refs) > 0 && p.SecretCommand == "" {
+	if refs := slices.DeleteFunc(p.SecretRefs(), func(n string) bool { return p.ReadBy(n) != "" }); len(refs) > 0 {
 		store, err := o.secretStore()
 		if err != nil {
 			return err

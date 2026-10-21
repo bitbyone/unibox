@@ -330,13 +330,16 @@ unibox agent co-author [agent] [--as "Name <email>" | --reset] [-p <profile>]
 ```
 
 `login` signs a profile's agents in: tokens into the platform's store, the
-profile's `auth` written. `co-author` shows how the profile credits each
+profile's `auth` written. A token comes on a hidden prompt or stdin, never as
+an argument; `-i` walks through each sign-in - pages opened, `claude
+setup-token` run, gh offered for copilot, the choice kept in `vars.toml`. `co-author` shows how the profile credits each
 agent in its commits, or with `--as` sets it (`Name <>` for no address). `ls`
 lists the agents, how each signs in, is credited and the arguments it starts with.
 
 | Flag | Command | Meaning |
 | --- | --- | --- |
-| `--gh` | `login` | sign copilot in through your gh login (`gh auth token`) |
+| `-i`, `--interactive` | `login` | walk through each sign-in, with choices and the pages opened in the browser |
+| `--gh` | `login` | sign copilot in through your gh login (`gh auth token`), kept in `vars.toml` |
 | `--renew` | `login` | ask for every token again, replacing the stored ones |
 | `--runtime <name>` | `login` | the runtime that keeps the logins (default: the configured one) |
 | `--as "Name <email>"` | `co-author` | how to credit the agent |
@@ -366,7 +369,7 @@ service out of the profile, and its token unless another profile names it.
 | `--no-co-author` | `add` | no `Co-Authored-By` trailer for the agent in its repositories |
 | `--command <cmd>` | `add` | a host command printing the token, for a store unibox does not keep |
 | `--secret <name>` | `add` | a token stored with `unibox secret set`, by its name, instead of asking for one |
-| `--gh` | `add` | sign a `github` service in through your gh login |
+| `--gh` | `add` | sign a `github` service in through your gh login, kept in `vars.toml`; the profile names `secret:<name>` |
 | `--refresh <duration>` | `add` | how often the runtime fetches the token again, e.g. `10m` |
 | `--renew` | `add` | ask for the token again, replacing the stored one |
 | `--keep-secret` | `rm` | keep the stored token |
@@ -424,15 +427,16 @@ ports the profile declares.
 unibox secret set <name>
 unibox secret ls
 unibox secret rm <name>
-unibox secret source [command | --reset] [-p <profile>]
+unibox secret source [command | --reset] [--name <secret>] [-p <profile>]
 ```
 
 Keeps tokens in the platform's store, for profiles to name as
 `secret:<name>`. `set` asks on a hidden prompt or reads stdin; `ls` lists the
 names, never the values. `source` shows or sets the command of yours that
 reads `secret:<name>` instead of the store, `{name}` standing for the name -
-for every profile, or with `-p` one profile's over it; `--reset` goes back to
-the store. It is kept in your `vars.toml`. `source` does not take the
+for every profile, or with `-p` one profile's over it; `--name` sets one
+secret's own command over it, as `gh auth token` for copilot; `--reset`
+goes back to the store. It is kept in your `vars.toml`. `source` does not take the
 profile from the context, as `var` does not.
 
 ### `unibox var`

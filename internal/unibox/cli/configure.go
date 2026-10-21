@@ -62,7 +62,7 @@ func (o *options) readSecret(prompt string) ([]byte, error) {
 // is a terminal to come back to.
 func (o *options) openPage(page string) {
 	fmt.Fprintf(o.log, "  %s\n", page)
-	if !o.interactive {
+	if !o.interactive || !o.guided {
 		return
 	}
 	opener := map[string]string{"darwin": "open", "linux": "xdg-open"}[runtime.GOOS]
@@ -85,10 +85,13 @@ func (o *options) useGH(cmd *cobra.Command, flag bool, what string, stored bool)
 		if !signedIn {
 			return false, fmt.Errorf("gh is not signed in to github.com; run gh auth login, or leave out --gh for a token of its own")
 		}
-	} else if stored || !signedIn || !o.interactive || o.json {
+	} else if stored || !signedIn || !o.guided || !o.canAsk() {
 		return false, nil
-	} else if !o.ask("  gh is signed in here; sign " + what + " in through it (gh auth token) instead of a token of its own?") {
-		return false, nil
+	} else if choice, err := o.askPick("How "+what+" signs in", "gh is installed and signed in here.", []pick{
+		{"token", "A token of its own - narrower (recommended)"},
+		{"gh", "Your gh login (gh auth token) - every repository and scope it has"},
+	}, "token"); err != nil || choice != "gh" {
+		return false, err
 	}
 	fmt.Fprintf(o.log, "  %s signs in through gh auth token: your whole gh login, every repository and scope it has; a token of its own is narrower\n", what)
 	return true, nil
@@ -142,14 +145,17 @@ writes a service that uses it, and an agent's auth can name it too.`, Example: "
 		}
 		return nil
 	}})
-	var profile string
+	var profile, name string
 	var reset bool
 	source := &cobra.Command{Use: "source [command]", Args: cobra.MaximumNArgs(1), Short: "Show or set the command a profile's secret:<name> is read by, instead of the platform's store", Long: `A profile names a token as secret:<name>, read from the platform's store -
 the login keychain, the Secret Service - unless you keep your tokens
-elsewhere: a command of yours, with {name} standing for the secret's name,
-reads them instead, for every profile or with -p for one. It is kept in
-your vars.toml, not in the profile, so a profile from a template stays as
-it is. The runtime runs the command on the host, as it would the store's.`, Example: "  unibox secret source 'op read op://Work/{name}/credential'\n  unibox secret source 'vault kv get -field=token secret/{name}' -p dev\n  unibox secret source --reset", RunE: func(cmd *cobra.Command, args []string) error {
+elsewhere: a command of yours reads them instead. Without --name it reads
+every secret, {name} standing for the secret's name; with --name it reads
+that one secret, over the command for every secret - gh auth token for
+copilot. Each is for every profile, or with -p for one, over the global
+one. It is kept in your vars.toml, not in the profile, so a profile from a
+template stays as it is. The runtime runs the command on the host, as it
+would the store's.`, Example: "  unibox secret source 'op read op://Work/{name}/credential'\n  unibox secret source 'gh auth token' --name copilot\n  unibox secret source 'vault kv get -field=token secret/{name}' -p dev\n  unibox secret source --reset --name copilot", RunE: func(cmd *cobra.Command, args []string) error {
 		u, err := o.paths.LoadVars()
 		if err != nil {
 			return err
@@ -158,60 +164,88 @@ it is. The runtime runs the command on the host, as it would the store's.`, Exam
 		if profile != "" {
 			scope = "profile " + profile
 		}
+		what := "secret:<name>"
+		if name != "" {
+			if err = unibox.ValidName(name); err != nil {
+				return err
+			}
+			what = "secret:" + name
+		}
+		// The table the command goes in: every secret's, or one secret's,
+		// for every profile or for one.
+		set := func(command string) {
+			switch {
+			case name == "" && profile == "":
+				u.Secrets = command
+			case name == "":
+				u.ProfileSecrets[profile] = command
+			case profile == "":
+				u.Names[name] = command
+			default:
+				if u.ProfileNames[profile] == nil {
+					u.ProfileNames[profile] = map[string]string{}
+				}
+				u.ProfileNames[profile][name] = command
+			}
+			if command == "" {
+				delete(u.ProfileSecrets, profile)
+				delete(u.Names, name)
+				delete(u.ProfileNames[profile], name)
+			}
+		}
+		current := func() string {
+			switch {
+			case name == "" && profile == "":
+				return u.Secrets
+			case name == "":
+				return u.SecretsFor(profile)
+			}
+			return u.SecretVia(profile, name)
+		}
 		switch {
 		case reset && len(args) > 0:
 			return fmt.Errorf("give a command or --reset, not both")
 		case reset:
-			if profile == "" {
-				u.Secrets = ""
-			} else {
-				delete(u.ProfileSecrets, profile)
-			}
+			set("")
 		case len(args) == 1:
-			if err = unibox.ValidSecretCommand(args[0]); err != nil {
-				return err
+			if name == "" {
+				if err = unibox.ValidSecretCommand(args[0]); err != nil {
+					return err
+				}
+			} else if strings.TrimSpace(args[0]) == "" || strings.ContainsAny(args[0], "\n\r") {
+				return fmt.Errorf("a command for a secret is one line")
 			}
-			if profile == "" {
-				u.Secrets = args[0]
-			} else {
-				u.ProfileSecrets[profile] = args[0]
-			}
+			set(args[0])
 		default:
-			command := u.Secrets
-			if profile != "" {
-				command = u.SecretsFor(profile)
-			}
+			command := current()
 			if o.json {
-				return o.write(map[string]any{"api_version": api.Version, "profile": profile, "command": command})
+				return o.write(map[string]any{"api_version": api.Version, "profile": profile, "name": name, "command": command})
 			}
 			if command == "" {
 				store, err := o.secretStore()
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(o.output, "%s reads secret:<name> from %s\n", scope, store.Name())
+				fmt.Fprintf(o.output, "%s reads %s from %s\n", scope, what, store.Name())
 				return nil
 			}
-			fmt.Fprintf(o.output, "%s reads secret:<name> by: %s\n", scope, command)
+			fmt.Fprintf(o.output, "%s reads %s by: %s\n", scope, what, command)
 			return nil
 		}
 		if err = o.paths.SaveVars(u); err != nil {
 			return err
 		}
-		// What the runtime has stored goes from the old source until a
-		// sandbox's next start gives it the new one.
 		how := "from the platform's store"
-		if command := u.Secrets; profile != "" {
-			if command = u.SecretsFor(profile); command != "" {
-				how = "by " + command
-			}
-		} else if command != "" {
+		if command := current(); command != "" {
 			how = "by " + command
 		}
-		return o.success(fmt.Sprintf("%s reads secret:<name> %s from its sandboxes' next start", scope, how))
+		// What the runtime has stored goes from the old source until a
+		// sandbox's next start gives it the new one.
+		return o.success(fmt.Sprintf("%s reads %s %s from its sandboxes' next start", scope, what, how))
 	}}
 	source.Flags().StringVarP(&profile, "profile", "p", "", "One profile's own command, over the one of every profile")
-	source.Flags().BoolVar(&reset, "reset", false, "Read from the platform's store again")
+	source.Flags().StringVar(&name, "name", "", "One secret's own command, by its name, over the command for every secret")
+	source.Flags().BoolVar(&reset, "reset", false, "Take the command away; a secret is read from the platform's store again")
 	c.AddCommand(source)
 	c.AddCommand(&cobra.Command{Use: "rm name", Args: cobra.ExactArgs(1), Short: "Remove a stored secret", RunE: func(cmd *cobra.Command, args []string) error {
 		store, err := o.secretStore()
@@ -226,11 +260,57 @@ it is. The runtime runs the command on the host, as it would the store's.`, Exam
 	return c
 }
 
+// readByGH keeps, in the person's vars.toml, whether a secret is read by
+// their gh login: a choice of theirs, so not in a profile a template may
+// have given. Choosing a token takes an earlier gh choice back.
+func (o *options) readByGH(profile, name string, gh bool) error {
+	u, err := o.paths.LoadVars()
+	if err != nil {
+		return err
+	}
+	switch {
+	case gh && u.Names[name] != GHCommand:
+		u.Names[name] = GHCommand
+	case !gh && u.Names[name] == GHCommand:
+		delete(u.Names, name)
+	default:
+		return nil
+	}
+	if err = o.paths.SaveVars(u); err != nil {
+		return err
+	}
+	if gh {
+		fmt.Fprintf(o.log, "  secret:%s is read by gh auth token, as your vars.toml now says (unibox secret source --reset --name %s takes it back)\n", name, name)
+	}
+	o.useSecretsOf(profile)
+	return nil
+}
+
+// useSecretsOf has the questions that follow read a profile's secrets as
+// the person's vars.toml says: by their own command, or from the store.
+func (o *options) useSecretsOf(profile string) {
+	u, err := o.paths.LoadVars()
+	if err != nil {
+		o.secretsVia = nil
+		return
+	}
+	o.secretsVia = func(name string) string { return u.SecretVia(profile, name) }
+}
+
+// secretVia is the person's own command a secret of the profile at hand
+// is read by, or "" when it is kept in the platform's store.
+func (o *options) secretVia(name string) string {
+	if o.secretsVia == nil {
+		return ""
+	}
+	return o.secretsVia(name)
+}
+
 // ensureSecret stores a secret unless it is there already and not renewed:
 // it says where the token is made, then asks for it.
 func (o *options) ensureSecret(cmd *cobra.Command, store unibox.SecretStore, name string, renew bool, explain []string, page string) error {
-	if o.secretsVia != "" {
-		fmt.Fprintf(o.log, "  secret %s is read by your command: %s\n", name, strings.ReplaceAll(o.secretsVia, unibox.SecretNameField, name))
+	if via := o.secretVia(name); via != "" {
+		fmt.Fprintf(o.log, "  secret %s is read by your command: %s\n", name, strings.ReplaceAll(via, unibox.SecretNameField, name))
 		return nil
 	}
 	if ok, err := store.Has(cmd.Context(), name); err != nil {
@@ -280,14 +360,23 @@ func (o *options) applyPorts(cmd *cobra.Command, profile string) error {
 }
 
 func (o *options) loginCommand() *cobra.Command {
-	var renew, viaGH bool
+	var renew, viaGH, guided bool
 	var rt, profile, command string
-	c := &cobra.Command{Use: "login [agent...]", Args: cobra.ArbitraryArgs, Short: "Sign a profile's agents in: tokens into the platform's store, the profile's auth written", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "login [agent...]", Args: cobra.ArbitraryArgs, Short: "Sign a profile's agents in: tokens into the platform's store, the profile's auth written", Long: `Sign a profile's agents in, the named ones or all. A token is asked for
+on a hidden prompt, or read from stdin - never an argument, which ps and the
+shell's history would show. With -i it walks you through each: the page
+where a token is made opened in the browser, claude setup-token run, and
+where gh is signed in, the choice of signing copilot in through it - kept
+in your vars.toml, not in the profile. An OAuth login opens the browser
+either way, as the runtime asks for it.`, RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := o.profileName(profile)
 		if err != nil {
 			return err
 		}
-		if err = o.login(cmd, name, args, renew, viaGH, rt, command); err != nil {
+		if guided && !o.canAsk() {
+			return fmt.Errorf("a guided sign-in needs a terminal; leave out -i, and pipe each token on stdin")
+		}
+		if err = o.login(cmd, name, args, renew, viaGH, guided, rt, command); err != nil {
 			return err
 		}
 		return o.success(fmt.Sprintf("profile %s signs its agents in", name))
@@ -298,6 +387,7 @@ func (o *options) loginCommand() *cobra.Command {
 	c.Flags().StringVar(&command, "command", "", "A host command printing the agent's token, for a store unibox does not keep")
 	c.MarkFlagsMutuallyExclusive("command", "gh")
 	c.MarkFlagsMutuallyExclusive("command", "renew")
+	c.Flags().BoolVarP(&guided, "interactive", "i", false, "Walk through each sign-in: choices, the pages opened in the browser, claude setup-token")
 	profileFlag(c, &profile)
 	return c
 }
@@ -313,20 +403,21 @@ func (o *options) offerLogin(cmd *cobra.Command, name string) (bool, error) {
 	if err != nil || !sign {
 		return false, err
 	}
-	return true, o.login(cmd, name, nil, false, false, "", "")
+	return true, o.login(cmd, name, nil, false, false, true, "", "")
 }
 
 // login signs a profile's agents in, the named ones or all: a token into
 // the platform's store where unibox knows how to get one, the profile's
 // auth written, and the runtime told each source.
-func (o *options) login(cmd *cobra.Command, name string, args []string, renew, viaGH bool, rt, command string) error {
+func (o *options) login(cmd *cobra.Command, name string, args []string, renew, viaGH, guided bool, rt, command string) error {
 	ctx := cmd.Context()
+	o.guided = guided
 	req := unibox.Request{Profile: name, Runtime: rt}
 	_, r, p, err := o.manager.Definition(req)
 	if err != nil {
 		return err
 	}
-	o.secretsVia = p.SecretCommand
+	o.useSecretsOf(p.Name)
 	agents := args
 	if len(agents) == 0 {
 		agents = p.Agents
@@ -371,8 +462,8 @@ func (o *options) login(cmd *cobra.Command, name string, args []string, renew, v
 			auths[id] = unibox.AgentAuth{Method: unibox.AuthOAuth}
 			fmt.Fprintln(o.log, "  the ChatGPT login is kept by the runtime, which opens the browser for it")
 		case "claude":
-			if ok, _ := store.Has(ctx, "claude"); o.secretsVia == "" && (!ok || renew) {
-				if _, err := exec.LookPath("claude"); err == nil && o.interactive {
+			if ok, _ := store.Has(ctx, "claude"); o.secretVia("claude") == "" && (!ok || renew) {
+				if _, err := exec.LookPath("claude"); err == nil && o.interactive && o.guided {
 					fmt.Fprintln(o.log, "  claude setup-token signs your subscription in for a year and prints the token")
 					setup := exec.CommandContext(ctx, "claude", "setup-token")
 					if f, ok := o.input.(*os.File); ok {
@@ -392,14 +483,22 @@ func (o *options) login(cmd *cobra.Command, name string, args []string, renew, v
 			auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "claude"}
 		case "copilot":
 			stored, _ := store.Has(ctx, "copilot")
-			gh, err := o.useGH(cmd, viaGH, "copilot", stored && !renew)
+			decided := (stored || o.secretVia("copilot") != "") && !renew
+			gh, err := o.useGH(cmd, viaGH, "copilot", decided)
 			if err != nil {
 				return err
 			}
-			if gh {
-				// A token login, so copilot's hosts alone get it; the
-				// github secret of command would take github.com over.
-				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: GHCommand}
+			// A token login, so copilot's hosts alone get it; the github
+			// secret of command would take github.com over. secret:copilot
+			// stays in the profile, and gh is the person's choice, in
+			// their vars.toml.
+			if !decided || viaGH {
+				if err = o.readByGH(p.Name, "copilot", gh); err != nil {
+					return err
+				}
+			}
+			if gh || o.secretVia("copilot") == GHCommand {
+				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: unibox.SecretPrefix + "copilot"}
 				continue
 			}
 			err = o.ensureSecret(cmd, store, "copilot", renew, []string{
@@ -517,8 +616,11 @@ func (o *options) serviceCommand() *cobra.Command {
 			return err
 		}
 		if p, err := o.manager.Profile(profile); err == nil {
-			o.secretsVia = p.SecretCommand
+			o.useSecretsOf(p.Name)
 		}
+		// At a terminal a service is set up as before: its page opened,
+		// gh offered.
+		o.guided = o.interactive && !o.json
 		if err := unibox.ValidName(name); err != nil {
 			return err
 		}
@@ -571,21 +673,27 @@ func (o *options) serviceCommand() *cobra.Command {
 		if secret != "" && (command != "" || viaGH) {
 			return fmt.Errorf("--secret names where the token is; leave out --command and --gh")
 		}
-		gh := false
+		gh, decided := false, true
 		if kind == "github" && command == "" && secret == "" {
 			stored := false
 			if store, err := o.secretStore(); err == nil {
 				stored, _ = store.Has(cmd.Context(), name)
 			}
+			decided = (stored || o.secretVia(name) != "") && !renew
 			var err error
-			if gh, err = o.useGH(cmd, viaGH, name, stored && !renew); err != nil {
+			if gh, err = o.useGH(cmd, viaGH, name, decided); err != nil {
 				return err
 			}
 		} else if viaGH {
 			return fmt.Errorf("--gh is for a github service; %s is %s", name, kind)
 		}
-		if gh {
-			s.Command = GHCommand
+		if !decided || viaGH {
+			if err := o.readByGH(profile, name, gh); err != nil {
+				return err
+			}
+		}
+		if gh || o.secretVia(name) == GHCommand {
+			s.Command = unibox.SecretPrefix + name
 		} else if secret != "" {
 			// A token stored before, perhaps for several services, is
 			// named rather than asked for again.
@@ -598,7 +706,7 @@ func (o *options) serviceCommand() *cobra.Command {
 			}
 			if ok, err := store.Has(cmd.Context(), secret); err != nil {
 				return err
-			} else if !ok && o.secretsVia == "" {
+			} else if !ok && o.secretVia(secret) == "" {
 				return fmt.Errorf("no secret %s is stored; store it with unibox secret set %s", secret, secret)
 			}
 			s.Command = unibox.SecretPrefix + secret
@@ -685,7 +793,7 @@ func (o *options) serviceCommand() *cobra.Command {
 		for _, n := range names {
 			s := p.Services[n]
 			token := "command"
-			if ref, ok := unibox.SecretRef(s.Command); ok && p.SecretCommand != "" {
+			if ref, ok := unibox.SecretRef(s.Command); ok && p.ReadBy(ref) != "" {
 				token = "your command"
 			} else if ok {
 				token = "missing"
@@ -740,7 +848,7 @@ func (o *options) serviceCommand() *cobra.Command {
 			return err
 		}
 		ref, isRef := unibox.SecretRef(s.Command)
-		if isRef && p.SecretCommand != "" {
+		if isRef && p.ReadBy(ref) != "" {
 			// The token is in the person's own store, not unibox's to remove.
 		} else if isRef && ref != args[1] {
 			// A secret of another name was stored on its own and named

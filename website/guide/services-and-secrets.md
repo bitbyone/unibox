@@ -109,10 +109,11 @@ its service's author too.
 unibox service add github -p web --gh
 ```
 
-writes a service with `command: gh auth token`. It reaches every owner your gh
-login can at once - and with it, every repository and scope that login has.
-At a terminal with gh signed in and nothing of the service's own stored,
-unibox asks whether to use it.
+writes a service with `command: secret:github` and has `gh auth token` read
+it, in your `vars.toml` under `[secrets.names]` - the profile stays as anyone
+can share it. It reaches every owner your gh login can at once - and with it,
+every repository and scope that login has. At a terminal with gh signed in
+and nothing of the service's own stored, unibox asks whether to use it.
 
 ## Secrets
 
@@ -153,9 +154,16 @@ It is kept in your `~/.config/unibox/vars.toml`, beside your values, so
 [secrets]
 command = "op read op://Work/{name}/credential"
 
+[secrets.names]                 # one secret by its own command, over the above
+copilot = "gh auth token"
+
 [profiles.dev.secrets]
 command = "vault kv get -field=token secret/{name}"
 ```
+
+A secret's own command wins, the profile's before the global one; then the
+command for every secret, the profile's first; then the platform's store.
+`unibox secret source 'gh auth token' --name copilot` sets one.
 
 The runtime runs the command on the host, as it would the store's; unibox
 never sees a value. Being yours rather than the profile's, it asks for no

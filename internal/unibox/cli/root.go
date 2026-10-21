@@ -30,9 +30,13 @@ type options struct {
 	output, log io.Writer
 	manager     *unibox.Manager
 	interactive bool
-	// secretsVia is the person's own command the profile at hand reads
-	// its secrets by, so none is asked for into the platform's store.
-	secretsVia string
+	// secretsVia are the person's own commands the profile at hand reads
+	// its secrets by, by name, so none of them is asked for into the
+	// platform's store.
+	secretsVia func(name string) string
+	// guided says the user asked to be walked through (-i): questions with
+	// choices, pages opened in the browser, an agent's own sign-in run.
+	guided bool
 }
 
 func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command {
