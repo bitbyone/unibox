@@ -78,6 +78,9 @@ func (a Amount) share() int {
 	return n
 }
 
+// Validate says whether the resources are of a form unibox takes.
+func (r Resources) Validate() error { return r.validate() }
+
 func (r Resources) validate() error {
 	if r.CPUs != "" && !cpuPattern.MatchString(string(r.CPUs)) && !validShare(r.CPUs) {
 		return fmt.Errorf("resources.cpus is a number of CPUs or a share of the host's from 1%% to 100%%, e.g. 4 or 50%%")

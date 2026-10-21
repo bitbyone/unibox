@@ -74,7 +74,9 @@ the host's:
 unibox init web --agents claude,codex --cpus 4 --memory 50%
 ```
 
-`unibox init -i` asks for all of it instead. You now have
+`unibox init -i` asks for all of it instead, as a small form at the terminal:
+the agents to pick from, CPUs and memory to choose among or to give your own,
+each answer checked as you give it. You now have
 `sandboxes/web/sandbox.yaml` and `sandboxes/web/sandbox.dockerfile`, ready to
 edit. Commit them as you would any repository; unibox reads the working tree,
 so what you see in your editor is what runs.

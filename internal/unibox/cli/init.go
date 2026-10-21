@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,19 +11,6 @@ import (
 	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
-
-func (o *options) prompt(reader *bufio.Reader, question, preset string) (string, error) {
-	fmt.Fprintf(o.log, "%s [%s]: ", question, preset)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("interactive init was cut short; rerun it or pass the profile on the command line")
-	}
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return preset, nil
-	}
-	return line, nil
-}
 
 func (o *options) inspectCommand() *cobra.Command {
 	return &cobra.Command{Use: "inspect [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Show a sandbox's record and the runtime materials made for it", RunE: func(cmd *cobra.Command, args []string) error {
@@ -103,12 +89,8 @@ func (o *options) initCommand() *cobra.Command {
 		// to here. Init always says which it writes into.
 		root := o.manager.Config.Environments
 		previous := root
-		var reader *bufio.Reader
-		if interactive {
-			if o.json || !o.interactive {
-				return fmt.Errorf("interactive init needs a terminal; pass the profile and flags instead")
-			}
-			reader = bufio.NewReader(o.input)
+		if interactive && !o.canAsk() {
+			return fmt.Errorf("interactive init needs a terminal; pass the profile and flags instead")
 		}
 		switch {
 		case dir != "":
@@ -125,8 +107,12 @@ func (o *options) initCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(o.log, "No environments repository is configured yet; it holds your profiles and is yours to keep in git.")
-			v, err := o.prompt(reader, "Environments repository", wd)
+			v, err := o.askText("Environments repository", "No environments repository is configured yet; it holds your profiles and is yours to keep in git.", wd, func(s string) error {
+				if strings.TrimSpace(s) == "" {
+					return fmt.Errorf("say where it goes")
+				}
+				return nil
+			})
 			if err != nil {
 				return err
 			}
@@ -150,7 +136,7 @@ func (o *options) initCommand() *cobra.Command {
 		}
 		if interactive {
 			if name == "" {
-				v, err := o.prompt(reader, "Profile name", "dev")
+				v, err := o.askText("Profile name", "Lower-case letters, digits and hyphens; a profile that exists is completed.", "dev", unibox.ValidName)
 				if err != nil {
 					return err
 				}
@@ -160,15 +146,24 @@ func (o *options) initCommand() *cobra.Command {
 			for _, a := range unibox.Agents {
 				ids = append(ids, a.ID)
 			}
-			v, err := o.prompt(reader, "Agents ("+strings.Join(ids, ", ")+")", strings.Join(agents, ","))
+			var err error
+			agents, err = o.askChoices("Agents", "The coding agents the image installs; space picks, enter goes on.", ids, agents, func(v []string) error {
+				if len(v) == 0 {
+					return fmt.Errorf("pick at least one agent")
+				}
+				return nil
+			})
 			if err != nil {
 				return err
 			}
-			agents = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
-			if cpus, err = o.prompt(reader, "CPUs (a number, or a share of the host's: 50%)", cpus); err != nil {
+			if cpus, err = o.askChoice("CPUs", "A number of CPUs, or a share of the host's.", []string{"2", "4", "8", "50%", "100%"}, cpus, func(v string) error {
+				return unibox.Resources{CPUs: unibox.Amount(v)}.Validate()
+			}); err != nil {
 				return err
 			}
-			if memory, err = o.prompt(reader, "Memory (a size such as 8g, or a share: 50%)", memory); err != nil {
+			if memory, err = o.askChoice("Memory", "A size, or a share of the host's; sbx gives at most 75%.", []string{"4g", "8g", "16g", "50%", "75%"}, memory, func(v string) error {
+				return unibox.Resources{Memory: v}.Validate()
+			}); err != nil {
 				return err
 			}
 		}

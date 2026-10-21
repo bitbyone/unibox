@@ -8,35 +8,12 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
-
-// readLine takes one line of input a byte at a time, so nothing after it is
-// taken from a reader the next question reads.
-func (o *options) readLine(prompt string) (string, error) {
-	fmt.Fprint(o.log, prompt)
-	var line []byte
-	one := make([]byte, 1)
-	for {
-		n, err := o.input.Read(one)
-		if n == 1 {
-			if one[0] == '\n' {
-				break
-			}
-			line = append(line, one[0])
-		}
-		if err != nil {
-			if len(line) == 0 {
-				return "", fmt.Errorf("input ended before an answer")
-			}
-			break
-		}
-	}
-	return strings.TrimSpace(string(line)), nil
-}
 
 // initFrom copies a template's profile into the repository and walks the
 // user through what it needs of them.
@@ -61,23 +38,20 @@ func (o *options) initFrom(cmd *cobra.Command, root, previous, name, from, use, 
 		if !interactive || len(profiles) == 0 {
 			return fmt.Errorf("say which of template %s's profiles to copy: %s (--use, or the profile's name)", template, strings.Join(profiles, ", "))
 		}
-		fmt.Fprintf(o.log, "Template %s has the profiles %s.\n", template, strings.Join(profiles, ", "))
-		if use, err = o.readLine("Profile to copy [" + profiles[0] + "]: "); err != nil {
-			return err
+		opts := []huh.Option[string]{}
+		for _, p := range profiles {
+			opts = append(opts, huh.NewOption(p, p))
 		}
-		if use == "" {
-			use = profiles[0]
+		use = profiles[0]
+		if err = o.runField(huh.NewSelect[string]().Title("Profile to copy").Description("The profiles of template " + template + ".").Options(opts...).Value(&use)); err != nil {
+			return err
 		}
 	}
 	if name == "" {
 		name = use
 		if interactive {
-			v, err := o.readLine("Name of your copy [" + use + "]: ")
-			if err != nil {
+			if name, err = o.askText("Name of your copy", "The profile's name in your repository.", use, unibox.ValidName); err != nil {
 				return err
-			}
-			if v != "" {
-				name = v
 			}
 		}
 	}
@@ -125,11 +99,16 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 				todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
 				continue
 			}
-			value, err := o.readLine(fmt.Sprintf("%s (%s): ", v, p.Vars[v]))
+			value, err := o.askText(v, p.Vars[v]+" - kept in your vars.toml; empty sets it later.", "", func(s string) error {
+				if s == "" {
+					return nil
+				}
+				return unibox.ValidVar(v, s)
+			})
 			if err != nil {
 				return err
 			}
-			if err = unibox.ValidVar(v, value); err != nil || value == "" {
+			if value == "" {
 				todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
 				continue
 			}
@@ -139,7 +118,8 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 			return err
 		}
 	}
-	if refs := p.SecretRefs(); len(refs) > 0 {
+	// Secrets read by the person's own command are theirs to keep there.
+	if refs := p.SecretRefs(); len(refs) > 0 && p.SecretCommand == "" {
 		store, err := o.secretStore()
 		if err != nil {
 			return err
@@ -166,9 +146,15 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 		}
 		return nil
 	}
-	if interactive && o.ask("Build the image of profile "+name+" now?") {
-		if err := o.manager.Build(ctx, name, "", false); err != nil {
+	if interactive {
+		build, err := o.askYes("Build the image of profile "+name+" now?", true)
+		if err != nil {
 			return err
+		}
+		if build {
+			if err := o.manager.Build(ctx, name, "", false); err != nil {
+				return err
+			}
 		}
 	}
 	fmt.Fprintf(o.output, "profile %s is ready; start with unibox run --profile %s --agent <agent> in a repository\n", name, name)

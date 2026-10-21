@@ -468,3 +468,35 @@ func TestEveryFieldOfAProfileIsReadAndWrittenThroughUnibox(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
+	// Accessible mode asks the same questions as numbered lines, which a
+	// test can answer.
+	t.Setenv("ACCESSIBLE", "1")
+	paths, root := cliFixture(t)
+	// Name; agents: claude besides the preset copilot, then done; CPUs:
+	// something else, 3; memory: the second offered, 8g.
+	answers := "web\n1\n0\n6\n3\n2\n"
+	out, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml"))
+	for _, want := range []string{"cpus: 3", "memory: 8g", "\nagents:\n  claude:\n", "\n  copilot:\n"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("no %q in\n%s\n%s", want, data, out)
+		}
+	}
+	for _, want := range []string{"Profile name", "Agents", "something else", "Memory"} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("not asked %q:\n%s", want, log)
+		}
+	}
+	// An answer of the wrong form is asked again, not taken.
+	if _, log, err = run(t, paths, "Bad Name\nmobile\n0\n1\n1\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "invalid name") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if _, err = os.Stat(filepath.Join(root, "sandboxes", "mobile", "sandbox.yaml")); err != nil {
+		t.Fatal(err)
+	}
+}

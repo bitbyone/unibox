@@ -219,7 +219,7 @@ older format. With `--from` it copies the profile from a
 | `--agents <list>` | agents the profile declares and installs (default `copilot`) |
 | `--cpus <n\|n%>` | CPUs for the profile's sandboxes, or a share of the host's (default `4`) |
 | `--memory <size\|n%>` | memory for the profile's sandboxes, `8g` or a share like `50%` (default `8g`) |
-| `-i`, `--interactive` | ask for the repository when none is configured, and the profile's name, agents and resources; with `--from`, which profile to copy and what it needs |
+| `-i`, `--interactive` | ask for the repository when none is configured, and the profile's name, agents and resources; with `--from`, which profile to copy and what it needs. A form at the terminal - choices, an answer of your own, each checked as given; with `ACCESSIBLE=1`, numbered lines for a screen reader |
 | `--from <source>` | copy the profile from a template: a git URL or a directory |
 | `--use <profile>` | the template's profile to copy (default: the profile's name) |
 | `--template <name>` | the name the template is kept under in `.templates` (default: its repository's) |

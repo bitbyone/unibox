@@ -63,3 +63,31 @@ func TestInitFromCopiesATemplateProfileAndSaysWhatItNeeds(t *testing.T) {
 		t.Fatal("--use without --from was taken")
 	}
 }
+
+func TestInteractiveInitFromPicksTheProfileAndAsksForValues(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	paths, root := cliFixture(t)
+	src := t.TempDir()
+	for rel, body := range map[string]string{
+		"sandboxes/backend/sandbox.yaml":  "version: 6\nimage: example/image\nagents: [claude]\n",
+		"sandboxes/frontend/sandbox.yaml": "version: 6\nimage: example/image\nagents: [claude]\nvars:\n  npm-user: your npm user\nenv:\n  - NPM_USER: ${vars.npm-user}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(src, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(src, rel), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The second profile; the copy named web; the var's value; no build.
+	out, log, err := run(t, paths, "2\nweb\ntobola\nn\n", "init", "-i", "--from", src, "--template", "acme")
+	if err != nil || !strings.Contains(out, "copied profile frontend of template acme as web") || !strings.Contains(out, "profile web is ready") {
+		t.Fatalf("%v\n%s\n%s", err, out, log)
+	}
+	if _, err = os.Stat(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, _ = run(t, paths, "", "var", "ls"); !strings.Contains(out, "npm-user  tobola") {
+		t.Fatalf("%s", out)
+	}
+}
