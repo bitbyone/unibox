@@ -93,3 +93,30 @@ func TestInteractiveInitFromPicksTheProfileAndAsksForValues(t *testing.T) {
 		t.Fatalf("%s", out)
 	}
 }
+
+func TestTemplateDiffPointsACommandOfOnesOwnToVars(t *testing.T) {
+	paths, root := cliFixture(t)
+	src := t.TempDir()
+	body := "version: 6\nimage: example/image\nagents: [claude]\nservices:\n  art: {host: art.example.com, command: 'secret:art'}\nenv:\n  - ART_TOKEN: ${services.art}\n"
+	if err := os.MkdirAll(filepath.Join(src, "sandboxes", "team"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "sandboxes", "team", "sandbox.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, log, err := run(t, paths, "", "init", "dev", "--from", src, "--use", "team", "--template", "acme"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if _, log, err := run(t, paths, "", "template", "diff", "-p", "dev"); err != nil || strings.Contains(log, "hint:") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	file := filepath.Join(root, "sandboxes", "dev", "sandbox.yaml")
+	data, _ := os.ReadFile(file)
+	if err := os.WriteFile(file, []byte(strings.Replace(string(data), "'secret:art'", "op read op://Me/art", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, log, err := run(t, paths, "", "template", "diff", "-p", "dev")
+	if err != nil || !strings.Contains(log, `hint: service art reads its token by "op read op://Me/art"`) || !strings.Contains(log, "unibox secret source 'op read op://Me/art' --name art") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+}

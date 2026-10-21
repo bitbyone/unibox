@@ -234,10 +234,45 @@ unibox var set artifactory-user tobola    # each person their own
 The repository's URL is the team's, so it can sit in the image's
 `~/.gradle/gradle.properties` or be a var too.
 
+## Where a token's command goes
+
+A profile says **what** the sandbox needs: a token for copilot, one for the
+github service, each named `secret:<name>`. Where that token comes from - the
+keychain, 1Password, your gh login - is **yours**, and may differ between
+people and machines. So a command that reads a token goes in one of two
+places:
+
+| | your `vars.toml` (the default) | the profile (`--in-profile`) |
+| --- | --- | --- |
+| In git, with the repository | no - it stays on this machine | yes |
+| On another machine of yours | set again there | there already |
+| Someone copying your profile with `--from` | gets a clean profile and sets their own | gets your command, which may not work for them |
+| A template update | never meets it | merges it, and may conflict |
+
+The rule is one for everyone: **your own store goes in `vars.toml`, a source
+everyone reads alike goes in the profile.** A team's Vault, read the same by
+every person and in CI, belongs in the profile; your 1Password vault or your
+gh login does not. `agent login --command`, `service add --command` and
+`--gh` write to `vars.toml`, with the profile naming `secret:<name>`;
+`--in-profile` writes the command into the profile instead.
+
+```sh
+unibox service add artifactory -p web --host artifactory.example.com --command 'op read op://Me/artifactory/token'
+#   profile: command: secret:artifactory   vars.toml: artifactory = "op read op://Me/artifactory/token"
+unibox service add vault-git -p web --kind generic --git --host git.example.com --command 'vault kv get -field=token team/git' --in-profile
+#   profile: command: vault kv get -field=token team/git
+```
+
+This holds whether or not the profile came from a template: an environments
+repository can become anyone's template at any time, and a profile kept
+clean of your own sources goes with you to another machine as it is.
+`unibox template diff` points out a command of your own written into a
+profile copied from a template, and how to move it into `vars.toml`.
+
 ## Stores unibox does not keep
 
-A profile may name any host command instead - written by hand, or with
-`--command`:
+A profile may name any host command, shared by everyone who uses it - written
+by hand, or with `--command --in-profile`:
 
 ```yaml
 services:

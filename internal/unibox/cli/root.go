@@ -37,6 +37,9 @@ type options struct {
 	// guided says the user asked to be walked through (-i): questions with
 	// choices, pages opened in the browser, an agent's own sign-in run.
 	guided bool
+	// inProfile writes a token's command into the profile, versioned with
+	// the repository, rather than into the person's vars.toml.
+	inProfile bool
 }
 
 func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command {

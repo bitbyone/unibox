@@ -415,12 +415,26 @@ what you want, update again.`, RunE: func(cmd *cobra.Command, args []string) err
 		diff := exec.CommandContext(cmd.Context(), "git", "diff", "--no-index", "--", filepath.Join(t.Dir, "sandboxes", p.TemplateProfile()), p.Dir)
 		diff.Stdout, diff.Stderr = o.output, o.log
 		if err := diff.Run(); err != nil {
-			if e, ok := err.(*exec.ExitError); ok && e.ExitCode() == 1 {
-				return nil
+			if e, ok := err.(*exec.ExitError); !ok || e.ExitCode() != 1 {
+				return err
 			}
-			return err
+		} else {
+			fmt.Fprintf(o.output, "profile %s is as the template's %s\n", p.Name, p.TemplateProfile())
+			return nil
 		}
-		fmt.Fprintf(o.output, "profile %s is as the template's %s\n", p.Name, p.TemplateProfile())
+		// A command of the person's own written into the profile is a
+		// change each update merges; their vars.toml keeps it aside.
+		mine, err := unibox.LoadProfile(p.Root, p.Name)
+		if err != nil {
+			return nil
+		}
+		theirs, err := unibox.LoadProfile(t.Dir, p.TemplateProfile())
+		if err != nil {
+			return nil
+		}
+		for _, line := range unibox.CommandsAside(mine, theirs) {
+			fmt.Fprintln(o.log, "hint:", line)
+		}
 		return nil
 	}}
 	profileFlag(diff, &profile)

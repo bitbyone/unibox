@@ -111,13 +111,22 @@ func TestAServiceIsAddedListedAndTakenOutThroughUnibox(t *testing.T) {
 	if err != nil || !strings.Contains(out, "gitlab-2n") || !strings.Contains(out, "stored") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	// A store unibox does not keep is the user's command, stored nowhere.
+	// A store unibox does not keep is the user's command, stored nowhere:
+	// in their vars.toml, the profile naming the secret.
 	if _, log, err = run(t, paths, "", "service", "add", "artifactory", "-p", "node", "--host", "repo.example.com", "--command", "vault kv get -field=token secret/art"); err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	data, _ = os.ReadFile(file)
-	if !strings.Contains(string(data), "ARTIFACTORY_TOKEN: ${services.artifactory}") || !strings.Contains(string(data), "command: vault kv get -field=token secret/art") || strings.Contains(string(data), "scheme") {
-		t.Fatalf("%s\n%s", log, data)
+	vars, _ := os.ReadFile(filepath.Join(paths.Config, "vars.toml"))
+	if !strings.Contains(string(data), "ARTIFACTORY_TOKEN: ${services.artifactory}") || !strings.Contains(string(data), "command: secret:artifactory") || strings.Contains(string(data), "scheme") || !strings.Contains(string(vars), "artifactory = 'vault kv get -field=token secret/art'") {
+		t.Fatalf("%s\n%s\n%s", log, data, vars)
+	}
+	// --in-profile writes it into the profile, versioned with it.
+	if _, log, err = run(t, paths, "", "service", "add", "artifactory", "-p", "node", "--host", "repo.example.com", "--command", "vault kv get -field=token team/art", "--in-profile"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if data, _ = os.ReadFile(file); !strings.Contains(string(data), "command: vault kv get -field=token team/art") {
+		t.Fatalf("%s", data)
 	}
 	// The variable carrying a service's placeholder goes with it.
 	if _, _, err = run(t, paths, "", "service", "rm", "artifactory", "-p", "node"); err != nil {
@@ -210,9 +219,11 @@ func TestLoginTakesAnAgentsTokenFromACommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
 	}
+	// The profile names the secret, the person's vars.toml its command.
 	data, _ := os.ReadFile(file)
-	if !strings.Contains(string(data), "  claude:\n    auth: {token: /usr/local/bin/unagit credential get claude}") {
-		t.Fatalf("%s", data)
+	vars, _ := os.ReadFile(filepath.Join(paths.Config, "vars.toml"))
+	if !strings.Contains(string(data), "  claude:\n    auth: {token: 'secret:claude'}") || !strings.Contains(string(vars), "claude = '/usr/local/bin/unagit credential get claude'") {
+		t.Fatalf("%s\n%s", data, vars)
 	}
 	recorded, _ := os.ReadFile(argv)
 	if !strings.Contains(string(recorded), "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN") || !strings.Contains(string(recorded), "unagit credential get claude") {
@@ -220,6 +231,12 @@ func TestLoginTakesAnAgentsTokenFromACommand(t *testing.T) {
 	}
 	if out, _, _ := run(t, paths, "", "secret", "ls"); strings.Contains(out, "claude") {
 		t.Fatal("unibox stored a token it was told another program keeps")
+	}
+	if _, log, err = run(t, paths, "", "agent", "login", "claude", "--command", "/opt/team/token claude", "--in-profile", "-p", "node"); err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if data, _ = os.ReadFile(file); !strings.Contains(string(data), "  claude:\n    auth: {token: /opt/team/token claude}") {
+		t.Fatalf("%s", data)
 	}
 }
 

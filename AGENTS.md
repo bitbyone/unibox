@@ -114,6 +114,12 @@ about it. Keep command output short: pipe through `head`, `tail` or
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
+- **A profile says what a token is, vars.toml where it comes from.**
+  Commands unibox writes for a token go into the person's vars.toml
+  (`[secrets.names]`), the profile naming `secret:<name>`; only
+  `--in-profile` writes one into the profile, for a source everyone reads
+  alike. It keeps a profile portable - to another person, to the user's
+  other machine, through a template update without a merge.
 - **A person adapts a shared profile in their vars.toml, not in it.** A
   template's profile stays as it is: values (with `${vars.x:-default}` for
   what may be left alone) and the command reading `secret:<name>` come from

@@ -264,23 +264,37 @@ would the store's.`, Example: "  unibox secret source 'op read op://Work/{name}/
 // their gh login: a choice of theirs, so not in a profile a template may
 // have given. Choosing a token takes an earlier gh choice back.
 func (o *options) readByGH(profile, name string, gh bool) error {
+	if gh {
+		return o.keepSource(profile, name, GHCommand)
+	}
+	u, err := o.paths.LoadVars()
+	if err != nil || u.Names[name] != GHCommand {
+		return err
+	}
+	return o.keepSource(profile, name, "")
+}
+
+// keepSource keeps, in the person's vars.toml, the command one secret is
+// read by - or takes it away - for every profile: where a token lives is
+// the person's, the same on every profile they run.
+func (o *options) keepSource(profile, name, command string) error {
 	u, err := o.paths.LoadVars()
 	if err != nil {
 		return err
 	}
-	switch {
-	case gh && u.Names[name] != GHCommand:
-		u.Names[name] = GHCommand
-	case !gh && u.Names[name] == GHCommand:
-		delete(u.Names, name)
-	default:
+	if u.Names[name] == command {
 		return nil
+	}
+	if command == "" {
+		delete(u.Names, name)
+	} else {
+		u.Names[name] = command
 	}
 	if err = o.paths.SaveVars(u); err != nil {
 		return err
 	}
-	if gh {
-		fmt.Fprintf(o.log, "  secret:%s is read by gh auth token, as your vars.toml now says (unibox secret source --reset --name %s takes it back)\n", name, name)
+	if command != "" {
+		fmt.Fprintf(o.log, "  secret:%s is read by %s, kept in your vars.toml (--in-profile writes it into the profile instead)\n", name, command)
 	}
 	o.useSecretsOf(profile)
 	return nil
@@ -384,10 +398,11 @@ either way, as the runtime asks for it.`, RunE: func(cmd *cobra.Command, args []
 	c.Flags().BoolVar(&renew, "renew", false, "Ask for every token again, replacing the stored ones")
 	c.Flags().BoolVar(&viaGH, "gh", false, "Sign copilot in through your gh login (gh auth token) instead of a token of its own")
 	c.Flags().StringVar(&rt, "runtime", "", "Runtime that keeps the logins (default: the configured one)")
-	c.Flags().StringVar(&command, "command", "", "A host command printing the agent's token, for a store unibox does not keep")
+	c.Flags().StringVar(&command, "command", "", "A host command printing the agent's token, for a store unibox does not keep, kept in your vars.toml")
 	c.MarkFlagsMutuallyExclusive("command", "gh")
 	c.MarkFlagsMutuallyExclusive("command", "renew")
 	c.Flags().BoolVarP(&guided, "interactive", "i", false, "Walk through each sign-in: choices, the pages opened in the browser, claude setup-token")
+	c.Flags().BoolVar(&o.inProfile, "in-profile", false, "Write --command or --gh into the profile, versioned with the repository, instead of your vars.toml")
 	profileFlag(c, &profile)
 	return c
 }
@@ -442,8 +457,17 @@ func (o *options) login(cmd *cobra.Command, name string, args []string, renew, v
 			if !ok {
 				return fmt.Errorf("unibox cannot sign %s in by a command; set its auth in sandbox.yaml", id)
 			}
-			auths[id] = unibox.AgentAuth{Method: method, Command: command}
-			fmt.Fprintf(o.log, "  its token comes from %s\n", command)
+			if o.inProfile {
+				auths[id] = unibox.AgentAuth{Method: method, Command: command}
+				fmt.Fprintf(o.log, "  its token comes from %s, as the profile now says\n", command)
+				continue
+			}
+			// The profile names the secret; where it comes from is the
+			// person's, kept on their machine.
+			if err := o.keepSource(p.Name, id, command); err != nil {
+				return err
+			}
+			auths[id] = unibox.AgentAuth{Method: method, Command: unibox.SecretPrefix + id}
 			continue
 		}
 		switch id {
@@ -492,6 +516,10 @@ func (o *options) login(cmd *cobra.Command, name string, args []string, renew, v
 			// secret of command would take github.com over. secret:copilot
 			// stays in the profile, and gh is the person's choice, in
 			// their vars.toml.
+			if gh && o.inProfile {
+				auths[id] = unibox.AgentAuth{Method: unibox.AuthToken, Command: GHCommand}
+				continue
+			}
 			if !decided || viaGH {
 				if err = o.readByGH(p.Name, "copilot", gh); err != nil {
 					return err
@@ -687,12 +715,14 @@ func (o *options) serviceCommand() *cobra.Command {
 		} else if viaGH {
 			return fmt.Errorf("--gh is for a github service; %s is %s", name, kind)
 		}
-		if !decided || viaGH {
+		if (!decided || viaGH) && !(gh && o.inProfile) {
 			if err := o.readByGH(profile, name, gh); err != nil {
 				return err
 			}
 		}
-		if gh || o.secretVia(name) == GHCommand {
+		if gh && o.inProfile {
+			s.Command = GHCommand
+		} else if gh || o.secretVia(name) == GHCommand {
 			s.Command = unibox.SecretPrefix + name
 		} else if secret != "" {
 			// A token stored before, perhaps for several services, is
@@ -710,10 +740,17 @@ func (o *options) serviceCommand() *cobra.Command {
 				return fmt.Errorf("no secret %s is stored; store it with unibox secret set %s", secret, secret)
 			}
 			s.Command = unibox.SecretPrefix + secret
-		} else if command != "" {
-			// A store unibox does not know - Vault, 1Password - is the
-			// user's command, run by the runtime as it is.
+		} else if command != "" && o.inProfile {
+			// A store everyone using the profile reads alike - the team's
+			// Vault - is the profile's, versioned with it.
 			s.Command = command
+		} else if command != "" {
+			// A store of the person's own - Vault, 1Password - is theirs,
+			// kept on their machine; the profile names the secret.
+			if err := o.keepSource(profile, name, command); err != nil {
+				return err
+			}
+			s.Command = unibox.SecretPrefix + name
 		} else {
 			store, err := o.secretStore()
 			if err != nil {
@@ -760,9 +797,10 @@ func (o *options) serviceCommand() *cobra.Command {
 	f.StringVar(&author, "author", "", "Who commits under the service, as Name <email> (--author on a run wins)")
 	f.BoolVar(&noCoAuthor, "no-co-author", false, "No Co-Authored-By trailer for the agent in its repositories")
 	f.StringVar(&refresh, "refresh", "", "How often the runtime fetches the token again, e.g. 10m")
-	f.StringVar(&command, "command", "", "A host command printing the token, for a store unibox does not keep (Vault, 1Password)")
+	f.StringVar(&command, "command", "", "A host command printing the token, for a store unibox does not keep (Vault, 1Password), kept in your vars.toml")
 	f.StringVar(&secret, "secret", "", "A token stored with unibox secret set, by its name, instead of asking for one")
 	f.BoolVar(&renew, "renew", false, "Ask for the token again, replacing the stored one")
+	f.BoolVar(&o.inProfile, "in-profile", false, "Write --command or --gh into the profile, versioned with the repository, instead of your vars.toml")
 	f.BoolVar(&viaGH, "gh", false, "Sign a github service in through your gh login (gh auth token)")
 	profileFlag(add, &target)
 	c.AddCommand(add)

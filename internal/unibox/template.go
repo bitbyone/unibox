@@ -727,3 +727,35 @@ func (u TemplateUpdate) Apply(root string, t Template) error {
 	_ = os.Remove(filepath.Join(templateDir(root, u.Template), "conflicts"))
 	return nil
 }
+
+// CommandsAside are the tokens a profile copied from a template reads by a
+// command written into it where the template's differs: each a change a
+// template update has to merge, which the person's vars.toml would keep
+// out of the profile.
+func CommandsAside(mine, template Profile) []string {
+	out := []string{}
+	aside := func(what, name, command, theirs string) {
+		if command == theirs || command == "" {
+			return
+		}
+		if _, ok := SecretRef(command); ok {
+			return
+		}
+		secret := name
+		if ref, ok := SecretRef(theirs); ok {
+			secret = ref
+		}
+		out = append(out, fmt.Sprintf("%s reads its token by %q, not as the template does; to keep it yours without a merge, run unibox secret source %s --name %s and write %s%s back in the profile", what, command, Quote(command), secret, SecretPrefix, secret))
+	}
+	for _, id := range sortedKeys(mine.Auth) {
+		if t, ok := template.Auth[id]; ok {
+			aside("agent "+id, id, mine.Auth[id].Command, t.Command)
+		}
+	}
+	for _, name := range sortedKeys(mine.Services) {
+		if t, ok := template.Services[name]; ok {
+			aside("service "+name, name, mine.Services[name].Command, t.Command)
+		}
+	}
+	return out
+}

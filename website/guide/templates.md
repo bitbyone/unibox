@@ -109,7 +109,18 @@ difference is, so each file that differs from the template's is a conflict
 once.
 
 `diff` shows how a profile differs from the template's, the template's side
-first.
+first. Where you wrote a command of your own for a token into the profile, it
+says how to keep it in your `vars.toml` instead, so no update has to merge
+it.
+
+| You want to change | Put it in | so the profile stays the template's |
+| --- | --- | --- |
+| where a token comes from (`secret:<name>`) | `vars.toml`, `unibox secret source` | yes |
+| a value the profile asks for (`${vars.<name>}`) | `vars.toml`, `unibox var set` | yes |
+| CPUs or memory, if the template refers to vars | `vars.toml`, `unibox var set cpus 6 -p dev` | yes |
+| the image, agents, network, anything else | the profile | no - `update` merges it |
+
+See [Where a token's command goes](./services-and-secrets#where-a-token-s-command-goes).
 
 ## Writing a template
 

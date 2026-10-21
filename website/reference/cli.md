@@ -340,6 +340,8 @@ lists the agents, how each signs in, is credited and the arguments it starts wit
 | --- | --- | --- |
 | `-i`, `--interactive` | `login` | walk through each sign-in, with choices and the pages opened in the browser |
 | `--gh` | `login` | sign copilot in through your gh login (`gh auth token`), kept in `vars.toml` |
+| `--command <cmd>` | `login` | a host command printing one agent's token, kept in `vars.toml`; the profile names `secret:<agent>` |
+| `--in-profile` | `login` | write `--command` or `--gh` into the profile, versioned with the repository |
 | `--renew` | `login` | ask for every token again, replacing the stored ones |
 | `--runtime <name>` | `login` | the runtime that keeps the logins (default: the configured one) |
 | `--as "Name <email>"` | `co-author` | how to credit the agent |
@@ -367,9 +369,10 @@ service out of the profile, and its token unless another profile names it.
 | `--user <name>` | `add` | the user a git forge pairs with the token (basic scheme) |
 | `--author "Name <email>"` | `add` | who commits under the service (`--author` on a run wins) |
 | `--no-co-author` | `add` | no `Co-Authored-By` trailer for the agent in its repositories |
-| `--command <cmd>` | `add` | a host command printing the token, for a store unibox does not keep |
+| `--command <cmd>` | `add` | a host command printing the token, for a store unibox does not keep, kept in `vars.toml`; the profile names `secret:<name>` |
 | `--secret <name>` | `add` | a token stored with `unibox secret set`, by its name, instead of asking for one |
 | `--gh` | `add` | sign a `github` service in through your gh login, kept in `vars.toml`; the profile names `secret:<name>` |
+| `--in-profile` | `add` | write `--command` or `--gh` into the profile, versioned with the repository, instead of `vars.toml` |
 | `--refresh <duration>` | `add` | how often the runtime fetches the token again, e.g. `10m` |
 | `--renew` | `add` | ask for the token again, replacing the stored one |
 | `--keep-secret` | `rm` | keep the stored token |

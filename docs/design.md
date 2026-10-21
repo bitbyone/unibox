@@ -567,9 +567,13 @@ state or the profile, and a test holds each of these.
   grant (Copilot Requests alone), then the hidden prompt. Each writes the
   agent's `auth` into the profile.
 - **The user's gh login** can stand in for a GitHub token: `login --gh`
-  writes `copilot: {token: gh auth token}` and `service add github --gh`
-  a service with `command: gh auth token`; at a terminal with gh signed
-  in and nothing of the service's own stored, unibox asks. It says what
+  and `service add github --gh` keep `secret:copilot` and `secret:github`
+  in the profile and `gh auth token` for them in the user's vars.toml
+  (`[secrets.names]`), as every command of the user's own for a token is
+  kept there - the profile says what a token is, vars.toml where it comes
+  from, so a profile stays portable to other people, the user's other
+  machines and template updates; `--in-profile` writes a command shared by
+  everyone into the profile. `login -i` offers gh where it is signed in. It says what
   that gives away - the whole gh login - and copilot keeps it as a token
   login, on Copilot's hosts alone, so github.com stays the services'.
 - **Services.** `unibox service add <name> -p <profile>` asks for, or takes
