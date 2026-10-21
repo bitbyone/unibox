@@ -71,3 +71,33 @@ func TestVarsKeptInYAMLMoveIntoTOML(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestSecretSourceSaysWhereAProfilesSecretsAreRead(t *testing.T) {
+	t.Parallel()
+	paths, _ := cliFixture(t)
+	if _, _, err := run(t, paths, "", "secret", "source", "op read x"); err == nil || !strings.Contains(err.Error(), "{name}") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "source", "op read op://Work/{name}/credential"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "source", "pass show {name}", "-p", "node"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "secret", "source", "-p", "node")
+	if err != nil || !strings.Contains(out, "profile node reads secret:<name> by: pass show {name}") {
+		t.Fatalf("%v %s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "secret", "source", "--reset", "-p", "node"); err != nil || !strings.Contains(out, "by op read op://Work/{name}/credential") {
+		t.Fatalf("%v %s", err, out)
+	}
+	// A service's token is then the person's command's to read, not asked
+	// for into the platform's store.
+	_, log, err := run(t, paths, "", "service", "add", "art", "--kind", "artifactory", "--host", "a.example", "-p", "node")
+	if err != nil || !strings.Contains(log, "secret art is read by your command: op read op://Work/art/credential") {
+		t.Fatalf("%v %s", err, log)
+	}
+	if out, _, _ = run(t, paths, "", "service", "ls", "-p", "node"); !strings.Contains(out, "your command") {
+		t.Fatalf("%s", out)
+	}
+}

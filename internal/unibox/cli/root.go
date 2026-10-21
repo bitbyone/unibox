@@ -30,6 +30,9 @@ type options struct {
 	output, log io.Writer
 	manager     *unibox.Manager
 	interactive bool
+	// secretsVia is the person's own command the profile at hand reads
+	// its secrets by, so none is asked for into the platform's store.
+	secretsVia string
 }
 
 func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command {

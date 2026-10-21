@@ -102,11 +102,11 @@ func TestAProfileNamesASecretAndTheRuntimeGetsThePlatformsLookup(t *testing.T) {
 	if refs := p.SecretRefs(); len(refs) != 2 || refs[0] != "claude" || refs[1] != "gitlab" {
 		t.Fatalf("%v", refs)
 	}
-	got, err := ResolveCommand("secret:gitlab")
+	got, err := ResolveCommand("secret:gitlab", "")
 	if err != nil || (!strings.Contains(got, "find-generic-password -s unibox-gitlab -w") && !strings.Contains(got, "lookup service unibox name gitlab")) {
 		t.Fatalf("%q %v", got, err)
 	}
-	if got, _ := ResolveCommand("vault kv get -field=token secret/ci"); got != "vault kv get -field=token secret/ci" {
+	if got, _ := ResolveCommand("vault kv get -field=token secret/ci", ""); got != "vault kv get -field=token secret/ci" {
 		t.Fatalf("a command of the user's own changed: %q", got)
 	}
 	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude: {auth: {token: 'secret:Not Valid'}}\n")

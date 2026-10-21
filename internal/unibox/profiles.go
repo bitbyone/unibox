@@ -118,6 +118,8 @@ type Service struct {
 	// profile's git.co_author.
 	Author   string `yaml:"author" json:"author,omitempty"`
 	CoAuthor *bool  `yaml:"co_author" json:"co_author,omitempty"`
+	// Via is as an agent's AgentAuth.Via.
+	Via string `yaml:"-" json:"-"`
 }
 
 const (
@@ -230,6 +232,9 @@ func (h *HostList) UnmarshalYAML(n *yaml.Node) error {
 type AgentAuth struct {
 	Method  string `json:"method"`
 	Command string `json:"command,omitempty"`
+	// Via is the person's own command a secret:<name> is read by, from
+	// their vars.toml; it is theirs, so no part of what is approved.
+	Via string `json:"-"`
 }
 
 const (
@@ -386,18 +391,24 @@ type Profile struct {
 	// in the profile, and reach a sandbox only where the profile refers to
 	// them as ${vars.<name>}. VarValues are the values found; SetEnv and
 	// BuildArgValues are env and build_args with every reference filled.
-	Vars           map[string]string       `yaml:"vars" json:"-"`
-	VarValues      map[string]string       `yaml:"-" json:"-"`
-	SetEnv         map[string]string       `yaml:"-" json:"-"`
-	BuildArgValues map[string]string       `yaml:"-" json:"-"`
-	AgentConfig    map[string]string       `yaml:"-" json:"agent_config,omitempty"`
-	AgentArgs      map[string]AgentArgs    `yaml:"-" json:"agent_args,omitempty"`
-	Git            GitOptions              `yaml:"git" json:"git"`
-	Name           string                  `yaml:"-" json:"-"`
-	Dir            string                  `yaml:"-" json:"-"`
-	Root           string                  `yaml:"-" json:"-"`
-	Revision       string                  `yaml:"-" json:"-"`
-	Files          map[string]SnapshotFile `yaml:"-" json:"-"`
+	Vars           map[string]string    `yaml:"vars" json:"-"`
+	VarValues      map[string]string    `yaml:"-" json:"-"`
+	SetEnv         map[string]string    `yaml:"-" json:"-"`
+	BuildArgValues map[string]string    `yaml:"-" json:"-"`
+	AgentConfig    map[string]string    `yaml:"-" json:"agent_config,omitempty"`
+	AgentArgs      map[string]AgentArgs `yaml:"-" json:"agent_args,omitempty"`
+	// SecretCommand is the person's own command its secret:<name> are read
+	// by; a change of it gives the sandbox the new source.
+	SecretCommand string `yaml:"-" json:"secret_command,omitempty"`
+	// ResourceSpec is resources as the profile writes them, references to
+	// vars and all; Resources has them filled in.
+	ResourceSpec Resources               `yaml:"-" json:"-"`
+	Git          GitOptions              `yaml:"git" json:"git"`
+	Name         string                  `yaml:"-" json:"-"`
+	Dir          string                  `yaml:"-" json:"-"`
+	Root         string                  `yaml:"-" json:"-"`
+	Revision     string                  `yaml:"-" json:"-"`
+	Files        map[string]SnapshotFile `yaml:"-" json:"-"`
 }
 type SnapshotFile struct {
 	Data []byte `json:"data"`
@@ -515,7 +526,19 @@ func LoadProfile(root, name string) (Profile, error) {
 			p.AgentConfig[agentConfigKey(id, file)] = seed
 		}
 	}
-	if err = p.Resources.validate(); err != nil {
+	// A resource may be a person's value, ${vars.cpus:-100%}, checked once
+	// it is filled in.
+	p.ResourceSpec = p.Resources
+	r := p.Resources
+	for field, value := range map[string]*Amount{"resources.cpus": &r.CPUs, "resources.memory": (*Amount)(&r.Memory)} {
+		if hasRefs(string(*value)) {
+			if err = p.checkRefs(field, string(*value), false); err != nil {
+				return p, err
+			}
+			*value = ""
+		}
+	}
+	if err = r.validate(); err != nil {
 		return p, fmt.Errorf("profile %s: %w", name, err)
 	}
 	if len(p.Agents) == 0 {

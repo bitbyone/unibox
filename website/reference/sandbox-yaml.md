@@ -50,6 +50,8 @@ resources: {cpus: 50%, memory: 50%}
 | `cpus` | a number of CPUs, or a share of the host's from `1%` to `100%` |
 | `memory` | a size such as `8g`, or a share of the host's from `1%` to `100%` |
 
+Either may be a person's value, `${vars.cpus:-100%}`, checked once filled in.
+
 For sbx, a share of CPUs is a rounded count, at least one, and `100%` is all
 the host's CPUs. A share of memory is resolved from the host's memory, and
 capped at sbx's limit of 75%, with a note. msb takes the count and the size
@@ -225,8 +227,13 @@ its own; the profile refers to it as `${vars.<name>}`.
 of it builds the image again. A build argument stays in the image's history,
 so it is never a secret.
 
-A run or a build stops while a var it refers to has no value; a var nothing
-refers to, and a service no variable carries, is told as a warning.
+A reference may carry a default, `${vars.<name>:-default}`, which stands
+while the person sets no value: theirs for the profile wins, then their
+global one, then the default. `resources` may refer to vars too.
+
+A run or a build stops while a var it refers to without a default has no
+value; a var nothing refers to, and a service no variable carries, is told
+as a warning.
 
 ### `caches`
 

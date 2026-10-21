@@ -241,7 +241,7 @@ func msbSecrets(s Spec) ([]msbSecret, error) {
 		svc := s.Access.Services[name]
 		resolved := svc
 		var err error
-		if resolved.Command, err = ResolveCommand(svc.Command); err != nil {
+		if resolved.Command, err = ResolveCommand(svc.Command, svc.Via); err != nil {
 			return nil, fmt.Errorf("service %s: %w", name, err)
 		}
 		env := ServiceEnv(name, svc)

@@ -67,12 +67,13 @@ func msbAgentSecret(agent string, a AgentAuth) (msbSecret, bool, error) {
 	sec := kinds[kind]
 	sec.Hosts = slices.Clone(sec.Hosts)
 	sec.Source = msbSource(sec.Env)
-	command := a.Command
+	command, via := a.Command, a.Via
 	if a.Method == AuthAPIKey {
-		command = SecretPrefix + msbKeyName(agent)
+		// The key unibox itself keeps for msb, in the platform's store.
+		command, via = SecretPrefix+msbKeyName(agent), ""
 	}
 	var err error
-	if sec.Command, err = ResolveCommand(command); err != nil {
+	if sec.Command, err = ResolveCommand(command, via); err != nil {
 		return msbSecret{}, false, err
 	}
 	return sec, true, nil

@@ -404,11 +404,16 @@ ports the profile declares.
 unibox secret set <name>
 unibox secret ls
 unibox secret rm <name>
+unibox secret source [command | --reset] [-p <profile>]
 ```
 
 Keeps tokens in the platform's store, for profiles to name as
 `secret:<name>`. `set` asks on a hidden prompt or reads stdin; `ls` lists the
-names, never the values.
+names, never the values. `source` shows or sets the command of yours that
+reads `secret:<name>` instead of the store, `{name}` standing for the name -
+for every profile, or with `-p` one profile's over it; `--reset` goes back to
+the store. It is kept in your `vars.toml`. `source` does not take the
+profile from the context, as `var` does not.
 
 ### `unibox var`
 

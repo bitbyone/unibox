@@ -200,7 +200,7 @@ func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
 		}
 		resolved := svc
 		var err error
-		if resolved.Command, err = ResolveCommand(svc.Command); err != nil {
+		if resolved.Command, err = ResolveCommand(svc.Command, svc.Via); err != nil {
 			return fmt.Errorf("service %s: %w", name, err)
 		}
 		args = append(args, "--command", serviceSecretCommand(resolved))

@@ -29,6 +29,10 @@ type SecretStore interface {
 
 const SecretPrefix = "secret:"
 
+// SecretNameField stands for a secret's name in a person's own command
+// for secrets.
+const SecretNameField = "{name}"
+
 // PlatformSecrets is the store of the platform unibox runs on.
 func PlatformSecrets() (SecretStore, error) {
 	switch runtime.GOOS {
@@ -48,12 +52,16 @@ func SecretRef(command string) (string, bool) {
 }
 
 // ResolveCommand turns a profile's command into the host command a runtime
-// runs: a secret reference becomes the platform's lookup, anything else is
-// the user's own command and stays as it is.
-func ResolveCommand(command string) (string, error) {
+// runs: a secret reference becomes the person's own command for secrets,
+// via, with {name} in it, or else the platform's lookup; anything else is
+// the profile's command and stays as it is.
+func ResolveCommand(command, via string) (string, error) {
 	name, ok := SecretRef(command)
 	if !ok {
 		return command, nil
+	}
+	if via != "" {
+		return strings.ReplaceAll(via, SecretNameField, name), nil
 	}
 	store, err := PlatformSecrets()
 	if err != nil {

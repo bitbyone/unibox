@@ -319,7 +319,7 @@ func TestProfilesSayHowEachAgentSignsIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Auth["codex"].Method != AuthOAuth || p.Auth["copilot"] != (AgentAuth{AuthCommand, "gh auth token"}) || p.Auth["claude"] != (AgentAuth{AuthToken, "security find-generic-password -s claude -w"}) || p.OAuthAgent() != "codex" {
+	if p.Auth["codex"].Method != AuthOAuth || p.Auth["copilot"] != (AgentAuth{Method: AuthCommand, Command: "gh auth token"}) || p.Auth["claude"] != (AgentAuth{Method: AuthToken, Command: "security find-generic-password -s claude -w"}) || p.OAuthAgent() != "codex" {
 		t.Fatal(p.Auth)
 	}
 	// A command runs on the host, so the sign-ins are approved like the rest.

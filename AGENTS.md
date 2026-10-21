@@ -114,6 +114,13 @@ about it. Keep command output short: pipe through `head`, `tail` or
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
+- **A person adapts a shared profile in their vars.toml, not in it.** A
+  template's profile stays as it is: values (with `${vars.x:-default}` for
+  what may be left alone) and the command reading `secret:<name>` come from
+  `~/.config/unibox/vars.toml`. That command is carried as `Via` on
+  `AgentAuth` and `Service`, `json:"-"`, so it is no part of what
+  `unibox approve` covers; `Profile.SecretCommand` puts it into the
+  sandbox's snapshot, so a change reaches the runtime.
 - **Every field of sandbox.yaml is a command's to write.** A program
   configuring unibox needs no YAML of its own: `unibox profile show --json`
   gives the document, `profile set|unset <path>` changes any field,

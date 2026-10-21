@@ -139,7 +139,7 @@ func (m *Manager) profile(name string) (Profile, error) {
 	if err != nil {
 		return p, err
 	}
-	return p.withVars(vars.For(p.Name))
+	return p.withSecrets(vars.SecretsFor(p.Name)).withVars(vars.For(p.Name))
 }
 
 // Environments says where the environments repository is, or, when there is
@@ -499,7 +499,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	}
 	// A secret the profile names has to be stored before the runtime can run
 	// the command that reads it, so it is checked before the logins are.
-	if refs := p.SecretRefs(); len(refs) > 0 {
+	if refs := p.SecretRefs(); len(refs) > 0 && p.SecretCommand == "" {
 		if store, err := PlatformSecrets(); err != nil {
 			result.Needs = append(result.Needs, api.Need{Code: "secret_missing", Message: err.Error()})
 		} else {

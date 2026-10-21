@@ -98,3 +98,107 @@ func TestARunStopsWhileAValueIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAVarsDefaultStandsWhileNobodySetsIt(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	write(t, file, "version: 6\nstart: start.sh\nagents: [claude]\nresources:\n  cpus: ${vars.cpus:-100%}\n  memory: ${vars.memory:-8g}\nvars:\n  cpus: CPUs for your machine\n  memory: memory for your machine\n  mirror: your npm mirror\nenv:\n  - NPM_MIRROR: ${vars.mirror:-https://registry.npmjs.org}\n")
+	orig, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// None set: the defaults, and nothing missing.
+	p, err := orig.withVars(nil)
+	if err != nil || p.missingVarsError() != nil || p.Resources.CPUs != "100%" || p.Resources.Memory != "8g" || !slices.Equal(p.SessionEnv(), []string{"NPM_MIRROR=https://registry.npmjs.org"}) {
+		t.Fatalf("%v %+v %v", err, p.Resources, p.SessionEnv())
+	}
+	if vars, _ := p.Unused(); len(vars) != 0 {
+		t.Fatalf("unused %v", vars)
+	}
+	if d := p.VarDefaults(); d["cpus"] != "100%" || d["mirror"] != "https://registry.npmjs.org" {
+		t.Fatal(d)
+	}
+	// A profile's own value over the global one, the global one over the
+	// default.
+	u := UserVars{Vars: map[string]string{"cpus": "4", "memory": "16g"}, Profiles: map[string]map[string]string{"node": {"cpus": "6"}}}
+	if p, err = orig.withVars(u.For("node")); err != nil || p.Resources.CPUs != "6" || p.Resources.Memory != "16g" {
+		t.Fatalf("%v %+v", err, p.Resources)
+	}
+	// A value of the wrong form is told as the person's.
+	if _, err = orig.withVars(map[string]string{"cpus": "lots"}); err == nil || !strings.Contains(err.Error(), "as your vars fill it in") {
+		t.Fatalf("%v", err)
+	}
+	// A resource refers to declared vars alone, and a service has no default.
+	write(t, file, "version: 6\nstart: start.sh\nagents: [claude]\nresources: {cpus: '${vars.cores:-2}'}\n")
+	if _, err = LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "do not declare") {
+		t.Fatalf("%v", err)
+	}
+	write(t, file, "version: 6\nstart: start.sh\nagents: [claude]\nservices:\n  art: {host: a.example, command: secret:art}\nenv:\n  - TOKEN_ART: ${services.art:-x}\n")
+	if _, err = LoadProfile(root, "node"); err == nil || !strings.Contains(err.Error(), "only a var") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestSecretsAreReadByThePersonsOwnCommandWithoutAnotherApproval(t *testing.T) {
+	t.Parallel()
+	root := profileFixture(t)
+	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude: {auth: {token: 'secret:claude'}}\nservices:\n  art: {host: a.example, command: 'secret:art'}\n  vault: {host: v.example, command: vault read x}\nenv:\n  - TOKEN_ART: ${services.art}\n  - TOKEN_VAULT: ${services.vault}\n")
+	orig, err := LoadProfile(root, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := emptyVars()
+	u.Secrets = "op read op://Work/{name}/credential"
+	u.ProfileSecrets["other"] = "pass show {name}"
+	p := orig.withSecrets(u.SecretsFor("node"))
+	if p.AccessHash() != orig.AccessHash() {
+		t.Fatal("where a person keeps their secrets asked for another approval")
+	}
+	for command, via := range map[string]string{p.Auth["claude"].Command: p.Auth["claude"].Via, p.Services["art"].Command: p.Services["art"].Via, p.Services["vault"].Command: p.Services["vault"].Via} {
+		got, err := ResolveCommand(command, via)
+		want := map[string]string{"secret:claude": "op read op://Work/claude/credential", "secret:art": "op read op://Work/art/credential", "vault read x": "vault read x"}[command]
+		if err != nil || got != want {
+			t.Errorf("%s: %q %v", command, got, err)
+		}
+	}
+	// A change of where secrets come from gives the sandboxes the new one.
+	if string(settingsSnapshot(p, &fakeRuntime{})) == string(settingsSnapshot(orig, &fakeRuntime{})) {
+		t.Fatal("a new source of secrets would not reach the sandbox")
+	}
+	if u.SecretsFor("other") != "pass show {name}" {
+		t.Fatal(u.SecretsFor("other"))
+	}
+}
+
+func TestVarsTOMLKeepsSecretsCommandsBesideTheValues(t *testing.T) {
+	t.Parallel()
+	paths := Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	u := emptyVars()
+	u.Vars["cpus"] = "4"
+	u.Secrets = "op read op://Work/{name}/credential"
+	u.Profiles["dev"] = map[string]string{"cpus": "8"}
+	u.ProfileSecrets["dev"] = "pass show {name}"
+	if err := paths.SaveVars(u); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(paths.VarsFile())
+	for _, want := range []string{"[global]\ncpus = '4'\n", "[secrets]\ncommand = 'op read op://Work/{name}/credential'\n", "[profiles.dev]\ncpus = '8'\n", "[profiles.dev.secrets]\ncommand = 'pass show {name}'\n"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("no %q in\n%s", want, data)
+		}
+	}
+	if !(strings.Index(string(data), "[global]") < strings.Index(string(data), "[secrets]") && strings.Index(string(data), "[secrets]") < strings.Index(string(data), "[profiles.dev]")) {
+		t.Fatalf("tables out of order:\n%s", data)
+	}
+	back, err := paths.LoadVars()
+	if err != nil || back.SecretsFor("dev") != "pass show {name}" || back.SecretsFor("web") != u.Secrets || back.For("dev")["cpus"] != "8" {
+		t.Fatalf("%v %+v", err, back)
+	}
+	for _, bad := range []string{"[secrets]\ncommand = 'op read x'\n", "[secrets]\nscript = 'x {name}'\n", "[global]\ncpus = 4\n", "cpus = '4'\n"} {
+		write(t, paths.VarsFile(), bad)
+		if _, err := paths.LoadVars(); err == nil {
+			t.Errorf("%q was taken", bad)
+		}
+	}
+}

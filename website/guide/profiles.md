@@ -141,7 +141,24 @@ artifactory-user = "tobola"
 
 [profiles.dev]
 gitlab-2n-author = "Jan Tobola <tobola@2n.com>"
+cpus = "6"
 ```
+
+A reference may carry what stands for it while you set nothing,
+`${vars.<name>:-default}`, as in a shell. A profile so offers settings with a
+sensible default that each person may change without touching it - a
+template's resources, for one:
+
+```yaml
+vars:
+  cpus: CPUs for your machine
+resources:
+  cpus: ${vars.cpus:-100%}
+```
+
+The profile's own value wins, then the global one, then the default.
+`[secrets]` in the same file says where your tokens are read from; see
+[Services and secrets](./services-and-secrets#your-own-store-for-secret-name).
 
 `unibox var` writes it for you:
 

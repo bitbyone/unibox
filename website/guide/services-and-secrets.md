@@ -133,6 +133,36 @@ a command's arguments, the log, `--json`, the state or the profile.
 `secret:<name>` is portable: unibox turns it into the host command of the
 platform it runs on, so a profile is shared between macOS and Linux.
 
+### Your own store for `secret:<name>`
+
+Where your tokens live is yours to say, not the profile's. A profile from a
+template keeps `secret:<name>`, and a command of yours reads it instead of
+the platform's store - `{name}` stands for the secret's name:
+
+```sh
+unibox secret source 'op read op://Work/{name}/credential'           # every profile
+unibox secret source 'vault kv get -field=token secret/{name}' -p dev  # one profile, over it
+unibox secret source -p dev                                            # which one a profile uses
+unibox secret source --reset                                           # the platform's store again
+```
+
+It is kept in your `~/.config/unibox/vars.toml`, beside your values, so
+`sandbox.yaml` stays as the template has it:
+
+```toml
+[secrets]
+command = "op read op://Work/{name}/credential"
+
+[profiles.dev.secrets]
+command = "vault kv get -field=token secret/{name}"
+```
+
+The runtime runs the command on the host, as it would the store's; unibox
+never sees a value. Being yours rather than the profile's, it asks for no
+`unibox approve`; a sandbox gets the new source at its next start. With it,
+`agent login` and `service add` ask for no token into the platform's store,
+and `service ls` shows the token as read by your command.
+
 A token stored this way is put into a profile by a service that names it,
 instead of asking for it again - one token can serve several services or
 profiles:

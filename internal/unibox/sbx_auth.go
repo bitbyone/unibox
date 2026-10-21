@@ -168,7 +168,7 @@ func (r *SBX) AuthNeeds(ctx context.Context, sandbox string, p Profile) []api.Ne
 // sbxLoginArgs is the sbx command storing an agent's login. A secret the
 // profile names is looked up by the platform's own command.
 func sbxLoginArgs(agent, service string, a AgentAuth) ([]string, error) {
-	command, err := ResolveCommand(a.Command)
+	command, err := ResolveCommand(a.Command, a.Via)
 	if err != nil {
 		return nil, err
 	}

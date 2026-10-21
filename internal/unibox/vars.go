@@ -18,17 +18,24 @@ import (
 // profile's own win over them. A run stops while one is missing.
 
 // UserVars is ~/.config/unibox/vars.toml: global values, and a profile's
-// own over them.
+// own over them; and how a secret:<name> is read, if not from the
+// platform's store, again for every profile or for one.
 type UserVars struct {
-	Vars     map[string]string            `toml:"global"`
-	Profiles map[string]map[string]string `toml:"profiles,omitempty"`
+	Vars     map[string]string
+	Profiles map[string]map[string]string
+	// Secrets is the command a secret:<name> is read by, {name} standing
+	// for the name; ProfileSecrets a profile's own, over it.
+	Secrets        string
+	ProfileSecrets map[string]string
 }
 
 const varsHeader = `# Your own values for what profiles ask of you (their vars), kept here and
 # never in the environments repository. Values under [global] apply to every
 # profile; those under [profiles.<name>] to that profile alone, and win.
-# unibox var set|ls|rm changes this file; no secret belongs here - keep
-# tokens with unibox secret set.
+# [secrets] command = "..." reads a profile's secret:<name> by a command of
+# yours, {name} in it, instead of the platform's store; [profiles.<name>.secrets]
+# for one profile. unibox var and unibox secret source change this file; no
+# secret belongs here - keep tokens with unibox secret set or your own store.
 
 `
 
@@ -38,8 +45,12 @@ func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.toml") }
 // vars.toml the first time they are read.
 func (p Paths) legacyVarsFile() string { return filepath.Join(p.Config, "vars.yaml") }
 
+func emptyVars() UserVars {
+	return UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}, ProfileSecrets: map[string]string{}}
+}
+
 func (p Paths) LoadVars() (UserVars, error) {
-	u := UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}}
+	u := emptyVars()
 	b, err := os.ReadFile(p.VarsFile())
 	if os.IsNotExist(err) {
 		return p.migrateVars(u)
@@ -47,18 +58,100 @@ func (p Paths) LoadVars() (UserVars, error) {
 	if err != nil {
 		return u, err
 	}
-	d := toml.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if err = d.Decode(&u); err != nil {
-		return u, fmt.Errorf("%s is not valid: values go under [global] or [profiles.<name>]; fix it or set them again with unibox var set: %w", p.VarsFile(), err)
+	var doc map[string]any
+	if err = toml.Unmarshal(b, &doc); err != nil {
+		return u, fmt.Errorf("%s is not valid TOML; fix it or set the values again with unibox var set: %w", p.VarsFile(), err)
 	}
-	if u.Vars == nil {
-		u.Vars = map[string]string{}
-	}
-	if u.Profiles == nil {
-		u.Profiles = map[string]map[string]string{}
+	if err = u.read(doc); err != nil {
+		return u, fmt.Errorf("%s: %w", p.VarsFile(), err)
 	}
 	return u, nil
+}
+
+// read takes the file's tables, naming what does not belong.
+func (u *UserVars) read(doc map[string]any) error {
+	strs := func(where string, v any, skip string) (map[string]string, error) {
+		t, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s is a table", where)
+		}
+		out := map[string]string{}
+		for k, v := range t {
+			if k == skip {
+				continue
+			}
+			s, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s.%s is a string, in quotes", where, k)
+			}
+			out[k] = s
+		}
+		return out, nil
+	}
+	command := func(where string, v any) (string, error) {
+		t, err := strs(where, v, "")
+		if err != nil {
+			return "", err
+		}
+		for k := range t {
+			if k != "command" {
+				return "", fmt.Errorf("%s takes command alone, not %s", where, k)
+			}
+		}
+		return t["command"], ValidSecretCommand(t["command"])
+	}
+	for key, v := range doc {
+		var err error
+		switch key {
+		case "global":
+			u.Vars, err = strs("global", v, "")
+		case "secrets":
+			u.Secrets, err = command("secrets", v)
+		case "profiles":
+			profiles, ok := v.(map[string]any)
+			if !ok {
+				return fmt.Errorf("profiles is a table of [profiles.<name>]")
+			}
+			for name, body := range profiles {
+				where := "profiles." + name
+				if u.Profiles[name], err = strs(where, body, "secrets"); err != nil {
+					return err
+				}
+				if sec, ok := body.(map[string]any)["secrets"]; ok {
+					if u.ProfileSecrets[name], err = command(where+".secrets", sec); err != nil {
+						return err
+					}
+				}
+			}
+		default:
+			err = fmt.Errorf("%s belongs in no table here; values go under [global] or [profiles.<name>], a command for secrets under [secrets]", key)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidSecretCommand says whether a command can read secrets: one line,
+// naming the secret as {name}.
+func ValidSecretCommand(command string) error {
+	if strings.TrimSpace(command) == "" || strings.ContainsAny(command, "\n\r") {
+		return fmt.Errorf("a command for secrets is one line")
+	}
+	if !strings.Contains(command, SecretNameField) {
+		return fmt.Errorf("a command for secrets names the secret as %s, as op read op://Work/%s/credential", SecretNameField, SecretNameField)
+	}
+	return nil
+}
+
+// SecretsFor is the command a profile's secret:<name> is read by, or ""
+// for the platform's store.
+func (u UserVars) SecretsFor(profile string) string {
+	if c := u.ProfileSecrets[profile]; c != "" {
+		return c
+	}
+	return u.Secrets
 }
 
 func (p Paths) migrateVars(u UserVars) (UserVars, error) {
@@ -89,19 +182,50 @@ func (p Paths) migrateVars(u UserVars) (UserVars, error) {
 }
 
 func (p Paths) SaveVars(u UserVars) error {
+	// A struct keeps the tables in the order the header tells them.
+	var doc struct {
+		Global   map[string]string `toml:"global"`
+		Secrets  map[string]string `toml:"secrets,omitempty"`
+		Profiles map[string]any    `toml:"profiles,omitempty"`
+	}
+	doc.Global = u.Vars
+	if doc.Global == nil {
+		doc.Global = map[string]string{}
+	}
+	if u.Secrets != "" {
+		doc.Secrets = map[string]string{"command": u.Secrets}
+	}
+	profiles := map[string]any{}
 	for name, values := range u.Profiles {
-		if len(values) == 0 {
-			delete(u.Profiles, name)
+		if len(values) > 0 {
+			t := map[string]any{}
+			for k, v := range values {
+				t[k] = v
+			}
+			profiles[name] = t
 		}
 	}
-	if u.Vars == nil {
-		u.Vars = map[string]string{}
+	for name, command := range u.ProfileSecrets {
+		if command == "" {
+			continue
+		}
+		t, _ := profiles[name].(map[string]any)
+		if t == nil {
+			t = map[string]any{}
+			profiles[name] = t
+		}
+		t["secrets"] = map[string]string{"command": command}
 	}
-	b, err := toml.Marshal(u)
-	if err != nil {
+	if len(profiles) > 0 {
+		doc.Profiles = profiles
+	}
+	var out bytes.Buffer
+	e := toml.NewEncoder(&out)
+	e.SetTablesInline(false)
+	if err := e.Encode(doc); err != nil {
 		return err
 	}
-	return AtomicWrite(p.VarsFile(), append([]byte(varsHeader), b...), 0o600)
+	return AtomicWrite(p.VarsFile(), append([]byte(varsHeader), out.Bytes()...), 0o600)
 }
 
 // EnsureVarsFile lays the file out when there is none, so a person finds
@@ -114,7 +238,7 @@ func (p Paths) EnsureVarsFile() (bool, error) {
 		_, err = p.LoadVars()
 		return false, err
 	}
-	return true, p.SaveVars(UserVars{Vars: map[string]string{}, Profiles: map[string]map[string]string{}})
+	return true, p.SaveVars(emptyVars())
 }
 
 // For is the values one profile sees: the shared ones with its own over
@@ -153,11 +277,12 @@ func ValidVar(name, value string) error {
 	return nil
 }
 
-// A value in a profile may refer to a person's value, ${vars.<name>}, or -
-// in env alone - to a service, ${services.<name>}, which stands for the
+// A value in a profile may refer to a person's value, ${vars.<name>}, with
+// what stands for it while the person sets none, ${vars.<name>:-default};
+// or - in env alone - to a service, ${services.<name>}, which stands for the
 // placeholder of its token.
 var anyRef = regexp.MustCompile(`\$\{([^}]*)\}`)
-var namedRef = regexp.MustCompile(`^(vars|services)\.([a-z][a-z0-9-]*)$`)
+var namedRef = regexp.MustCompile(`^(vars|services)\.([a-z][a-z0-9-]*)(:-(.*))?$`)
 
 func hasRefs(s string) bool { return anyRef.MatchString(s) }
 
@@ -170,6 +295,8 @@ func (p Profile) checkRefs(where, value string, services bool) error {
 		switch {
 		case parts == nil:
 			return fmt.Errorf("profile %s: %s refers to ${%s}; write ${vars.<name>} or ${services.<name>}", p.Name, where, m[1])
+		case parts[1] == "services" && parts[3] != "":
+			return fmt.Errorf("profile %s: %s refers to ${%s}; a service has no default, only a var", p.Name, where, m[1])
 		case parts[1] == "vars":
 			if _, ok := p.Vars[parts[2]]; !ok {
 				return fmt.Errorf("profile %s: %s refers to ${vars.%s}, which its vars do not declare", p.Name, where, parts[2])
@@ -189,24 +316,35 @@ func (p Profile) checkRefs(where, value string, services bool) error {
 	return nil
 }
 
-// refsIn are the vars and the services a value refers to.
-func refsIn(value string) (vars, services []string) {
+// refsIn are the vars and the services a value refers to, and the vars it
+// needs a value of: those it names without a default.
+func refsIn(value string) (vars, services, required []string) {
 	for _, m := range anyRef.FindAllStringSubmatch(value, -1) {
 		if parts := namedRef.FindStringSubmatch(m[1]); parts != nil {
 			if parts[1] == "vars" {
 				vars = append(vars, parts[2])
+				if parts[3] == "" {
+					required = append(required, parts[2])
+				}
 			} else {
 				services = append(services, parts[2])
 			}
 		}
 	}
-	return vars, services
+	return vars, services, required
 }
 
 // usedRefs are the vars and services the profile refers to anywhere.
 func (p Profile) usedRefs() (vars, services map[string]bool) {
-	vars, services = map[string]bool{}, map[string]bool{}
-	values := []string{}
+	vars, services, _ = p.refs()
+	return vars, services
+}
+
+// refs are the vars and services the profile refers to anywhere, and the
+// vars it needs a value of.
+func (p Profile) refs() (vars, services, required map[string]bool) {
+	vars, services, required = map[string]bool{}, map[string]bool{}, map[string]bool{}
+	values := []string{string(p.ResourceSpec.CPUs), p.ResourceSpec.Memory}
 	for _, v := range p.EnvValues {
 		values = append(values, v)
 	}
@@ -217,15 +355,18 @@ func (p Profile) usedRefs() (vars, services map[string]bool) {
 		values = append(values, s.User, s.Author)
 	}
 	for _, v := range values {
-		vs, ss := refsIn(v)
+		vs, ss, rs := refsIn(v)
 		for _, n := range vs {
 			vars[n] = true
 		}
 		for _, n := range ss {
 			services[n] = true
 		}
+		for _, n := range rs {
+			required[n] = true
+		}
 	}
-	return vars, services
+	return vars, services, required
 }
 
 // fill puts the values in place of a value's references.
@@ -236,10 +377,39 @@ func (p Profile) fill(value string) string {
 			return ref
 		}
 		if parts[1] == "vars" {
-			return p.VarValues[parts[2]]
+			if v, ok := p.VarValues[parts[2]]; ok {
+				return v
+			}
+			return parts[4]
 		}
 		return ServicePlaceholder(parts[2], p.Services[parts[2]])
 	})
+}
+
+// withSecrets has the profile's secret:<name> read by the person's own
+// command, if they keep their secrets elsewhere than the platform's store.
+func (p Profile) withSecrets(command string) Profile {
+	if command == "" {
+		return p
+	}
+	p.SecretCommand = command
+	if len(p.Auth) > 0 {
+		auth := map[string]AgentAuth{}
+		for id, a := range p.Auth {
+			a.Via = command
+			auth[id] = a
+		}
+		p.Auth = auth
+	}
+	if len(p.Services) > 0 {
+		services := map[string]Service{}
+		for name, s := range p.Services {
+			s.Via = command
+			services[name] = s
+		}
+		p.Services = services
+	}
+	return p
 }
 
 // withVars gives the profile its person's values, filled into env,
@@ -255,6 +425,15 @@ func (p Profile) withVars(values map[string]string) (Profile, error) {
 	if len(p.MissingVars()) > 0 {
 		return p, nil
 	}
+	r := p.ResourceSpec
+	if r == (Resources{}) {
+		r = p.Resources
+	}
+	r.CPUs, r.Memory = Amount(p.fill(string(r.CPUs))), p.fill(r.Memory)
+	if err := r.validate(); err != nil {
+		return p, fmt.Errorf("profile %s: %w, as your vars fill it in", p.Name, err)
+	}
+	p.Resources = r
 	p.SetEnv = map[string]string{}
 	for k, v := range p.EnvValues {
 		p.SetEnv[k] = p.fill(v)
@@ -285,9 +464,36 @@ func (p Profile) withVars(values map[string]string) (Profile, error) {
 	return p, nil
 }
 
-// MissingVars are the vars the profile refers to without a value.
+// VarDefaults are what stands for each var while the person sets none:
+// the first default the profile gives it.
+func (p Profile) VarDefaults() map[string]string {
+	out := map[string]string{}
+	values := []string{string(p.ResourceSpec.CPUs), p.ResourceSpec.Memory}
+	for _, k := range sortedKeys(p.EnvValues) {
+		values = append(values, p.EnvValues[k])
+	}
+	for _, k := range sortedKeys(p.BuildArgSpec) {
+		values = append(values, p.BuildArgSpec[k])
+	}
+	for _, k := range sortedKeys(p.Services) {
+		values = append(values, p.Services[k].User, p.Services[k].Author)
+	}
+	for _, v := range values {
+		for _, m := range anyRef.FindAllStringSubmatch(v, -1) {
+			if parts := namedRef.FindStringSubmatch(m[1]); parts != nil && parts[1] == "vars" && parts[3] != "" {
+				if _, ok := out[parts[2]]; !ok {
+					out[parts[2]] = parts[4]
+				}
+			}
+		}
+	}
+	return out
+}
+
+// MissingVars are the vars the profile needs a value of and has none:
+// those it refers to without a default.
 func (p Profile) MissingVars() []string {
-	used, _ := p.usedRefs()
+	_, _, used := p.refs()
 	out := []string{}
 	for _, name := range sortedKeys(p.Vars) {
 		if _, ok := p.VarValues[name]; !ok && used[name] {

@@ -99,14 +99,17 @@ secret belongs here; keep tokens with unibox secret set.`}
 			return err
 		}
 		rows := []map[string]string{}
+		defaults := p.VarDefaults()
 		for _, name := range sorted(p.Vars) {
-			from := "missing"
+			from, value := "missing", p.VarValues[name]
 			if _, ok := u.Profiles[profile][name]; ok {
 				from = "profile " + profile
 			} else if _, ok := u.Vars[name]; ok {
 				from = "every profile"
+			} else if d, ok := defaults[name]; ok {
+				from, value = "default", d
 			}
-			rows = append(rows, map[string]string{"name": name, "description": p.Vars[name], "value": p.VarValues[name], "from": from})
+			rows = append(rows, map[string]string{"name": name, "description": p.Vars[name], "value": value, "from": from})
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "profile": profile, "vars": rows})
