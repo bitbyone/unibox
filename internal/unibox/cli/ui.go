@@ -87,6 +87,22 @@ func (o *options) askChoice(title, description string, options []string, preset 
 	return value, nil
 }
 
+// pick is an option shown by its label and answered by its value.
+type pick struct{ value, label string }
+
+// askPick offers options alone, the preset chosen.
+func (o *options) askPick(title, description string, options []pick, preset string) (string, error) {
+	opts := []huh.Option[string]{}
+	for _, p := range options {
+		opts = append(opts, huh.NewOption(p.label, p.value))
+	}
+	value := preset
+	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)); err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
 // askChoices offers options to pick any of, the preset ones picked.
 func (o *options) askChoices(title, description string, options, preset []string, validate func([]string) error) ([]string, error) {
 	opts := []huh.Option[string]{}

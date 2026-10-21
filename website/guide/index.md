@@ -77,7 +77,9 @@ unibox init web --agents claude,codex --cpus 4 --memory 50%
 `unibox init -i` asks for all of it instead, as a small form at the terminal:
 the agents to pick from, CPUs and memory to choose among or to give your own,
 each answer checked as you give it - and at the end offers to sign the agents
-in, as `unibox agent login` does. You now have
+in, as `unibox agent login` does. Without sbx it says so first, sbx being the
+runtime unibox prefers, and lets you stop to install it or go on with the
+experimental msb; without `-i` it warns. You now have
 `sandboxes/web/sandbox.yaml` and `sandboxes/web/sandbox.dockerfile`, ready to
 edit. Commit them as you would any repository; unibox reads the working tree,
 so what you see in your editor is what runs.

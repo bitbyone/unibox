@@ -66,6 +66,7 @@ func TestInitFromCopiesATemplateProfileAndSaysWhatItNeeds(t *testing.T) {
 
 func TestInteractiveInitFromPicksTheProfileAndAsksForValues(t *testing.T) {
 	t.Setenv("ACCESSIBLE", "1")
+	fakeHostTools(t)
 	paths, root := cliFixture(t)
 	src := t.TempDir()
 	for rel, body := range map[string]string{

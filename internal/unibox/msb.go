@@ -51,6 +51,9 @@ func (r *MSB) Capabilities() Capabilities { return Capabilities{"vm", true, true
 
 // msbPlatform says whether microsandbox runs here: Apple silicon Macs and
 // Linux.
+// MSBPlatform says whether microsandbox can run here at all.
+func MSBPlatform() bool { return msbPlatform() }
+
 func msbPlatform() bool {
 	switch runtime.GOOS + "/" + runtime.GOARCH {
 	case "darwin/arm64", "linux/amd64", "linux/arm64":

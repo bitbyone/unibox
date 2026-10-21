@@ -92,6 +92,10 @@ func (o *options) initCommand() *cobra.Command {
 		if interactive && !o.canAsk() {
 			return fmt.Errorf("interactive init needs a terminal; pass the profile and flags instead")
 		}
+		// Before anything is laid out, a user without a runtime hears so.
+		if err := o.checkRuntime(cmd, interactive); err != nil {
+			return err
+		}
 		switch {
 		case dir != "":
 			abs, err := unibox.ExpandPath(dir)

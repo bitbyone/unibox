@@ -305,6 +305,10 @@ func (o *options) loginCommand() *cobra.Command {
 // offerLogin asks, at the end of an interactive init, whether to sign the
 // profile's agents in now, as unibox agent login would, and does.
 func (o *options) offerLogin(cmd *cobra.Command, name string) (bool, error) {
+	if missing := o.runtimeMissing(); missing != "" {
+		fmt.Fprintf(o.log, "the agents are signed in once a runtime is installed: unibox agent login -p %s\n", name)
+		return false, nil
+	}
 	sign, err := o.askYes("Sign the agents of profile "+name+" in now?", true)
 	if err != nil || !sign {
 		return false, err

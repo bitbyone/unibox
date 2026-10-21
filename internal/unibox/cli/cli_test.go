@@ -473,6 +473,7 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 	// Accessible mode asks the same questions as numbered lines, which a
 	// test can answer.
 	t.Setenv("ACCESSIBLE", "1")
+	fakeHostTools(t)
 	paths, root := cliFixture(t)
 	// Name; agents: claude besides the preset copilot, then done; CPUs:
 	// something else, 3; memory: the second offered, 8g.
@@ -497,6 +498,36 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	if _, err = os.Stat(filepath.Join(root, "sandboxes", "mobile", "sandbox.yaml")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitWithoutSbxSaysSoAndOffersTheExperimentalRuntime(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	paths, root := cliFixture(t)
+	// Stopping, where msb is offered, or straight away where it is not.
+	if _, _, err := run(t, paths, "1\n", "init", "-i", "--dir", root); err == nil || !strings.Contains(err.Error(), "sbx") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "dev")); err == nil {
+		t.Fatal("init laid a profile out without a runtime")
+	}
+	// Without a terminal it warns and goes on.
+	if _, log, err := run(t, paths, "", "init", "web", "--dir", root); err != nil || !strings.Contains(log, "warning: Docker Sandboxes (sbx) is not installed") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if !unibox.MSBPlatform() {
+		return
+	}
+	// Going on with msb makes it the default, and init goes on.
+	if _, log, err := run(t, paths, "2\nmobile\n0\n\n\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "experimental") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	cfg, _ := paths.LoadConfig()
+	if cfg.DefaultRuntime != "msb" {
+		t.Fatalf("%+v", cfg)
+	}
+	if _, err := os.Stat(filepath.Join(root, "sandboxes", "mobile", "sandbox.yaml")); err != nil {
 		t.Fatal(err)
 	}
 }
