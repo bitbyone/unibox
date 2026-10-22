@@ -451,8 +451,9 @@ func TestInteractiveInitSignsTheAgentsInWhenAsked(t *testing.T) {
 	paths, root := cliFixture(t)
 	// The profile node, claude alone (the preset copilot, first, off;
 	// claude on), the offered resources, sign in now, and claude's token.
-	out, log, err := run(t, paths, "\nnode\n1\n2\n0\n\n\ny\nsk-ant-oat01-tokenvalue\n", "init", "-i", "--dir", root)
-	if err != nil || !strings.Contains(out, "profile node is ready and signs its agents in") {
+	// Then the Agents step, claude's token, the rest left, no build or run.
+	out, log, err := run(t, paths, "\nnode\n1\n2\n0\n\n\n1\nsk-ant-oat01-tokenvalue\n3\nn\nn\n", "init", "-i", "--dir", root)
+	if err != nil || !strings.Contains(log, "✓ Agents  – Services") {
 		t.Fatalf("%v\n%s\n%s", err, out, log)
 	}
 	data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "node", "sandbox.yaml"))
@@ -506,7 +507,7 @@ func TestSSHAgentIsTheUsersChoiceAndSbxIsSetToMatch(t *testing.T) {
 	argv := fakeHostTools(t)
 	paths, root := cliFixture(t)
 	// Yes, in init: sbx forwards the agent from then on.
-	if _, log, err := run(t, paths, "2\nweb\n0\n\n\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "signs with every key") {
+	if _, log, err := run(t, paths, "2\nweb\n0\n\n\n3\nn\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "signs with every key") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	recorded, _ := os.ReadFile(argv)
@@ -517,10 +518,79 @@ func TestSSHAgentIsTheUsersChoiceAndSbxIsSetToMatch(t *testing.T) {
 		t.Fatalf("%v %q", err, out)
 	}
 	// Said once, init does not ask again.
-	if _, log, err := run(t, paths, "mobile\n0\n\n\nn\n", "init", "-i", "--dir", root); err != nil || strings.Contains(log, "SSH agent in sandboxes") {
+	if _, log, err := run(t, paths, "mobile\n0\n\n\n3\nn\nn\n", "init", "-i", "--dir", root); err != nil || strings.Contains(log, "SSH agent in sandboxes") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	if _, _, err := run(t, paths, "", "config", "set", "runtimes.msb.ssh_agent", "true"); err == nil {
 		t.Fatal("msb took an SSH agent")
+	}
+}
+
+func TestTheSetupAddsServicesWithThePersonsOwnValuesInVars(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	fakeHostTools(t)
+	paths, root := cliFixture(t)
+	answers := strings.Join([]string{
+		"",                 // SSH agent: no
+		"web", "0", "", "", // profile: name, agents as offered, CPUs, memory
+		"2",           // Agents: skip
+		"1",           // Services: go on
+		"1", "4", "0", // GitHub and Artifactory
+		"Jan Tobola <jan@example.com>", // GitHub: commit identity
+		"ghp_tokenvalue",               // its token
+		"art.example.com", "",          // Artifactory: host, the name offered
+		"jtobola",        // its user name
+		"art_tokenvalue", // its token
+		"n", "n",         // no build, no run
+	}, "\n") + "\n"
+	_, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml"))
+	vars, _ := os.ReadFile(filepath.Join(paths.Config, "vars.toml"))
+	for _, want := range []string{"github-author: you on github.com, as Name <email>", "author: ${vars.github-author}", "artifactory-art-user: your user name on art.example.com", "ARTIFACTORY_ART_USER: ${vars.artifactory-art-user}", "artifactory-art:", "command: secret:github"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("no %q in\n%s\n%s", want, data, log)
+		}
+	}
+	for _, want := range []string{"github-author = 'Jan Tobola <jan@example.com>'", "artifactory-art-user = 'jtobola'"} {
+		if !strings.Contains(string(vars), want) {
+			t.Fatalf("no %q in\n%s", want, vars)
+		}
+	}
+	if strings.Contains(string(data), "Jan Tobola") || strings.Contains(string(data)+log, "tokenvalue") {
+		t.Fatalf("a value of the person's own went into the profile, or a token was shown:\n%s\n%s", data, log)
+	}
+}
+
+func TestDoctorSaysWhatARunNeeds(t *testing.T) {
+	t.Parallel()
+	paths, root := cliFixture(t)
+	file := filepath.Join(root, "sandboxes", "node", "sandbox.yaml")
+	if err := os.WriteFile(file, []byte("version: 6\nimage: example/image\nagents: [claude]\nvars:\n  team-user: your user name\nenv:\n  - TEAM_USER: ${vars.team-user}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "doctor")
+	if err == nil || !strings.Contains(out, "✗ var team-user") || !strings.Contains(out, "unibox var set team-user <value>") || !strings.Contains(out, "to fix") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "var", "set", "team-user", "me"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, _ = run(t, paths, "", "doctor"); strings.Contains(out, "var team-user") {
+		t.Fatalf("%s", out)
+	}
+	if out, _, _ = run(t, paths, "", "doctor", "--json"); !strings.Contains(out, `"checks"`) || !strings.Contains(out, `"area": "Profile node"`) {
+		t.Fatalf("%s", out)
+	}
+}
+
+func TestARunBeforeAnySetupOffersIt(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	_, log, err := run(t, paths, "n\n", "run")
+	if err == nil || !strings.Contains(log, "unibox is not set up here yet") || !strings.Contains(err.Error(), "unibox init -i") {
+		t.Fatalf("%v\n%s", err, log)
 	}
 }

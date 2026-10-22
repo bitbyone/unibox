@@ -407,20 +407,6 @@ either way, as the runtime asks for it.`, RunE: func(cmd *cobra.Command, args []
 	return c
 }
 
-// offerLogin asks, at the end of an interactive init, whether to sign the
-// profile's agents in now, as unibox agent login would, and does.
-func (o *options) offerLogin(cmd *cobra.Command, name string) (bool, error) {
-	if missing := o.runtimeMissing(); missing != "" {
-		fmt.Fprintf(o.log, "the agents are signed in once a runtime is installed: unibox agent login -p %s\n", name)
-		return false, nil
-	}
-	sign, err := o.askYes("Sign the agents of profile "+name+" in now?", true)
-	if err != nil || !sign {
-		return false, err
-	}
-	return true, o.login(cmd, name, nil, false, false, true, "", "")
-}
-
 // login signs a profile's agents in, the named ones or all: a token into
 // the platform's store where unibox knows how to get one, the profile's
 // auth written, and the runtime told each source.

@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -187,6 +189,11 @@ func (o *options) taskCommand(name string) *cobra.Command {
 		if len(req.Repositories) == 0 {
 			req.Repositories = []unibox.RepoInput{{Source: "."}}
 		}
+		if name == "run" && o.manager.Config.Environments == "" && o.canAsk() {
+			if err := o.setupFirst(cmd, &req); err != nil {
+				return err
+			}
+		}
 		o.defaultTarget(&req)
 		if name == "check" {
 			check, err := o.manager.Check(cmd.Context(), req)
@@ -354,4 +361,33 @@ func (o *options) scriptCommand() *cobra.Command {
 	sandboxFlag(ls, &sandbox)
 	c.AddCommand(run, ls)
 	return c
+}
+
+// setupFirst walks a user who runs unibox before setting it up through
+// init, and has the run go on in the profile it made.
+func (o *options) setupFirst(cmd *cobra.Command, req *unibox.Request) error {
+	setup, err := o.askYes("unibox is not set up here yet. Set it up now? It ends by running the agent in this repository.", true)
+	if err != nil {
+		return err
+	}
+	if !setup {
+		return fmt.Errorf("no environments repository is configured; unibox init -i sets one up")
+	}
+	o.setupForRun = true
+	if home, err := os.UserHomeDir(); err == nil {
+		o.setupRepository = filepath.Join(home, "unibox-environments")
+	}
+	init := o.initCommand()
+	init.SetArgs([]string{"-i"})
+	init.SetIn(o.input)
+	init.SetOut(o.output)
+	init.SetErr(o.log)
+	if err = init.ExecuteContext(cmd.Context()); err != nil {
+		return err
+	}
+	if o.setupProfile == "" {
+		return fmt.Errorf("the setup made no profile; unibox init -i makes one")
+	}
+	req.Profile = o.setupProfile
+	return nil
 }

@@ -25,7 +25,14 @@ func (o *options) accessible() bool { return os.Getenv("ACCESSIBLE") != "" }
 // canAsk says whether a form can be shown: a terminal, or accessible mode.
 func (o *options) canAsk() bool { return !o.json && (o.interactive || o.accessible()) }
 
-func (o *options) runField(field huh.Field) error {
+func (o *options) runField(field huh.Field) (err error) {
+	// huh's accessible mode indexes past a list when its input ends
+	// before an answer; the user hears that the answers ran out instead.
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("the input ended before every question was answered")
+		}
+	}()
 	// The theme asks the terminal for its background; asked here, before
 	// the form reads keys, the answer is not taken for typing.
 	lipgloss.HasDarkBackground()
@@ -56,13 +63,24 @@ func (o *options) describe(description string) {
 
 // askText asks for a line, preset to an answer Enter takes.
 func (o *options) askText(title, description, preset string, validate func(string) error) (string, error) {
-	value := preset
-	field := huh.NewInput().Title(title).Description(description).Value(&value)
+	// The preset shows as a placeholder: what is typed takes its place,
+	// rather than being added to it, and an empty answer takes it.
+	value := ""
+	field := huh.NewInput().Title(title).Description(description).Placeholder(preset).Value(&value)
 	if validate != nil {
-		field.Validate(validate)
+		// An empty answer is the preset, so the preset is what is checked.
+		field.Validate(func(s string) error {
+			if s == "" && preset != "" {
+				return validate(preset)
+			}
+			return validate(s)
+		})
 	}
 	if err := o.runField(field); err != nil {
 		return "", err
+	}
+	if value == "" {
+		value = preset
 	}
 	return value, nil
 }

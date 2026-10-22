@@ -11,7 +11,7 @@ unibox [command] [flags]
 `script`, `instructions`, `template`, `secret`, `var`, `herdr` - and the verb
 follows: `unibox sandbox stop`, `unibox network port publish`. Only the
 everyday commands stand alone: `run`, `resume`, `init`, `context`, `config`,
-`prune`, `destroy` and `version`.
+`doctor`, `prune`, `destroy` and `version`.
 
 **The argument is what the command acts on.** One name - a task, a sandbox,
 a service, a host's rule - or a list of the same kind, such as directories or
@@ -212,6 +212,23 @@ Lays out the environments repository, and adds a profile to it. On a profile
 that exists it completes it to what `init` writes today, and migrates an
 older format. With `--from` it copies the profile from a
 [template](/guide/templates) instead, and walks you through what it needs.
+With `-i` it is a walk through steps - Runtime, Repository, Profile, Values,
+Agents, Services, Build, Run - shown as it goes; from Agents on each can be
+skipped, or the rest left for later, which goes to the build and lists what
+is left. See [Getting started](/guide/).
+
+### `unibox doctor`
+
+```
+unibox doctor [-p <profile>] [--json]
+```
+
+Checks what a run needs and says what to fix: the runtime (`sbx diagnose` -
+installed, signed in, its daemon - and the SSH agent against your choice),
+the environments repository, your `vars.toml`, and each profile's values,
+tokens, agent logins and image. A missing login or image is a warning, as
+the first run takes care of it; anything else that would stop a run is a
+failure, and exits 4.
 
 | Flag | Meaning |
 | --- | --- |

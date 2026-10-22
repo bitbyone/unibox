@@ -478,7 +478,8 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 	// Name; agents: claude besides the preset copilot, which comes first,
 	// then done; CPUs: something else, 3; memory: the preset, 8g.
 	// The SSH agent first: the recommended no.
-	answers := "\nweb\n2\n0\n6\n3\n1\nn\n"
+	// Then the rest left for later, no build, no run.
+	answers := "\nweb\n2\n0\n6\n3\n1\n3\nn\nn\n"
 	out, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)
@@ -489,13 +490,16 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 			t.Fatalf("no %q in\n%s\n%s", want, data, out)
 		}
 	}
-	for _, want := range []string{"Profile name", "Agents", "something else", "Memory", "Sign the agents of profile web in now?"} {
+	for _, want := range []string{"Profile name", "Agents", "something else", "Memory", "✓ Runtime  ✓ Profile  ▸ Agents  · Services  · Build  · Run   (3/6)", "– Services"} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("not asked %q:\n%s", want, log)
 		}
 	}
+	if !strings.Contains(out, "left for later:\n  unibox agent login -i -p web\n  unibox service add <name> -p web\n  unibox profile build web\n") {
+		t.Fatalf("%s", out)
+	}
 	// An answer of the wrong form is asked again, not taken.
-	if _, log, err = run(t, paths, "Bad Name\nmobile\n0\n1\n1\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "invalid name") {
+	if _, log, err = run(t, paths, "Bad Name\nmobile\n0\n1\n1\n3\nn\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "invalid name") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	if _, err = os.Stat(filepath.Join(root, "sandboxes", "mobile", "sandbox.yaml")); err != nil {
@@ -521,7 +525,7 @@ func TestInitWithoutSbxSaysSoAndOffersTheExperimentalRuntime(t *testing.T) {
 		return
 	}
 	// Going on with msb makes it the default, and init goes on.
-	if _, log, err := run(t, paths, "2\nmobile\n0\n\n\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "experimental") {
+	if _, log, err := run(t, paths, "2\nmobile\n0\n\n\n3\nn\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "experimental") {
 		t.Fatalf("%v\n%s", err, log)
 	}
 	cfg, _ := paths.LoadConfig()

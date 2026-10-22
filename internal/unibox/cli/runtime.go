@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os/exec"
 
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
@@ -60,6 +61,54 @@ func (o *options) checkRuntime(cmd *cobra.Command, interactive bool) error {
 	fmt.Fprintln(o.log, "new sandboxes run in msb (unibox config unset default_runtime goes back to sbx once it is installed)")
 	if err = msb.Available(cmd.Context()); err != nil {
 		fmt.Fprintf(o.log, "before the first run: %v\n", err)
+	}
+	return nil
+}
+
+// runtimeHealth is the runtime checking itself, for the user to see what
+// to fix before a sandbox fails on it: the checks that fail, and, where
+// the user is not signed in, the sign-in offered at once.
+func (o *options) runtimeHealth(cmd *cobra.Command) error {
+	d, ok := o.manager.Runtimes[o.manager.DefaultRuntime()].(unibox.Diagnoser)
+	if !ok || o.runtimeMissing() != "" {
+		return nil
+	}
+	var checks []unibox.RuntimeCheck
+	err := o.working("checking "+o.manager.DefaultRuntime(), func() error {
+		var err error
+		checks, err = d.Diagnose(cmd.Context())
+		return err
+	})
+	if err != nil {
+		fmt.Fprintf(o.log, "could not check the runtime: %v\n", err)
+		return nil
+	}
+	failed := false
+	for _, c := range checks {
+		if c.Status != "fail" {
+			continue
+		}
+		failed = true
+		fmt.Fprintf(o.log, "✗ %s - %s\n", c.Name, c.Message)
+		if c.Hint != "" {
+			fmt.Fprintf(o.log, "    %s\n", c.Hint)
+		}
+		if c.Name == "Authentication" && o.manager.DefaultRuntime() == "sbx" {
+			login, err := o.askYes("Sign in to Docker now (sbx login)?", true)
+			if err != nil {
+				return err
+			}
+			if login {
+				l := exec.CommandContext(cmd.Context(), "sbx", "login")
+				l.Stdin, l.Stdout, l.Stderr = o.input, o.log, o.log
+				if err := l.Run(); err != nil {
+					return fmt.Errorf("sbx login did not finish; run it yourself, then unibox init again: %w", err)
+				}
+			}
+		}
+	}
+	if failed {
+		fmt.Fprintln(o.log, "unibox doctor checks again once you have fixed it")
 	}
 	return nil
 }

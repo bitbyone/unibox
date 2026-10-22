@@ -114,6 +114,14 @@ about it. Keep command output short: pipe through `head`, `tail` or
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
+- **init -i is a walk of steps** (`wizard.go`): Runtime, Repository,
+  Profile, Values, Agents, Services, Build, Run, each shown as it goes;
+  from Agents on, each can be skipped or the rest left for later. A step
+  reuses its command (`service add` runs as itself), so the walk and the
+  commands never differ. `unibox doctor` checks what the walk sets up.
+- **sbx's JSON changes shape between releases** (0.48 made `ls` and
+  `template ls` bare lists); read a list through `sbxList`, which takes
+  either.
 - **The SSH agent is the user's call.** sbx forwards it by default; unibox
   refuses that until `runtimes.sbx.ssh_agent` says yes or no (`init -i`
   asks, recommending no) and sets sbx to match. With it, sessions get

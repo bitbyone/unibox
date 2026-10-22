@@ -570,3 +570,21 @@ func TestASandboxUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
 		t.Fatalf("%v", env)
 	}
 }
+
+func TestSbxListsReadInTheFormOfEitherVersion(t *testing.T) {
+	t.Parallel()
+	type box struct{ Name, Status string }
+	for _, in := range []string{
+		`{"sandboxes":[{"name":"unibox-dev","status":"running"}]}`,
+		`[{"name":"unibox-dev","status":"running","last_used_at":"2026-09-08T14:49:59Z"}]`,
+		"note from sbx\n[{\"name\":\"unibox-dev\",\"status\":\"running\"}]",
+	} {
+		got, err := sbxList[box]([]byte(in), "sandboxes")
+		if err != nil || len(got) != 1 || got[0].Name != "unibox-dev" {
+			t.Fatalf("%s: %v %+v", in, err, got)
+		}
+	}
+	if got, err := sbxList[box]([]byte(`[]`), "sandboxes"); err != nil || len(got) != 0 {
+		t.Fatalf("%v %+v", err, got)
+	}
+}

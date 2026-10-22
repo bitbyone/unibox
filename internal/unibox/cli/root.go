@@ -40,6 +40,16 @@ type options struct {
 	// inProfile writes a token's command into the profile, versioned with
 	// the repository, rather than into the person's vars.toml.
 	inProfile bool
+	// wiz is the walk of an interactive init under way.
+	wiz *wizard
+	// setupForRun says an init was started by a run with nothing set up:
+	// it leaves out its own Run step, and setupProfile is what it made,
+	// for the run to go on with; setupRepository is where the
+	// environments repository goes by default then, as here is the
+	// repository the run is for.
+	setupForRun     bool
+	setupProfile    string
+	setupRepository string
 }
 
 func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command {
@@ -68,7 +78,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
 		o.taskGroup(), o.sandboxGroup(), o.profileGroup(), o.runtimeGroup(),
 		o.instructionsCommand(), o.agentCommand(), o.serviceCommand(), o.networkCommand(), o.scriptCommand(),
-		o.secretCommand(), o.varCommand(), o.templateCommand(), o.herdrCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
+		o.secretCommand(), o.varCommand(), o.templateCommand(), o.herdrCommand(), o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
 	// unibox runs itself as this under the shell that fetched a running
 	// msb sandbox's tokens, to hand them to msb; it is no command for people.
 	root.AddCommand(&cobra.Command{Use: unibox.MSBSecretsCommand + " sandbox spec...", Hidden: true, Args: cobra.MinimumNArgs(2), RunE: func(cmd *cobra.Command, args []string) error {

@@ -64,6 +64,17 @@ adds the profile format and the API version it speaks.
 
 ## Use
 
+The quickest start is one command, which walks you from nothing to a running
+agent - runtime, repository, profile, agents, services, build - showing where
+you are, and lets you leave the rest for later at any step from the agents on:
+
+```sh
+unibox init -i                                    # or unibox run in a repository, before any setup
+unibox doctor                                     # what a run needs, and what to fix
+```
+
+Each step also has its command:
+
 ```sh
 unibox init --dir ~/my-envs                       # lay out your environments repo and use it
 unibox init web --agents claude,codex             # add profile "web" (or: unibox init -i)

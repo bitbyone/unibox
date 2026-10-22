@@ -34,6 +34,9 @@ func (o *options) initFrom(cmd *cobra.Command, root, previous, name, from, use, 
 	if use == "" {
 		use = name
 	}
+	if interactive {
+		o.wiz.begin(stepProfile)
+	}
 	if use == "" {
 		if !interactive || len(profiles) == 0 {
 			return fmt.Errorf("say which of template %s's profiles to copy: %s (--use, or the profile's name)", template, strings.Join(profiles, ", "))
@@ -72,50 +75,24 @@ func (o *options) initFrom(cmd *cobra.Command, root, previous, name, from, use, 
 		return err
 	}
 	fmt.Fprintf(o.output, "copied profile %s of template %s as %s into %s\n", use, template, name, root)
-	if err = o.completeProfile(cmd, name, interactive); err != nil {
-		return err
+	if interactive {
+		o.setupProfile = name
+		return o.setupSteps(cmd, o.wiz, name)
 	}
-	return nil
+	return o.completeProfile(cmd, name)
 }
 
-// completeProfile asks for what a profile needs of the user before it can
-// run - their own values and its tokens - and offers the build. Without a
-// terminal it says what is missing and how to give it.
-func (o *options) completeProfile(cmd *cobra.Command, name string, interactive bool) error {
+// completeProfile says what a profile copied without -i needs of the user
+// before it can run - their own values and its tokens - and how to give it.
+func (o *options) completeProfile(cmd *cobra.Command, name string) error {
 	ctx := cmd.Context()
 	p, err := o.manager.Profile(name)
 	if err != nil {
 		return err
 	}
 	todo := []string{}
-	if missing := p.MissingVars(); len(missing) > 0 {
-		u, err := o.paths.LoadVars()
-		if err != nil {
-			return err
-		}
-		for _, v := range missing {
-			if !interactive {
-				todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
-				continue
-			}
-			value, err := o.askText(v, p.Vars[v]+" - kept in your vars.toml; empty sets it later.", "", func(s string) error {
-				if s == "" {
-					return nil
-				}
-				return unibox.ValidVar(v, s)
-			})
-			if err != nil {
-				return err
-			}
-			if value == "" {
-				todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
-				continue
-			}
-			u.Vars[v] = value
-		}
-		if err = o.paths.SaveVars(u); err != nil {
-			return err
-		}
+	for _, v := range p.MissingVars() {
+		todo = append(todo, fmt.Sprintf("unibox var set %s <value>   # %s", v, p.Vars[v]))
 	}
 	// Secrets read by the person's own command are theirs to keep there.
 	if refs := slices.DeleteFunc(p.SecretRefs(), func(n string) bool { return p.ReadBy(n) != "" }); len(refs) > 0 {
@@ -127,15 +104,8 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 			if ok, _ := store.Has(ctx, ref); ok {
 				continue
 			}
-			what, explain, page := secretUse(p, ref)
-			if !interactive {
-				todo = append(todo, fmt.Sprintf("unibox secret set %s   # %s", ref, what))
-				continue
-			}
-			fmt.Fprintf(o.log, "%s:\n", what)
-			if err := o.ensureSecret(cmd, store, ref, false, explain, page); err != nil {
-				return err
-			}
+			what, _, _ := secretUse(p, ref)
+			todo = append(todo, fmt.Sprintf("unibox secret set %s   # %s", ref, what))
 		}
 	}
 	if len(todo) > 0 {
@@ -144,20 +114,6 @@ func (o *options) completeProfile(cmd *cobra.Command, name string, interactive b
 			fmt.Fprintf(o.output, "  %s\n", line)
 		}
 		return nil
-	}
-	if interactive {
-		if _, err := o.offerLogin(cmd, name); err != nil {
-			return err
-		}
-		build, err := o.askYes("Build the image of profile "+name+" now?", true)
-		if err != nil {
-			return err
-		}
-		if build {
-			if err := o.manager.Build(ctx, name, "", false); err != nil {
-				return err
-			}
-		}
 	}
 	fmt.Fprintf(o.output, "profile %s is ready; start with unibox run --profile %s --agent <agent> in a repository\n", name, name)
 	return nil

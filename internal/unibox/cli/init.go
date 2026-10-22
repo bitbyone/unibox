@@ -92,12 +92,34 @@ func (o *options) initCommand() *cobra.Command {
 		if interactive && !o.canAsk() {
 			return fmt.Errorf("interactive init needs a terminal; pass the profile and flags instead")
 		}
+		var w *wizard
+		if interactive {
+			steps := []string{stepRuntime}
+			if root == "" && dir == "" {
+				steps = append(steps, stepRepository)
+			}
+			steps = append(steps, stepProfile)
+			if from != "" {
+				steps = append(steps, stepValues)
+			}
+			steps = append(steps, stepAgents, stepServices, stepBuild)
+			if !o.setupForRun {
+				steps = append(steps, stepRun)
+			}
+			w = o.newWizard(steps...)
+			o.wiz = w
+			w.begin(stepRuntime)
+		}
 		// Before anything is laid out, a user without a runtime hears so,
-		// and says whether sandboxes may use their SSH agent.
+		// sees what of it needs fixing, and says whether sandboxes may use
+		// their SSH agent.
 		if err := o.checkRuntime(cmd, interactive); err != nil {
 			return err
 		}
 		if interactive && o.runtimeMissing() == "" {
+			if err := o.runtimeHealth(cmd); err != nil {
+				return err
+			}
 			if err := o.askSSHAgent(cmd); err != nil {
 				return err
 			}
@@ -113,9 +135,13 @@ func (o *options) initCommand() *cobra.Command {
 			}
 			root = abs
 		case root == "" && interactive:
+			w.begin(stepRepository)
 			wd, err := os.Getwd()
 			if err != nil {
 				return err
+			}
+			if o.setupRepository != "" {
+				wd = o.setupRepository
 			}
 			v, err := o.askText("Environments repository", "No environments repository is configured yet; it holds your profiles and is yours to keep in git.", wd, func(s string) error {
 				if strings.TrimSpace(s) == "" {
@@ -145,6 +171,7 @@ func (o *options) initCommand() *cobra.Command {
 			return fmt.Errorf("--use and --template go with --from")
 		}
 		if interactive {
+			w.begin(stepProfile)
 			if name == "" {
 				v, err := o.askText("Profile name", "Lower-case letters, digits and hyphens; a profile that exists is completed.", "dev", unibox.ValidName)
 				if err != nil {
@@ -247,14 +274,8 @@ func (o *options) initCommand() *cobra.Command {
 			return nil
 		}
 		if interactive {
-			signed, err := o.offerLogin(cmd, name)
-			if err != nil {
-				return err
-			}
-			if signed {
-				fmt.Fprintf(o.output, "profile %s is ready and signs its agents in; add forges with unibox service add <name> -p %s, then unibox run builds and starts it\n", name, name)
-				return nil
-			}
+			o.setupProfile = name
+			return o.setupSteps(cmd, w, name)
 		}
 		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox agent login -p %s, add forges with unibox service add <name> -p %s, then unibox run builds and starts it\n", name, name, name)
 		return nil

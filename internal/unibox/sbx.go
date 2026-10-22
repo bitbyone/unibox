@@ -101,14 +101,12 @@ func (r *SBX) List(ctx context.Context) ([]Box, error) {
 	if err != nil {
 		return nil, err
 	}
-	var response struct {
-		Sandboxes []struct{ Name, Status, Memory, ID string } `json:"sandboxes"`
-	}
-	if err = json.Unmarshal(b, &response); err != nil {
+	sandboxes, err := sbxList[struct{ Name, Status, Memory, ID string }](b, "sandboxes")
+	if err != nil {
 		return nil, fmt.Errorf("cannot parse sbx sandbox list; update sbx: %w", err)
 	}
 	boxes := []Box{}
-	for _, v := range response.Sandboxes {
+	for _, v := range sandboxes {
 		boxes = append(boxes, Box{v.Name, v.Status, v.Memory, v.ID})
 	}
 	return boxes, nil
@@ -118,14 +116,12 @@ func (r *SBX) Images(ctx context.Context) ([]Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	var response struct {
-		Images []struct{ ID, Repository, Tag string } `json:"images"`
-	}
-	if err = json.Unmarshal(b, &response); err != nil {
+	listed, err := sbxList[struct{ ID, Repository, Tag string }](b, "images")
+	if err != nil {
 		return nil, err
 	}
 	images := []Image{}
-	for _, v := range response.Images {
+	for _, v := range listed {
 		ref := strings.TrimPrefix(v.Repository, "docker.io/") + ":" + v.Tag
 		images = append(images, Image{ref, v.ID})
 	}
@@ -422,19 +418,17 @@ func (r *SBX) UniboxImages(ctx context.Context) ([]RuntimeImage, error) {
 	if err != nil {
 		return nil, err
 	}
-	var list struct {
-		Images []struct {
-			Repository string    `json:"repository"`
-			Tag        string    `json:"tag"`
-			Created    time.Time `json:"created_at"`
-		} `json:"images"`
-	}
-	if err = json.Unmarshal(b, &list); err != nil {
+	listed, err := sbxList[struct {
+		Repository string    `json:"repository"`
+		Tag        string    `json:"tag"`
+		Created    time.Time `json:"created_at"`
+	}](b, "images")
+	if err != nil {
 		return nil, fmt.Errorf("sbx template ls answered in a form unibox does not know; upgrade unibox: %w", err)
 	}
 	seen := map[string]bool{}
 	out := []RuntimeImage{}
-	for _, im := range list.Images {
+	for _, im := range listed {
 		repo := strings.TrimPrefix(strings.TrimPrefix(im.Repository, "docker.io/"), "library/")
 		ref := repo + ":" + im.Tag
 		switch {
@@ -489,4 +483,59 @@ func (r *SBX) Unmount(ctx context.Context, sandbox, host, target string) error {
 		return fmt.Errorf("sbx did not unmount %s from %s: %w", host, target, err)
 	}
 	return nil
+}
+
+// RuntimeCheck is one of a runtime's own checks of itself: whether it is
+// signed in, whether its daemon answers.
+type RuntimeCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"` // pass, warn, fail or skip
+	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+// Diagnoser is a runtime that checks itself.
+type Diagnoser interface {
+	Diagnose(ctx context.Context) ([]RuntimeCheck, error)
+}
+
+// Diagnose is sbx diagnose: its installation, the daemon, the sign-in.
+// Its details, which may name the user's account, are left out.
+func (r *SBX) Diagnose(ctx context.Context) ([]RuntimeCheck, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "diagnose", "--format", "json"))
+	if i := bytes.IndexByte(b, '{'); i >= 0 {
+		b = b[i:]
+	} else if err != nil {
+		return nil, fmt.Errorf("sbx diagnose did not finish: %w", err)
+	}
+	var report struct {
+		Checks []RuntimeCheck `json:"checks"`
+	}
+	if err := json.Unmarshal(b, &report); err != nil {
+		return nil, fmt.Errorf("could not read sbx diagnose --format json: %w", err)
+	}
+	return report.Checks, nil
+}
+
+// sbxList reads a list sbx prints as JSON: a list itself since sbx 0.48,
+// an object holding it under key before.
+func sbxList[T any](b []byte, key string) ([]T, error) {
+	b = bytes.TrimSpace(b)
+	if i := bytes.IndexAny(b, "[{"); i > 0 {
+		b = b[i:]
+	}
+	var list []T
+	if bytes.HasPrefix(b, []byte("[")) {
+		err := json.Unmarshal(b, &list)
+		return list, err
+	}
+	var wrapped map[string]json.RawMessage
+	if err := json.Unmarshal(b, &wrapped); err != nil {
+		return nil, err
+	}
+	if raw, ok := wrapped[key]; ok && string(raw) != "null" {
+		err := json.Unmarshal(raw, &list)
+		return list, err
+	}
+	return list, nil
 }

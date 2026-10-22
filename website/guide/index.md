@@ -74,12 +74,30 @@ the host's:
 unibox init web --agents claude,codex --cpus 4 --memory 50%
 ```
 
-`unibox init -i` asks for all of it instead, as a small form at the terminal:
-the agents to pick from, CPUs and memory to choose among or to give your own,
-each answer checked as you give it - and at the end offers to sign the agents
-in, as `unibox agent login` does. Without sbx it says so first, sbx being the
-runtime unibox prefers, and lets you stop to install it or go on with the
-experimental msb; without `-i` it warns. You now have
+`unibox init -i` walks you through all of it instead, as small forms at the
+terminal, each answer checked as you give it. It shows where you are and what
+is left:
+
+```
+✓ Runtime  ✓ Repository  ✓ Profile  ▸ Agents  · Services  · Build  · Run   (4/7)
+```
+
+| Step | What it does |
+| --- | --- |
+| Runtime | checks sbx - installed, signed in (offering `sbx login`), its daemon - and asks whether sandboxes may use your SSH agent. Without sbx it offers the experimental msb |
+| Repository | where the environments repository goes, when none is configured |
+| Profile | its name, agents, CPUs and memory - or, with `--from`, which of a template's profiles to copy |
+| Values | with `--from`, the values and tokens the template's profile asks of you |
+| Agents | signs the agents in, as `unibox agent login -i` |
+| Services | the forges your repositories live on and services such as Artifactory: their tokens, and your commit identity or user name kept in your `vars.toml`, the profile referring to it |
+| Build | builds the image |
+| Run | runs an agent in the repository you started in |
+
+From Agents on, each step can be skipped, or the rest left for later: the
+profile is written as it is, the build is offered, and init lists what to
+run later. Without sbx `init` without `-i` warns. `unibox run` before
+anything is set up offers this walk, and goes on to run the agent at its
+end. You now have
 `sandboxes/web/sandbox.yaml` and `sandboxes/web/sandbox.dockerfile`, ready to
 edit. Commit them as you would any repository; unibox reads the working tree,
 so what you see in your editor is what runs.
