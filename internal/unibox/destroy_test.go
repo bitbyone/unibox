@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,7 +38,10 @@ func TestDestroyRemovesEverySandboxOnlyWhenNoWorkIsLost(t *testing.T) {
 	if s, _ := m.Paths.ReadState(); len(s.Sandboxes) != 0 || f.removes != 2 {
 		t.Fatalf("%d sandboxes left, %d removed", len(s.Sandboxes), f.removes)
 	}
-	// All takes unibox's own files too, and leaves the repository.
+	// All takes unibox's own files too, and a repository in git stays.
+	if out, err := exec.Command("git", "-C", m.Config.Environments, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
 	if err = m.Destroy(ctx, DestroyOptions{All: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +51,33 @@ func TestDestroyRemovesEverySandboxOnlyWhenNoWorkIsLost(t *testing.T) {
 		}
 	}
 	if _, err := os.Stat(filepath.Join(m.Config.Environments, "sandboxes", "node", "sandbox.yaml")); err != nil {
-		t.Fatal("the environments repository went too")
+		t.Fatal("the environments repository in git went too")
+	}
+}
+
+func TestDestroyAllRemovesARepositoryNotInGit(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	root := m.Config.Environments
+	if remove, why := EnvironmentsFate(context.Background(), root); !remove {
+		t.Fatalf("kept: %s", why)
+	}
+	if err := m.Destroy(context.Background(), DestroyOptions{All: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("%s stayed: %v", root, err)
+	}
+	// A directory that is no environments repository, or one holding a
+	// file unibox did not lay out, is never removed.
+	other := t.TempDir()
+	if remove, why := EnvironmentsFate(context.Background(), other); remove || !strings.Contains(why, "does not look like") {
+		t.Fatalf("%v %s", remove, why)
+	}
+	mine := profileFixture(t)
+	write(t, filepath.Join(mine, "notes.md"), "mine")
+	if remove, why := EnvironmentsFate(context.Background(), mine); remove || !strings.Contains(why, "notes.md") {
+		t.Fatalf("%v %s", remove, why)
 	}
 }
 

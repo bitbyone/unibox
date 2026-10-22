@@ -311,7 +311,7 @@ unless `--force` discards them. A mounted host directory is never deleted.
 
 | Flag | Also removes |
 | --- | --- |
-| `--all` | unibox's images; in sbx, the custom secrets carrying unibox's placeholders, a secret read by unibox's lookup and the domain approvals it added to `credentials.yaml` - a login or secret made with sbx stays; the herdr plugin; `~/.config/unibox` (state, configuration, `vars.toml`) and `~/.cache/unibox`. The environments repository stays where it is; only the configuration naming it goes |
+| `--all` | unibox's images; in sbx, the custom secrets carrying unibox's placeholders, a secret read by unibox's lookup and the domain approvals it added to `credentials.yaml` - a login or secret made with sbx stays; the herdr plugin; `~/.config/unibox` (state, configuration, `vars.toml`) and `~/.cache/unibox`; and the environments repository, unless it is in git - then it is your work and stays. One holding anything unibox did not lay out stays too |
 | `--secrets` | the tokens unibox keeps in the platform's store (`unibox secret ls`) |
 | `--msb` | the microsandbox runtime in `~/.microsandbox` |
 | `--force` | sandboxes with running sessions or unpushed work, discarding it |

@@ -18,8 +18,9 @@ never deleted.
 
 --all goes on to what unibox made outside its sandboxes: its images, the
 secrets and approvals it gave sbx (what you made with sbx stays), the herdr
-plugin, and its state, configuration and your vars.toml. The environments
-repository stays where it is; only the configuration naming it goes.
+plugin, and its state, configuration and your vars.toml - and the
+environments repository, unless it is in git: then it is your work, and
+stays where it is.
 --secrets removes the tokens unibox keeps in the platform's store too, and
 --msb the microsandbox runtime in ~/.microsandbox.`, RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := o.paths.ReadState()
@@ -31,8 +32,15 @@ repository stays where it is; only the configuration naming it goes.
 			tasks += len(b.Tasks)
 		}
 		what := []string{fmt.Sprintf("%d sandboxes and their %d tasks", len(s.Sandboxes), tasks)}
+		removeRepo, why := false, ""
+		root := o.manager.Config.Environments
 		if opts.All {
 			what = append(what, "unibox's images, its sbx secrets and approvals, the herdr plugin, its state, configuration and your vars.toml")
+			if root != "" {
+				if removeRepo, why = unibox.EnvironmentsFate(cmd.Context(), root); removeRepo {
+					what = append(what, "the environments repository "+root+" ("+why+")")
+				}
+			}
 		}
 		if opts.Secrets {
 			what = append(what, "the tokens in the platform's store")
@@ -51,7 +59,10 @@ repository stays where it is; only the configuration naming it goes.
 			return err
 		}
 		if opts.All {
-			return o.success("unibox is as if never used here; the environments repository stays, unibox init --dir <path> takes it up again")
+			if root == "" || removeRepo {
+				return o.success("unibox is as if never used here")
+			}
+			return o.success(fmt.Sprintf("unibox is as if never used here; the environments repository %s stays, as %s - unibox init --dir %s takes it up again", root, why, root))
 		}
 		if err := o.forgetContext(o.manager.Config.Context.Sandbox); err != nil {
 			return err

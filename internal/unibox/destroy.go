@@ -33,7 +33,11 @@ type RuntimeCleaner interface {
 // forced, it checks every sandbox before removing any, so work is never
 // half lost: one with a running session or unpushed work stops it all.
 func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
+	removeRepo := false
 	if o.All && m.Config.Environments != "" {
+		removeRepo, _ = EnvironmentsFate(ctx, m.Config.Environments)
+	}
+	if o.All && m.Config.Environments != "" && !removeRepo {
 		for _, dir := range []string{m.Paths.Config, m.Paths.Cache} {
 			if rel, err := filepath.Rel(dir, m.Config.Environments); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
 				return fmt.Errorf("the environments repository %s lies in %s, which --all removes; move it elsewhere first (unibox config set environments <path>)", m.Config.Environments, dir)
@@ -141,10 +145,16 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 		}
 	}
 	if o.All {
+		// The environments repository goes with the rest unless it is in
+		// git, where it is the user's work kept apart from unibox.
+		if removeRepo {
+			if err := os.RemoveAll(m.Config.Environments); err != nil {
+				return err
+			}
+			fmt.Fprintf(m.Log, "removed %s\n", m.Config.Environments)
+		}
 		// Last, as the locks live there: unibox's state, configuration and
-		// the person's vars.toml, and what it cached. The environments
-		// repository is the user's work and stays; only the configuration
-		// naming it goes.
+		// the person's vars.toml, and what it cached.
 		for _, dir := range []string{m.Paths.Cache, m.Paths.Config} {
 			if err := os.RemoveAll(dir); err != nil {
 				return err
@@ -289,4 +299,37 @@ func removeBindings(file string, log io.Writer) error {
 	}
 	fmt.Fprintf(log, "removed %d domain approvals unibox added from %s\n", removed, file)
 	return nil
+}
+
+// EnvironmentsFate says whether destroy --all removes the environments
+// repository, and why or why not. One in git - its own repository or
+// inside another - is the user's work and stays; one that is not goes
+// with unibox's state, as init laid it out. A directory that does not look
+// like one, or a home or root, is never removed.
+func EnvironmentsFate(ctx context.Context, root string) (bool, string) {
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return false, "it is not there"
+	}
+	home, _ := os.UserHomeDir()
+	if abs, _ := filepath.Abs(root); abs == "/" || abs == home {
+		return false, "it is your home or the root"
+	}
+	if hostCommand(ctx, "git", "-C", root, "rev-parse", "--is-inside-work-tree").Run() == nil {
+		return false, "it is in git"
+	}
+	if info, err := os.Stat(filepath.Join(root, "sandboxes")); err != nil || !info.IsDir() || CheckLayout(root) != nil {
+		return false, "it does not look like an environments repository"
+	}
+	// Only what unibox lays out; anything else there is the user's.
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false, err.Error()
+	}
+	for _, e := range entries {
+		if !slices.Contains([]string{"sandboxes", "_shared", ".shared", ".templates", ".DS_Store"}, e.Name()) {
+			return false, "it holds " + e.Name() + ", which unibox did not lay out"
+		}
+	}
+	return true, "it is not in git"
 }
