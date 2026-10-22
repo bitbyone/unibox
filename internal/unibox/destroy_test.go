@@ -103,3 +103,29 @@ func TestSBXCleanRemovesOnlyTheSecretsUniboxMade(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+// notInstalled is a runtime that installs itself on first use and has not
+// been, as msb before its first sandbox.
+type notInstalled struct {
+	*fakeRuntime
+	looked bool
+}
+
+func (n *notInstalled) Installed() bool { return false }
+func (n *notInstalled) List(context.Context) ([]Box, error) {
+	n.looked = true
+	return nil, nil
+}
+
+func TestDestroyLeavesARuntimeThatNeverRanUninstalled(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	idle := &notInstalled{fakeRuntime: f}
+	m.Runtimes["idle"] = idle
+	if err := m.Destroy(context.Background(), DestroyOptions{All: true}); err != nil {
+		t.Fatal(err)
+	}
+	if idle.looked {
+		t.Fatal("destroy looked into a runtime that was never installed, which installs it")
+	}
+}

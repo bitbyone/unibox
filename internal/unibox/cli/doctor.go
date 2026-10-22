@@ -134,6 +134,11 @@ func (o *options) doctorCommand() *cobra.Command {
 				add(area, "logins and image", "warn", "not checked: "+err.Error(), "")
 				continue
 			}
+			if !unibox.InUse(ctx, r) {
+				// Looking would install it; the first run does that.
+				add(area, "logins and image", "warn", "not checked: "+rt+" installs itself on the first run", "")
+				continue
+			}
 			if a, isAuth := r.(unibox.Authenticator); isAuth {
 				// A missing login is asked for by the first run, so it is
 				// told, not failed.

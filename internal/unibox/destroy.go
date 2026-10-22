@@ -70,7 +70,7 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 	// Sandboxes of unibox's the state no longer knows.
 	for _, rt := range sortedKeys(m.Runtimes) {
 		r := m.Runtimes[rt]
-		if r.Available(ctx) != nil {
+		if !InUse(ctx, r) {
 			continue
 		}
 		boxes, err := r.List(ctx)
@@ -89,7 +89,7 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 	if o.All {
 		for _, rt := range sortedKeys(m.Runtimes) {
 			r := m.Runtimes[rt]
-			if r.Available(ctx) != nil {
+			if !InUse(ctx, r) {
 				continue
 			}
 			if pruner, ok := r.(ImagePruner); ok {

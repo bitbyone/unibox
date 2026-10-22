@@ -95,6 +95,16 @@ func (r *MSB) Available(ctx context.Context) error {
 	return nil
 }
 
+// Installed says whether msb is on disk now - not whether it could be
+// installed - so a cleanup asks nothing of a runtime that never ran.
+func (r *MSB) Installed() bool {
+	if r.Binary != "" {
+		return true
+	}
+	_, err := msbResolve()
+	return err == nil
+}
+
 // binary finds msb, installing the runtime the first time it is needed.
 func (r *MSB) binary(ctx context.Context) (string, error) {
 	r.mu.Lock()

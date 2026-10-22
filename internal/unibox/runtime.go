@@ -114,6 +114,22 @@ func IsExperimental(r Runtime) bool {
 // Present says whether a runtime is there to use without asking it
 // anything: an installed program, or one unibox brings along. Choosing a
 // runtime for a new sandbox takes the first present one.
+// Installer is a runtime that installs itself the first time it is used;
+// Installed says whether it has been.
+type Installer interface {
+	Installed() bool
+}
+
+// InUse says whether a runtime may hold anything of unibox's: it is
+// available, and installed if it installs itself, so looking does not
+// install it.
+func InUse(ctx context.Context, r Runtime) bool {
+	if i, ok := r.(Installer); ok && !i.Installed() {
+		return false
+	}
+	return r.Available(ctx) == nil
+}
+
 type Present interface {
 	Present() bool
 }

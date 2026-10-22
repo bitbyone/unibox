@@ -99,7 +99,7 @@ func (m *Manager) Prune(ctx context.Context) ([]string, error) {
 	removed := []string{}
 	for _, rt := range sortedKeys(m.Runtimes) {
 		pruner, ok := m.Runtimes[rt].(ImagePruner)
-		if !ok || m.Runtimes[rt].Available(ctx) != nil {
+		if !ok || !InUse(ctx, m.Runtimes[rt]) {
 			continue
 		}
 		images, err := pruner.UniboxImages(ctx)
