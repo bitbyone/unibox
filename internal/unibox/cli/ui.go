@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"slices"
-	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -103,7 +102,7 @@ func (o *options) askChoice(title, description string, options []string, preset 
 	if value == "" && len(options) > 0 {
 		value = options[0]
 	}
-	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value).Height(fieldHeight(len(opts), description))); err != nil {
+	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)); err != nil {
 		return "", err
 	}
 	if value == otherChoice {
@@ -132,7 +131,7 @@ func (o *options) askPick(title, description string, options []pick, preset stri
 		}
 	}
 	value := preset
-	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value).Height(fieldHeight(len(opts), description))); err != nil {
+	if err := o.runField(huh.NewSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)); err != nil {
 		return "", err
 	}
 	return value, nil
@@ -152,7 +151,7 @@ func (o *options) askChoices(title, description string, options, preset []string
 	}
 	opts := append(picked, rest...)
 	value := slices.Clone(preset)
-	field := huh.NewMultiSelect[string]().Title(title).Description(description).Options(opts...).Value(&value).Height(fieldHeight(len(opts), description))
+	field := huh.NewMultiSelect[string]().Title(title).Description(description).Options(opts...).Value(&value)
 	if validate != nil {
 		field.Validate(validate)
 	}
@@ -171,12 +170,6 @@ func (o *options) askYes(title string, preset bool) (bool, error) {
 		return false, err
 	}
 	return value, nil
-}
-
-// fieldHeight is a list's height with every option in sight, its title
-// and description besides.
-func fieldHeight(options int, description string) int {
-	return options + 2 + strings.Count(description, "\n") + 1
 }
 
 type byteReader struct{ r io.Reader }

@@ -84,7 +84,7 @@ func TestInteractiveInitFromPicksTheProfileAndAsksForValues(t *testing.T) {
 	// now, no build.
 	// Values step on, the var; the rest left; no build, no run.
 	out, log, err := run(t, paths, "\n2\nweb\n1\ntobola\n3\nn\nn\n", "init", "-i", "--from", src, "--template", "acme")
-	if err != nil || !strings.Contains(out, "copied profile frontend of template acme as web") || !strings.Contains(log, "✓ Values") {
+	if err != nil || !strings.Contains(out, "profile web is in "+root) || !strings.Contains(log, "✓ Values") {
 		t.Fatalf("%v\n%s\n%s", err, out, log)
 	}
 	if _, err = os.Stat(filepath.Join(root, "sandboxes", "web", "sandbox.yaml")); err != nil {

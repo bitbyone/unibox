@@ -233,6 +233,13 @@ func (o *options) initCommand() *cobra.Command {
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "root": report.Root, "written": report.Written, "kept": report.Kept, "completed": report.Completed, "migrated": report.Migrated, "updated": report.Updated, "removed": report.Removed, "relaid": report.Relaid})
 		}
+		// The walk keeps to its screen: what was written is said at its
+		// end, as the profile and where it is.
+		if interactive && name != "" {
+			w.profile, w.root = name, root
+			o.setupProfile = name
+			return o.setupSteps(cmd, w, name)
+		}
 		switch {
 		case previous == "":
 			fmt.Fprintf(o.output, "environments repository: %s (configured)\n", root)
@@ -272,10 +279,6 @@ func (o *options) initCommand() *cobra.Command {
 		if name == "" {
 			fmt.Fprintln(o.output, "add a profile with unibox init <profile>, or be asked with unibox init -i")
 			return nil
-		}
-		if interactive {
-			o.setupProfile = name
-			return o.setupSteps(cmd, w, name)
 		}
 		fmt.Fprintf(o.output, "profile %s is ready; sign it in with unibox agent login -p %s, add forges with unibox service add <name> -p %s, then unibox run builds and starts it\n", name, name, name)
 		return nil

@@ -74,11 +74,12 @@ func (o *options) initFrom(cmd *cobra.Command, root, previous, name, from, use, 
 	if _, err := o.paths.EnsureVarsFile(); err != nil {
 		return err
 	}
-	fmt.Fprintf(o.output, "copied profile %s of template %s as %s into %s\n", use, template, name, root)
 	if interactive {
+		o.wiz.profile, o.wiz.root = name, root
 		o.setupProfile = name
 		return o.setupSteps(cmd, o.wiz, name)
 	}
+	fmt.Fprintf(o.output, "copied profile %s of template %s as %s into %s\n", use, template, name, root)
 	return o.completeProfile(cmd, name)
 }
 

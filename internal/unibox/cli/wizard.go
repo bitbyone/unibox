@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -37,10 +38,50 @@ type wizard struct {
 	rest   bool     // the rest is left for later
 	later  []string // what to run then
 	runDir string   // the repository the Run step offers to start in
+	// screen is a terminal the walk keeps to one screen: each step clears
+	// it and shows where the user is above its questions. Accessible mode
+	// goes line by line, for a screen reader.
+	screen bool
+	// profile and root are what the walk made, said at its end.
+	profile, root string
 }
 
 func (o *options) newWizard(steps ...string) *wizard {
-	return &wizard{o: o, steps: steps, state: map[string]string{}}
+	return &wizard{o: o, steps: steps, state: map[string]string{}, screen: o.interactive && !o.accessible() && !o.json}
+}
+
+// progress is the line saying what is done, where the user is and what is
+// left.
+func (w *wizard) progress() string {
+	parts := []string{}
+	n := 0
+	for i, s := range w.steps {
+		mark := "·"
+		switch {
+		case s == w.at:
+			mark, n = "▸", i+1
+		case w.state[s] == "done":
+			mark = "✓"
+		case w.state[s] == "skipped":
+			mark = "–"
+		}
+		parts = append(parts, mark+" "+s)
+	}
+	line := strings.Join(parts, "  ")
+	if n > 0 {
+		line += fmt.Sprintf("   (%d/%d)", n, len(w.steps))
+	}
+	return line
+}
+
+// show puts the progress at the top: of a cleared screen at a terminal,
+// on a line of its own otherwise.
+func (w *wizard) show() {
+	if w.screen {
+		fmt.Fprintf(w.o.log, "\x1b[H\x1b[2J%s\n\n", w.progress())
+		return
+	}
+	fmt.Fprintf(w.o.log, "\n%s\n", w.progress())
 }
 
 func (w *wizard) has(step string) bool { return slices.Contains(w.steps, step) }
@@ -51,21 +92,7 @@ func (w *wizard) begin(step string) {
 		w.state[w.at] = "done"
 	}
 	w.at = step
-	parts := []string{}
-	n := 0
-	for i, s := range w.steps {
-		mark := "·"
-		switch {
-		case s == step:
-			mark, n = "▸", i+1
-		case w.state[s] == "done":
-			mark = "✓"
-		case w.state[s] == "skipped":
-			mark = "–"
-		}
-		parts = append(parts, mark+" "+s)
-	}
-	fmt.Fprintf(w.o.log, "\n%s   (%d/%d)\n", strings.Join(parts, "  "), n, len(w.steps))
+	w.show()
 }
 
 // skip marks a step as left for later, with what to run then.
@@ -99,10 +126,15 @@ func (w *wizard) offer(step, what string, later ...string) (bool, error) {
 	return false, nil
 }
 
-// finish says what was left for later.
+// finish shows the walk done, what it made and what was left for later.
 func (w *wizard) finish() {
 	if w.at != "" && w.state[w.at] == "" {
 		w.state[w.at] = "done"
+	}
+	w.at = ""
+	w.show()
+	if w.profile != "" {
+		fmt.Fprintf(w.o.output, "profile %s is in %s\n", w.profile, w.root)
 	}
 	if len(w.later) == 0 {
 		return
@@ -152,7 +184,7 @@ func (o *options) setupSteps(cmd *cobra.Command, w *wizard, name string) error {
 	} else if build, err := o.askYes("Build the image of profile "+name+" now?", true); err != nil {
 		return err
 	} else if build {
-		if err := o.manager.Build(cmd.Context(), name, "", false); err != nil {
+		if err := o.quietly("building the image of profile "+name, func() error { return o.manager.Build(cmd.Context(), name, "", false) }); err != nil {
 			return err
 		}
 		built = true
@@ -167,6 +199,24 @@ func (o *options) setupSteps(cmd *cobra.Command, w *wizard, name string) error {
 	}
 	w.finish()
 	return nil
+}
+
+// quietly does what logs as it goes with a spinner instead, keeping the
+// log for a failure, so the walk stays on its screen.
+func (o *options) quietly(what string, do func() error) error {
+	var kept bytes.Buffer
+	log := o.manager.Log
+	o.manager.Log = &kept
+	defer func() { o.manager.Log = log }()
+	err := o.working(what, do)
+	if err != nil {
+		lines := strings.Split(strings.TrimRight(kept.String(), "\n"), "\n")
+		if len(lines) > 30 {
+			lines = lines[len(lines)-30:]
+		}
+		fmt.Fprintln(o.log, strings.Join(lines, "\n"))
+	}
+	return err
 }
 
 // askValues asks for the values and tokens a profile names that the user
