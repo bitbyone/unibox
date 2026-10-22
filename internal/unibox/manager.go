@@ -544,6 +544,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	}
 	result.Repositories = repos
 	result.Needs = append(result.Needs, needs...)
+	result.Needs = append(result.Needs, p.unsignedRepositories(repos)...)
 	for _, r := range repos {
 		if r.HostPath == "" {
 			result.Needs = append(result.Needs, api.Need{Code: "remote_check_pending", Repository: r.Name, Message: "remote branch and credentials will be checked inside the sandbox during preparation", Warning: true})

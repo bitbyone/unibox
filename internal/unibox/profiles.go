@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/tobola/unibox/internal/unibox/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1265,4 +1266,37 @@ func (p Profile) knownScripts(names []string) error {
 		}
 	}
 	return nil
+}
+
+// unsignedRepositories are the repositories a task clones from a forge no
+// git service of the profile signs in to: a private one fails to clone
+// with a 401, so it is told before the run, with what to add.
+func (p Profile) unsignedRepositories(repos []api.Repository) []api.Need {
+	out := []api.Need{}
+	for _, r := range repos {
+		if r.Mounted || !strings.HasPrefix(r.URL, "https://") {
+			continue
+		}
+		signed := false
+		for _, s := range p.Services {
+			if !s.Git {
+				continue
+			}
+			for _, u := range s.GitURLs() {
+				if strings.HasPrefix(r.URL, u) {
+					signed = true
+				}
+			}
+		}
+		if signed {
+			continue
+		}
+		host, _, _ := strings.Cut(strings.TrimPrefix(r.URL, "https://"), "/")
+		kind := "--kind gitlab "
+		if strings.Contains(host, "github") {
+			kind = "--kind github "
+		}
+		out = append(out, api.Need{Code: "service_missing", Repository: r.Name, Warning: true, Message: fmt.Sprintf("%s is on %s, which no git service of profile %s signs in to: a private repository fails to clone (401); add one with unibox service add <name> -p %s %s--host %s", r.Name, host, p.Name, p.Name, kind, host)})
+	}
+	return out
 }

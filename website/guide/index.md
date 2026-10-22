@@ -89,7 +89,7 @@ is left:
 | Profile | its name, agents, CPUs and memory - or, with `--from`, which of a template's profiles to copy |
 | Values | with `--from`, the values and tokens the template's profile asks of you |
 | Agents | signs the agents in, as `unibox agent login -i` |
-| Services | the forges your repositories live on and services such as Artifactory: their tokens, and your commit identity or user name kept in your `vars.toml`, the profile referring to it |
+| Services | the forges your repositories live on and services such as Artifactory, one at a time until you are done - the forge of the repository you started in offered first: their tokens, and your commit identity or user name kept in your `vars.toml`, the profile referring to it |
 | Build | builds the image |
 | Run | runs an agent in the repository you started in |
 

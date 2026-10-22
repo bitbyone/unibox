@@ -360,3 +360,17 @@ func TestFormat5ServiceVariablesMoveIntoEnv(t *testing.T) {
 		t.Fatalf("the user's comment went:\n%s", data)
 	}
 }
+
+func TestARepositoryOnAForgeNoServiceSignsInToIsToldBeforeTheRun(t *testing.T) {
+	t.Parallel()
+	p := Profile{Name: "dev"}
+	p.Services = map[string]Service{"github": {Git: true, Host: HostList{"github.com"}}}
+	needs := p.unsignedRepositories([]api.Repository{
+		{Name: "app", URL: "https://gitlab.2n.cz/team/app.git"},
+		{Name: "lib", URL: "https://github.com/acme/lib.git"},
+		{Name: "mine", URL: "https://gitlab.2n.cz/team/mine.git", Mounted: true},
+	})
+	if len(needs) != 1 || needs[0].Repository != "app" || !needs[0].Warning || !strings.Contains(needs[0].Message, "unibox service add <name> -p dev --kind gitlab --host gitlab.2n.cz") {
+		t.Fatalf("%+v", needs)
+	}
+}

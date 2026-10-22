@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -528,19 +529,22 @@ func TestSSHAgentIsTheUsersChoiceAndSbxIsSetToMatch(t *testing.T) {
 
 func TestTheSetupAddsServicesWithThePersonsOwnValuesInVars(t *testing.T) {
 	t.Setenv("ACCESSIBLE", "1")
+	t.Chdir(t.TempDir())
 	fakeHostTools(t)
 	paths, root := cliFixture(t)
 	answers := strings.Join([]string{
 		"",                 // SSH agent: no
 		"web", "0", "", "", // profile: name, agents as offered, CPUs, memory
-		"2",           // Agents: skip
-		"1",           // Services: go on
-		"1", "4", "0", // GitHub and Artifactory
-		"Jan Tobola <jan@example.com>", // GitHub: commit identity
+		"2",                            // Agents: skip
+		"1",                            // Services: go on
+		"1",                            // GitHub, offered first
+		"Jan Tobola <jan@example.com>", // its commit identity
 		"ghp_tokenvalue",               // its token
-		"art.example.com", "",          // Artifactory: host, the name offered
+		"4",                            // Artifactory, after Done, GitLab and a self-hosted one
+		"art.example.com", "",          // its host, the name offered
 		"jtobola",        // its user name
 		"art_tokenvalue", // its token
+		"1",              // Done
 		"n", "n",         // no build, no run
 	}, "\n") + "\n"
 	_, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
@@ -592,5 +596,29 @@ func TestARunBeforeAnySetupOffersIt(t *testing.T) {
 	_, log, err := run(t, paths, "n\n", "run")
 	if err == nil || !strings.Contains(log, "unibox is not set up here yet") || !strings.Contains(err.Error(), "unibox init -i") {
 		t.Fatalf("%v\n%s", err, log)
+	}
+}
+
+func TestTheSetupOffersTheForgeOfTheRepositoryItRunsIn(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@gitlab.example.com:team/app.git"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, out)
+		}
+	}
+	t.Chdir(repo)
+	fakeHostTools(t)
+	paths, root := cliFixture(t)
+	// Its forge, offered first; the name offered; no identity; a token;
+	// done; no build, no run.
+	answers := "\nweb\n0\n\n\n2\n1\n1\n\n\nglpat_tokenvalue\n1\nn\nn\n"
+	_, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
+	if err != nil || !strings.Contains(log, "gitlab.example.com - where this repository lives") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "sandboxes", "web", "sandbox.yaml"))
+	if !strings.Contains(string(data), "gitlab-example:") || !strings.Contains(string(data), "host: gitlab.example.com") {
+		t.Fatalf("%s\n%s", data, log)
 	}
 }

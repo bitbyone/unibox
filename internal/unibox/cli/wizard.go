@@ -271,94 +271,198 @@ func (o *options) askValues(cmd *cobra.Command, name string) error {
 	return nil
 }
 
-// askServices offers the forges and services most profiles need, and adds
-// each chosen through unibox service add. What is the user's own - their
-// commit identity, their user name - goes into their vars.toml, the
+// askServices adds forges and services one at a time until the user is
+// done: the forges of the repository init runs in first, then the usual
+// ones. Each is added through unibox service add. What is the user's own -
+// their commit identity, their user name - goes into their vars.toml, the
 // profile referring to it, so the profile stays shareable.
 func (o *options) askServices(cmd *cobra.Command, name string) error {
-	chosen, err := o.askChoices("Services", "Where your repositories live, and what else your builds reach. Others: unibox service add later.", []string{"GitHub", "GitLab (gitlab.com)", "A self-hosted GitLab", "Artifactory"}, nil, nil)
-	if err != nil {
-		return err
-	}
-	for _, c := range chosen {
-		var service, kind, host string
-		switch c {
-		case "GitHub":
-			service, kind, host = "github", "github", "github.com"
-		case "GitLab (gitlab.com)":
-			service, kind, host = "gitlab", "gitlab", "gitlab.com"
-		case "A self-hosted GitLab", "Artifactory":
-			kind = "gitlab"
-			if c == "Artifactory" {
-				kind = "artifactory"
-			}
-			if host, err = o.askText(c+": host", "Its host name, such as "+map[string]string{"gitlab": "gitlab.example.com", "artifactory": "artifactory.example.com"}[kind]+".", "", func(s string) error {
-				if strings.TrimSpace(s) == "" || strings.ContainsAny(s, " /:") {
-					return fmt.Errorf("a host name, with no scheme or path")
+	suggested := repositoryHosts(cmd)
+	added := []string{}
+	for {
+		picks := []pick{}
+		preset := "done"
+		for _, h := range suggested {
+			if !slices.Contains(added, h) {
+				picks = append(picks, pick{"repo:" + h, h + " - where this repository lives"})
+				if preset == "done" {
+					preset = "repo:" + h
 				}
-				return nil
+			}
+		}
+		for _, p := range []pick{{"github", "GitHub (github.com)"}, {"gitlab", "GitLab (gitlab.com)"}, {"gitlab-self", "A self-hosted GitLab"}, {"artifactory", "Artifactory"}} {
+			taken := map[string]string{"github": "github.com", "gitlab": "gitlab.com"}[p.value]
+			if !slices.Contains(added, p.value) && (taken == "" || !slices.Contains(suggested, taken)) {
+				picks = append(picks, p)
+			}
+		}
+		if preset == "done" && len(added) == 0 {
+			preset = picks[0].value
+		}
+		picks = append(picks, pick{"done", "Done - no more services"})
+		what := "Where your repositories live, and what else your builds reach - one at a time."
+		if len(added) > 0 {
+			what = "Added: " + strings.Join(added, ", ") + ". Another, or done."
+		}
+		choice, err := o.askPick("Services", what, picks, preset)
+		if err != nil {
+			return err
+		}
+		if choice == "done" {
+			return nil
+		}
+		kind, host, label := choice, "", choice
+		switch {
+		case choice == "github":
+			host = "github.com"
+		case choice == "gitlab":
+			host = "gitlab.com"
+		case strings.HasPrefix(choice, "repo:"):
+			host = strings.TrimPrefix(choice, "repo:")
+			kind = guessKind(host)
+			if kind == "" {
+				if kind, err = o.askPick(host, "What forge it is.", []pick{{"gitlab", "GitLab"}, {"github", "GitHub Enterprise"}, {"generic", "Another git forge"}}, "gitlab"); err != nil {
+					return err
+				}
+			}
+			label = host
+		default:
+			kind = map[string]string{"gitlab-self": "gitlab", "artifactory": "artifactory"}[choice]
+		}
+		if err := o.addOneService(cmd, name, kind, host); err != nil {
+			return err
+		}
+		added = append(added, label)
+	}
+}
+
+// addOneService asks what a service needs - its host and name where they
+// are not known, the user's own values - and adds it.
+func (o *options) addOneService(cmd *cobra.Command, name, kind, host string) error {
+	var err error
+	what := map[string]string{"gitlab": "GitLab", "github": "GitHub", "artifactory": "Artifactory", "generic": "The forge"}[kind]
+	if host == "" {
+		if host, err = o.askText(what+": host", "Its host name, such as "+map[string]string{"gitlab": "gitlab.example.com", "artifactory": "artifactory.example.com"}[kind]+".", "", func(s string) error {
+			if strings.TrimSpace(s) == "" || strings.ContainsAny(s, " /:") {
+				return fmt.Errorf("a host name, with no scheme or path")
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	service := kind
+	if host != "github.com" && host != "gitlab.com" {
+		if service, err = o.askText(what+": name", "What the profile calls it.", serviceName(kind, host), unibox.ValidName); err != nil {
+			return err
+		}
+	}
+	args := []string{"add", service, "-p", name, "--kind", kind, "--host", host}
+	if kind == "generic" {
+		args = append(args, "--git")
+	}
+	if kind == "artifactory" {
+		user, err := o.askText(service+": your user name", "Kept in your vars.toml; the profile refers to it. Empty leaves it out.", "", nil)
+		if err != nil {
+			return err
+		}
+		if user != "" {
+			variable := service + "-user"
+			env := strings.ToUpper(strings.ReplaceAll(service, "-", "_")) + "_USER"
+			if err := o.personalValue(name, variable, "your user name on "+host, user, func(doc *yaml.Node) {
+				unibox.SetEnvValue(doc, env, "${vars."+variable+"}")
 			}); err != nil {
 				return err
 			}
-			if service, err = o.askText(c+": name", "What the profile calls it.", serviceName(kind, host), unibox.ValidName); err != nil {
-				return err
-			}
 		}
-		args := []string{"add", service, "-p", name, "--kind", kind, "--host", host}
-		if kind == "artifactory" {
-			user, err := o.askText(service+": your user name", "Kept in your vars.toml; the profile refers to it. Empty leaves it out.", "", nil)
-			if err != nil {
-				return err
+	} else {
+		author, err := o.askText(service+": your commit identity", "Name <email> you commit as on "+host+"; kept in your vars.toml. Empty takes your git configuration.", "", func(s string) error {
+			if s == "" {
+				return nil
 			}
-			if user != "" {
-				variable := service + "-user"
-				env := strings.ToUpper(strings.ReplaceAll(service, "-", "_")) + "_USER"
-				if err := o.personalValue(name, variable, "your user name on "+host, user, func(doc *yaml.Node) {
-					unibox.SetEnvValue(doc, env, "${vars."+variable+"}")
-				}); err != nil {
-					return err
-				}
-			}
-		} else {
-			author, err := o.askText(service+": your commit identity", "Name <email> you commit as on "+host+"; kept in your vars.toml. Empty takes your git configuration.", "", func(s string) error {
-				if s == "" {
-					return nil
-				}
-				_, _, err := unibox.AuthorParts(s)
-				return err
-			})
-			if err != nil {
-				return err
-			}
-			if author != "" {
-				variable := service + "-author"
-				if err := o.personalValue(name, variable, "you on "+host+", as Name <email>", author, nil); err != nil {
-					return err
-				}
-				args = append(args, "--author", "${vars."+variable+"}")
-			}
+			_, _, err := unibox.AuthorParts(s)
+			return err
+		})
+		if err != nil {
+			return err
 		}
-		svc := o.serviceCommand()
-		svc.SetArgs(args)
-		svc.SetIn(o.input)
-		svc.SetOut(o.output)
-		svc.SetErr(o.log)
-		if err := svc.ExecuteContext(cmd.Context()); err != nil {
-			return fmt.Errorf("service %s: %w", service, err)
+		if author != "" {
+			variable := service + "-author"
+			if err := o.personalValue(name, variable, "you on "+host+", as Name <email>", author, nil); err != nil {
+				return err
+			}
+			args = append(args, "--author", "${vars."+variable+"}")
 		}
 	}
+	svc := o.serviceCommand()
+	svc.SetArgs(args)
+	svc.SetIn(o.input)
+	svc.SetOut(o.output)
+	svc.SetErr(o.log)
+	if err := svc.ExecuteContext(cmd.Context()); err != nil {
+		return fmt.Errorf("service %s: %w", service, err)
+	}
 	return nil
+}
+
+// repositoryHosts are the hosts the remotes of the repository init runs in
+// point at, the first a service is offered for.
+func repositoryHosts(cmd *cobra.Command) []string {
+	out, err := exec.CommandContext(cmd.Context(), "git", "remote", "-v").Output()
+	if err != nil {
+		return nil
+	}
+	hosts := []string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		u := fields[1]
+		host := ""
+		switch {
+		case strings.Contains(u, "://"):
+			_, rest, _ := strings.Cut(u, "://")
+			host, _, _ = strings.Cut(rest, "/")
+			if _, h, ok := strings.Cut(host, "@"); ok {
+				host = h
+			}
+			host, _, _ = strings.Cut(host, ":")
+		case strings.Contains(u, ":"):
+			// git@host:owner/repo
+			host, _, _ = strings.Cut(u, ":")
+			if _, h, ok := strings.Cut(host, "@"); ok {
+				host = h
+			}
+		}
+		if host != "" && !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
+// guessKind is the kind of a forge its host name says, or "".
+func guessKind(host string) string {
+	switch {
+	case strings.Contains(host, "github"):
+		return "github"
+	case strings.Contains(host, "gitlab"):
+		return "gitlab"
+	}
+	return ""
 }
 
 // serviceName is what a service on a host is called by default: the kind,
 // with the host's first label when that says more.
 func serviceName(kind, host string) string {
 	label, _, _ := strings.Cut(host, ".")
-	if label == kind || label == "" {
-		return kind
-	}
+	// gitlab.2n.cz says more by its second label.
 	if parts := strings.Split(host, "."); len(parts) > 2 && parts[0] == kind {
 		label = parts[1]
+	}
+	if label == kind || label == "" {
+		return kind
 	}
 	name := strings.ToLower(kind + "-" + label)
 	if unibox.ValidName(name) != nil {
