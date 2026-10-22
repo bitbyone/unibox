@@ -2,12 +2,14 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"slices"
-	"text/tabwriter"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
+	"golang.org/x/term"
 )
 
 // doctorCheck is one thing unibox doctor looked at.
@@ -51,7 +53,11 @@ func (o *options) doctorCommand() *cobra.Command {
 					if c.Status == "skip" {
 						continue
 					}
-					add(runtime, c.Name, c.Status, c.Message, c.Hint)
+					hint := c.Hint
+					if c.Link != "" {
+						hint = strings.TrimSpace(strings.Replace(hint, " from the link above", "", 1)) + ": " + c.Link
+					}
+					add(runtime, c.Name, c.Status, c.Message, hint)
 				}
 			}
 			if s, ok := r.(*unibox.SBX); ok {
@@ -163,27 +169,7 @@ func (o *options) doctorCommand() *cobra.Command {
 				return err
 			}
 		} else {
-			area := ""
-			w := tabwriter.NewWriter(o.output, 0, 4, 1, ' ', 0)
-			for _, c := range checks {
-				if c.Area != area {
-					area = c.Area
-					fmt.Fprintf(w, "%s\n", area)
-				}
-				mark := map[string]string{"pass": "✓", "warn": "!", "fail": "✗"}[c.Status]
-				fmt.Fprintf(w, "  %s %s\t%s\n", mark, c.Name, c.Message)
-				if c.Hint != "" && c.Status != "pass" {
-					fmt.Fprintf(w, "      \t%s\n", c.Hint)
-				}
-			}
-			if err := w.Flush(); err != nil {
-				return err
-			}
-			if failed == 0 {
-				fmt.Fprintln(o.output, "everything a run needs is in place")
-			} else {
-				fmt.Fprintf(o.output, "%d to fix\n", failed)
-			}
+			o.printChecks(checks, failed)
 		}
 		if failed > 0 {
 			return &reportedError{4}
@@ -192,4 +178,50 @@ func (o *options) doctorCommand() *cobra.Command {
 	}}
 	c.Flags().StringVarP(&profile, "profile", "p", "", "Check this profile alone (default: every profile)")
 	return c
+}
+
+// printChecks lays the checks out by area, one column for their names
+// across all of them, in colour at a terminal.
+func (o *options) printChecks(checks []doctorCheck, failed int) {
+	paint := o.painter()
+	width := 0
+	for _, c := range checks {
+		width = max(width, len([]rune(c.Name)))
+	}
+	area := ""
+	for _, c := range checks {
+		if c.Area != area {
+			if area != "" {
+				fmt.Fprintln(o.output)
+			}
+			area = c.Area
+			fmt.Fprintln(o.output, paint("bold", area))
+		}
+		mark := map[string]string{"pass": paint("green", "✓"), "warn": paint("yellow", "!"), "fail": paint("red", "✗")}[c.Status]
+		message := c.Message
+		if c.Status == "pass" {
+			message = paint("dim", message)
+		}
+		fmt.Fprintf(o.output, "  %s %-*s  %s\n", mark, width, c.Name, message)
+		if c.Hint != "" && c.Status != "pass" {
+			fmt.Fprintf(o.output, "    %*s  %s\n", width, "", paint("dim", "→ "+c.Hint))
+		}
+	}
+	fmt.Fprintln(o.output)
+	if failed == 0 {
+		fmt.Fprintln(o.output, paint("green", "everything a run needs is in place"))
+	} else {
+		fmt.Fprintln(o.output, paint("red", fmt.Sprintf("%d to fix", failed)))
+	}
+}
+
+// painter colours text at a terminal that takes colour, and leaves it
+// plain elsewhere - a pipe, a file, NO_COLOR.
+func (o *options) painter() func(style, text string) string {
+	f, ok := o.output.(*os.File)
+	if !ok || !term.IsTerminal(int(f.Fd())) || os.Getenv("NO_COLOR") != "" {
+		return func(_, text string) string { return text }
+	}
+	codes := map[string]string{"bold": "1", "dim": "2", "green": "32", "yellow": "33", "red": "31"}
+	return func(style, text string) string { return "\x1b[" + codes[style] + "m" + text + "\x1b[0m" }
 }

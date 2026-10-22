@@ -492,6 +492,9 @@ type RuntimeCheck struct {
 	Status  string `json:"status"` // pass, warn, fail or skip
 	Message string `json:"message"`
 	Hint    string `json:"hint,omitempty"`
+	// Link is a check's detail when it is a web address - where an update
+	// is - and nothing else of it, as a detail may name the user's account.
+	Link string `json:"link,omitempty"`
 }
 
 // Diagnoser is a runtime that checks itself.
@@ -509,12 +512,22 @@ func (r *SBX) Diagnose(ctx context.Context) ([]RuntimeCheck, error) {
 		return nil, fmt.Errorf("sbx diagnose did not finish: %w", err)
 	}
 	var report struct {
-		Checks []RuntimeCheck `json:"checks"`
+		Checks []struct {
+			RuntimeCheck
+			Detail string `json:"detail"`
+		} `json:"checks"`
 	}
 	if err := json.Unmarshal(b, &report); err != nil {
 		return nil, fmt.Errorf("could not read sbx diagnose --format json: %w", err)
 	}
-	return report.Checks, nil
+	checks := []RuntimeCheck{}
+	for _, c := range report.Checks {
+		if d := strings.TrimSpace(c.Detail); strings.HasPrefix(d, "https://") && !strings.ContainsAny(d, " \n") {
+			c.Link = d
+		}
+		checks = append(checks, c.RuntimeCheck)
+	}
+	return checks, nil
 }
 
 // sbxList reads a list sbx prints as JSON: a list itself since sbx 0.48,
