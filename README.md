@@ -94,7 +94,7 @@ unibox context use -s web-1 -p web                # work there when -s or -p is 
 unibox sandbox ls                                 # all sandboxes
 unibox task ls                                    # all tasks in all sandboxes
 unibox resume <task>                              # continue a task later
-unibox resume <task> --shell                      # a shell in the task's repository instead
+unibox resume <task> --shell                      # a shell in the task's repository, also beside its running agent
 unibox task rename <task> <name>                  # an alias, taken wherever the ID is
 unibox task add-repo <task> ../api --branch feat/login  # clone one more, even while it runs
 unibox sandbox shell                              # shell inside the context's sandbox

@@ -487,6 +487,23 @@ func TestRunOpensAShellInTheTaskInsteadOfTheAgent(t *testing.T) {
 	if err := m.Run(ctx, Request{Task: "refunds", Shell: true}, strings.NewReader(""), io.Discard, io.Discard, []string{"--x"}); err == nil {
 		t.Fatal("a shell took agent arguments")
 	}
+	// While a session works in the task, a shell joins it; another agent
+	// does not.
+	busy, err := LockFile(filepath.Join(m.Paths.Config, "locks", "dev-task-refunds.lock"), false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	os.Remove(seen)
+	if err := m.Run(ctx, Request{Task: "refunds", Shell: true}, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(seen); string(got) != "-l|payments|none" {
+		t.Fatalf("the joining shell saw %q", got)
+	}
+	if err := m.Run(ctx, Request{Task: "refunds"}, strings.NewReader(""), io.Discard, io.Discard, nil); err == nil || !strings.Contains(err.Error(), "join it with unibox resume refunds --shell") {
+		t.Fatalf("%v", err)
+	}
 }
 
 func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {

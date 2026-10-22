@@ -96,7 +96,7 @@ sandbox that holds it.
 | Flag | Meaning |
 | --- | --- |
 | `--agent <name>` | a coding agent to run instead of the task's own |
-| `--shell` | open a shell in the task's directory instead of the agent; excludes `--agent` |
+| `--shell` | open a shell in the task's directory instead of the agent; excludes `--agent`. It joins a task whose agent is working in it, where another agent is refused |
 | `--script <name>` | run one of the profile's scripts before the agent starts (repeatable, in order) |
 
 ### `unibox task`

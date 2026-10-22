@@ -333,7 +333,13 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 	}
 	taskLock, err := LockFile(filepath.Join(m.Paths.Config, "locks", b.Name+"-task-"+t.ID+".lock"), false, false)
 	if err != nil {
-		return b, t, r, nil, nil, fmt.Errorf("task %s already has an active session; wait for it to finish", t.ID)
+		// A shell joins a task whose agent works in it: the task is ready,
+		// so nothing is prepared that the agent could be in the middle of.
+		if !(resume && req.Shell && t.State == "ready") {
+			return b, t, r, nil, nil, fmt.Errorf("task %s already has an active session; wait for it to finish, or join it with unibox resume %s --shell", t.ID, t.ID)
+		}
+		fmt.Fprintf(m.Log, "joining task %s beside its running session\n", t.ID)
+		taskLock = nil
 	}
 	success := false
 	var usage *FileLock
@@ -620,9 +626,9 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		return err
 	}
 	defer m.finishRun(b, r, run, lease, usage, nil)
-	var env []string
+	env := sshEnv(r)
 	if p, err := m.profile(b.Profile); err == nil {
-		env = p.SessionEnv()
+		env = append(p.SessionEnv(), env...)
 	}
 	return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(env, []string{"bash", "-l"}))}, Interactive: true, Input: in, Output: out, Error: errout}))
 }
