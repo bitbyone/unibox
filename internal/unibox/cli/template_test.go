@@ -82,7 +82,7 @@ func TestInteractiveInitFromPicksTheProfileAndAsksForValues(t *testing.T) {
 	}
 	// The second profile; the copy named web; the var's value; no sign-in
 	// now, no build.
-	out, log, err := run(t, paths, "2\nweb\ntobola\nn\nn\n", "init", "-i", "--from", src, "--template", "acme")
+	out, log, err := run(t, paths, "\n2\nweb\ntobola\nn\nn\n", "init", "-i", "--from", src, "--template", "acme")
 	if err != nil || !strings.Contains(out, "copied profile frontend of template acme as web") || !strings.Contains(out, "profile web is ready") {
 		t.Fatalf("%v\n%s\n%s", err, out, log)
 	}

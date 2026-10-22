@@ -559,3 +559,14 @@ func TestTheInstallContextLeavesTheImagesDirectoriesOpen(t *testing.T) {
 		}
 	}
 }
+
+func TestASandboxUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
+	t.Parallel()
+	p := Profile{}
+	if env := (&SBX{}).SessionEnv(p, "claude"); len(env) != 0 {
+		t.Fatalf("%v", env)
+	}
+	if env := (&SBX{SSHAgent: true}).SessionEnv(p, "claude"); !slices.Contains(env, "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new") {
+		t.Fatalf("%v", env)
+	}
+}

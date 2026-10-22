@@ -166,6 +166,7 @@ func (o *options) configCommand() *cobra.Command {
   default_runtime           the runtime new sandboxes get: sbx, or the experimental msb
   runtimes.<name>.on        whether a runtime may be used (true, false)
   runtimes.<name>.stop_idle whether a sandbox is stopped when its last session ends
+  runtimes.sbx.ssh_agent    whether sandboxes may use your SSH agent (sbx is set to match)
 
 A sandbox keeps the runtime it was made in; --runtime asks for another one
 for a new sandbox.`, Example: "  unibox config set default_runtime sbx\n  unibox config set runtimes.sbx.stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
@@ -194,6 +195,18 @@ for a new sandbox.`, Example: "  unibox config set default_runtime sbx\n  unibox
 			v, err := strconv.ParseBool(value)
 			if err != nil {
 				return fmt.Errorf("%s must be true or false", key)
+			}
+			if parts[2] == "ssh_agent" {
+				if parts[1] != "sbx" {
+					return fmt.Errorf("ssh_agent is sbx's; %s does not forward an SSH agent", parts[1])
+				}
+				if v {
+					fmt.Fprintln(o.log, sshAgentRisk)
+				}
+				if err := o.setSSHAgent(cmd, v); err != nil {
+					return err
+				}
+				return o.success("configuration updated")
 			}
 			r := cfg.Runtimes[parts[1]]
 			switch parts[2] {
@@ -224,6 +237,20 @@ for a new sandbox.`, Example: "  unibox config set default_runtime sbx\n  unibox
 			parts := strings.Split(key, ".")
 			if len(parts) != 3 || parts[0] != "runtimes" {
 				return fmt.Errorf("unknown configuration key %q", key)
+			}
+			if parts[2] == "ssh_agent" && parts[1] == "sbx" {
+				// Unsaid, a forwarding sbx is refused; so it is turned off.
+				if err := o.setSSHAgent(cmd, false); err != nil {
+					return err
+				}
+				cfg = o.manager.Config
+				r := cfg.Runtimes["sbx"]
+				r.SSHAgent = nil
+				cfg.Runtimes["sbx"] = r
+				if err := o.paths.SaveConfig(cfg); err != nil {
+					return err
+				}
+				return o.success("configuration updated")
 			}
 			r, ok := cfg.Runtimes[parts[1]]
 			if !ok {
@@ -262,6 +289,9 @@ func configValue(c unibox.Config, key string) (any, error) {
 			return c.Enabled(p[1]), nil
 		case "stop_idle":
 			return c.StopIdle(p[1]), nil
+		case "ssh_agent":
+			on, _ := c.SSHAgent(p[1])
+			return on, nil
 		}
 	}
 	return nil, fmt.Errorf("unknown configuration key %q", key)

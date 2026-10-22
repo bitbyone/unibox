@@ -477,7 +477,8 @@ func TestInteractiveInitOffersChoicesAndAnAnswerOfOnesOwn(t *testing.T) {
 	paths, root := cliFixture(t)
 	// Name; agents: claude besides the preset copilot, which comes first,
 	// then done; CPUs: something else, 3; memory: the preset, 8g.
-	answers := "web\n2\n0\n6\n3\n1\nn\n"
+	// The SSH agent first: the recommended no.
+	answers := "\nweb\n2\n0\n6\n3\n1\nn\n"
 	out, log, err := run(t, paths, answers, "init", "-i", "--dir", root)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log)

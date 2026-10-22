@@ -27,6 +27,10 @@ func ValidName(s string) error {
 type RuntimeConfig struct {
 	On       *bool `yaml:"on,omitempty" json:"on,omitempty"`
 	StopIdle *bool `yaml:"stop_idle,omitempty" json:"stop_idle,omitempty"`
+	// SSHAgent says the user lets sandboxes use their SSH agent: git over
+	// SSH needs no token then, but an agent signs with every key the user
+	// has. Unset, a forwarding runtime is refused.
+	SSHAgent *bool `yaml:"ssh_agent,omitempty" json:"ssh_agent,omitempty"`
 }
 type Config struct {
 	Environments   string                   `yaml:"environments" json:"environments"`
@@ -196,6 +200,17 @@ func (c Config) Enabled(name string) bool {
 	r, ok := c.Runtimes[name]
 	return !ok || r.On == nil || *r.On
 }
+
+// SSHAgent says whether the user lets a runtime's sandboxes use their SSH
+// agent, and whether they said so at all.
+func (c Config) SSHAgent(name string) (on, said bool) {
+	r, ok := c.Runtimes[name]
+	if !ok || r.SSHAgent == nil {
+		return false, false
+	}
+	return *r.SSHAgent, true
+}
+
 func (c Config) StopIdle(name string) bool {
 	r, ok := c.Runtimes[name]
 	return !ok || r.StopIdle == nil || *r.StopIdle

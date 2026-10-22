@@ -36,7 +36,8 @@ lookup) [ -f "$store/unibox-$5" ] || exit 1; echo x ;;
 clear) rm -f "$store/unibox-$5" ;;
 search) for f in "$store"/unibox-*; do [ -f "$f" ] && echo "attribute.name = ${f##*/unibox-}"; done ;;
 esac`)
-	write("sbx", `[ "$1 $2" = "secret ls" ] && echo '{"secrets":[],"custom_secrets":[]}'`)
+	write("sbx", `[ "$1 $2" = "secret ls" ] && echo '{"secrets":[],"custom_secrets":[]}'
+[ "$1 $2" = "settings get" ] && echo '{"value":false}'`)
 	// gh is signed in when the store holds a marker; ghSignedIn puts it.
 	write("gh", `[ "$1 $2" = "auth status" ] && { [ -f "$store/gh" ] || exit 1; }`)
 	ghDirs[argv] = dir
@@ -450,7 +451,7 @@ func TestInteractiveInitSignsTheAgentsInWhenAsked(t *testing.T) {
 	paths, root := cliFixture(t)
 	// The profile node, claude alone (the preset copilot, first, off;
 	// claude on), the offered resources, sign in now, and claude's token.
-	out, log, err := run(t, paths, "node\n1\n2\n0\n\n\ny\nsk-ant-oat01-tokenvalue\n", "init", "-i", "--dir", root)
+	out, log, err := run(t, paths, "\nnode\n1\n2\n0\n\n\ny\nsk-ant-oat01-tokenvalue\n", "init", "-i", "--dir", root)
 	if err != nil || !strings.Contains(out, "profile node is ready and signs its agents in") {
 		t.Fatalf("%v\n%s\n%s", err, out, log)
 	}
@@ -497,5 +498,29 @@ func TestAGuidedLoginOffersGhAndKeepsTheChoiceInVars(t *testing.T) {
 	}
 	if vars, _ = os.ReadFile(filepath.Join(paths.Config, "vars.toml")); strings.Contains(string(vars), "copilot = 'gh auth token'") {
 		t.Fatalf("%s", vars)
+	}
+}
+
+func TestSSHAgentIsTheUsersChoiceAndSbxIsSetToMatch(t *testing.T) {
+	t.Setenv("ACCESSIBLE", "1")
+	argv := fakeHostTools(t)
+	paths, root := cliFixture(t)
+	// Yes, in init: sbx forwards the agent from then on.
+	if _, log, err := run(t, paths, "2\nweb\n0\n\n\nn\n", "init", "-i", "--dir", root); err != nil || !strings.Contains(log, "signs with every key") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	recorded, _ := os.ReadFile(argv)
+	if !strings.Contains(string(recorded), "settings set ssh.agentForwardingEnabled true\ndaemon restart\n") {
+		t.Fatalf("%s", recorded)
+	}
+	if out, _, err := run(t, paths, "", "config", "get", "runtimes.sbx.ssh_agent"); err != nil || strings.TrimSpace(out) != "true" {
+		t.Fatalf("%v %q", err, out)
+	}
+	// Said once, init does not ask again.
+	if _, log, err := run(t, paths, "mobile\n0\n\n\nn\n", "init", "-i", "--dir", root); err != nil || strings.Contains(log, "SSH agent in sandboxes") {
+		t.Fatalf("%v\n%s", err, log)
+	}
+	if _, _, err := run(t, paths, "", "config", "set", "runtimes.msb.ssh_agent", "true"); err == nil {
+		t.Fatal("msb took an SSH agent")
 	}
 }

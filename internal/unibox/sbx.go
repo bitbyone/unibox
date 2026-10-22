@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,25 @@ type SBX struct {
 	// Bindings is sbx's credentials.yaml, where a generated kit's
 	// credentials are approved; empty leaves it alone.
 	Bindings string
+	// SSHAgent is the user's leave for sandboxes to use their SSH agent,
+	// which sbx forwards when its setting says so.
+	SSHAgent bool
+}
+
+// SSHForwarding says whether sbx forwards the host's SSH agent now.
+func (r *SBX) SSHForwarding(ctx context.Context) (bool, error) { return sbxForwarding(ctx) }
+
+// SetSSHForwarding turns sbx's forwarding of the host's SSH agent on or
+// off, and restarts its daemon, which a change takes effect with; running
+// sandboxes keep the connections they have until they restart.
+func (r *SBX) SetSSHForwarding(ctx context.Context, on bool) error {
+	if err := runQuiet(hostCommand(ctx, "sbx", "settings", "set", "ssh.agentForwardingEnabled", strconv.FormatBool(on))); err != nil {
+		return fmt.Errorf("sbx did not change ssh.agentForwardingEnabled: %w", err)
+	}
+	if err := runQuiet(hostCommand(ctx, "sbx", "daemon", "restart")); err != nil {
+		return fmt.Errorf("sbx changed ssh.agentForwardingEnabled, but its daemon did not restart; run sbx daemon restart: %w", err)
+	}
+	return nil
 }
 
 func (r *SBX) Name() string               { return "sbx" }
@@ -70,8 +90,8 @@ func (r *SBX) Available(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if forwarding {
-		return Fail(4, "host_access", "sbx forwards the host SSH agent; run sbx settings set ssh.agentForwardingEnabled false, then sbx daemon restart")
+	if forwarding && !r.SSHAgent {
+		return Fail(4, "host_access", "sbx forwards your SSH agent, which lets agents sign with every SSH key you have; unibox config set runtimes.sbx.ssh_agent false turns it off, or true allows it")
 	}
 	_, err = r.List(ctx)
 	return err

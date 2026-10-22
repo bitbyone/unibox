@@ -46,6 +46,14 @@ func (o *options) runField(field huh.Field) error {
 	return nil
 }
 
+// describe says a question's description where huh's accessible mode,
+// which shows a list's title alone, would leave it out.
+func (o *options) describe(description string) {
+	if o.accessible() && description != "" {
+		fmt.Fprintln(o.log, description)
+	}
+}
+
 // askText asks for a line, preset to an answer Enter takes.
 func (o *options) askText(title, description, preset string, validate func(string) error) (string, error) {
 	value := preset
@@ -62,6 +70,7 @@ func (o *options) askText(title, description, preset string, validate func(strin
 // askChoice offers the options, the preset chosen, and an answer of one's
 // own after them, checked by validate.
 func (o *options) askChoice(title, description string, options []string, preset string, validate func(string) error) (string, error) {
+	o.describe(description)
 	// huh scrolls a list to its chosen option, hiding those above it, so
 	// the preset comes first.
 	if preset != "" {
@@ -95,6 +104,7 @@ type pick struct{ value, label string }
 
 // askPick offers options alone, the preset chosen.
 func (o *options) askPick(title, description string, options []pick, preset string) (string, error) {
+	o.describe(description)
 	opts := []huh.Option[string]{}
 	for _, p := range options {
 		if p.value == preset {
@@ -112,6 +122,7 @@ func (o *options) askPick(title, description string, options []pick, preset stri
 
 // askChoices offers options to pick any of, the preset ones picked.
 func (o *options) askChoices(title, description string, options, preset []string, validate func([]string) error) ([]string, error) {
+	o.describe(description)
 	// The picked ones first, as huh scrolls to the first picked.
 	picked, rest := []huh.Option[string]{}, []huh.Option[string]{}
 	for _, v := range options {

@@ -114,6 +114,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   sits between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
+- **The SSH agent is the user's call.** sbx forwards it by default; unibox
+  refuses that until `runtimes.sbx.ssh_agent` says yes or no (`init -i`
+  asks, recommending no) and sets sbx to match. With it, sessions get
+  `GIT_SSH_COMMAND` with `StrictHostKeyChecking=accept-new`.
 - **A profile says what a token is, vars.toml where it comes from.**
   Commands unibox writes for a token go into the person's vars.toml
   (`[secrets.names]`), the profile naming `secret:<name>`; only

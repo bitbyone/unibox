@@ -46,11 +46,22 @@ var sbxTokens = map[string]struct {
 
 // SessionEnv hands an agent's session the placeholder of its token login.
 func (r *SBX) SessionEnv(p Profile, agent string) []string {
+	env := sshEnv(r)
 	t, ok := sbxTokens[agent]
 	if !ok || p.Auth[agent].Method != AuthToken {
-		return nil
+		return env
 	}
-	return []string{t.Env + "=" + t.Placeholder}
+	return append(env, t.Env+"="+t.Placeholder)
+}
+
+// sshEnv is what a session needs to use the user's forwarded SSH agent:
+// git trusts a server it meets the first time, as nobody is there to
+// answer, and refuses one whose key has changed.
+func sshEnv(r Runtime) []string {
+	if s, ok := r.(*SBX); ok && s.SSHAgent {
+		return []string{"GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new"}
+	}
+	return nil
 }
 
 // sbxKitToken says whether an agent signs in by a token of its own, so the

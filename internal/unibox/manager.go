@@ -63,6 +63,7 @@ func Open(paths Paths, log io.Writer) (*Manager, error) {
 		log = io.Discard
 	}
 	sbx := &SBX{Cache: filepath.Join(paths.Cache, "sbx")}
+	sbx.SSHAgent, _ = c.SSHAgent("sbx")
 	if home, err := os.UserHomeDir(); err == nil {
 		sbx.Bindings = filepath.Join(home, ".config", "sbx", "credentials.yaml")
 	}

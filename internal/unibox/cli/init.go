@@ -92,9 +92,15 @@ func (o *options) initCommand() *cobra.Command {
 		if interactive && !o.canAsk() {
 			return fmt.Errorf("interactive init needs a terminal; pass the profile and flags instead")
 		}
-		// Before anything is laid out, a user without a runtime hears so.
+		// Before anything is laid out, a user without a runtime hears so,
+		// and says whether sandboxes may use their SSH agent.
 		if err := o.checkRuntime(cmd, interactive); err != nil {
 			return err
+		}
+		if interactive && o.runtimeMissing() == "" {
+			if err := o.askSSHAgent(cmd); err != nil {
+				return err
+			}
 		}
 		switch {
 		case dir != "":

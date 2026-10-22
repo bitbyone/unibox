@@ -491,6 +491,7 @@ Reads or changes unibox's own configuration. The keys:
 | `default_runtime` | the runtime used when none is named |
 | `runtimes.<runtime>.on` | `true` or `false`: whether the runtime is used |
 | `runtimes.<runtime>.stop_idle` | `true` or `false`: stop a sandbox when its last agent ends |
+| `runtimes.sbx.ssh_agent` | `true` or `false`: whether sandboxes may use your SSH agent; sbx is set to match, its daemon restarted. Unset, a sbx that forwards the agent is refused |
 
 `unset` forgets a setting, back to its default.
 

@@ -110,6 +110,23 @@ agent works on your files and your `.git` as they are. Worktrees are refused,
 and `unibox task rm` unmounts before it deletes and never deletes your files. See
 [Mounting a Directory](/guide/mount).
 
+## Your SSH agent
+
+sbx can forward your SSH agent into a sandbox; `unibox init -i` asks whether
+it may, and sets sbx to match (`unibox config set runtimes.sbx.ssh_agent`).
+
+| | No (recommended) | Yes |
+| --- | --- | --- |
+| git | over HTTPS, through the profile's services | also over SSH, with no token - a mounted checkout pushes as you do |
+| What an agent can reach | the hosts and owners the services' tokens allow | every repository and server your SSH keys reach, as you |
+| Your keys | out of reach | never seen, but used to sign, as many times as the agent wants |
+| Tools beyond git (`gh`, Artifactory, registries) | services' tokens | services' tokens all the same |
+
+With it, git in a session trusts a server the first time it meets it
+(`StrictHostKeyChecking=accept-new`), as nobody is there to answer, and
+refuses one whose key has changed. Without a word said, unibox refuses a sbx
+that forwards the agent, as that would hand every key over unasked.
+
 ## Caches
 
 Caches are read-only. Read-write would let the agent put a jar or an

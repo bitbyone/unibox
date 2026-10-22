@@ -530,7 +530,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if req.Shell {
 		// A shell is the user's own session: no agent is credited in its
 		// commits.
-		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(p.SessionEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
+		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(append(p.SessionEnv(), sshEnv(r)...), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
 	a, _ := FindAgent(t.Agent)
 	args, agentEnv := p.AgentCommand(a)

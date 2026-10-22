@@ -22,6 +22,16 @@ when you or your editor run git there. Mount a repository you would let the
 agent configure.
 :::
 
+## Pushing over SSH
+
+A mounted checkout keeps its remotes as they are. One over HTTPS pushes
+through the profile's git services; one over SSH (`git@github.com:…`) needs
+your SSH agent in the sandbox, which unibox lets in only when you said so -
+`unibox init -i` asks, `unibox config set runtimes.sbx.ssh_agent true` says
+it later. With it no token is needed for git at all; see
+[Your SSH agent](/reference/security#your-ssh-agent) for what it gives the
+agent.
+
 ## With a branch
 
 ```sh
