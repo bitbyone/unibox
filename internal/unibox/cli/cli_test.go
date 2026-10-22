@@ -537,7 +537,7 @@ func TestInitWithoutSbxSaysSoAndOffersTheExperimentalRuntime(t *testing.T) {
 	}
 }
 
-func TestDestroyAsksAndAllLeavesTheRepository(t *testing.T) {
+func TestDestroyAsksAndAllRemovesARepositoryNotInGit(t *testing.T) {
 	t.Parallel()
 	paths, root := cliFixture(t)
 	err := paths.State(func(s *unibox.State) error {
@@ -556,13 +556,15 @@ func TestDestroyAsksAndAllLeavesTheRepository(t *testing.T) {
 	if s, _ := paths.ReadState(); len(s.Sandboxes) != 0 {
 		t.Fatalf("%+v", s.Sandboxes)
 	}
-	if out, _, err := run(t, paths, "", "destroy", "--all", "--yes"); err != nil || !strings.Contains(out, "environments repository stays") {
+	// A repository unibox laid out, not in git, goes with the rest; one in
+	// git would stay.
+	if out, _, err := run(t, paths, "", "destroy", "--all", "--yes"); err != nil || !strings.Contains(out, "unibox is as if never used here") {
 		t.Fatalf("%v %s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(paths.Config, "config.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("config stayed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "sandboxes", "node", "sandbox.yaml")); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("the repository not in git stayed: %v", err)
 	}
 }
