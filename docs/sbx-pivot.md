@@ -8,8 +8,9 @@ Unibox nemá vlastní formát. Bere libovolný sbxenv tak, jak je, a přidává 
 1. **Osobní hodnoty**: `vars.toml` → `--env-args-file`, aby se `env.args` nemusely vypisovat při každém create.
 2. **Loginy**: wizard, který zjistí, které secrety kity potřebují, a nechá je uložit přes `sbx secret set`.
 3. **Tasky**: repo do sandboxu naživo přes `sbx mount` (direct) nebo jako klon uvnitř, agent se pustí v něm, stav se vede.
-4. **Doctor, drift, recreate**: řekne, co chybí nebo se změnilo a co z toho plyne.
-5. **herdr** zůstane, jak je.
+4. **Pojmenované porty**: osobní mapování portů na hostu, publikované a rušené podle jména.
+5. **Doctor, drift, recreate**: řekne, co chybí nebo se změnilo a co z toho plyne.
+6. **herdr** zůstane, jak je.
 
 Kdo unibox nechce, použije tytéž soubory přes čisté `sbx env create`. Unibox nesmí být podmínkou.
 
@@ -30,7 +31,7 @@ Kdo unibox nechce, použije tytéž soubory přes čisté `sbx env create`. Unib
 | Build image | `build.go`, `@install` runner | dělá ho sbx z kitů |
 | msb | `msb*.go`, cgo tag | konec runtime agnostiky |
 | Runtime rozhraní | `runtime.go` (Runtime, Mounter, Authenticator, …) | jeden konkrétní `sbx` klient |
-| Příkazy nad profilem | `network`, `service`, `agent`, `port`, `secret source`, `profile set/unset`, `co-author`, `instructions` | řeší kity, `sbx policy`, `sbx ports` a `sbx secret` |
+| Příkazy nad profilem | `network`, `service`, `agent`, `secret source`, `profile set/unset`, `co-author`, `instructions` | řeší kity, `sbx policy`, `sbx ports` a `sbx secret` |
 | Seedy agentů | `templates/seeds` | konfiguraci agenta dodává kit (viz `copilot-config`) |
 
 Zhruba 60 % kódu. Mažu až ve fázi 5, aby se do té doby dalo porovnávat chování.
@@ -46,6 +47,7 @@ Zhruba 60 % kódu. Mažu až ve fázi 5, aby se do té doby dalo porovnávat cho
 | Úklid | `destroy.go`, `prune.go` | jen sandboxy, které založil unibox |
 | Kontext, config, lock | `context.go`, `config.go`, `lock_unix.go` | `default_env` místo `default_profile` |
 | Vars | `vars.go`, `cli/vars.go` | klíčované podle env (viz níže) a výstup do `--env-args-file` |
+| Porty | `ports.go`, příkazy `port` | Jen z `config.toml` uživatele místo profilu, viz "Porty" níže. Stejná syntaxe a příkazy. |
 | Doctor | `cli/doctor.go` | nové kontroly (viz fáze 4) |
 | Testy | `internal/testenv`, fake runtime | fake `sbx` na PATH místo fake runtime |
 
@@ -71,6 +73,24 @@ Zhruba 60 % kódu. Mažu až ve fázi 5, aby se do té doby dalo porovnávat cho
 - **Otisk:** hash obsahu všech souborů env, jejich lokálních kitů (adresáře z `kits[].source`) a args.
   Uloží se do stavu sandboxu při create. Liší-li se při `run`, unibox to oznámí a nabídne `unibox sandbox recreate`, nic sám neschvaluje.
 
+## Porty
+
+Porty zůstávají pojmenované, ale patří uživateli, ne týmu. Jsou v
+`~/.config/unibox/config.toml` u env a nikdy v sbxenv, protože host port je
+věc stroje (co už na něm běží, jaké číslo zná prohlížeč).
+
+```
+[envs.my2n-dev.ports]
+web      = "3000:5173"                     # publikovaný při startu
+storybook = { port = "6006:6006", default = "off" }
+```
+
+- Syntaxe a chování jako dnes (`ports.go`): spec je `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`, jen loopback, `default` on/off.
+- `unibox port set|unset|ls` mění `config.toml`; `unibox port publish|unpublish <name>` (i `--map` pro jednorázové mapování) přepíná na běžícím sandboxu přes `sbx ports --publish|--unpublish`.
+- Při `run` a po recreate unibox srovná publikované porty se seznamem (dnešní `syncPorts`).
+- Spravuje jen porty, které sám publikoval (vede je ve stavu). Porty z kitů (`port@1`, třeba node dev servery na náhodném portu) ani ručně publikované přes `sbx ports` nepřepisuje ani neruší; `port ls` je ukáže zvlášť bez jména.
+- Kolize host portu (obsazený jiným sandboxem nebo procesem) je chyba se jménem portu a radou, jak ho přemapovat.
+
 ## Fáze
 
 ### Fáze 0: Ověření předpokladů v sbx (před kódem)
@@ -93,6 +113,7 @@ Výstupem fáze 0 je doplněná sekce v `docs/design.md`. Do té doby se nic nem
 - `vars.go` překlíčovat na `[envs.<name>.args]` a vytvořit generátor `--env-args-file`.
 - `unibox sandbox create [env]` → `sbx env create --name … --env-args-file … <files…>`. Chybí-li povinný arg, zastaví se se jménem argu a příkazem `unibox var set`.
 - Otisk a jeho zápis do stavu.
+- Porty: `ports.go` přepojit z profilu na `[envs.<name>.ports]`, stav publikovaných portů u sandboxu.
 
 ### Fáze 2: Tasky nad sbx
 
