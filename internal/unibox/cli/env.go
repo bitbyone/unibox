@@ -126,6 +126,82 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 		return o.success("removed env " + args[0])
 	}})
 
+	c.AddCommand(&cobra.Command{Use: "pull [env]", Args: cobra.MaximumNArgs(1), Short: "Update the repositories unibox cloned, and say what that changes", Long: `Brings each repository unibox init cloned from an address up to its
+remote, by a fast-forward alone, and says what it changes for the envs of
+it: values they now ask for, sandboxes to recreate, new sbxenv files. A
+repository of your own is never pulled; update it with git.`, RunE: func(cmd *cobra.Command, args []string) error {
+		cfg := o.manager.Config
+		repos := map[string][]string{}
+		if len(args) == 1 {
+			ec, ok := cfg.Envs[args[0]]
+			if !ok {
+				return fmt.Errorf("there is no env %s; unibox env ls lists them", args[0])
+			}
+			if ec.Source == "" || ec.Repo == "" {
+				return unibox.Fail(4, "not_a_clone", "env %s is in a repository of yours, which unibox does not pull; update it with git", args[0])
+			}
+		}
+		for _, name := range sorted(cfg.Envs) {
+			if ec := cfg.Envs[name]; ec.Source != "" && ec.Repo != "" && (len(args) == 0 || cfg.Envs[args[0]].Repo == ec.Repo) {
+				repos[ec.Repo] = append(repos[ec.Repo], name)
+			}
+		}
+		if len(repos) == 0 {
+			return o.success("no env is in a repository unibox cloned; unibox init <git-address> clones one")
+		}
+		values, err := o.paths.LoadEnvValues()
+		if err != nil {
+			return err
+		}
+		state, err := o.paths.ReadState()
+		if err != nil {
+			return err
+		}
+		said, updated := []string{}, false
+		for _, repo := range sorted(repos) {
+			moved, err := unibox.Pull(cmd.Context(), repo, o.canAsk(), o.input, o.log)
+			if err != nil {
+				return err
+			}
+			if !moved {
+				said = append(said, repo+": up to date")
+				continue
+			}
+			said, updated = append(said, repo+": updated"), true
+			for _, name := range repos[repo] {
+				env, err := o.manager.Config.LoadEnv(name)
+				if err != nil {
+					said = append(said, fmt.Sprintf("  env %s: %v", name, err))
+					continue
+				}
+				mine := values.Envs[name]
+				if missing := env.SBX.Missing(mine); len(missing) > 0 {
+					said = append(said, fmt.Sprintf("  env %s now asks for %s: unibox var set -e %s %s <value>", name, strings.Join(missing, ", "), name, missing[0]))
+				}
+				if changed(state, env, mine) {
+					said = append(said, fmt.Sprintf("  env %s changed for sandbox %s: unibox sandbox recreate %s", name, env.SandboxName(), env.SandboxName()))
+				}
+			}
+			found, err := unibox.FindSBXEnvs(repo)
+			if err != nil {
+				return err
+			}
+			fresh := []string{}
+			for _, f := range found {
+				if _, ok := o.manager.Config.EnvOf(f); !ok {
+					fresh = append(fresh, relative(repo, f))
+				}
+			}
+			if len(fresh) > 0 {
+				said = append(said, fmt.Sprintf("  new sbxenv file(s) %s: unibox init %s sets them up", strings.Join(fresh, ", "), repo))
+			}
+		}
+		if updated {
+			said = append(said, "unibox doctor checks the logins they need")
+		}
+		return o.success(strings.Join(said, "\n"))
+	}})
+
 	c.AddCommand(&cobra.Command{Use: "show [env]", Args: cobra.MaximumNArgs(1), Short: "Show what an env's files declare and what you set", RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := o.envName(firstArg(args))
 		if err != nil {

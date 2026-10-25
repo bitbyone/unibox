@@ -132,3 +132,35 @@ func gitOutput(ctx context.Context, dir string, args ...string) (string, error) 
 	b, err := commandOutput(hostCommand(ctx, "git", append([]string{"-C", dir}, args...)...))
 	return strings.TrimSpace(string(b)), err
 }
+
+// Pull brings a clone of unibox's up to its remote by a fast-forward alone,
+// so nothing of the user's in it is merged or lost, and says whether it
+// moved.
+func Pull(ctx context.Context, dir string, ask bool, in io.Reader, out io.Writer) (moved bool, err error) {
+	before, err := gitOutput(ctx, dir, "rev-parse", "HEAD")
+	if err != nil {
+		return false, err
+	}
+	c := userGit(ctx, ask, "-C", dir, "pull", "--ff-only", "--quiet")
+	c.Stdin, c.Stdout, c.Stderr = in, out, out
+	if err = c.Run(); err != nil {
+		return false, fmt.Errorf("git could not fast-forward %s; git says why above, and the clone is set right with git in it: %w", dir, err)
+	}
+	after, err := gitOutput(ctx, dir, "rev-parse", "HEAD")
+	return before != after, err
+}
+
+// Behind fetches a clone's remote and says how many commits its branch is
+// behind it.
+func Behind(ctx context.Context, dir string) (int, error) {
+	if err := runQuiet(userGit(ctx, false, "-C", dir, "fetch", "--quiet")); err != nil {
+		return 0, fmt.Errorf("could not reach its remote: %w", err)
+	}
+	count, err := gitOutput(ctx, dir, "rev-list", "--count", "HEAD..@{upstream}")
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	_, err = fmt.Sscan(count, &n)
+	return n, err
+}

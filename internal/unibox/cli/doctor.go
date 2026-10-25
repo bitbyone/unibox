@@ -2,9 +2,11 @@ package cli
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
@@ -104,6 +106,7 @@ func (o *options) doctorCommand() *cobra.Command {
 			add("Envs", "configured", "fail", "no env yet", "unibox env add <name> <file.sbxenv.yaml>")
 		}
 		state, _ := o.paths.ReadState()
+		behind := map[string]int{}
 		for _, name := range names {
 			area := "Env " + name
 			env, err := o.manager.Config.LoadEnv(name)
@@ -163,10 +166,26 @@ func (o *options) doctorCommand() *cobra.Command {
 					}
 				}
 			}
-			if b, ok := state.Sandboxes[sandbox]; ok && b.Env == name && b.Fingerprint != "" && !b.Adopted {
-				if args := env.SBX.Declared(mine); env.SBX.Missing(mine) == nil {
-					if fp, err := env.SBX.Fingerprint(args); err == nil && fp != b.Fingerprint {
-						add(area, "sandbox "+b.Name, "warn", "the env changed since the sandbox was created", "unibox sandbox recreate "+b.Name)
+			if changed(state, env, mine) {
+				add(area, "sandbox "+sandbox, "warn", "the env changed since the sandbox was created", "unibox sandbox recreate "+sandbox)
+			}
+			if repo := env.Config.Repo; env.Config.Source != "" && repo != "" {
+				if _, done := behind[repo]; !done {
+					var n int
+					err := o.working("asking the remote of "+repo, func() (err error) {
+						ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+						defer cancel()
+						n, err = unibox.Behind(ctx, repo)
+						return err
+					})
+					behind[repo] = n
+					switch {
+					case err != nil:
+						add(area, "clone", "warn", err.Error(), "")
+					case n > 0:
+						add(area, "clone", "warn", fmt.Sprintf("%d commit(s) behind its remote", n), "unibox env pull")
+					default:
+						add(area, "clone", "pass", "as its remote", "")
 					}
 				}
 			}
@@ -277,4 +296,15 @@ func (o *options) painter() func(style, text string) string {
 	}
 	codes := map[string]string{"bold": "1", "dim": "2", "green": "32", "yellow": "33", "red": "31"}
 	return func(style, text string) string { return "\x1b[" + codes[style] + "m" + text + "\x1b[0m" }
+}
+
+// changed says whether the env is no longer what its sandbox was created
+// from, as far as unibox made it and the person's values let it be told.
+func changed(state unibox.State, env unibox.Env, mine map[string]string) bool {
+	b, ok := state.Sandboxes[env.SandboxName()]
+	if !ok || b.Env != env.Name || b.Fingerprint == "" || b.Adopted || env.SBX.Missing(mine) != nil {
+		return false
+	}
+	fp, err := env.SBX.Fingerprint(env.SBX.Declared(mine))
+	return err == nil && fp != b.Fingerprint
 }

@@ -319,6 +319,39 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	if _, said, err = run(t, paths, "", "init", address, "--file", "sandboxes/dev.sbxenv.yaml"); err != nil || !strings.Contains(said, "cloned in "+dir+" already") {
 		t.Fatalf("%v\n%s", err, said)
 	}
+	// The team changes its repository: doctor sees the clone behind, and
+	// pull says what follows.
+	if err := os.WriteFile(filepath.Join(repo, "sandboxes", "dev.sbxenv.yaml"), []byte("agent: shell\nargs:\n  user: {required: true}\n  mirror: {required: true}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "extra"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "extra", "new.sbxenv.yaml"), []byte("agent: shell\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-qm", "mirror")
+	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "1 commit(s) behind its remote") {
+		t.Fatalf("%s", out)
+	}
+	out, _, err = run(t, paths, "", "env", "pull")
+	if err != nil || !strings.Contains(out, dir+": updated") || !strings.Contains(out, "env dev now asks for mirror") || !strings.Contains(out, "new sbxenv file(s) extra/new.sbxenv.yaml") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "env", "pull", "dev"); err != nil || !strings.Contains(out, ": up to date") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "as its remote") {
+		t.Fatalf("%s", out)
+	}
+	// A repository of the user's own is not unibox's to pull.
+	if _, _, err = run(t, paths, "", "env", "add", "mine", filepath.Join(repo, "extra", "new.sbxenv.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = run(t, paths, "", "env", "pull", "mine"); err == nil || !strings.Contains(err.Error(), "update it with git") {
+		t.Fatalf("%v", err)
+	}
 	// An address that cannot be cloned leaves nothing behind.
 	missing := "file://" + filepath.ToSlash(filepath.Join(t.TempDir(), "nothing"))
 	if _, _, err = run(t, paths, "", "init", missing); err == nil || !strings.Contains(err.Error(), "git could not clone") {
