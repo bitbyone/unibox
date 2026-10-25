@@ -2,8 +2,9 @@
 
 ## On the host
 
-unibox's home follows the XDG variables: `$XDG_CONFIG_HOME/unibox` and
-`$XDG_CACHE_HOME/unibox`, which default to the paths below.
+unibox's home follows the XDG variables: `$XDG_CONFIG_HOME/unibox`,
+`$XDG_CACHE_HOME/unibox` and `$XDG_DATA_HOME/unibox`, which default to the
+paths below, under your home directory on Windows too.
 
 | Path | What it holds |
 | --- | --- |
@@ -13,9 +14,12 @@ unibox's home follows the XDG variables: `$XDG_CONFIG_HOME/unibox` and
 | `~/.config/unibox/state.lock`, `locks/` | locks that keep two unibox commands from changing the same thing at once |
 | `~/.config/unibox/herdr-plugin/` | the herdr plugin's manifest, when installed |
 | `~/.cache/unibox/args/` | the args file for one `sbx env create`, readable only by you and removed after it |
+| `~/.local/share/unibox/repos/<host>/<path>` | the team repositories `unibox init` cloned from a git address, kept current by `unibox env pull`; `destroy --all` leaves them |
 
 The team's sbxenv files and kits are wherever the team keeps them; unibox
-records their paths and never writes them. Tokens are in none of these
+records their paths and never writes them. Beside an sbxenv file, the team
+may keep the [ports it names](/guide/ports#the-team-s-ports) in a file sbx
+does not read: `dev.sbxenv.yaml` has `dev.unibox.yaml`. Tokens are in none of these
 files: they are sbx's, in its own store (the keychain on macOS).
 
 ### `config.yaml`
@@ -28,14 +32,22 @@ envs:
       - /home/me/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml
       - /home/me/team/agent-sandboxes/sandboxes/local.sbxenv.yaml
     name: dev-mine
+    repo: /home/me/.local/share/unibox/repos/github.com/team/agent-sandboxes
+    source: git@github.com:team/agent-sandboxes.git
     ports:
       web: 3000:5173
       storybook: {port: '6006:6006', default: off}
+      vite: {default: on}     # a port of the team's, switched on for you
 context:
   sandbox: dev-mine
 stop_idle: true
 ssh_agent: false
 ```
+
+`repo` is the repository init found the files in, and `source` the
+address it cloned it from; only a repository with a `source` is pulled by
+`unibox env pull`. A port with no mapping of its own is one of the team's,
+switched by `unibox port on` or `off`.
 
 Change it with unibox's commands rather than by hand - `unibox env`,
 `unibox port`, `unibox context`, `unibox config`:

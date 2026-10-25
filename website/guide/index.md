@@ -29,6 +29,25 @@ A recent Homebrew loads a third-party tap's formulae only once you trust
 it; `brew trust --formula bitbyone/unibox/unibox` trusts this one formula
 alone. `brew upgrade unibox` picks up a new release.
 
+### Scoop, on Windows
+
+This repository is a Scoop bucket as well; Scoop installs the release's
+Windows archive, checked against its SHA-256.
+
+```powershell
+scoop bucket add unibox https://github.com/bitbyone/unibox
+scoop install unibox
+```
+
+`scoop update unibox` picks up a new release.
+
+### A release archive
+
+Every release on [GitHub](https://github.com/bitbyone/unibox/releases)
+has an archive for Linux, macOS and Windows, on amd64 and arm64, each with
+one binary that needs nothing else, and `checksums.txt` with their SHA-256.
+Put `unibox` (`unibox.exe`) anywhere on your `PATH`.
+
 ### From a checkout
 
 ```sh
@@ -44,9 +63,9 @@ of its JSON contract.
 
 ### Requirements
 
-- **macOS** (verified on Apple Silicon) or **Linux**
-- **Docker Sandboxes** (`sbx`) **0.49.2** or newer, signed in with
-  `sbx login`
+- **macOS** (verified on Apple Silicon), **Linux** or **Windows**
+- **Docker Sandboxes** (`sbx`) **0.49.2** or newer, signed in (`unibox
+  init` runs `sbx login` for you)
 - **An sbxenv file**, usually your team's, in a repository of sbxenv files
   and kits
 - **git**
@@ -54,21 +73,49 @@ of its JSON contract.
 
 ## Set it up
 
+In your team's repository of sbxenv files, or anywhere in it:
+
 ```sh
+cd ~/team/agent-sandboxes
 unibox init
 ```
 
-walks you through five steps at the terminal. Each runs the command it
-stands for, so what the walk does and what the commands do never differ,
-and a step already done is only said.
+init finds every `*.sbxenv.yaml` in the repository and offers them to
+pick, several at once; each becomes an env, named as the file names its
+sandbox. It then walks you through six steps at the terminal. Each runs the
+command it stands for, so what the walk does and what the commands do never
+differ, and a step already done is only said. Running it again adds what is
+new - a file the team added, an arg it now asks for - and skips the rest.
 
 | Step | What it does |
 | --- | --- |
-| sbx | checks sbx is installed and signed in, and asks whether sandboxes may use your SSH agent |
-| Env | names your team's sbxenv file as an env, as `unibox env add` |
-| Values | asks for the args the file requires and you have not set, as `unibox var set` |
-| Logins | lists the tokens the env's kits need and has sbx ask for the missing ones, as `unibox login set` |
-| Sandbox | creates the env's sandbox, as `unibox sandbox create`; sbx shows what it makes and asks you to approve it |
+| sbx | checks sbx is installed and signed in (running `sbx login` for you), and asks whether sandboxes may use your SSH agent |
+| Envs | names each sbxenv file you picked as an env, as `unibox env add`, and which is the default when there are several |
+| Values | asks for the args the files require and you have not set, as `unibox var set` |
+| Logins | lists the tokens the envs' kits need and has sbx ask for the missing ones, as `unibox login set` |
+| Ports | offers the [ports the team named](./ports#the-team-s-ports) to switch on or off, as `unibox port on` |
+| Sandboxes | creates the envs' sandboxes, as `unibox sandbox create`; sbx shows what it makes and asks you to approve it |
+
+You need no checkout of the repository first: given its git address, init
+clones it with your own git into
+`~/.local/share/unibox/repos/<host>/<path>` and sets it up from there.
+
+```sh
+unibox init git@github.com:team/agent-sandboxes.git
+unibox env pull        # later: brings the clone up to date, and says what that changes
+```
+
+`unibox env pull` pulls only the clones unibox made; a checkout of your own
+is yours to pull. `unibox doctor` says when such a clone is behind.
+
+Without a terminal, or with `--no-input`, init asks nothing: it sets up
+every file found, or those named with `--file`, takes your values from
+`--var name=value`, and fails naming what is still missing and the flag
+that gives it. Tokens are never given on the command line.
+
+```sh
+unibox init --no-input --file sandboxes/dev.sbxenv.yaml --var user=jdoe
+```
 
 The same by hand:
 
@@ -147,7 +194,8 @@ question.
 
 unibox 2 has no profiles, `sandbox.yaml`, environments repository, image
 builds or templates: the team's sbxenv files and kits say all of that now,
-network rules are `sbx policy`'s and tokens `sbx secret`'s. The first
+network rules are sbx's policy (`unibox network`) and tokens sbx's
+secrets (`unibox login`). The first
 command of unibox 2 sets the old state aside as `state.v1.json` and names
 the sandboxes of unibox 1, which it no longer manages; remove them with
 `sbx rm` once their work is safe.

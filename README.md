@@ -39,7 +39,8 @@ proxy replaces. unibox never reads them.
 
 ## Install
 
-Needs git and Docker Sandboxes 0.49.2 or later, signed in (`sbx login`).
+Needs git and Docker Sandboxes 0.49.2 or later; `unibox init` signs you in
+to sbx. Runs on Linux, macOS and Windows.
 
 With Homebrew, from the tap in this repository; it builds the release on
 your machine from its tagged commit:
@@ -50,7 +51,17 @@ brew trust bitbyone/unibox     # Homebrew loads a third-party tap only once trus
 brew install unibox
 ```
 
-Or from a checkout, with Go 1.26+:
+On Windows, with Scoop, from the bucket in this repository:
+
+```powershell
+scoop bucket add unibox https://github.com/bitbyone/unibox
+scoop install unibox
+```
+
+Or download the archive for your system from the
+[releases](https://github.com/bitbyone/unibox/releases): one binary, no
+dependencies, with `checksums.txt` beside it. Or from a checkout, with Go
+1.26+:
 
 ```sh
 git clone https://github.com/bitbyone/unibox && cd unibox
@@ -62,13 +73,20 @@ for a build that is not one; `unibox version --json` adds the API version.
 
 ## Use
 
-The quickest start walks you through it - sbx, an env, your args, logins,
-the sandbox - one step at a time:
+The quickest start: in your team's repository of sbxenv files, `init`
+finds every `*.sbxenv.yaml`, lets you pick, and walks you through it - sbx,
+the envs, your args, logins, the team's ports, the sandboxes - one step at
+a time. Given a git address, it clones the repository for you first.
 
 ```sh
-unibox init
-unibox doctor                 # what a run needs, and what to fix
+cd ~/team/agent-sandboxes && unibox init
+unibox init git@github.com:team/agent-sandboxes.git   # cloned into ~/.local/share/unibox/repos
+unibox env pull                                       # later: update that clone, say what it changes
+unibox doctor                                         # what a run needs, and what to fix
 ```
+
+`init --no-input` asks nothing - for a script - and takes values from
+`--var name=value`.
 
 Each step also has its command:
 
@@ -100,7 +118,8 @@ check` (same arguments as `run`) says what is missing before a start;
 
 ## Envs
 
-An env is a list of sbxenv files, kept in `~/.config/unibox/config.yaml`:
+An env is a list of sbxenv files, kept in `~/.config/unibox/config.yaml`;
+`init` makes one of each file you pick:
 
 ```sh
 unibox env add dev team/sandboxes/dev.sbxenv.yaml            # the team's
@@ -134,8 +153,7 @@ unibox var set -e dev artifactoryUser tobola
 
 The env's kits and bindings name the tokens its sandboxes use.
 `unibox login ls` shows each, whether sbx has it and what it is for;
-`unibox login set` has sbx ask for the missing ones (`sbx secret set`),
-or stores the one piped in. `--command` gives sbx a host command that
+`unibox login set` has sbx ask for the missing ones, or stores the one piped in. `--command` gives sbx a host command that
 prints the token - a keychain, a vault - which sbx runs itself. Secrets
 are stored globally: sbx removes a sandbox's own with the sandbox.
 
@@ -166,16 +184,42 @@ the host's loopback by name, at every start unless `--off`; the mapping
 is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. Ports are yours, kept
 with the env in `config.yaml`. `unibox port ls -s <sandbox>` lists them
 with their URLs, `port publish` and `port unpublish` switch them while it
-runs. The network policy is sbx's: `sbx policy`.
+runs.
+
+A team names the ports everyone uses beside its sbxenv file, in a file sbx
+never reads - `dev.unibox.yaml` for `dev.sbxenv.yaml` - so nobody without
+unibox is limited by it:
+
+```yaml
+ports:
+  vite: {port: '5173:5173', description: the dev server, default: on}
+  storybook: {port: '6006', description: Storybook}
+```
+
+Each person switches them with `unibox port on|off <name>`; their choice
+wins over the team's default.
+
+## Network
+
+```sh
+unibox network ls -s dev                 # the hosts the sandbox may reach
+unibox network allow jitpack.io -s dev   # --global for every sandbox
+unibox network log -s dev                # what was asked, and what was decided
+```
+
+The rules are sbx's network policy; a rule the team needs belongs in a
+kit.
 
 ## Doctor
 
 `unibox doctor` checks sbx (installed, its own diagnosis, a version unibox
 supports, `env.rememberHostCommands`, the SSH agent), each env (its files,
 your args, `sbx env plan`, the logins, a change since its sandbox was
-made) and the sandboxes (gone from sbx, a mounted directory gone from the
-host, a mount a running sandbox lacks or no task has), each with the
-command that fixes it.
+made, a clone of unibox's behind its remote) and the sandboxes (gone from
+sbx, a mounted directory gone from the host, a mount a running sandbox
+lacks or no task has), each with the unibox command that fixes it;
+`unibox prune` clears what sbx no longer has and the mounts no task has.
+You never need sbx's own CLI, though it keeps working beside unibox.
 
 ## The SSH agent
 

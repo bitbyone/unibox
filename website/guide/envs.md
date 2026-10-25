@@ -37,7 +37,11 @@ unibox passes it on untouched.
 
 ## Adding one
 
+`unibox init` in the team's repository finds its sbxenv files and makes an
+env of each you pick ([Getting Started](./#set-it-up)). One at a time:
+
 ```sh
+unibox env add                                   # the one sbxenv file in this directory
 unibox env add dev ~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml
 unibox env add dev dev.sbxenv.yaml local.sbxenv.yaml --name dev-mine
 unibox env add dev dev.sbxenv.yaml --default
@@ -59,8 +63,23 @@ unibox env show dev       # what the files declare, and what you set
 unibox env rm dev         # forget it; its files and sandbox stay
 ```
 
-Envs are kept in `~/.config/unibox/config.yaml`. `unibox init` adds the
-first one for you.
+Envs are kept in `~/.config/unibox/config.yaml`, with the repository the
+files are in when init found them, and the address it was cloned from when
+init cloned it.
+
+## Keeping the team's repository current
+
+```sh
+unibox env pull          # every repository unibox cloned
+unibox env pull dev      # the one dev's files are in
+```
+
+brings each repository unibox init cloned from a git address up to its
+remote, by a fast-forward alone, and says what that changes: an arg the
+files now ask of you, a sandbox to recreate, a new sbxenv file for
+`unibox init` to add. A checkout of your own is never pulled; update it
+with git as you would. `unibox doctor` says when a clone is behind its
+remote.
 
 ## Your values for its args
 

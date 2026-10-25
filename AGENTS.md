@@ -61,7 +61,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
 | Package | What it owns |
 | --- | --- |
 | `cmd/unibox` | the entry point |
-| `internal/unibox` | envs and their sbxenv files (`env.go`, `sbxenv.go`), the person's values (`envvars.go`), logins, the manager, tasks and their mounts, ports, agents, herdr, and `sbx.go`, the one client of sbx behind the `Runtime` interface |
+| `internal/unibox` | envs and their sbxenv files (`env.go`, `sbxenv.go`), finding them in a repository (`discover.go`) and cloning one (`clone.go`), the person's values (`envvars.go`), logins, the manager, tasks and their mounts, ports and the team's (`teamports.go`), the network policy (`policy.go`), locks per system (`lock_unix.go`, `lock_windows.go`), agents, herdr, and `sbx.go`, the one client of sbx behind the `Runtime` interface |
 | `internal/unibox/api` | the versioned JSON contract other programs read |
 | `internal/unibox/cli` | the cobra commands, preflight, the `init` walk and doctor |
 | `internal/version` | the release unibox was built from, set from the tag at build time |
@@ -113,10 +113,32 @@ about it. Keep command output short: pipe through `head`, `tail` or
   user's settings. An agent unibox does not know is still run.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
-- **init is a walk of steps** (`cli/init.go`): sbx, Env, Values, Logins,
-  Sandbox. A step runs its command (`login set`, `sandbox create`), so
-  the walk and the commands never differ; away from a terminal init only
-  says what to run. `unibox doctor` checks what the walk sets up.
+- **init starts from the team's repository** (`cli/init.go`): the
+  current one, a path, or a git address, which it clones with the user's
+  own git into `$XDG_DATA_HOME/unibox/repos/<host>/<path>`. It offers every
+  sbxenv file found and walks six steps: sbx, Envs, Values, Logins,
+  Ports, Sandboxes. A step runs its command (`login set`, `port on`,
+  `sandbox create`), so the walk and the commands never differ. Without a
+  terminal or with `--no-input` it asks nothing and fails naming the flag
+  (`--file`, `--var`) that gives what is missing. `unibox doctor` checks
+  what the walk sets up.
+- **unibox pulls only what it cloned.** An env keeps the repository its
+  files are in (`repo`) and the address unibox cloned it from
+  (`source`); `env pull` fast-forwards those with a `source` alone. The
+  user's own checkout is never pulled, and `destroy --all` leaves the
+  clones.
+- **What only unibox reads sits beside the sbxenv file.** The team's
+  ports are in `<name>.unibox.yaml`, which sbx never reads, so a team
+  member without unibox is limited by nothing. The user's choice in
+  config.yaml (`port on|off`, an entry without a mapping) wins over the
+  team's default.
+- **Nobody using unibox needs sbx's CLI.** The network policy
+  (`unibox network`), `env.rememberHostCommands` (`unibox config`) and
+  stray mounts (`unibox prune`) have commands, and every hint doctor or
+  an error gives names a unibox command.
+- **Every platform, without cgo.** unibox builds for Linux, macOS and
+  Windows; what differs is behind build tags (locks, detaching a
+  process). `GOOS=windows go vet ./...` checks it from any machine.
 - **sbx's JSON changes shape between releases** (0.48 made `ls` bare
   lists); read a list through `sbxList`, which takes either. The oldest
   sbx unibox was checked against is `MinSBXVersion`; raise it when unibox

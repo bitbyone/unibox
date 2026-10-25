@@ -216,6 +216,16 @@ Cíl: s unibox není potřeba sbx CLI vůbec; kdo unibox nechce, vystačí si se
 - Windows: `LockFileEx` místo flock, herdr za build tagem, proměnné prostředí Windows, Windows v CI.
 - Release: `CGO_ENABLED=0` pro linux, darwin, windows × amd64, arm64, archivy v GitHub release, Scoop manifest v tomto repu vedle Homebrew formule.
 
+### Hotovo
+
+Vše výše je hotové; odchylky od plánu:
+
+- Init bere i podsložku repa (najde jeho kořen) a skrytými složkami neprochází vůbec, nejen `.git`.
+- Na Windows se herdr nestaví zvlášť: liší se jen odpojení procesu (`detach`), za build tagem spolu se zámky.
+- Síťové pravidlo platí pro sandbox, ne globálně; globální jen s `--global`.
+- `unibox prune` navíc odmountuje, co žádný task nemá, místo samostatného příkazu.
+- Windows CI pouští jen testy bez shellových fake programů (zámky, adresáře klonů, týmové porty); zbytek suite běží na Linuxu a macOS.
+
 ## Testy
 
 - Fake `sbx` na PATH (`testenv.WriteExecutable`) zapisuje volání do souboru a vrací připravené JSON odpovědi. Testy, které ho používají, jsou sériové.

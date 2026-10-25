@@ -29,6 +29,12 @@ older one. Where sbx's behaviour shows through, this page says so.
 | stop and remove | `sbx stop`; `sbx env rm --force` with the env's files, or `sbx rm --force`, after unibox's own checks |
 | named ports | `sbx ports --json`, `--publish`, `--unpublish` |
 | the SSH agent decision | `sbx settings get/set ssh.agentForwardingEnabled`, then `sbx daemon restart` |
+| `config set remember_host_commands` | `sbx settings set/unset env.rememberHostCommands` |
+| `network ls` | `sbx policy ls --json --type network [<sandbox>]` |
+| `network allow`, `deny` | `sbx policy allow/deny network [--sandbox <sandbox>] <hosts>` |
+| `network rm` | `sbx policy rm network --force --resource <hosts> [--sandbox <sandbox>]` |
+| `network log` | `sbx policy log --type network --limit <n> [<sandbox>]` |
+| `prune` | `sbx ls --json`, and `sbx umount` of a mount no task has |
 | `doctor` | `sbx version`, `sbx diagnose --format json`, `sbx settings get env.rememberHostCommands` |
 
 unibox removes only sandboxes it created; one it adopted with
@@ -103,6 +109,16 @@ unibox removes only sandboxes it created; one it adopted with
   ports are the person's, in unibox's configuration.
 - A switch on a stopped sandbox is refused, since publishing would start it.
 
+## Network policy
+
+- `sbx policy ls --json` gives `rules[]`, each with `applies_to` (`all`, or
+  `sandbox:<name>`), how it was made, and for a kit's rule a name starting
+  `kit:`. unibox lists them as they are and removes only rules it can name
+  by their hosts; sbx refuses to remove the defaults' and the kits'.
+- A rule for one sandbox goes into sbx's `local` policy, scoped to it.
+  Hosts are joined by commas, so unibox refuses a host with a comma or
+  whitespace in it, or one starting with `-`, before sbx is asked.
+
 ## Lifecycle
 
 - `sbx exec` starts a stopped VM.
@@ -110,4 +126,4 @@ unibox removes only sandboxes it created; one it adopted with
   unless `stop_idle` is `false`. The disk and tasks stay.
 - With `env.rememberHostCommands` on, sbx runs an env's host commands again
   without asking; `unibox doctor` warns and suggests
-  `sbx settings set env.rememberHostCommands false`.
+  `unibox config set remember_host_commands false`.

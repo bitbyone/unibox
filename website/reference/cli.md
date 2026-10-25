@@ -55,14 +55,28 @@ lower case and say what to do: `sbx is not signed in - run sbx login`.
 ### `unibox init`
 
 ```
-unibox init
+unibox init [<directory>|<file>|<git-address>] [--no-input] [--file <file>...] [--var <name>=<value>...]
 ```
 
-Sets unibox up step by step, each shown as it goes: **sbx** (installed,
-recent enough, signed in, the SSH agent decided), **Env** (an sbxenv file
-added as an env), **Values** (the args it asks of you), **Logins** (the tokens
-sbx lacks, asked for by sbx) and **Sandbox** (created, on your terminal). A
-step already done is said and passed. See [Getting Started](/guide/).
+Sets unibox up for a team's repository of sbxenv files: the current one
+(the whole repository, from anywhere in it), the one given, or one cloned
+from a git address into `~/.local/share/unibox/repos/<host>/<path>` with
+your own git. It finds every `*.sbxenv.yaml` there and offers them to pick,
+then goes step by step, each shown as it goes: **sbx** (installed, recent
+enough, signed in, the SSH agent decided), **Envs** (each file picked
+added as an env, and the default one), **Values** (the args they ask of
+you), **Logins** (the tokens sbx lacks, asked for by sbx), **Ports** (the
+team's ports switched on or off) and **Sandboxes** (created, on your
+terminal). A step already done is said and passed; running it again adds
+what is new.
+
+| Flag | Meaning |
+| --- | --- |
+| `--no-input` | ask nothing, as without a terminal; fail naming what is missing and the flag that gives it |
+| `--file <file>` | set up this sbxenv file rather than each found (repeatable) |
+| `--var <name>=<value>` | a value of yours for each env asking for it (repeatable) |
+
+See [Getting Started](/guide/#set-it-up).
 
 ### `unibox doctor`
 
@@ -74,15 +88,18 @@ Checks sbx, the envs, your args and logins, and the sandboxes, and says what
 to fix: sbx's version (0.49.2 or newer) and `sbx diagnose`; the SSH agent
 decision; that each env's files read and `sbx env plan` accepts them with
 your args; every required arg and login; whether a sandbox still matches its
-env, and is still in sbx; mounted directories that are gone. With `-e`, one
-env alone. Exits `4` on a failure.
+env, and is still in sbx; mounted directories that are gone, and mounts a
+running sandbox has that no task does; a clone of unibox's that is behind
+its remote. Each finding names the unibox command that fixes it. With `-e`,
+one env alone. Exits `4` on a failure.
 
 ### `unibox env`
 
 ```
-unibox env add <env> <file...> [--name <sandbox>] [--default]
+unibox env add [<env>] [<file>...] [--name <sandbox>] [--default]
 unibox env ls
 unibox env show [<env>]
+unibox env pull [<env>]
 unibox env rm <env>
 ```
 
@@ -91,10 +108,15 @@ merged by sbx in the order given; a later file, such as a local overlay,
 overrides an earlier one. unibox never changes the files. Envs are kept in
 `~/.config/unibox/config.yaml`.
 
-`add` adds an env, or changes the files of one. `--name` names its sandbox
-(default: the file's `name:`, or the env's); `--default` makes it the env new
-sandboxes come from. `show` prints what the files declare - args, kits,
-agent - and what you set. `rm` forgets an env; its files and sandbox stay.
+`add` adds an env, or changes the files of one; without a file it takes the
+one sbxenv file in the current directory, and without a name the name that
+file gives its sandbox. `--name` names its sandbox (default: the file's
+`name:`, or the env's); `--default` makes it the env new sandboxes come
+from. `show` prints what the files declare - args, kits, agent, the team's
+ports - and what you set. `pull` brings the repositories unibox init cloned
+up to their remote, by a fast-forward alone, and says what that changes; a
+checkout of your own is never pulled. `rm` forgets an env; its files and
+sandbox stay.
 See [Envs](/guide/envs).
 
 ### `unibox var`
@@ -242,6 +264,8 @@ does; `rm` always names it.
 ```
 unibox port set <name> --map <mapping> [--off] [-e <env>]
 unibox port unset <name...> [-e <env>]
+unibox port on <name...> [-e <env>]
+unibox port off <name...> [-e <env>]
 unibox port ls [-s <sandbox>]
 unibox port publish [name...] [--map <mapping>...] [-s <sandbox>]
 unibox port unpublish [name...] [--map <mapping>...] [-s <sandbox>]
@@ -249,13 +273,32 @@ unibox port unpublish [name...] [--map <mapping>...] [-s <sandbox>]
 
 A port is published on the host's loopback. `set` and `unset` change the
 env's named ports, for its sandbox, and apply at once while it runs; `--off`
-publishes one only when asked to, not at start. `publish` and `unpublish`
-switch a running sandbox's ports alone - the env's by name, others by
-`--map` - and its next start goes back to the env's. `ls` lists a sandbox's
-ports and their URLs.
+publishes one only when asked to, not at start. `on` and `off` switch
+whether a port - the team's, from the `.unibox.yaml` beside the env's
+sbxenv file, or yours - is published at start; your choice wins over the
+team's default, and `unset` takes back what you changed of a team's port.
+`publish` and `unpublish` switch a running sandbox's ports alone - the
+env's by name, others by `--map` - and its next start goes back to the
+env's. `ls` lists a sandbox's ports, where each comes from, and their URLs.
 
 A mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`: `3000` takes
 any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).
+
+### `unibox network`
+
+```
+unibox network ls [-s <sandbox>] [--global]
+unibox network allow <host...> [-s <sandbox>] [--global]
+unibox network deny <host...> [-s <sandbox>] [--global]
+unibox network rm <host...> [-s <sandbox>] [--global]
+unibox network log [-s <sandbox>] [--limit <n>]
+```
+
+The hosts a sandbox may reach, as sbx's network policy says. A rule is
+for the sandbox unless `--global` makes it every sandbox's; `ls --global`
+lists every rule. `rm` takes away a rule you added; the defaults' and the
+kits' are not to be removed. `log` shows the latest requests and what the
+policy decided. See [Ports](/guide/ports#what-a-sandbox-may-reach).
 
 ### `unibox prune`
 
@@ -263,7 +306,10 @@ any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).
 unibox prune
 ```
 
-Forgets the sandboxes sbx no longer has - removed with `sbx rm`, say.
+Forgets the sandboxes sbx no longer has - removed with sbx itself, say -
+and unmounts from running sandboxes the directories no task of theirs
+mounts any more. A sandbox busy with another unibox command is passed and
+named.
 
 ### `unibox destroy`
 
@@ -278,7 +324,8 @@ the host is never deleted, and a sandbox unibox adopted is only forgotten.
 
 `--all` goes on to the herdr plugin and unibox's state, configuration and
 your args. The env files, the kits and your logins in sbx stay: they are the
-team's and sbx's.
+team's and sbx's; so do the repositories init cloned, in
+`~/.local/share/unibox/repos`.
 
 ## unibox itself
 
@@ -312,6 +359,7 @@ unibox's own configuration. `get` without a key prints all of it.
 | `default_env` | the env a sandbox is created from when none is named |
 | `stop_idle` | whether a sandbox is stopped when its last session ends (default `true`) |
 | `ssh_agent` | whether sandboxes may use your SSH agent; sbx is set to match |
+| `remember_host_commands` | whether approving an env's host commands covers their later runs too, rather than being asked each time; sbx's own setting, `env.rememberHostCommands` (default `false`) |
 
 `unset` forgets a setting, back to its default. See
 [Your SSH agent](/reference/security#your-ssh-agent) for `ssh_agent`.

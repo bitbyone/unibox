@@ -32,6 +32,52 @@ where it is now. Give a host port for a page you keep open.
 
 `unibox env show` lists an env's ports with the rest of it.
 
+## The team's ports
+
+The ports a whole team uses - the dev server, Storybook, a debugger - can be
+named once, beside the sbxenv file, in a file sbx does not read:
+`dev.sbxenv.yaml` has its ports in `dev.unibox.yaml`.
+
+```yaml
+# sandboxes/dev.unibox.yaml
+ports:
+  vite:
+    port: '5173:5173'
+    description: the dev server
+    default: on
+  storybook:
+    port: '6006'
+    description: Storybook, when you work on components
+```
+
+`port` is the mapping, `description` says what it is for, and `default`
+whether it is published at every start; left out, it is off. Someone using
+sbx without unibox is not limited by the file in any way: sbx never reads
+it.
+
+Each person switches the team's ports for themselves; the choice is kept
+in their `config.yaml`, and wins over the team's default:
+
+```sh
+unibox port on storybook -e dev
+unibox port off vite -e dev
+unibox port set vite --map 15173:5173 -e dev    # another host port, for you alone
+unibox port unset vite -e dev                   # back to the team's mapping
+```
+
+`unibox init` offers the team's ports in its Ports step. `unibox port ls`
+says of each where it comes from - the team, you, or neither, for one
+published by hand - and whether it is on at start:
+
+```
+PORT       MAPPING    FROM  AT START  NOW  URL                    DESCRIPTION
+storybook  6006       team  off       off  -                      Storybook, when you work on components
+vite       5173:5173  team  on        on   http://127.0.0.1:5173  the dev server
+```
+
+When an env has several files, a later file's `.unibox.yaml` wins for a port
+both name, as its sbxenv file does.
+
 ## Switching ports on a running sandbox
 
 ```sh
@@ -56,18 +102,21 @@ you to look on. An agent driving your own browser would have its cookies,
 sessions and files.
 :::
 
-## Network rules are sbx's
+## What a sandbox may reach
 
-What a sandbox may reach is not unibox's to say. sbx refuses what its policy
-does not list; the env's kits add the hosts they need, and the hosts a
-binding names are reached with the token put in. To change the rest, use
-sbx's own command:
+A sandbox reaches only the hosts sbx's network policy allows: the
+defaults, the hosts the env's kits add, and rules of your own. unibox
+changes those rules with sbx, for one sandbox or with `--global` for every
+one:
 
 ```sh
-sbx policy ls
-sbx policy allow network jitpack.io
-sbx policy deny network gist.github.com
+unibox network ls -s dev                    # the rules the sandbox has
+unibox network allow jitpack.io -s dev
+unibox network deny gist.github.com --global
+unibox network rm jitpack.io -s dev         # take a rule of yours away
+unibox network log -s dev                   # the latest requests, and what was decided
 ```
 
-`sbx policy --help` has the rest. A rule the whole team needs belongs in a
-kit, where it is reviewed with the env.
+A host is as sbx takes it: a name, a wildcard such as `*.example.com`, an
+IP address or CIDR prefix, each with an optional port (`example.com:443`). The defaults' and the kits' rules are not to be removed. A rule the
+whole team needs belongs in a kit, where it is reviewed with the env.

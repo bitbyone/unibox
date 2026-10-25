@@ -7,9 +7,12 @@ team describes its sandboxes in its own repository, as sbx's env files
 (`*.sbxenv.yaml`) and kits v3; unibox takes any such env as it is and adds
 only what sbx does not do: each person's values for the env's args, the
 logins the kits need, tasks with an agent in the user's terminal, named
-ports, a doctor, recreation when the env changed, and herdr's status of
-the agents. Using the same files with plain `sbx env create` still works;
-unibox is never a condition.
+ports (the team's among them), a doctor, recreation when the env changed,
+and herdr's status of the agents. Someone using unibox never needs sbx's
+CLI: init sets everything up, and the network policy and sbx's settings
+have unibox commands. Using the same files with plain `sbx env create`
+still works; unibox is never a condition, and nothing it adds to a team's
+repository limits someone without it.
 
 unibox 1 had a format of its own (profiles, `sandbox.yaml`), templates,
 image builds, generated kits and a second runtime; the sbxenv files and
@@ -18,7 +21,8 @@ says what went and why; [sbx-pivot.md](sbx-pivot.md) is the plan of the
 change, with what each phase actually did.
 
 Checked against sbx 0.49.2 on macOS (Apple Silicon), the oldest release
-unibox accepts (`MinSBXVersion`). What sbx was found to do, with when and
+unibox accepts (`MinSBXVersion`). It builds without cgo for Linux, macOS
+and Windows on amd64 and arm64 ([Platforms](#platforms-and-releases)). What sbx was found to do, with when and
 how, is in [What was verified about sbx](#what-was-verified-about-sbx);
 some of it was checked against 0.47 for unibox 1 and is kept because the
 decisions here still rest on it.
@@ -339,7 +343,29 @@ docs/sandboxes.md.
 
 ## Envs and the person's values
 
-- `unibox env add <env> <file...> [--name N] [--default]` keeps the files
+- **`unibox init` starts from the team's repository**, not from a file:
+  the current directory (its git root, from anywhere inside), a path, or
+  a git address. It finds every `*.sbxenv.yaml` (`discover.go`, skipping
+  hidden directories, `.git` among them, and `node_modules`), offers them
+  to pick, several at once, and makes an env of each, named as the file names its sandbox. One env
+  becomes `default_env` by itself; of several, init asks. Running it again
+  adds what is new and says what is in place. config.yaml keeps the
+  repository an env's files are in as `repo`.
+- **A git address is cloned with the person's own git** - their keys,
+  their credential helper; unibox never sees them - into
+  `$XDG_DATA_HOME/unibox/repos/<host>/<path>` (`clone.go`), and the env
+  keeps the address as `source`. `unibox env pull` fast-forwards such
+  clones alone and says what the change means: a new arg asked of the
+  person, a sandbox to recreate, a new sbxenv file for init. A checkout of
+  the person's own has no `source` and is never pulled: their branch,
+  their uncommitted work, are not unibox's. doctor fetches a clone and
+  warns when it is behind. `destroy --all` leaves the clones; they are a
+  repository, not unibox's state.
+- **Without a terminal, or with `--no-input`, init asks nothing**: it sets
+  up every file found or those of `--file`, takes values from `--var
+  name=value`, and fails naming what is missing and the flag that gives
+  it. A token is never a flag; `unibox login set` stores it.
+- `unibox env add [<env>] [<file...>] [--name N] [--default]` keeps the files
   in config.yaml after checking they read; `env show` prints what they
   declare and what the person set; `env rm` forgets the env, its files and
   sandbox untouched.
@@ -464,8 +490,32 @@ are kept with the env in config.yaml, never in an sbxenv.
   `port ls` shows those apart, without a name.
 - A kit's ports get new host ports at every start (verified), which is
   why named ports stay the person's.
-- The network policy is sbx's (`sbx policy`); unibox has no command for
-  it.
+- **The team may name the ports everyone uses**, beside the sbxenv file in
+  `<name>.unibox.yaml` (`teamports.go`): `ports.<name>: {port,
+  description, default}`, `default` off unless said. sbx never reads the
+  file, so it limits nobody without unibox; that is why it is not a field
+  of the sbxenv, which sbx would refuse or a newer sbx might mean
+  otherwise. The file is read strictly, an unknown key an error. Of an
+  env's several files, a later one's ports win, as its sbxenv does.
+- **The person's choice wins.** `port on|off` writes an entry without a
+  mapping (`{default: on}`) into config.yaml, switching the team's port
+  alone; `port set` gives it another mapping; `unset` returns to the
+  team's, and refuses for a port the person never changed (`port off` is
+  what they meant). An entry equal to the team's is dropped, so
+  config.yaml holds only what differs. init's Ports step offers the team's
+  ports per env.
+
+## Network
+
+What a sandbox may reach is sbx's network policy; unibox gives it
+commands so nobody needs `sbx policy` (`policy.go`, `cli/network.go`):
+`network ls|allow|deny|rm|log`. A rule is the sandbox's - sbx's `local`
+policy, scoped to it - unless `--global`, as a forgotten `-s` should not
+open a host to every sandbox; `-s` and `--global` together are an error.
+Hosts are joined with commas for sbx, so one holding a comma or
+whitespace, or starting with `-`, is refused first. The defaults' and the
+kits' rules are listed but not unibox's to remove; a rule the whole team
+needs belongs in a kit, reviewed with the env.
 
 ## Doctor
 
@@ -484,17 +534,22 @@ failure with the command that fixes it:
 - **the sandboxes**: one sbx no longer has; in a running one, the mounts
   under `/work` compared with the tasks'. sbx lists no mounts; the
   sandbox's `/proc/self/mountinfo` does, and a virtiofs mount's root is
-  the host path (verified), so a stray mount gets an exact `sbx umount
-  <sandbox> <host>:<target>`. A task's mount the sandbox lacks is a
+  the host path (verified), so a stray mount is unmounted exactly by
+  `unibox prune`, which does so for every running sandbox, under each
+  one's guard so a busy sandbox is passed and named. A task's mount the sandbox lacks is a
   warning - its next `resume` mounts it again, as after a recreation; a
   mounted host directory that is gone is a failure, since the sandbox
   cannot start.
 
-`init` sets up what doctor checks, as a walk of five steps (`cli/init.go`):
-sbx, Env, Values, Logins, Sandbox. Each step runs the command it stands
-for (`env add`, `var set`, `login set`, `sandbox create`), so the walk and
-the commands never differ; what is in place already is only said, and away
-from a terminal init only says what is left.
+Every fix doctor or an error names is a unibox command - `unibox prune`,
+`unibox config set remember_host_commands false`, `unibox login set` -
+never sbx's, so that nobody using unibox needs its CLI.
+
+`init` sets up what doctor checks, as a walk of six steps (`cli/init.go`):
+sbx (installed, `sbx login` run for the person, the SSH agent), Envs,
+Values, Logins, Ports, Sandboxes. Each step runs the command it stands for
+(`env add`, `var set`, `login set`, `port on|off`, `sandbox create`), so the
+walk and the commands never differ; what is in place already is only said.
 
 ## The SSH agent
 
@@ -532,6 +587,7 @@ with). With it, sessions get `GIT_SSH_COMMAND` with
                                published, directories told of
 ~/.config/unibox/locks/        a guard per sandbox, usage and task locks
 ~/.cache/unibox/args/          an args file while sbx env create or plan runs
+~/.local/share/unibox/repos/   the team repositories init cloned
 ```
 
 ```yaml
@@ -539,15 +595,38 @@ default_env: dev
 envs:
   dev:
     files: [~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml]
+    repo: ~/team/agent-sandboxes
     ports:
       fe: '3000:3000'
       devtools: {port: '9333:9222', default: off}
+      vite: {default: on}           # the team's port, switched on
 stop_idle: true
 ssh_agent: false
 ```
 
 unagit writes this file only through `unibox config set` and the commands,
-never by hand.
+never by hand. `remember_host_commands` is a key of `unibox config` but
+not of this file: it is sbx's setting (`env.rememberHostCommands`), read
+and written through `sbx settings`, so sbx alone says what it is.
+
+### Platforms and releases
+
+unibox builds with `CGO_ENABLED=0` for Linux, macOS and Windows, amd64 and
+arm64. What differs per system is small and behind build tags: file locks
+are `flock` on Unix and `LockFileEx` on Windows (`lock_unix.go`,
+`lock_windows.go`), as is detaching herdr's watcher (`Setsid`, or a new
+process group without a console); the environment handed to sbx and git
+keeps Windows' own variables there (`SYSTEMROOT`, `USERPROFILE`, ...); a
+clone's directory is cleaned of characters Windows refuses. CI runs the
+whole suite on Linux and macOS; on Windows it builds, vets and runs the
+tests that need no shell stand-in, as the stand-ins are `sh` scripts.
+
+A `vX.Y` tag publishes `make dist`'s archives - one binary, the licence
+and the README per system - with their SHA-256 sums as the GitHub release.
+Homebrew still builds the tagged commit from source; Scoop, for Windows,
+installs the archive, from the manifest the release writes into
+`bucket/unibox.json` beside the formula. The jobs that write run none of
+the repository's code.
 
 ### The command line
 
@@ -736,6 +815,15 @@ removed.
   and the root of a virtiofs mount there is the host path.
 - **A kit's ports (`port@1`) get new host ports at every start**
   (49226 became 49228), which is why unibox's named ports stay the user's.
+- **The network policy** (`sbx policy ls --json --type network`) is
+  `.rules[]` with `applies_to` (`all` or `sandbox:<name>`),
+  `provenance.created_via` and, for a kit's rule, a name `kit:...`, which
+  sbx refuses to remove. `allow|deny network --sandbox S` puts a rule into
+  the `local` policy scoped to S; `rm network --force --resource h1,h2`
+  removes by hosts; `policy log --type network --limit N` shows the
+  decisions. Checked on a throwaway sandbox, then removed.
+- **`sbx settings set|unset|get <key> --json`** reads and writes sbx's
+  settings; `env.rememberHostCommands` is false by default.
 - Gradle's locks in a cache shared by several sandboxes are the team's
   concern, not unibox's.
 
@@ -973,6 +1061,8 @@ the race detector, while iterating.
   command run through `hostCommand` gets a filtered environment, so a
   stand-in is steered by files, not variables.
 - No host secret in the arguments or environment unibox gives sbx.
+- On Windows CI only the portable tests run: locks (`lock_test.go`),
+  clone directories (`clone_test.go`) and reading the team's ports.
 - The real sbx is checked by hand on a throwaway sandbox from the team's
   env: `run`, `resume`, `task rm`, `sandbox rm`, removed afterwards.
 
@@ -980,5 +1070,7 @@ the race detector, while iterating.
 
 The pivot to sbx was done in phases 0 to 5 of
 [sbx-pivot.md](sbx-pivot.md); each phase's "Hotovo" paragraph says what
-was actually built and where it differs from the plan. What comes next for
-unagit's integration is in unagit's docs/sandboxes.md.
+was actually built and where it differs from the plan; its "Další kroky"
+followed - init over a whole repository, team ports, the network, no need
+of sbx's CLI, every platform. What comes next for unagit's integration is
+in unagit's docs/sandboxes.md.

@@ -59,7 +59,7 @@ placeholder on requests to the hosts a binding names. An agent that prints
 its environment prints a placeholder.
 
 **Not every host on the internet.** sbx's network policy refuses what it does
-not list; `sbx policy` changes it.
+not list; `unibox network` changes it.
 
 **What you mount, it can change.** A task mounts your repository by default,
 so the agent writes your files and your `.git` directly. A `.git` holds
