@@ -61,7 +61,10 @@ type Context struct {
 	// Profile is unibox 1's, read and dropped.
 	Profile string `yaml:"profile,omitempty" json:"-"`
 }
-type Paths struct{ Config, Cache string }
+
+// Paths are where unibox keeps its files: configuration and state, a
+// cache, and data - the repositories it clones.
+type Paths struct{ Config, Cache, Data string }
 
 func DefaultPaths() (Paths, error) {
 	home, err := os.UserHomeDir()
@@ -76,7 +79,11 @@ func DefaultPaths() (Paths, error) {
 	if cache == "" {
 		cache = filepath.Join(home, ".cache")
 	}
-	return Paths{filepath.Join(config, "unibox"), filepath.Join(cache, "unibox")}, nil
+	data := os.Getenv("XDG_DATA_HOME")
+	if data == "" {
+		data = filepath.Join(home, ".local", "share")
+	}
+	return Paths{filepath.Join(config, "unibox"), filepath.Join(cache, "unibox"), filepath.Join(data, "unibox")}, nil
 }
 
 func ExpandPath(path string) (string, error) {

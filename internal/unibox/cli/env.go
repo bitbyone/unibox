@@ -191,6 +191,7 @@ func (o *options) addEnv(ctx context.Context, name string, files []string, renam
 	ec := cfg.Envs[name]
 	ec.Files = files
 	ec.Repo = unibox.RepoRoot(ctx, filepath.Dir(files[0]))
+	ec.Source = o.paths.CloneSource(ctx, ec.Repo)
 	if rename != nil {
 		ec.Name = *rename
 	}

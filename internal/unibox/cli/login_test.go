@@ -293,6 +293,47 @@ func TestInitWithoutInputSetsUpEveryFileOrFails(t *testing.T) {
 	}
 }
 
+func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir(), Data: t.TempDir()}
+	repo, _ := teamRepo(t)
+	git := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+	}
+	git("add", ".")
+	git("commit", "-qm", "envs")
+	address := "file://" + filepath.ToSlash(repo)
+	out, said, err := run(t, paths, "", "init", address, "--file", "sandboxes/dev.sbxenv.yaml", "--var", "user=me")
+	if err != nil || !strings.Contains(said, "cloned "+address) || !strings.Contains(out, "set up env(s) dev") {
+		t.Fatalf("%v\n%s\n%s", err, out, said)
+	}
+	dir, _ := paths.CloneDir(address)
+	cfg, _ := paths.LoadConfig()
+	if dev := cfg.Envs["dev"]; dev.Source != address || dev.Files[0] != filepath.Join(dir, "sandboxes", "dev.sbxenv.yaml") {
+		t.Fatalf("%+v", dev)
+	}
+	// Again, the clone there is is used.
+	if _, said, err = run(t, paths, "", "init", address, "--file", "sandboxes/dev.sbxenv.yaml"); err != nil || !strings.Contains(said, "cloned in "+dir+" already") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	// An address that cannot be cloned leaves nothing behind.
+	missing := "file://" + filepath.ToSlash(filepath.Join(t.TempDir(), "nothing"))
+	if _, _, err = run(t, paths, "", "init", missing); err == nil || !strings.Contains(err.Error(), "git could not clone") {
+		t.Fatalf("%v", err)
+	}
+	if dir, _ := paths.CloneDir(missing); fileExists(dir) {
+		t.Fatalf("%s was left", dir)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func TestEnvAddTakesTheOnlyFileHere(t *testing.T) {
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo, _ := teamRepo(t)

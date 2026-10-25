@@ -51,18 +51,36 @@ func (o *options) inspectCommand() *cobra.Command {
 func (o *options) initCommand() *cobra.Command {
 	var noInput bool
 	var files, vars []string
-	c := &cobra.Command{Use: "init [directory|file]", Args: cobra.MaximumNArgs(1), Short: "Set unibox up for a team's repository: sbx, its envs, your args, logins and sandboxes", Long: `Run in your team's repository, init finds every sbxenv file in it - the
+	c := &cobra.Command{Use: "init [directory|file|git-address]", Args: cobra.MaximumNArgs(1), Short: "Set unibox up for a team's repository: sbx, its envs, your args, logins and sandboxes", Long: `Run in your team's repository, init finds every sbxenv file in it - the
 whole repository when you are in a part of it - and makes an env of each you
 pick, named as the file names its sandbox, else by the file. It then asks
 for the args an env leaves to you, has sbx store the tokens it lacks, and
 offers to create the sandboxes. Running it again adds what is new and only
 says what is in place.
 
+Given a git address instead, init clones the repository with your own git
+into ~/.local/share/unibox/repos/<host>/<path> and sets it up from there;
+unibox env pull keeps such a clone current. A repository of your own is
+never pulled.
+
 With --no-input, or without a terminal, it asks nothing: it sets up every
 file found, or those of --file, takes values from --var, and fails naming
 what is still missing. Tokens are never given on the command line;
-unibox login set stores them.`, Example: "  unibox init\n  unibox init ~/work/agent-sandboxes\n  unibox init --no-input --file sandboxes/dev.sbxenv.yaml --var user=jan", RunE: func(cmd *cobra.Command, args []string) error {
-		root, named, err := o.initRoot(cmd.Context(), cmp.Or(firstArg(args), "."))
+unibox login set stores them.`, Example: "  unibox init\n  unibox init ~/work/agent-sandboxes\n  unibox init git@github.com:team/agent-sandboxes.git\n  unibox init --no-input --file sandboxes/dev.sbxenv.yaml --var user=jan", RunE: func(cmd *cobra.Command, args []string) error {
+		target := cmp.Or(firstArg(args), ".")
+		if unibox.IsGitURL(target) {
+			dir, cloned, err := o.paths.Clone(cmd.Context(), target, !noInput && o.canAsk(), o.input, o.log)
+			if err != nil {
+				return err
+			}
+			if cloned {
+				fmt.Fprintf(o.log, "cloned %s into %s\n", target, dir)
+			} else {
+				fmt.Fprintf(o.log, "%s is cloned in %s already; unibox env pull updates it\n", target, dir)
+			}
+			target = dir
+		}
+		root, named, err := o.initRoot(cmd.Context(), target)
 		if err != nil {
 			return err
 		}

@@ -14,6 +14,9 @@ type EnvConfig struct {
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
 	// Repo is the git repository the files are in, as init found them.
 	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
+	// Source is the address unibox cloned Repo from; a repository of the
+	// user's own has none, and unibox never pulls it.
+	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 }
 
 // Env is an env with what its files say.
