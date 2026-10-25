@@ -1726,3 +1726,49 @@ Facts the implementation stands on:
   unlocks first, which releases every copy.
 - `unibox sandbox ls` could hint at a missing sandbox's row that recreate restores
   it and rm removes the record.
+
+## sbx as the configuration: verified for the pivot (2026-10-25)
+
+Phase 0 of [sbx-pivot.md](sbx-pivot.md), checked against sbx 0.49.2 on a
+throwaway sandbox created from the team's `my2n-dev.sbxenv.yaml`, then
+removed.
+
+- **`sbx env plan` has no JSON.** It prints text only. It does validate:
+  an undeclared or missing required `--env-arg` exits 1 with the
+  argument's name and description. unibox reads `args`, `kits` and
+  `bindings` from the YAML itself, read-only, and runs `plan` only for
+  its exit code and to show the user.
+- **Bindings are approved once, by the user.** A binding not yet applied
+  is "present, not recorded as applied, needs your approval"; `create`
+  asks once, and `--force` approves without asking. unibox runs the
+  first create with the user's terminal and never passes `--force` on
+  their behalf.
+- **The agent's command is the workload kit's.** `sbx kit inspect --json
+  <kit>` gives `sandbox.entrypoint` (`["copilot"]`) and
+  `sandbox.command.default` (`["--yolo"]`). A local source kit is built
+  first (seconds; progress on stderr, the JSON alone on stdout).
+- **Which secrets a sandbox needs** is the union of `credentials[].service`
+  over its kits from `kit inspect --json`; inspect drops a credential's
+  `optional`, which only the kit's YAML has. What is stored is
+  `sbx secret ls --json`: `.secrets[]` with `name`, `scope` and `secret`
+  masked as `(stored)` or `(oauth configured)`, never a value.
+- **`sbx exec` gives the agent what `sbx run` does.** The environment of
+  `copilot` started by `sbx run` and that of `sbx exec [-it]` are the
+  same: proxy variables, `JAVA_TOOL_OPTIONS`, `BASH_ENV`, `PATH`,
+  `SBX_CRED_*`. Only the terminal's variables differ, as expected without
+  `-it`. `sh` is dash: it drops variables whose names are not a shell's
+  (`SBX_CRED_GITLAB-2N_MODE`) and does not read `BASH_ENV`, so mise's
+  tools are found under bash only. `sbx exec -w /tmp utest copilot -p …`
+  signed in and answered, while a session started by `sbx run` was
+  working in the same sandbox: two agents at once are fine.
+- **A same-path mount** (`sbx mount S /a/b/repo` is `/a/b/repo:/a/b/repo`)
+  creates its parents as root, mode 755: the agent cannot write beside the
+  repository. Inside it git works, a commit is the host's at once, and
+  `.git/hooks` is writable - the risk the plan warns of.
+- **Mounts are kept across stop and start**, and a saved mount whose host
+  path is gone fails the start until it is removed with `sbx umount` while
+  stopped. Removing a task therefore unmounts before anything else, and
+  doctor checks every mounted host path exists. sbx lists no mounts;
+  `/proc/self/mountinfo` in a running sandbox shows each with its target.
+- **A kit's ports (`port@1`) get new host ports at every start**
+  (49226 became 49228), which is why unibox's named ports stay the user's.

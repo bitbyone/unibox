@@ -106,6 +106,17 @@ Na throwaway sandboxu (`--name utest`), po testu `sbx rm`:
 
 Výstupem fáze 0 je doplněná sekce v `docs/design.md`. Do té doby se nic nemaže.
 
+**Hotovo (2026-10-25, sbx 0.49.2)**, podrobnosti v `docs/design.md`, sekce "sbx as the configuration":
+
+1. `plan` je jen text. Unibox čte `args`, `kits` a `bindings` z YAML sám, `plan` pouští jen kvůli exit kódu (chybějící nebo neznámý arg = 1).
+2. `exec` dává agentovi stejné prostředí jako `run`, auth funguje. Příkazy se spouštějí přes bash, ne `sh` (dash nečte `BASH_ENV`).
+3. Příkaz agenta: `sbx kit inspect --json` workload kitu, `sandbox.entrypoint` + `sandbox.command.default`.
+4. Potřebné secrety: `credentials[].service` z `kit inspect --json` všech kitů (`optional` jen z YAML kitu), uložené: `sbx secret ls --json`.
+5. Rodiče mountu vlastní root (755), agent vedle repa nezapíše. Git i commit fungují, `.git/hooks` je zapisovatelný.
+6. Dva agenti v jednom sandboxu naráz fungují. Zámky Gradle cache se netýkají uniboxu.
+
+Navíc: mounty přežijí stop/start a chybějící host cesta start shodí, proto `task rm` nejdřív odmountuje. Výpis mountů sbx nemá, jen `/proc/self/mountinfo` v běžícím sandboxu. První `create` jde se zděděnou TTY, aby uživatel bindingy schválil sám, unibox za něj `--force` nedává.
+
 ### Fáze 1: Env místo profilu
 
 - Typ `Env` (files, name, args) a jeho načtení z `config.toml`, `unibox env add|ls|rm|show`.
@@ -163,7 +174,7 @@ Výstupem fáze 0 je doplněná sekce v `docs/design.md`. Do té doby se nic nem
 
 ## Rizika a otevřené otázky
 
-- **Agent přes `exec`:** pokud se chová jinak než přes `run`, fallback je `sbx run` a `cd` přes `BASH_ENV`/wrapper. Do toho je potřeba proniknout ve fázi 0.
+- **Agent přes `exec`:** ve fázi 0 ověřeno, že se chová jako přes `run`. Fallback (`sbx run` a `cd` přes `BASH_ENV`) zůstává, kdyby to nová verze sbx změnila.
 - **sbx se rychle mění:** `sbxList` tolerantní vůči tvaru JSON zůstává a minimální verze sbx se hlídá v doctor.
 - **Více sandboxů nad stejnou read/write Gradle cache:** zámky. Netýká se uniboxu, ale týmového repa.
 - **Kolize jmen:** sandbox založený ručně přes `sbx env create` se stejným jménem. Unibox ho převezme jen s `--adopt`.
