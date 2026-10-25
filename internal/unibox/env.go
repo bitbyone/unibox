@@ -12,6 +12,8 @@ type EnvConfig struct {
 	Files []string        `yaml:"files" json:"files"`
 	Name  string          `yaml:"name,omitempty" json:"name,omitempty"`
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
+	// Repo is the git repository the files are in, as init found them.
+	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
 }
 
 // Env is an env with what its files say.

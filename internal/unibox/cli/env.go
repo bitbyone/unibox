@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -23,11 +26,28 @@ know which logins a sandbox needs. Envs are kept in
 ~/.config/unibox/config.yaml.`}
 	var sandbox string
 	var makeDefault bool
-	add := &cobra.Command{Use: "add env file...", Args: cobra.MinimumNArgs(2), Short: "Add an env, or change the files of one", Example: "  unibox env add dev ~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml\n  unibox env add dev dev.sbxenv.yaml local.sbxenv.yaml --name dev-mine", RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := o.manager.Config
-		ec := cfg.Envs[args[0]]
-		ec.Files = nil
-		for _, f := range args[1:] {
+	add := &cobra.Command{Use: "add [env] [file...]", Args: cobra.ArbitraryArgs, Short: "Add an env, or change the files of one", Long: `Names sbxenv files as an env. Without a file it takes the one sbxenv file
+in this directory, and without a name the name that file gives its sandbox,
+else its own. unibox init finds every file of a repository.`, Example: "  unibox env add\n  unibox env add dev ~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml\n  unibox env add dev dev.sbxenv.yaml local.sbxenv.yaml --name dev-mine", RunE: func(cmd *cobra.Command, args []string) error {
+		files := []string{}
+		if len(args) > 1 {
+			files = args[1:]
+		} else {
+			here, err := unibox.SBXEnvsIn(".")
+			if err != nil {
+				return err
+			}
+			switch len(here) {
+			case 0:
+				return fmt.Errorf("no sbxenv file in this directory; name one, or run unibox init in your team's repository to find them all")
+			case 1:
+				files = here
+			default:
+				return fmt.Errorf("this directory has several sbxenv files (%s); name the one, as in unibox env add <env> <file>", strings.Join(here, ", "))
+			}
+		}
+		paths := []string{}
+		for _, f := range files {
 			path, err := unibox.ExpandPath(f)
 			if err != nil {
 				return err
@@ -35,26 +55,17 @@ know which logins a sandbox needs. Envs are kept in
 			if _, err = os.Stat(path); err != nil {
 				return fmt.Errorf("cannot read %s; give the path of an sbxenv file", f)
 			}
-			ec.Files = append(ec.Files, path)
+			paths = append(paths, path)
 		}
+		name := firstArg(args)
+		if name == "" {
+			name = unibox.EnvNameFor(paths[0])
+		}
+		var rename *string
 		if cmd.Flags().Changed("name") {
-			ec.Name = sandbox
+			rename = &sandbox
 		}
-		if err := unibox.ValidEnvConfig(args[0], ec); err != nil {
-			return err
-		}
-		if cfg.Envs == nil {
-			cfg.Envs = map[string]unibox.EnvConfig{}
-		}
-		cfg.Envs[args[0]] = ec
-		if makeDefault || cfg.DefaultEnv == "" {
-			cfg.DefaultEnv = args[0]
-		}
-		if err := o.paths.SaveConfig(cfg); err != nil {
-			return err
-		}
-		o.manager.Config = cfg
-		e, err := cfg.LoadEnv(args[0])
+		e, err := o.addEnv(cmd.Context(), name, paths, rename, makeDefault)
 		if err != nil {
 			return err
 		}
@@ -136,6 +147,9 @@ know which logins a sandbox needs. Envs are kept in
 		for _, f := range e.SBX.Files {
 			fmt.Fprintf(o.output, "  file %s\n", f)
 		}
+		if e.Config.Repo != "" {
+			fmt.Fprintf(o.output, "  repo %s\n", e.Config.Repo)
+		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
 		if len(e.SBX.Args) > 0 {
 			fmt.Fprintln(w, "ARG\tVALUE\tFROM\tFOR")
@@ -167,6 +181,35 @@ know which logins a sandbox needs. Envs are kept in
 		return nil
 	}})
 	return c
+}
+
+// addEnv keeps an env of files, or gives one new files, with the
+// repository they are in; rename, when given, names its sandbox. It is
+// made the default when told or when there is none.
+func (o *options) addEnv(ctx context.Context, name string, files []string, rename *string, makeDefault bool) (unibox.Env, error) {
+	cfg := o.manager.Config
+	ec := cfg.Envs[name]
+	ec.Files = files
+	ec.Repo = unibox.RepoRoot(ctx, filepath.Dir(files[0]))
+	if rename != nil {
+		ec.Name = *rename
+	}
+	if err := unibox.ValidEnvConfig(name, ec); err != nil {
+		return unibox.Env{}, err
+	}
+	cfg.Envs = maps.Clone(cfg.Envs)
+	if cfg.Envs == nil {
+		cfg.Envs = map[string]unibox.EnvConfig{}
+	}
+	cfg.Envs[name] = ec
+	if makeDefault || cfg.DefaultEnv == "" {
+		cfg.DefaultEnv = name
+	}
+	if err := o.paths.SaveConfig(cfg); err != nil {
+		return unibox.Env{}, err
+	}
+	o.manager.Config = cfg
+	return cfg.LoadEnv(name)
 }
 
 func firstArg(args []string) string {

@@ -66,6 +66,10 @@ func (f *fakeRuntime) SetSSHForwarding(_ context.Context, on bool) error {
 	return nil
 }
 func (f *fakeRuntime) Diagnose(context.Context) ([]RuntimeCheck, error) { return nil, nil }
+func (f *fakeRuntime) SignedIn(context.Context) (bool, error)           { return true, nil }
+func (f *fakeRuntime) Login(context.Context, io.Reader, io.Writer, io.Writer) error {
+	return nil
+}
 
 func (f *fakeRuntime) List(context.Context) ([]Box, error) {
 	f.mu.Lock()

@@ -41,6 +41,10 @@ type Runtime interface {
 	EnvPlan(ctx context.Context, name, args string, files []string) (string, error)
 	Setting(ctx context.Context, key string) (string, error)
 	Diagnose(ctx context.Context) ([]RuntimeCheck, error)
+	// SignedIn says whether the runtime is signed in to its account, and
+	// Login signs it in on the user's terminal.
+	SignedIn(ctx context.Context) (bool, error)
+	Login(ctx context.Context, in io.Reader, out, errout io.Writer) error
 	SSHForwarding(ctx context.Context) (bool, error)
 	SetSSHForwarding(ctx context.Context, on bool) error
 	// AllowSSHAgent records the user's leave for sandboxes to use their

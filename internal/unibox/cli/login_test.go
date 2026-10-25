@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -169,10 +170,10 @@ func TestInitWalksThroughAnEnvItsArgsAndLogins(t *testing.T) {
 	log := fakeSBX(t)
 	t.Setenv("ACCESSIBLE", "1")
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
-	file := teamEnv(t)
-	// SSH agent: no; the file; its name as the file says; the arg; store
+	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
+	// SSH agent: no; the one file is taken without asking; the arg; store
 	// the logins; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n"+file+"\n\nperson\ny\nn\n", "init")
+	_, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", repo)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -190,12 +191,118 @@ func TestInitWalksThroughAnEnvItsArgsAndLogins(t *testing.T) {
 	if c := calls(t, log); !strings.Contains(c, "secret set anthropic\n") || !strings.Contains(c, "secret set gitlab\n") || strings.Contains(c, "env create") {
 		t.Fatalf("%s", c)
 	}
-	if !strings.Contains(said, "unibox run creates it when it first needs it") {
+	if !strings.Contains(said, "env team, sandboxes/team.sbxenv.yaml: added") || !strings.Contains(said, "unibox run creates team when it first needs it") {
 		t.Fatalf("%s", said)
 	}
 	// Again, everything is in place and only said.
-	if _, said, err = runAt(t, paths, "1\nn\n", "init"); err != nil || !strings.Contains(said, "has every value it needs") || !strings.Contains(said, "sbx has every token") {
+	if _, said, err = runAt(t, paths, "n\n", "init", repo); err != nil || !strings.Contains(said, "set up already") || !strings.Contains(said, "has every value it needs") || !strings.Contains(said, "sbx has every token") {
 		t.Fatalf("%v\n%s", err, said)
+	}
+}
+
+func TestInitAwayFromARepositoryAsksForTheFile(t *testing.T) {
+	fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	// SSH agent: no; the file; its name as it says; the arg; no logins
+	// stored; no sandbox.
+	_, said, err := runAt(t, paths, "1\n"+file+"\n\nperson\nn\nn\n", "init", t.TempDir())
+	if err != nil || !strings.Contains(said, "no sbxenv file in") || !strings.Contains(said, "later: unibox login set -e team") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.DefaultEnv != "team" {
+		t.Fatalf("%+v", cfg)
+	}
+}
+
+// teamRepo is a team's repository with two envs, a part of it where init
+// is run, and files init passes over.
+func teamRepo(t *testing.T) (repo, part string) {
+	t.Helper()
+	repo = t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	for file, text := range map[string]string{
+		"sandboxes/dev.sbxenv.yaml":            "agent: shell\nargs:\n  user: {required: true}\n",
+		"review/Review_Box.sbxenv.yaml":        "agent: shell\n",
+		"node_modules/pkg/ignored.sbxenv.yaml": "agent: shell\n",
+		".cache/ignored.sbxenv.yaml":           "agent: shell\n",
+		"sandboxes/notes/readme.md":            "",
+	} {
+		path := filepath.Join(repo, file)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return repo, filepath.Join(repo, "sandboxes", "notes")
+}
+
+func TestInitFindsEveryEnvOfTheRepository(t *testing.T) {
+	fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo, part := teamRepo(t)
+	t.Chdir(part)
+	// SSH agent: no; both files as offered; review's name, as its own does
+	// not make one; dev as the default, review being added first; dev's arg;
+	// no sandboxes.
+	_, said, err := runAt(t, paths, "1\n0\nreview\n2\nme\nn\nn\n", "init")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	cfg, _ := paths.LoadConfig()
+	resolved := func(path string) string {
+		path, _ = filepath.EvalSymlinks(path)
+		return path
+	}
+	if len(cfg.Envs) != 2 || resolved(cfg.Envs["dev"].Files[0]) != resolved(filepath.Join(repo, "sandboxes", "dev.sbxenv.yaml")) || cfg.Envs["review"].Repo == "" || cfg.DefaultEnv != "dev" {
+		t.Fatalf("%+v\n%s", cfg, said)
+	}
+	if strings.Contains(said, "ignored") {
+		t.Fatalf("%s", said)
+	}
+}
+
+func TestInitWithoutInputSetsUpEveryFileOrFails(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo, _ := teamRepo(t)
+	// The file whose name makes no env is left out; dev lacks its value.
+	_, _, err := run(t, paths, "", "init", repo, "--no-input", "--file", "sandboxes/dev.sbxenv.yaml")
+	if err == nil || !strings.Contains(err.Error(), "--var user=<value> (env dev)") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err = run(t, paths, "", "init", repo, "--file", "sandboxes/dev.sbxenv.yaml", "--var", "nobody=x"); err == nil || !strings.Contains(err.Error(), "no env of dev asks for nobody") {
+		t.Fatalf("%v", err)
+	}
+	out, _, err := run(t, paths, "", "init", repo, "--file", "sandboxes/dev.sbxenv.yaml", "--var", "user=me")
+	if err != nil || !strings.Contains(out, "set up env(s) dev") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if values, _ := paths.LoadEnvValues(); values.Envs["dev"]["user"] != "me" {
+		t.Fatalf("%+v", values)
+	}
+	// Every file found: one cannot name an env, which says how to add it.
+	if _, _, err = run(t, paths, "", "init", repo); err == nil || !strings.Contains(err.Error(), "unibox env add <env>") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestEnvAddTakesTheOnlyFileHere(t *testing.T) {
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo, _ := teamRepo(t)
+	t.Chdir(filepath.Join(repo, "sandboxes"))
+	if out, _, err := run(t, paths, "", "env", "add"); err != nil || !strings.Contains(out, "env dev: sandbox dev") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	t.Chdir(repo)
+	if _, _, err := run(t, paths, "", "env", "add", "x"); err == nil || !strings.Contains(err.Error(), "no sbxenv file in this directory") {
+		t.Fatalf("%v", err)
 	}
 }
 

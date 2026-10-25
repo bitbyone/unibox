@@ -369,6 +369,33 @@ type RuntimeCheck struct {
 	Link string `json:"link,omitempty"`
 }
 
+// SignedIn says whether sbx is signed in to Docker, as sbx diagnose sees
+// it. A release without the check is taken as signed in; listing its
+// sandboxes says otherwise.
+func (r *SBX) SignedIn(ctx context.Context) (bool, error) {
+	checks, err := r.Diagnose(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range checks {
+		if c.Name == "Authentication" {
+			return c.Status == "pass", nil
+		}
+	}
+	return true, nil
+}
+
+// Login runs sbx login on the user's terminal, where sbx asks for what it
+// needs; nothing of it passes through unibox.
+func (r *SBX) Login(ctx context.Context, in io.Reader, out, errout io.Writer) error {
+	c := hostCommand(ctx, "sbx", "login")
+	c.Stdin, c.Stdout, c.Stderr = in, out, errout
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("sbx login did not finish; run unibox init again to sign in: %w", err)
+	}
+	return nil
+}
+
 // Diagnose is sbx diagnose: its installation, the daemon, the sign-in.
 // Its details, which may name the user's account, are left out.
 func (r *SBX) Diagnose(ctx context.Context) ([]RuntimeCheck, error) {
