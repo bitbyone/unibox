@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,11 +11,8 @@ import (
 
 func runCLI(t *testing.T, paths unibox.Paths, args ...string) (string, error) {
 	t.Helper()
-	var out bytes.Buffer
-	c := New(paths, strings.NewReader(""), &out, io.Discard)
-	c.SetArgs(args)
-	err := c.Execute()
-	return out.String(), err
+	out, _, err := run(t, paths, "", args...)
+	return out, err
 }
 
 func TestEnvsNameTheTeamsFilesAndShowWhatIsMissing(t *testing.T) {

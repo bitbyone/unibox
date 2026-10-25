@@ -16,18 +16,6 @@ func (o *options) sandboxGroup() *cobra.Command {
 	return c
 }
 
-func (o *options) profileGroup() *cobra.Command {
-	c := &cobra.Command{Use: "profile", Short: "List, build and check profiles; unibox init adds one"}
-	c.AddCommand(o.profilesCommand(), o.profileShowCommand(), o.profileSetCommand(), o.profileUnsetCommand(), o.buildCommand(), o.diffCommand(), o.validateCommand())
-	return c
-}
-
-func (o *options) runtimeGroup() *cobra.Command {
-	c := &cobra.Command{Use: "runtime", Short: "The runtimes sandboxes run in"}
-	c.AddCommand(o.runtimesCommand())
-	return c
-}
-
 func first(args []string) string {
 	if len(args) == 0 {
 		return ""

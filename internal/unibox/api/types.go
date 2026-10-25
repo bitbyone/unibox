@@ -1,12 +1,9 @@
 // Package api is the versioned command-line contract shared with unibox clients.
 package api
 
-import (
-	"encoding/json"
-	"time"
-)
+import "time"
 
-const Version = 1
+const Version = 2
 
 type Repository struct {
 	Name     string `json:"name"`
@@ -14,8 +11,8 @@ type Repository struct {
 	Branch   string `json:"branch"`
 	HostPath string `json:"host_path,omitempty"`
 	Author   string `json:"author"`
-	// CoAuthor is a git service's say over the agent's co-author trailer
-	// for this repository; unset leaves it to the profile.
+	// CoAuthor says whether the agent's commits name it as co-author;
+	// unset means they do.
 	CoAuthor *bool `json:"co_author,omitempty"`
 	// Mounted is HostPath mounted into the sandbox at the repository's
 	// place in the task instead of cloned.
@@ -46,26 +43,27 @@ type Run struct {
 }
 
 type Sandbox struct {
-	Name                string   `json:"name"`
-	Runtime             string   `json:"runtime"`
-	RuntimeName         string   `json:"runtime_name"`
-	RuntimeID           string   `json:"runtime_id,omitempty"`
-	Profile             string   `json:"profile"`
-	Instructions        []string `json:"instructions"`
-	Revision            string   `json:"revision,omitempty"`
-	InstructionRevision string   `json:"instruction_revision,omitempty"`
-	State               string   `json:"state"`
-	Memory              string   `json:"memory,omitempty"`
-	Tasks               []Task   `json:"tasks"`
-	Runs                []Run    `json:"runs"`
-	// Image and Settings are what the sandbox was created from, so a
-	// recreation can say what changed. NetworkAllow and NetworkDeny are
-	// the rules unibox applied to it; a change of them is applied live.
-	Image        string          `json:"image,omitempty"`
-	Settings     json.RawMessage `json:"settings,omitempty"`
-	NetworkAllow []string        `json:"network_allow,omitempty"`
-	NetworkDeny  []string        `json:"network_deny,omitempty"`
-	// Ports are what unibox published of the sandbox, by name - a profile's
+	// Name is the sandbox's name in sbx as well.
+	Name string `json:"name"`
+	// ID is sbx's for it, so a sandbox replaced outside unibox is told.
+	ID string `json:"id,omitempty"`
+	// Env is the env the sandbox was created from, Files its sbxenv files
+	// and Fingerprint what they, their local kits and the person's args
+	// were then, so a change can be told.
+	Env         string   `json:"env"`
+	Files       []string `json:"files"`
+	Fingerprint string   `json:"fingerprint,omitempty"`
+	// Agent is the agent the env's workload kit runs, and AgentCommand
+	// how the kit starts it: its entrypoint and default arguments.
+	Agent        string   `json:"agent,omitempty"`
+	AgentCommand []string `json:"agent_command,omitempty"`
+	// Adopted says unibox took over a sandbox it did not create, which it
+	// then removes only when forced.
+	Adopted bool   `json:"adopted,omitempty"`
+	State   string `json:"state"`
+	Tasks   []Task `json:"tasks"`
+	Runs    []Run  `json:"runs"`
+	// Ports are what unibox published of the sandbox, by name - an env's
 	// port, or a spec switched on for the sandbox alone - and PortSwitches
 	// what was switched for it until it next starts.
 	Ports        map[string]string `json:"ports,omitempty"`
@@ -91,22 +89,11 @@ type Port struct {
 	Published []PublishedPort `json:"published"`
 }
 
-type Profile struct {
-	Name       string            `json:"name"`
-	Agents     []string          `json:"agents"`
-	Revision   string            `json:"revision,omitempty"`
-	Images     map[string]string `json:"images"`
-	Approved   bool              `json:"approved"`
-	Error      string            `json:"error,omitempty"`
-	LastCommit string            `json:"last_commit,omitempty"`
-}
-
 type Need struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 	Repository string `json:"repository,omitempty"`
 	Agent      string `json:"agent,omitempty"`
-	Service    string `json:"service,omitempty"`
 	Warning    bool   `json:"warning,omitempty"`
 }
 
@@ -118,65 +105,15 @@ type Check struct {
 }
 
 type Prepared struct {
-	APIVersion  int    `json:"api_version"`
-	Sandbox     string `json:"sandbox"`
-	Runtime     string `json:"runtime"`
-	RuntimeName string `json:"runtime_name"`
-	Task        string `json:"task"`
-	Directory   string `json:"directory"`
-	State       string `json:"state"`
+	APIVersion int    `json:"api_version"`
+	Sandbox    string `json:"sandbox"`
+	Task       string `json:"task"`
+	Directory  string `json:"directory"`
+	State      string `json:"state"`
 }
 
 type Error struct {
 	APIVersion int    `json:"api_version"`
 	Code       string `json:"code"`
 	Message    string `json:"message"`
-}
-
-// Template is what unibox template inspect tells of a template before
-// anything is copied from it, and how it stands to the repository.
-type Template struct {
-	APIVersion int    `json:"api_version"`
-	Name       string `json:"name"`
-	Source     string `json:"source"`
-	Commit     string `json:"commit,omitempty"`
-	// Shared are the template's shared install scripts and instruction
-	// texts, as kept under .templates/<name>.
-	Shared   []string          `json:"shared"`
-	Profiles []TemplateProfile `json:"profiles"`
-	// Kept is the template of this name the repository keeps already, if
-	// any; a different source means the name is taken.
-	Kept *TemplateKept `json:"kept,omitempty"`
-}
-
-type TemplateKept struct {
-	Source   string   `json:"source"`
-	Commit   string   `json:"commit,omitempty"`
-	Profiles []string `json:"profiles"`
-}
-
-type TemplateProfile struct {
-	Name   string `json:"name"`
-	Format int    `json:"format"`
-	// Image is the image named instead of a Dockerfile, empty when the
-	// profile builds its own.
-	Image    string            `json:"image,omitempty"`
-	Agents   []string          `json:"agents"`
-	Vars     map[string]string `json:"vars"`
-	Services []TemplateService `json:"services"`
-	// Secrets are the names of the tokens it needs stored, each once.
-	Secrets []string `json:"secrets"`
-	// Env are the variables its sessions get, by name.
-	Env          []string `json:"env"`
-	Instructions []string `json:"instructions"`
-	// Exists says the repository has a profile of this name already, so a
-	// copy needs another.
-	Exists bool   `json:"exists"`
-	Error  string `json:"error,omitempty"`
-}
-
-type TemplateService struct {
-	Name  string   `json:"name"`
-	Hosts []string `json:"hosts"`
-	Git   bool     `json:"git"`
 }

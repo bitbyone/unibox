@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -28,6 +29,9 @@ type EnvValues struct {
 	// other are tables of an older unibox, kept as they are.
 	other map[string]any
 }
+
+// VarsFile holds each env's args of the person's, in TOML.
+func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.toml") }
 
 func (p Paths) LoadEnvValues() (EnvValues, error) {
 	v := EnvValues{Envs: map[string]map[string]string{}, other: map[string]any{}}

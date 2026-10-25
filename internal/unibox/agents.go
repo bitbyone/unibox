@@ -1,23 +1,18 @@
 package unibox
 
 import (
-	"fmt"
+	"path"
 	"strings"
 )
 
+// Agent is what unibox knows of a coding agent a kit runs, beyond how the
+// kit starts it: what to answer before a session so it does not stop to
+// ask, and how its commits credit it.
 type Agent struct {
-	ID, Command, Instructions, CoAuthor string
-	// Config is the JSON file Trust is merged into.
+	ID, Command, CoAuthor string
+	// Config is the JSON file in the guest home Trust is merged into.
 	Config string
-	// Args leave the agent to work unasked, the sandbox being the
-	// boundary; a profile adds its own to them, or with args_override puts
-	// its own in their place.
-	Args []string
-	// ArgsEnv goes with Args: what grants the same through the
-	// environment, left out when a profile overrides them.
-	ArgsEnv []string
-	// Setup runs in the guest before every session of the agent, for what
-	// depends on the sandbox's credentials rather than on the profile.
+	// Setup runs in the guest before every session of the agent.
 	Setup string
 	// Env is set for the agent's process.
 	Env []string
@@ -25,61 +20,10 @@ type Agent struct {
 	// directories the session works in, so the agent does not stop to ask
 	// whether to trust what unibox prepared.
 	Trust func(dirs []string) map[string]any
-	// Configs are the agent's configuration files unibox knows how to merge
-	// a seed into, by the name the agent gives each. A profile names them
-	// under the agent's config, and init seeds them from here: the agent's
-	// first questions answered and it left to work unasked, as the sandbox
-	// is the boundary. The user edits the seeds in _data.
-	Configs []AgentFile
-}
-
-// AgentFile is one configuration file of an agent in the guest home, JSON
-// or, by its name, TOML.
-// Its seed, when unibox has one, is templates/seeds/<agent>/<name>.
-type AgentFile struct {
-	Name, Path string
-}
-
-// TOML says whether the file is TOML rather than JSON.
-func (f AgentFile) TOML() bool { return strings.HasSuffix(f.Name, ".toml") }
-
-// SeedPath is where init keeps a file's seed in a profile: in the agent's
-// own directory, under the file's own name.
-func (f AgentFile) SeedPath(agent string) string {
-	return "_data/" + agent + "/" + f.Name
-}
-
-// ConfigFile is the file of an agent a profile's config names.
-func ConfigFile(agent, name string) (Agent, AgentFile, error) {
-	a, err := FindAgent(agent)
-	if err != nil {
-		return a, AgentFile{}, err
-	}
-	for _, f := range a.Configs {
-		if f.Name == name {
-			return a, f, nil
-		}
-	}
-	names := []string{}
-	for _, f := range a.Configs {
-		names = append(names, f.Name)
-	}
-	if len(names) == 0 {
-		return a, AgentFile{}, fmt.Errorf("agent %s has no configuration unibox can seed", agent)
-	}
-	return a, AgentFile{}, fmt.Errorf("agent %s has no configuration %s unibox can seed; it knows %s", agent, name, strings.Join(names, ", "))
-}
-
-// agentConfigKey is how a profile's AgentConfig keys one file of an agent.
-func agentConfigKey(agent, name string) string { return agent + "/" + name }
-
-func splitAgentConfigKey(key string) (string, string) {
-	agent, name, _ := strings.Cut(key, "/")
-	return agent, name
 }
 
 // claudeTrust is what sbx's own claude kit seeds: each directory's trust
-// dialog answered, and the bypass mode unibox starts claude in accepted.
+// dialog answered, and the bypass mode its kit starts claude in accepted.
 func claudeTrust(dirs []string) map[string]any {
 	projects := map[string]any{}
 	for _, d := range dirs {
@@ -88,40 +32,46 @@ func claudeTrust(dirs []string) map[string]any {
 	return map[string]any{"bypassPermissionsModeAccepted": true, "projects": projects}
 }
 
-var Agents = []Agent{
-	// The image fixes each agent's version, so none updates itself inside,
-	// and unibox's commit hook says the co-author, so no agent's own byline.
-	{ID: "claude", Command: "claude", Instructions: ".claude/CLAUDE.md", CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Args: []string{"--dangerously-skip-permissions"}, Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust,
-		Configs: []AgentFile{
-			{Name: ".claude.json", Path: ".claude.json"},
-			{Name: "settings.json", Path: ".claude/settings.json"},
-		}},
-	// codex works unasked - the VM is the boundary - so one started by hand
-	// in unibox sandbox shell is as free as one unibox runs.
-	{ID: "codex", Command: "codex", Instructions: ".codex/AGENTS.md", CoAuthor: "Codex <noreply@openai.com>", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, Setup: codexSetup,
-		Configs: []AgentFile{
-			{Name: "config.toml", Path: ".codex/config.toml"},
-		}},
-	// Its settings.json, per copilot help config; config.json is the state
-	// it keeps itself, seeded only by a profile that wants to.
-	{ID: "copilot", Command: "copilot", Instructions: ".copilot/copilot-instructions.md", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Args: []string{"--allow-all"}, ArgsEnv: []string{"COPILOT_ALLOW_ALL=true"},
-		Configs: []AgentFile{
-			{Name: "settings.json", Path: ".copilot/settings.json"},
-			{Name: "config.json", Path: ".copilot/config.json"},
-		}},
-	// --auto approves what the seed does not name either, as the other
-	// agents' flags do; the sandbox is the boundary.
-	{ID: "opencode", Command: "opencode", Instructions: ".config/opencode/AGENTS.md", CoAuthor: "opencode <noreply@opencode.ai>", Args: []string{"--auto"},
-		Configs: []AgentFile{
-			{Name: "opencode.json", Path: ".config/opencode/opencode.json"},
-		}},
+// copilotTrust names the directories in copilot's trusted_folders, a list
+// the merge adds to.
+func copilotTrust(dirs []string) map[string]any {
+	folders := []any{}
+	for _, d := range dirs {
+		folders = append(folders, d)
+	}
+	return map[string]any{"trusted_folders": folders}
 }
 
-func FindAgent(id string) (Agent, error) {
+var Agents = []Agent{
+	// The kit's image fixes each agent's version, so none updates itself,
+	// and unibox's commit hook says the co-author, so no agent's own byline.
+	{ID: "claude", Command: "claude", CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust},
+	{ID: "codex", Command: "codex", CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup},
+	{ID: "copilot", Command: "copilot", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust},
+	{ID: "opencode", Command: "opencode", CoAuthor: "opencode <noreply@opencode.ai>"},
+}
+
+// AgentFor is the agent a kit's entrypoint starts, by the command's name;
+// an agent unibox does not know is still run, with nothing prepared.
+func AgentFor(entrypoint []string) Agent {
+	if len(entrypoint) == 0 {
+		return Agent{}
+	}
+	command := path.Base(entrypoint[0])
 	for _, a := range Agents {
-		if a.ID == id {
-			return a, nil
+		if a.Command == command {
+			return a
 		}
 	}
-	return Agent{}, fmt.Errorf("unknown agent %q; choose one listed by unibox profile ls", id)
+	return Agent{ID: strings.ToLower(command), Command: command}
+}
+
+// FindAgent is the agent of an ID unibox recorded.
+func FindAgent(id string) Agent {
+	for _, a := range Agents {
+		if a.ID == id {
+			return a
+		}
+	}
+	return Agent{ID: id, Command: id}
 }

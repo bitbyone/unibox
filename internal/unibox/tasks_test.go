@@ -80,11 +80,11 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	url := "https://forge.invalid/team/payments.git"
 	f.remotes[url] = "file://" + remote
 	ctx := context.Background()
-	_, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"})
+	_, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := Request{Sandbox: "dev", Task: "refunds", Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
+	req := Request{Sandbox: "dev", Task: "refunds", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
 	prepared, err := m.Prepare(ctx, req)
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	if prepared.Directory != "/work/refunds" {
 		t.Fatal(prepared)
 	}
-	clone := filepath.Join(f.root, "unibox-dev", "work", "refunds", "payments")
+	clone := filepath.Join(f.root, "dev", "work", "refunds", "payments")
 	if got := gitTest(t, clone, "branch", "--show-current"); got != "feat/refunds" {
 		t.Fatal(got)
 	}
@@ -100,7 +100,7 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 		t.Fatal("host changed")
 	}
 	write(t, filepath.Join(clone, "agent.txt"), "uncommitted agent work\n")
-	if err = m.Recreate(ctx, "dev", false); err == nil {
+	if err = m.Recreate(ctx, "dev"); err == nil {
 		t.Fatal("recreated sandbox with uncommitted files")
 	}
 	if f.removes != 0 {
@@ -116,7 +116,7 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	if err = m.saveBox(b); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "refunds"}, true)
+	_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "refunds"}, true)
 	if err != nil {
 		t.Fatalf("cannot resume own edits: %v", err)
 	}
@@ -136,11 +136,11 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	if strings.Count(message, "Co-Authored-By: Claude <noreply@anthropic.com>") != 1 {
 		t.Fatal(message)
 	}
-	if err = m.Remove(ctx, "dev", ""); err == nil {
+	if err = m.Remove(ctx, "dev", "", false); err == nil {
 		t.Fatal("removed sandbox with unpushed commit")
 	}
 	gitTest(t, clone, "push", "origin", "HEAD")
-	if err = m.Remove(ctx, "dev", ""); err != nil {
+	if err = m.Remove(ctx, "dev", "", false); err != nil {
 		t.Fatal(err)
 	}
 	// The check says what it checked, not every branch the fetch learned.
@@ -166,10 +166,10 @@ func TestTheDefaultBranchIsPreparedAndAMissingOneRefusedInsideGuest(t *testing.T
 			url := "https://forge.invalid/team/payments.git"
 			f.remotes[url] = "file://" + remote
 			ctx := context.Background()
-			if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
+			if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
 				t.Fatal(err)
 			}
-			_, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "t-" + branch, Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: branch}}})
+			_, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "t-" + branch, Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: branch}}})
 			if (err == nil) != accepted {
 				t.Fatalf("%s: %v", branch, err)
 			}
@@ -220,75 +220,14 @@ func TestPushCreatesABranchNobodyHasFromTheHostHead(t *testing.T) {
 	}
 }
 
-func TestAgentConfigSeedMergesAndKeepsAgentState(t *testing.T) {
-	t.Parallel()
-	m, f := managerFixture(t)
-	root := m.Config.Environments
-	write(t, filepath.Join(root, "sandboxes", "node", "_data", "claude.json"), `{"theme": "dark", "hasCompletedOnboarding": true, "nested": {"a": 1}}`)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nagents: {claude: {config: {.claude.json: _data/claude.json}}, codex: null}\nresources: {cpus: 2, memory: 1g}\nstart: start.sh\n")
-	ctx := context.Background()
-	if err := m.Build(ctx, "node", "fake", false); err != nil {
-		t.Fatal(err)
-	}
-	// The agent's own state, written before the sandbox is ensured.
-	home := filepath.Join(f.root, "unibox-dev", "home")
-	write(t, filepath.Join(home, ".claude.json"), `{"theme": "light", "projects": {"/work/x": {"trusted": true}}, "nested": {"a": 2, "keep": "yes"}}`)
-	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
-		t.Fatal(err)
-	}
-	read := func() map[string]any {
-		t.Helper()
-		b, err := os.ReadFile(filepath.Join(home, ".claude.json"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var got map[string]any
-		if err = json.Unmarshal(b, &got); err != nil {
-			t.Fatal(err)
-		}
-		return got
-	}
-	got := read()
-	if got["theme"] != "dark" || got["hasCompletedOnboarding"] != true {
-		t.Fatalf("seed keys were not enforced: %v", got)
-	}
-	if _, ok := got["projects"].(map[string]any)["/work/x"]; !ok {
-		t.Fatalf("agent state was lost: %v", got)
-	}
-	nested := got["nested"].(map[string]any)
-	if nested["a"] != float64(1) || nested["keep"] != "yes" {
-		t.Fatalf("nested merge went wrong: %v", nested)
-	}
-	// The agent works on: its own additions survive the next initialization.
-	got["projects"].(map[string]any)["/work/y"] = map[string]any{"trusted": true}
-	b, _ := json.Marshal(got)
-	write(t, filepath.Join(home, ".claude.json"), string(b))
-	box, err := m.sandbox("dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	p, err := LoadProfile(root, "node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = m.ensure(ctx, &box, f, p, false, false); err != nil {
-		t.Fatal(err)
-	}
-	got = read()
-	projects := got["projects"].(map[string]any)
-	if _, ok := projects["/work/y"]; !ok {
-		t.Fatalf("agent state added later was lost: %v", got)
-	}
-	if got["theme"] != "dark" {
-		t.Fatalf("seed key was not kept enforced: %v", got)
-	}
-}
-
 func TestPushCreatesABranchOnTheForgeFromAURL(t *testing.T) {
 	t.Parallel()
 	remote, _ := remoteFixture(t)
 	url := "https://forge-url-push.invalid/team/payments.git"
 	gitTest(t, ".", "config", "--global", "url.file://"+remote+".insteadOf", url)
+	// The rule is the run's, and the first one for a URL wins: a repeated
+	// test must not find this one.
+	t.Cleanup(func() { gitTest(t, ".", "config", "--global", "--remove-section", "url.file://"+remote) })
 	ctx := context.Background()
 	req := Request{Repositories: []RepoInput{{Source: url, Branch: "feat/from-url"}}, Push: true, Author: "Person <person@example.com>"}
 	repos, needs, err := ResolveRepositories(ctx, req)
@@ -314,7 +253,7 @@ func TestPushCreatesABranchOnTheForgeFromAURL(t *testing.T) {
 func TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox(t *testing.T) {
 	t.Parallel()
 	m, f := managerFixture(t)
-	b, err := m.Create(context.Background(), Request{NewSandbox: "dev", Profile: "node"})
+	b, err := m.Create(context.Background(), Request{Sandbox: "dev", Env: "dev"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,11 +273,11 @@ func TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.finishRun(b, f, r1, l1, u1, nil)
+	m.finishRun(b, r1, l1, u1, nil)
 	if f.stops != 0 {
 		t.Fatal("stopped while another session was alive")
 	}
-	m.finishRun(b, f, r2, l2, u2, nil)
+	m.finishRun(b, r2, l2, u2, nil)
 	if f.stops != 1 {
 		t.Fatal("did not stop last session's sandbox")
 	}
@@ -350,30 +289,30 @@ func TestATaskNamedAloneFindsItsSandbox(t *testing.T) {
 	// Two sandboxes holding one name is state from before names were unique.
 	ctx := context.Background()
 	for _, name := range []string{"dev", "ci"} {
-		if _, err := m.Create(ctx, Request{NewSandbox: name, Profile: "node"}); err != nil {
+		if _, err := m.Create(ctx, Request{Sandbox: name, Env: "dev"}, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for name, ids := range map[string][]string{"dev": {"refunds", "shared"}, "ci": {"shared"}} {
 		b, _ := m.sandbox(name)
 		for _, id := range ids {
-			b.Tasks = append(b.Tasks, api.Task{ID: id, Sandbox: name, Directory: "/work/" + id, Agent: "claude", State: "ready"})
+			b.Tasks = append(b.Tasks, api.Task{ID: id, Sandbox: name, Directory: "/work/" + id, State: "ready"})
 		}
 		if err := m.saveBox(b); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if b, _, _, err := m.Definition(Request{Task: "refunds"}); err != nil || b.Name != "dev" {
+	if b, _, err := m.Definition(Request{Task: "refunds"}); err != nil || b.Name != "dev" {
 		t.Fatalf("%s %v", b.Name, err)
 	}
-	if _, _, _, err := m.Definition(Request{Task: "shared"}); err == nil || !strings.Contains(err.Error(), "ci, dev; remove the one not wanted") {
+	if _, _, err := m.Definition(Request{Task: "shared"}); err == nil || !strings.Contains(err.Error(), "ci, dev; remove the one not wanted") {
 		t.Fatalf("%v", err)
 	}
-	if _, _, _, err := m.Definition(Request{Task: "missing"}); err == nil || !strings.Contains(err.Error(), "unibox task ls lists them") {
+	if _, _, err := m.Definition(Request{Task: "missing"}); err == nil || !strings.Contains(err.Error(), "unibox task ls lists them") {
 		t.Fatalf("%v", err)
 	}
 	// A new task named by the user still needs to be told where to go.
-	if _, _, _, err := m.Definition(Request{Task: "missing", Repositories: []RepoInput{{Source: "."}}}); err == nil || !strings.Contains(err.Error(), "no sandbox chosen") {
+	if _, _, err := m.Definition(Request{Task: "missing", Repositories: []RepoInput{{Source: "."}}}); err == nil || !strings.Contains(err.Error(), "no sandbox chosen") {
 		t.Fatalf("%v", err)
 	}
 }
@@ -386,12 +325,12 @@ func TestTaskNamesAreUniqueAcrossSandboxes(t *testing.T) {
 	f.remotes[url] = "file://" + remote
 	ctx := context.Background()
 	for _, name := range []string{"dev", "ci"} {
-		if _, err := m.Create(ctx, Request{NewSandbox: name, Profile: "node"}); err != nil {
+		if _, err := m.Create(ctx, Request{Sandbox: name, Env: "dev"}, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	req := func(sandbox, task string) Request {
-		return Request{Sandbox: sandbox, Task: task, Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
+		return Request{Sandbox: sandbox, Task: task, Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
 	}
 	if _, err := m.Prepare(ctx, req("dev", "refunds")); err != nil {
 		t.Fatal(err)
@@ -425,12 +364,12 @@ func TestClaudeTrustsTheTaskItRunsIn(t *testing.T) {
 	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nprintf '%s' \"$UNIBOX_CO_AUTHOR\" > "+Quote(seen)+"\n"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ctx := context.Background()
-	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
 		t.Fatal(err)
 	}
-	home := filepath.Join(f.root, "unibox-dev", "home")
+	home := filepath.Join(f.root, "dev", "home")
 	write(t, filepath.Join(home, ".claude.json"), `{"theme":"dark","projects":{"/elsewhere":{"hasTrustDialogAccepted":false}}}`)
-	req := Request{Sandbox: "dev", Task: "refunds", Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
+	req := Request{Sandbox: "dev", Task: "refunds", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
 	if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -464,11 +403,16 @@ func TestRunOpensAShellInTheTaskInsteadOfTheAgent(t *testing.T) {
 	f.remotes[url] = "file://" + remote
 	bin := t.TempDir()
 	seen := filepath.Join(t.TempDir(), "shell")
-	mustWriteExecutable(t, filepath.Join(bin, "bash"), []byte("#!/bin/sh\nprintf '%s|%s|%s' \"$*\" \"${PWD##*/}\" \"${UNIBOX_AGENT:-none}\" > "+Quote(seen)+"\n"))
+	realBash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Preparing a task runs bash too; only the login shell is the session.
+	mustWriteExecutable(t, filepath.Join(bin, "bash"), []byte("#!/bin/sh\n[ \"$1\" = -l ] || exec "+Quote(realBash)+" \"$@\"\nprintf '%s|%s|%s' \"$*\" \"${PWD##*/}\" \"${UNIBOX_AGENT:-none}\" > "+Quote(seen)+"\n"))
 	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\necho claude ran >&2\nexit 9\n"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ctx := context.Background()
-	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
 		t.Fatal(err)
 	}
 	req := Request{Sandbox: "dev", Task: "refunds", Shell: true, Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
@@ -516,16 +460,16 @@ func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
 	f.remotes[paymentsURL] = "file://" + payments
 	f.remotes[ledgerURL] = "file://" + ledger
 	ctx := context.Background()
-	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node"}); err != nil {
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
 		t.Fatal(err)
 	}
 	author := "Person <person@example.com>"
-	first := Request{Sandbox: "dev", Task: "refunds", Agent: "claude", Author: author, Repositories: []RepoInput{{Source: paymentsURL, Branch: "feat/refunds"}}}
+	first := Request{Sandbox: "dev", Task: "refunds", Author: author, Repositories: []RepoInput{{Source: paymentsURL, Branch: "feat/refunds"}}}
 	if _, err := m.Prepare(ctx, first); err != nil {
 		t.Fatal(err)
 	}
 	// A running session holds the task; adding must not wait for it.
-	_, _, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "refunds"}, true)
+	_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "refunds"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +483,7 @@ func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
 	if len(added) != 1 || added[0].Name != "ledger" || len(task.Repositories) != 2 {
 		t.Fatalf("%+v %+v", added, task)
 	}
-	clone := filepath.Join(f.root, "unibox-dev", "work", "refunds", "ledger")
+	clone := filepath.Join(f.root, "dev", "work", "refunds", "ledger")
 	if got := gitTest(t, clone, "branch", "--show-current"); got != "feat/refunds" {
 		t.Fatal(got)
 	}
@@ -564,7 +508,7 @@ func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
 	write(t, filepath.Join(clone, "agent.txt"), "work\n")
 	gitTest(t, clone, "add", "agent.txt")
 	gitTest(t, clone, "commit", "-m", "Agent work")
-	if err = m.Remove(ctx, "dev", ""); err == nil {
+	if err = m.Remove(ctx, "dev", "", false); err == nil {
 		t.Fatal("removed a sandbox with an unpushed commit in an added repository")
 	}
 	if _, _, err = m.AddRepositories(ctx, Request{Task: "missing", Repositories: add.Repositories}); err == nil {
@@ -580,12 +524,12 @@ func TestATaskAliasIsTakenWhereverItsIDIs(t *testing.T) {
 	f.remotes[url] = "file://" + remote
 	ctx := context.Background()
 	for _, name := range []string{"dev", "ci"} {
-		if _, err := m.Create(ctx, Request{NewSandbox: name, Profile: "node"}); err != nil {
+		if _, err := m.Create(ctx, Request{Sandbox: name, Env: "dev"}, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	req := func(sandbox, task string) Request {
-		return Request{Sandbox: sandbox, Task: task, Agent: "claude", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
+		return Request{Sandbox: sandbox, Task: task, Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Branch: "feat/refunds"}}}
 	}
 	for sandbox, task := range map[string]string{"dev": "refunds", "ci": "audit"} {
 		if _, err := m.Prepare(ctx, req(sandbox, task)); err != nil {
@@ -596,7 +540,7 @@ func TestATaskAliasIsTakenWhereverItsIDIs(t *testing.T) {
 	if err != nil || task.ID != "refunds" || task.Alias != "billing" {
 		t.Fatalf("%+v %v", task, err)
 	}
-	if b, _, _, err := m.Definition(Request{Task: "billing"}); err != nil || b.Name != "dev" {
+	if b, _, err := m.Definition(Request{Task: "billing"}); err != nil || b.Name != "dev" {
 		t.Fatalf("%s %v", b.Name, err)
 	}
 	if p, err := m.Prepare(ctx, Request{Task: "billing"}); err != nil || p.Task != "refunds" {
@@ -620,7 +564,7 @@ func TestATaskAliasIsTakenWhereverItsIDIs(t *testing.T) {
 	if _, err := m.AliasTask("refunds", "billing"); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Remove(ctx, "dev", "billing"); err != nil {
+	if err := m.Remove(ctx, "dev", "billing", false); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := m.sandbox("dev"); len(b.Tasks) != 0 {

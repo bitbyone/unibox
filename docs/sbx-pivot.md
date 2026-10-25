@@ -139,6 +139,17 @@ Navíc: mounty přežijí stop/start a chybějící host cesta start shodí, pro
 - **Bezpečnost direct mountu:** při prvním `--mount` jednou za repo vypsat, že agent může zapisovat do `.git/hooks` a `.git/config`, které se pak spustí na hostu.
   Volitelně `--protect-git`: `.git` navrch přimountovat jen pro čtení (agent pak necommituje, viz fáze 0, bod 5).
 
+**Hotovo** (ověřeno proti sbx 0.49.2 na throwaway sandboxu). Odchylky od plánu:
+
+- Mazání profilů, msb, šablon a buildů proběhlo už tady, ne až ve fázi 5; jádro bez nich nešlo přepojit.
+- Konfigurace zůstává v `config.yaml` (envy pod `envs:`, porty u envu), args ve `vars.toml` pod `[envs.<name>]`. Klíče z v1 (`runtimes.sbx.ssh_agent`) se přečtou, `environments` se zahodí.
+- Mount jde na `/work/<task>/<repo>`, ne na stejnou cestu jako na hostu: tasky tak mají jeden tvar pro mount i klon.
+- `sandbox create --adopt` převezme sandbox se stejným jménem, který unibox nezaložil; takový se nikdy nerecreatuje a `destroy` ho jen zapomene.
+- Mezi jádrem a sbx je rozhraní `Runtime`, aby testy jely proti falešnému runtime v Go místo skriptů na PATH.
+- `--protect-git` není; místo něj se při prvním mountu adresáře jednou řekne, že agent může psát do `.git`, a doporučí `--clone`.
+- Preflight se na chybějící args neptá, jen řekne `unibox var set`; ptaní přijde s wizardem ve fázi 3. `unibox init` do té doby jen odkáže na `unibox env add`.
+- Nedokončené vytvoření (sbx odmítne bez schválení) se při dalším `create`/`run` zkusí znovu, a pokud sbx sandbox už udělal, jen se dopřipraví.
+
 ### Fáze 3: Loginy a wizard
 
 - `unibox login [env]`: ze sbxenv a kitů zjistí potřebné secrety, porovná se `sbx secret ls` a pro chybějící spustí `sbx secret set <name>` se zděděnou TTY.

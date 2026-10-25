@@ -3,7 +3,6 @@ package unibox
 import (
 	"context"
 	"fmt"
-	"io"
 	"maps"
 	"regexp"
 	"slices"
@@ -14,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Port is one of a profile's ports, published on the host's loopback by
+// Port is one of an env's ports, published on the host's loopback by
 // name: Spec is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL], as Docker
 // says it; Default is whether a sandbox starts with it published.
 type Port struct {
@@ -135,22 +134,22 @@ func (p PortSpec) matches(q api.PublishedPort) bool {
 	return q.Protocol == p.Protocol
 }
 
-// validatePorts checks a profile's ports: names a command can say, specs
+// validatePorts checks an env's ports: names a command can say, specs
 // that parse, and no host port asked for twice.
 func validatePorts(ports map[string]Port) error {
 	hosts := map[string]string{}
 	for _, name := range sortedKeys(ports) {
 		if !portName.MatchString(name) {
-			return fmt.Errorf("network.ports name %q must be lower case letters, digits and dashes, starting with a letter", name)
+			return fmt.Errorf("port name %q must be lower case letters, digits and dashes, starting with a letter", name)
 		}
 		spec, err := ParsePortSpec(ports[name].Spec)
 		if err != nil {
-			return fmt.Errorf("network.ports %s: %w", name, err)
+			return fmt.Errorf("port %s: %w", name, err)
 		}
 		if spec.HostPort != 0 {
 			key := spec.HostIP + ":" + strconv.Itoa(spec.HostPort) + "/" + strings.TrimRight(spec.Protocol, "46")
 			if other, ok := hosts[key]; ok {
-				return fmt.Errorf("network.ports %s and %s ask for the same host port %d", other, name, spec.HostPort)
+				return fmt.Errorf("ports %s and %s ask for the same host port %d", other, name, spec.HostPort)
 			}
 			hosts[key] = name
 		}
@@ -158,27 +157,12 @@ func validatePorts(ports map[string]Port) error {
 	return nil
 }
 
-// PortPublisher is a runtime that publishes a running sandbox's ports on
-// the host and takes them back, without a recreation.
-// PortLister is a runtime that says which of a sandbox's ports are
-// published. One that publishes them only when it creates a sandbox, as msb
-// does, lists them without being a PortPublisher.
-type PortLister interface {
-	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)
-}
-
-type PortPublisher interface {
-	PortLister
-	PublishPort(ctx context.Context, sandbox, spec string, log io.Writer) error
-	UnpublishPort(ctx context.Context, sandbox string, port api.PublishedPort, log io.Writer) error
-}
-
-// wantedPorts is what a sandbox should have published: each of the
-// profile's ports by its default unless the sandbox's own switch says
-// otherwise, and the ports switched on for it alone, by their spec.
-func wantedPorts(p Profile, b api.Sandbox) map[string]string {
+// wantedPorts is what a sandbox should have published: each of the env's
+// ports by its default unless the sandbox's own switch says otherwise, and
+// the ports switched on for it alone, by their spec.
+func wantedPorts(ports map[string]Port, b api.Sandbox) map[string]string {
 	want := map[string]string{}
-	for name, port := range p.Ports {
+	for name, port := range ports {
 		on := port.Default
 		if v, ok := b.PortSwitches[name]; ok {
 			on = v
@@ -188,7 +172,7 @@ func wantedPorts(p Profile, b api.Sandbox) map[string]string {
 		}
 	}
 	for key, on := range b.PortSwitches {
-		if _, named := p.Ports[key]; !named && on {
+		if _, named := ports[key]; !named && on {
 			want[key] = key
 		}
 	}
@@ -197,14 +181,13 @@ func wantedPorts(p Profile, b api.Sandbox) map[string]string {
 
 // syncPorts brings a running sandbox's published ports to what it should
 // have, touching only ports unibox published or should; a port published
-// by hand with the runtime's own command stays.
-func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Profile) error {
-	pub, ok := r.(PortPublisher)
-	if !ok {
+// by hand with sbx ports stays.
+func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, env Env) error {
+	want := wantedPorts(env.Config.Ports, *b)
+	if len(want) == 0 && len(b.Ports) == 0 {
 		return nil
 	}
-	want := wantedPorts(p, *b)
-	actual, err := pub.PublishedPorts(ctx, b.RuntimeName)
+	actual, err := m.SBX.PublishedPorts(ctx, b.Name)
 	if err != nil {
 		return err
 	}
@@ -217,7 +200,7 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Pr
 		if parsed, err := ParsePortSpec(spec); err == nil {
 			for _, q := range actual {
 				if parsed.matches(q) {
-					if err := pub.UnpublishPort(ctx, b.RuntimeName, q, m.Log); err != nil {
+					if err := m.SBX.UnpublishPort(ctx, b.Name, q, m.Log); err != nil {
 						return err
 					}
 					removed = true
@@ -227,7 +210,7 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Pr
 		changes = append(changes, "- "+name)
 	}
 	if removed {
-		if actual, err = pub.PublishedPorts(ctx, b.RuntimeName); err != nil {
+		if actual, err = m.SBX.PublishedPorts(ctx, b.Name); err != nil {
 			return err
 		}
 	}
@@ -239,7 +222,7 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Pr
 			return err
 		}
 		if !slices.ContainsFunc(actual, parsed.matches) {
-			if err := pub.PublishPort(ctx, b.RuntimeName, spec, m.Log); err != nil {
+			if err := m.SBX.PublishPort(ctx, b.Name, spec, m.Log); err != nil {
 				return fmt.Errorf("port %s (%s) of sandbox %s: %w", name, spec, b.Name, err)
 			}
 		}
@@ -249,7 +232,7 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Pr
 		published[name] = spec
 	}
 	if len(changes) > 0 {
-		fmt.Fprintf(m.Log, "ports of sandbox %s, applied live: %s\n", b.Name, strings.Join(changes, ", "))
+		fmt.Fprintf(m.Log, "ports of sandbox %s: %s\n", b.Name, strings.Join(changes, ", "))
 	}
 	if len(published) == 0 {
 		published = nil
@@ -261,7 +244,7 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, r Runtime, p Pr
 	return m.saveBox(*b)
 }
 
-// PortState is one port of a sandbox as unibox network port ls shows it.
+// PortState is one port of a sandbox as unibox port ls shows it.
 type PortState struct {
 	Name, Spec string
 	Default    bool
@@ -271,35 +254,31 @@ type PortState struct {
 	Published []api.PublishedPort
 }
 
-// SandboxPorts lists a sandbox's ports: the profile's and those switched
-// on for it alone, each with where it is published now.
+// SandboxPorts lists a sandbox's ports: its env's and those switched on
+// for it alone, each with where it is published now.
 func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, bool, error) {
-	b, err := m.sandbox(name)
+	b, env, err := m.Definition(Request{Sandbox: name})
 	if err != nil {
 		return nil, false, err
 	}
-	r, err := m.Runtime(b.Runtime)
-	if err != nil {
-		return nil, false, err
+	if b.State == "missing" {
+		return nil, false, Fail(404, "sandbox_not_found", "sandbox %s is not unibox's; unibox sandbox ls lists them", name)
 	}
-	p, err := m.profile(b.Profile)
-	if err != nil {
-		return nil, false, err
-	}
-	box, exists, err := m.findBox(ctx, r, b)
+	ports := env.Config.Ports
+	box, exists, err := m.findBox(ctx, b)
 	if err != nil {
 		return nil, false, err
 	}
 	running := exists && box.State == "running"
 	var actual []api.PublishedPort
-	if pub, ok := r.(PortLister); ok && running {
-		if actual, err = pub.PublishedPorts(ctx, b.RuntimeName); err != nil {
+	if running {
+		if actual, err = m.SBX.PublishedPorts(ctx, b.Name); err != nil {
 			return nil, false, err
 		}
 	}
 	want := map[string]string{}
 	if running {
-		want = wantedPorts(p, b)
+		want = wantedPorts(ports, b)
 	}
 	out := []PortState{}
 	add := func(name, spec string, def, named bool) {
@@ -314,11 +293,11 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 		}
 		out = append(out, s)
 	}
-	for _, n := range sortedKeys(p.Ports) {
-		add(n, p.Ports[n].Spec, p.Ports[n].Default, true)
+	for _, n := range sortedKeys(ports) {
+		add(n, ports[n].Spec, ports[n].Default, true)
 	}
 	for _, key := range sortedKeys(b.PortSwitches) {
-		if _, named := p.Ports[key]; !named && b.PortSwitches[key] {
+		if _, named := ports[key]; !named && b.PortSwitches[key] {
 			add(key, key, false, false)
 		}
 	}
@@ -326,93 +305,66 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 }
 
 // SwitchPorts turns a running sandbox's ports on or off for as long as it
-// runs, by the profile's name or, for a port the profile does not name, by
-// its spec; the profile stays as it is, and the next start of the sandbox
-// goes back to the profile's defaults.
+// runs, by the env's name or, for a port the env does not name, by its
+// spec; the next start of the sandbox goes back to the env's defaults.
 func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[string]bool) error {
 	guard, err := m.guard(name)
 	if err != nil {
 		return err
 	}
 	defer guard.Close()
-	b, err := m.sandbox(name)
+	b, env, err := m.Definition(Request{Sandbox: name})
 	if err != nil {
 		return err
 	}
-	r, err := m.Runtime(b.Runtime)
+	box, exists, err := m.findBox(ctx, b)
 	if err != nil {
 		return err
 	}
-	if _, ok := r.(PortPublisher); !ok {
-		return fmt.Errorf("runtime %s publishes ports only when it creates a sandbox; change the profile's default with unibox network port set, which recreates sandbox %s", b.Runtime, name)
-	}
-	p, err := m.profile(b.Profile)
-	if err != nil {
-		return err
-	}
-	box, exists, err := m.findBox(ctx, r, b)
-	if err != nil {
-		return err
-	}
-	if !exists || box.State != "running" {
-		return fmt.Errorf("sandbox %s is not running; a port switched now lasts while it runs - start it with unibox resume or unibox sandbox shell, or change the profile's default with unibox network port set", name)
+	if b.State == "missing" || !exists || box.State != "running" {
+		return fmt.Errorf("sandbox %s is not running; a port switched now lasts while it runs - start it with unibox resume or unibox sandbox shell, or change the env's default with unibox port set", name)
 	}
 	if b.PortSwitches == nil {
 		b.PortSwitches = map[string]bool{}
 	}
 	for key, on := range switches {
-		if _, named := p.Ports[key]; !named {
+		if _, named := env.Config.Ports[key]; !named {
 			if _, err := ParsePortSpec(key); err != nil {
-				return fmt.Errorf("profile %s has no port %s, and it is not a mapping either; unibox network port ls -s %s lists them", p.Name, key, name)
+				return fmt.Errorf("env %s has no port %s, and it is not a mapping either; unibox port ls -s %s lists them", env.Name, key, name)
 			}
 		}
 		b.PortSwitches[key] = on
 	}
-	return m.syncPorts(ctx, &b, r, p)
+	return m.syncPorts(ctx, &b, env)
 }
 
-// ApplyPorts brings every running sandbox of a profile to its ports.
-func (m *Manager) ApplyPorts(ctx context.Context, profile string) ([]string, error) {
-	p, err := m.profile(profile)
-	if err != nil {
-		return nil, err
-	}
+// ApplyPorts brings every running sandbox of an env to its ports.
+func (m *Manager) ApplyPorts(ctx context.Context, envName string) error {
 	s, err := m.Paths.ReadState()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	needRecreate := []string{}
 	for _, name := range sortedKeys(s.Sandboxes) {
-		b := s.Sandboxes[name]
-		if b.Profile != p.Name {
+		if s.Sandboxes[name].Env != envName {
 			continue
 		}
-		r, err := m.Runtime(b.Runtime)
+		b, env, err := m.Definition(Request{Sandbox: name})
 		if err != nil {
-			return nil, err
+			return err
 		}
-		box, exists, err := m.findBox(ctx, r, b)
-		if err != nil || !exists {
-			continue
-		}
-		// A runtime that publishes ports only when it creates a sandbox
-		// takes the change with a recreation.
-		if _, ok := r.(PortPublisher); !ok {
-			needRecreate = append(needRecreate, name)
-			continue
-		}
-		if box.State != "running" {
+		box, exists, err := m.findBox(ctx, b)
+		if err != nil || !exists || box.State != "running" {
 			continue
 		}
 		guard, err := m.guard(name)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		err = m.syncPorts(ctx, &b, r, p)
+		err = m.syncPorts(ctx, &b, env)
 		guard.Close()
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return needRecreate, nil
+	return nil
 }
