@@ -181,6 +181,41 @@ Navíc: mounty přežijí stop/start a chybějící host cesta start shodí, pro
 
 **Hotovo**, kromě release. Mazání a `api` v2 proběhly už ve fázi 2. README, AGENTS.md, `docs/design.md` (ověřená fakta o sbx zůstala v oddílu "What was verified about sbx", s daty) a web jsou přepsané; stránky o profilech, šablonách, buildech a msb zmizely, přibyly `envs`, `logins` a `ports`. Při psaní se našly dvě chyby: `resume` hotového tasku znovu nenamountoval, co mu chybělo (teď ano), a "nenalezeno" končilo exit kódem 404, což shell vidí jako 148 (teď `4`). Release `v2.0` a merge do main čekají na souhlas.
 
+## Další kroky
+
+Cíl: s unibox není potřeba sbx CLI vůbec; kdo unibox nechce, vystačí si se sbx a týmovým repem a ničím omezen není.
+
+### Init nad celým repem
+
+- `unibox init` je interaktivní; bez terminálu nebo s `--no-input` se na nic neptá, vezme výchozí hodnoty a chybějící povinnou hodnotu ohlásí chybou s flagem, který ji dodá.
+- Vstup: aktuální složka, cesta, nebo git URL. URL se naklonuje hostovým gitem do `~/.local/share/unibox/repos/<host>/<owner>/<repo>`.
+- Init najde všechny `*.sbxenv.yaml` v repu (bez `.git` a `node_modules`) a nabídne je k výběru, víc najednou; env se jmenuje podle souboru. Výchozí env se nastaví sám, je-li jeden, jinak se init zeptá.
+- Kroky: sbx (instalace, `sbx login` pustí unibox, verze, ssh agent), envy, args, loginy, týmové porty, sandbox.
+- Opakovaný init doplní nové soubory a hodnoty a přeskočí hotové.
+- `config.yaml` si u env pamatuje `repo` a u klonu `source`.
+- `env add <name>` bez cesty vezme jediný sbxenv v aktuální složce.
+
+### Aktualizace týmového repa
+
+- `unibox env pull`: `git pull --ff-only` jen v klonech, které unibox založil, a co ze změny plyne (recreate, nové args, loginy). Cizí checkouty nepulluje nikdy.
+- doctor upozorní na klon pozadu za remote.
+
+### Bez sbx CLI
+
+- `unibox network ls|allow|deny|rm` nad `sbx policy`.
+- `unibox config set remember_host_commands` zapíše do sbx settings.
+- Rady v doctoru jen unibox příkazy (osiřelý mount → unibox příkaz místo `sbx umount`).
+
+### Týmové porty
+
+- `<env>.unibox.yaml` vedle sbxenv: `ports.<name>: {port, description, default}`. sbx ho nečte, takže nikoho bez unibox neomezuje.
+- `unibox port on|off <name>`; osobní volby v `config.yaml` mají přednost před týmovými výchozími.
+
+### Všechny platformy
+
+- Windows: `LockFileEx` místo flock, herdr za build tagem, proměnné prostředí Windows, Windows v CI.
+- Release: `CGO_ENABLED=0` pro linux, darwin, windows × amd64, arm64, archivy v GitHub release, Scoop manifest v tomto repu vedle Homebrew formule.
+
 ## Testy
 
 - Fake `sbx` na PATH (`testenv.WriteExecutable`) zapisuje volání do souboru a vrací připravené JSON odpovědi. Testy, které ho používají, jsou sériové.
