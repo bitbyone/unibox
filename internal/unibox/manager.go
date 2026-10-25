@@ -431,12 +431,13 @@ func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string) {
 		}
 		return 0
 	})
+	values, _ := m.Paths.LoadEnvValues()
 	for _, k := range kits {
 		ref := k.Source
 		if k.Dir != "" {
 			ref = k.Dir
 		}
-		kit, err := m.SBX.KitInspect(ctx, ref)
+		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.Envs[env.Name]))
 		if err != nil {
 			fmt.Fprintf(m.Log, "%v\n", err)
 			continue

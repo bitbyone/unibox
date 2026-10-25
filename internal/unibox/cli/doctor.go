@@ -129,9 +129,9 @@ func (o *options) doctorCommand() *cobra.Command {
 					case l.Stored:
 						add(area, "login "+l.Service, "pass", "stored ("+l.Scope+")", "")
 					case l.Optional:
-						add(area, "login "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "sbx secret set "+l.Service)
+						add(area, "login "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "unibox login set -e "+name+" "+l.Service)
 					default:
-						add(area, "login "+l.Service, "fail", cmp.Or(l.Description, "not stored"), "sbx secret set "+l.Service)
+						add(area, "login "+l.Service, "fail", cmp.Or(l.Description, "not stored"), "unibox login set -e "+name+" "+l.Service)
 					}
 				}
 			}

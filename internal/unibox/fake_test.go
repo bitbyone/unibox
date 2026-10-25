@@ -123,9 +123,12 @@ func (f *fakeRuntime) Remove(_ context.Context, name string) error {
 	return os.RemoveAll(filepath.Join(f.root, name))
 }
 
-func (f *fakeRuntime) KitInspect(_ context.Context, ref string) (Kit, error) {
+func (f *fakeRuntime) KitInspect(_ context.Context, ref string, args map[string]string) (Kit, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(args) > 0 {
+		f.record("kit inspect " + ref + " " + fmt.Sprint(args))
+	}
 	if k, ok := f.kits[ref]; ok {
 		return k, nil
 	}
@@ -138,7 +141,7 @@ func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	return slices.Clone(f.secrets), nil
 }
 
-func (f *fakeRuntime) SecretSet(_ context.Context, service string, _ io.Reader, _, _ io.Writer) error {
+func (f *fakeRuntime) SecretSet(_ context.Context, service, command string, _ io.Reader, _, _ io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.record("secret set " + service)

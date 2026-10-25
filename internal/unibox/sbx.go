@@ -177,9 +177,13 @@ type KitCredential struct {
 
 // KitInspect reads a kit as sbx resolves it: a registry reference or a
 // local directory. sbx says what it cached before the JSON.
-func (r *SBX) KitInspect(ctx context.Context, ref string) (Kit, error) {
+func (r *SBX) KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error) {
 	var k Kit
-	b, err := commandOutput(hostCommand(ctx, "sbx", "kit", "inspect", "--json", ref))
+	argv := []string{"kit", "inspect", "--json"}
+	for _, name := range sortedKeys(args) {
+		argv = append(argv, "--kit-arg", name+"="+args[name])
+	}
+	b, err := commandOutput(hostCommand(ctx, "sbx", append(argv, ref)...))
 	if err != nil {
 		return k, fmt.Errorf("cannot read kit %s: %w", ref, err)
 	}
@@ -214,9 +218,16 @@ func (r *SBX) Secrets(ctx context.Context) ([]Secret, error) {
 
 // SecretSet has sbx ask the person for a service's token on their own
 // terminal, which unibox only hands over: the value goes from the
-// keyboard to sbx's store and never through unibox.
-func (r *SBX) SecretSet(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error {
-	cmd := hostCommand(ctx, "sbx", "secret", "set", service)
+// keyboard, or a pipe, to sbx's store and never through unibox. With a
+// command, sbx stores the command instead and runs it on the host when it
+// needs the token - a keychain read, say. Either is global: sbx env rm
+// deletes a sandbox's own.
+func (r *SBX) SecretSet(ctx context.Context, service, command string, in io.Reader, out, errout io.Writer) error {
+	args := []string{"secret", "set", service}
+	if command != "" {
+		args = append(args, "--command", command)
+	}
+	cmd := hostCommand(ctx, "sbx", args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("sbx did not store the %s token; run sbx secret set %s yourself: %w", service, service, err)

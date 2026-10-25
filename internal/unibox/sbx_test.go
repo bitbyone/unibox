@@ -84,7 +84,7 @@ esac
 	if err != nil || len(boxes) != 1 || boxes[0].ID != "vm-id" || boxes[0].State != "stopped" {
 		t.Fatalf("%+v %v", boxes, err)
 	}
-	kit, err := r.KitInspect(ctx, "./kits/agent")
+	kit, err := r.KitInspect(ctx, "./kits/agent", nil)
 	if err != nil || kit.Kind != "sandbox" || !slices.Equal(kit.Sandbox.Entrypoint, []string{"copilot"}) || kit.Sandbox.Command.Default[0] != "--yolo" || kit.Credentials[0].Service != "copilot" {
 		t.Fatalf("%+v %v", kit, err)
 	}

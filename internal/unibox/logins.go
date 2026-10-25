@@ -3,8 +3,15 @@ package unibox
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 )
+
+var secretName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// ValidSecretName says whether a name is one sbx stores a service's token
+// under, as a kit's credentials and an env's bindings name them.
+func ValidSecretName(name string) bool { return secretName.MatchString(name) }
 
 // Login is a service an env's sandbox takes a token for, and whether sbx
 // has one stored: the person's logins are sbx's secrets, set once and used
@@ -37,12 +44,15 @@ func (m *Manager) Logins(ctx context.Context, env Env, sandbox string) ([]Login,
 		order = append(order, service)
 		return l
 	}
+	// A kit is read with the args the env gives it, which may be the
+	// person's.
+	values, _ := m.Paths.LoadEnvValues()
 	for _, k := range env.SBX.Kits {
 		ref := k.Source
 		if k.Dir != "" {
 			ref = k.Dir
 		}
-		kit, err := m.SBX.KitInspect(ctx, ref)
+		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.Envs[env.Name]))
 		if err != nil {
 			return nil, err
 		}

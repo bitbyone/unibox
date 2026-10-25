@@ -126,3 +126,43 @@ func sorted[V any](m map[string]V) []string {
 	slices.Sort(out)
 	return out
 }
+
+// askArgs asks, at a terminal, for the args an env requires and the person
+// has not set, and keeps them as unibox var set would. It says whether it
+// set any.
+func (o *options) askArgs(env unibox.Env) (bool, error) {
+	if !o.canAsk() {
+		return false, nil
+	}
+	values, err := o.paths.LoadEnvValues()
+	if err != nil {
+		return false, err
+	}
+	mine := values.Envs[env.Name]
+	missing := env.SBX.Missing(mine)
+	if len(missing) == 0 {
+		return false, nil
+	}
+	if mine == nil {
+		mine = map[string]string{}
+	}
+	fmt.Fprintf(o.log, "env %s asks for values of your own, kept for it in vars.toml:\n", env.Name)
+	for _, name := range missing {
+		value, err := o.askText(name, env.SBX.Args[name].Description, "", func(s string) error {
+			if s == "" {
+				return fmt.Errorf("%s is required", name)
+			}
+			if err := unibox.ValidArg(name, s); err != nil {
+				return err
+			}
+			_, err := env.SBX.CheckArgs(map[string]string{name: s})
+			return err
+		})
+		if err != nil {
+			return false, err
+		}
+		mine[name] = value
+	}
+	values.Envs[env.Name] = mine
+	return true, o.paths.SaveEnvValues(values)
+}

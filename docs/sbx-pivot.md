@@ -157,6 +157,8 @@ Navíc: mounty přežijí stop/start a chybějící host cesta start shodí, pro
 - `unibox init -i` jako walk: sbx (verze, ssh agent, `env.rememberHostCommands`), Env (soubory), Values (chybějící args → vars.toml), Logins, Create, Run.
   Kroky volají tytéž příkazy jako dnes (`wizard.go` zůstává jako kostra).
 
+**Hotovo.** `unibox login ls|set` (podle konvence podstatné jméno a sloveso), `set` umí `--command` pro keychain a hodnotu z pipe; secrety jsou vždy globální, protože `sbx env rm` maže ty sandboxové. `init` je nový pětikrokový walk (sbx, Env, Values, Logins, Sandbox) místo `wizard.go`. Chybějící args se ptá `run` i `sandbox create`. Kit s povinným vlastním argem (`2n-artifactory`) se čte s `--kit-arg` z hodnot env, jinak by ho `sbx kit inspect` nepřečetl. `env.rememberHostCommands` walk neřeší, nastavuje se v sbx.
+
 ### Fáze 4: Doctor a drift
 
 - doctor kontroluje:

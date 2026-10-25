@@ -110,6 +110,19 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 				if !r.Push {
 					return unibox.Fail(4, n.Code, "%s: %s", n.Repository, n.Message)
 				}
+			case "arg_missing":
+				_, env, err := o.manager.Definition(*r)
+				if err != nil {
+					return err
+				}
+				asked, err := o.askArgs(env)
+				if err != nil {
+					return err
+				}
+				if !asked {
+					return unibox.Fail(4, n.Code, "%s", n.Message)
+				}
+				changed = true
 			default:
 				return unibox.Fail(4, n.Code, "%s", n.Message)
 			}
@@ -240,6 +253,13 @@ sbx itself: unibox then adds tasks to it, and removes it only when forced.`, Exa
 			return err
 		}
 		req.Env = env
+		if !adopt {
+			if _, e, err := o.manager.Definition(req); err == nil {
+				if _, err = o.askArgs(e); err != nil {
+					return err
+				}
+			}
+		}
 		b, err := o.manager.Create(cmd.Context(), req, adopt)
 		if err != nil {
 			return err

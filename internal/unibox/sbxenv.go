@@ -33,6 +33,9 @@ type EnvArg struct {
 type EnvKit struct {
 	Source string `json:"source"`
 	Dir    string `json:"dir,omitempty"`
+	// Args are what the env gives the kit's own args, as written: a
+	// value, or ${{ env.args.<name> }}.
+	Args map[string]string `json:"args,omitempty"`
 }
 
 // SBXEnv is what unibox reads of an env's files, merged in their order as sbx
@@ -107,17 +110,19 @@ func ReadSBXEnv(files []string) (SBXEnv, error) {
 		}
 		for _, k := range doc.Kits {
 			source := k.Value
+			var args map[string]string
 			if k.Kind == yaml.MappingNode {
 				var entry struct {
-					Source string `yaml:"source"`
+					Source string            `yaml:"source"`
+					Args   map[string]string `yaml:"args"`
 				}
 				_ = k.Decode(&entry)
-				source = entry.Source
+				source, args = entry.Source, entry.Args
 			}
 			if source == "" {
 				return e, fmt.Errorf("%s: a kit without a source; give it as a reference or {source: ...}", file)
 			}
-			kit := EnvKit{Source: source}
+			kit := EnvKit{Source: source, Args: args}
 			if localKit(source) {
 				dir := source
 				if !filepath.IsAbs(dir) {
@@ -125,7 +130,7 @@ func ReadSBXEnv(files []string) (SBXEnv, error) {
 				}
 				kit.Dir = filepath.Clean(dir)
 			}
-			if !slices.Contains(e.Kits, kit) {
+			if !slices.ContainsFunc(e.Kits, func(k EnvKit) bool { return k.Source == kit.Source && k.Dir == kit.Dir }) {
 				e.Kits = append(e.Kits, kit)
 			}
 		}
@@ -280,4 +285,30 @@ func WriteArgsFile(dir string, values map[string]string) (string, func(), error)
 		return "", nil, err
 	}
 	return f.Name(), remove, nil
+}
+
+var envArgRef = regexp.MustCompile(`\$\{\{\s*env\.args\.([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}`)
+
+// KitArgs are the values a kit's args get from the env, with the person's
+// values, then the env's defaults, put for ${{ env.args.<name> }}. One
+// neither gives is a placeholder: unibox only reads a kit, and what a kit
+// declares does not depend on its args.
+func (e SBXEnv) KitArgs(k EnvKit, values map[string]string) map[string]string {
+	if len(k.Args) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for name, v := range k.Args {
+		out[name] = envArgRef.ReplaceAllStringFunc(v, func(ref string) string {
+			arg := envArgRef.FindStringSubmatch(ref)[1]
+			if v, ok := values[arg]; ok {
+				return v
+			}
+			if d := e.Args[arg].Default; d != nil {
+				return *d
+			}
+			return "unset"
+		})
+	}
+	return out
 }

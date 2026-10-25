@@ -56,7 +56,7 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	// What a command works on is a word of a group (unibox task rm); only
 	// the everyday ones stand alone.
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
-		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.portCommand(),
+		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.loginCommand(), o.portCommand(),
 		o.herdrCommand(), o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
 	return root
 }

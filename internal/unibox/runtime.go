@@ -29,9 +29,9 @@ type Runtime interface {
 	Remove(ctx context.Context, name string) error
 	EnvCreate(ctx context.Context, name, args string, files []string, in io.Reader, out, errout io.Writer) error
 	EnvRemove(ctx context.Context, name, args string, files []string, log io.Writer) error
-	KitInspect(ctx context.Context, ref string) (Kit, error)
+	KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error)
 	Secrets(ctx context.Context) ([]Secret, error)
-	SecretSet(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error
+	SecretSet(ctx context.Context, service, command string, in io.Reader, out, errout io.Writer) error
 	Mount(ctx context.Context, sandbox, host, target string) error
 	Unmount(ctx context.Context, sandbox, host, target string) error
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)

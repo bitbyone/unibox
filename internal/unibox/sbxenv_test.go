@@ -87,6 +87,37 @@ bindings:
 	}
 }
 
+func TestAKitIsGivenTheArgsTheEnvGivesIt(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "dev.sbxenv.yaml")
+	write(t, file, `args:
+  user: {required: true}
+  region: {default: eu}
+kits:
+  - ./plain
+  - source: ./artifactory
+    args:
+      user: ${{ env.args.user }}
+      host: repo-${{env.args.region}}.example.com
+      fixed: value
+`)
+	e, err := ReadSBXEnv([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.KitArgs(e.Kits[0], nil) != nil {
+		t.Fatal("a kit without args got some")
+	}
+	got := e.KitArgs(e.Kits[1], map[string]string{"user": "person"})
+	if got["user"] != "person" || got["host"] != "repo-eu.example.com" || got["fixed"] != "value" {
+		t.Fatalf("%v", got)
+	}
+	// An arg not yet set still lets the kit be read.
+	if got = e.KitArgs(e.Kits[1], nil); got["user"] != "unset" {
+		t.Fatalf("%v", got)
+	}
+}
+
 func TestEnvArgsAreCheckedBeforeSbx(t *testing.T) {
 	t.Parallel()
 	e, err := ReadSBXEnv([]string{filepath.Join(envFixture(t), "sandboxes", "dev.sbxenv.yaml")})
