@@ -51,6 +51,15 @@ func (p *Port) UnmarshalYAML(n *yaml.Node) error {
 	return fmt.Errorf("line %d: a port is its spec, such as '3000:3000', or {port: ..., default: off}", n.Line)
 }
 
+// MarshalYAML writes a port on by default as its spec alone, as a person
+// would write it.
+func (p Port) MarshalYAML() (any, error) {
+	if p.Default {
+		return p.Spec, nil
+	}
+	return map[string]string{"port": p.Spec, "default": "off"}, nil
+}
+
 func onOff(s string) (bool, bool) {
 	switch strings.ToLower(s) {
 	case "on", "true", "yes":

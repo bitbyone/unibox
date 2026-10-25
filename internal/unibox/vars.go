@@ -130,6 +130,8 @@ func (u *UserVars) read(doc map[string]any) error {
 	for key, v := range doc {
 		var err error
 		switch key {
+		case "envs":
+			// An env's args, read by LoadEnvValues.
 		case "global":
 			u.Vars, err = strs("global", v, "")
 		case "secrets":

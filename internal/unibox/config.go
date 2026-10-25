@@ -39,11 +39,15 @@ type Config struct {
 	// Context is the sandbox and profile a command works on when it is
 	// not told, set by unibox context use.
 	Context Context `yaml:"context,omitempty" json:"context,omitempty"`
+	// DefaultEnv is the env a sandbox is created from when none is named.
+	DefaultEnv string               `yaml:"default_env,omitempty" json:"default_env,omitempty"`
+	Envs       map[string]EnvConfig `yaml:"envs,omitempty" json:"envs,omitempty"`
 }
 
 type Context struct {
 	Sandbox string `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
 	Profile string `yaml:"profile,omitempty" json:"profile,omitempty"`
+	Env     string `yaml:"env,omitempty" json:"env,omitempty"`
 }
 type Paths struct{ Config, Cache string }
 
