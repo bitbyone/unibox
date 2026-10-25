@@ -245,6 +245,40 @@ func (m *Manager) args(env Env) (map[string]string, error) {
 	return env.SBX.Declared(mine), nil
 }
 
+// Plan has sbx check an env's files with the person's args, changing
+// nothing, and gives the line saying what creating or updating its
+// sandbox would do; a failure carries sbx's first line of error.
+func (m *Manager) Plan(ctx context.Context, env Env) (string, error) {
+	args, err := m.args(env)
+	if err != nil {
+		return "", err
+	}
+	file := ""
+	if len(args) > 0 {
+		f, remove, err := WriteArgsFile(filepath.Join(m.Paths.Cache, "args"), args)
+		if err != nil {
+			return "", err
+		}
+		defer remove()
+		file = f
+	}
+	out, err := m.SBX.EnvPlan(ctx, env.SandboxName(), file, env.SBX.Files)
+	if err != nil {
+		for _, line := range strings.Split(out, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				return "", fmt.Errorf("%s", strings.TrimPrefix(strings.TrimPrefix(line, "Error: "), "error: "))
+			}
+		}
+		return "", err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "to destroy") {
+			return strings.TrimSpace(line), nil
+		}
+	}
+	return "nothing to do", nil
+}
+
 // Check says what a request needs before its task can start.
 func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	req.Task = m.taskID(req.Task)

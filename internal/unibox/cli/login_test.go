@@ -22,6 +22,11 @@ func fakeSBX(t *testing.T) (log string) {
 echo "$*" >> ` + unibox.Quote(log) + `
 case "$1 $2" in
 "settings get") echo '{"value":false}' ;;
+"version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.49.2) 1234abc" ;;
+"diagnose --format") echo '{"checks":[]}' ;;
+"env plan")
+	if [ -f ` + unibox.Quote(filepath.Join(dir, "plan-error")) + ` ]; then echo "Error: $(cat ` + unibox.Quote(filepath.Join(dir, "plan-error")) + `)" >&2; echo "  try: sbx env --help" >&2; exit 1; fi
+	printf 'SANDBOX\n  + team\n\n  1 to add · 0 to change · 0 to destroy\n' ;;
 "ls --json") echo '[]' ;;
 "kit inspect") echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}' ;;
 "secret ls")
@@ -112,6 +117,51 @@ func TestLoginsAreListedAndTheMissingOnesStoredBySbx(t *testing.T) {
 	}
 	if _, _, err = run(t, paths, "", "login", "set", "Not A Name"); err == nil {
 		t.Fatal("a name sbx does not take was passed on")
+	}
+}
+
+func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
+	log := fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	// An env is planned only once its args are given.
+	out, _, _ := run(t, paths, "", "doctor")
+	if !strings.Contains(out, "0.49.2") || !strings.Contains(out, "sbx asks before an env's host commands run") || strings.Contains(calls(t, log), "env plan") {
+		t.Fatalf("%s", out)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "-e", "team", "user", "me"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "token", "login", "set", "gitlab"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "token", "login", "set", "anthropic"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err := run(t, paths, "", "doctor"); err != nil || !strings.Contains(out, "1 to add · 0 to change · 0 to destroy") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(calls(t, log), "env plan --name team --env-args-file ") {
+		t.Fatalf("%s", calls(t, log))
+	}
+	answer := func(name, text string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(filepath.Dir(log), name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	answer("plan-error", "kit ../kits/agent: no such kit")
+	if out, _, err := run(t, paths, "", "doctor"); err == nil || !strings.Contains(out, "kit ../kits/agent: no such kit") || strings.Contains(out, "try: sbx") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if err := os.Remove(filepath.Join(filepath.Dir(log), "plan-error")); err != nil {
+		t.Fatal(err)
+	}
+	answer("version", "0.48.0")
+	if out, _, err := run(t, paths, "", "doctor"); err == nil || !strings.Contains(out, "0.48.0, older than the "+unibox.MinSBXVersion) {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }
 

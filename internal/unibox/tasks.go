@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -697,6 +698,71 @@ func mounts(t api.Task) [][2]string {
 		}
 	}
 	return out
+}
+
+// MountDrift compares what a running sandbox has mounted under /work
+// with its ready tasks' mounts: missing are a task's mounts the sandbox
+// lacks, which the task's next start makes again, and stray the mount
+// points no task has, each as host path and target.
+func (m *Manager) MountDrift(ctx context.Context, b api.Sandbox) (missing, stray [][2]string, err error) {
+	info, err := guestOutput(ctx, m.SBX, b.Name, "cat", "/proc/self/mountinfo")
+	if err != nil {
+		return nil, nil, err
+	}
+	found := guestMounts(info)
+	mounted := map[string]bool{}
+	for _, mt := range found {
+		mounted[mt[1]] = true
+	}
+	known := map[string]bool{}
+	for _, t := range b.Tasks {
+		for _, mt := range mounts(t) {
+			known[mt[1]] = true
+			if t.State == "ready" && !mounted[mt[1]] {
+				missing = append(missing, mt)
+			}
+		}
+	}
+	for _, mt := range found {
+		if !known[mt[1]] {
+			stray = append(stray, mt)
+		}
+	}
+	return missing, stray, nil
+}
+
+// guestMounts are the mounts under /work in a mountinfo, where unibox
+// mounts tasks' directories, as host path and target: sbx shares a host
+// directory with its path as the mount's root. mountinfo escapes a space
+// and the like as an octal \NNN.
+func guestMounts(info string) [][2]string {
+	out := [][2]string{}
+	for _, line := range strings.Split(info, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 5 {
+			continue
+		}
+		mt := [2]string{unescapeMountinfo(f[3]), unescapeMountinfo(f[4])}
+		if strings.HasPrefix(mt[1], "/work/") && !slices.Contains(out, mt) {
+			out = append(out, mt)
+		}
+	}
+	return out
+}
+
+func unescapeMountinfo(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+3 < len(s) {
+			if n, err := strconv.ParseUint(s[i+1:i+4], 8, 8); err == nil {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 // mountTask mounts a task's host directories into its sandbox, at their

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -152,6 +153,66 @@ func envArgs(verb, name, args string, files []string) []string {
 		out = append(out, "--env-args-file", args)
 	}
 	return append(out, files...)
+}
+
+// MinSBXVersion is the oldest sbx unibox was checked against: sbxenv
+// files, args files, kit args and mounts as unibox uses them.
+const MinSBXVersion = "0.49.2"
+
+var semver = regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
+
+// Version is the release of sbx, as sbx version prints it.
+func (r *SBX) Version(ctx context.Context) (string, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "version"))
+	if err != nil {
+		return "", err
+	}
+	m := semver.FindStringSubmatch(string(b))
+	if m == nil {
+		return "", fmt.Errorf("sbx version printed no version unibox can read; update unibox")
+	}
+	return strings.Join(m[1:], "."), nil
+}
+
+// VersionAtLeast compares two releases given as major.minor.patch.
+func VersionAtLeast(version, min string) bool {
+	a, b := semver.FindStringSubmatch(version), semver.FindStringSubmatch(min)
+	if a == nil || b == nil {
+		return false
+	}
+	for i := 1; i <= 3; i++ {
+		x, _ := strconv.Atoi(a[i])
+		y, _ := strconv.Atoi(b[i])
+		if x != y {
+			return x > y
+		}
+	}
+	return true
+}
+
+// EnvPlan is sbx env plan: it checks an env's files and args and prints
+// what creating or updating the sandbox would do, changing nothing.
+func (r *SBX) EnvPlan(ctx context.Context, name, args string, files []string) (string, error) {
+	b, err := hostCommand(ctx, "sbx", envArgs("plan", name, args, files)...).CombinedOutput()
+	if err != nil {
+		return string(b), fmt.Errorf("sbx env plan failed: %w", err)
+	}
+	return string(b), nil
+}
+
+// Setting is the value of one of sbx's settings, as JSON.
+func (r *SBX) Setting(ctx context.Context, key string) (string, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "settings", "get", key, "--json"))
+	if err != nil {
+		return "", err
+	}
+	var setting struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if i := bytes.IndexByte(b, '{'); i < 0 || json.Unmarshal(b[i:], &setting) != nil {
+		return "", fmt.Errorf("sbx settings get %s answered in a form unibox does not know; update unibox", key)
+	}
+	return string(setting.Value), nil
 }
 
 // Kit is what sbx kit inspect says of a kit that unibox reads.

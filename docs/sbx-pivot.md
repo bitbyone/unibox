@@ -171,6 +171,8 @@ Navíc: mounty přežijí stop/start a chybějící host cesta start shodí, pro
   - sandboxy ve stavu, které už sbx nezná.
 - Při `run` se otisk porovná s uloženým, změna se oznámí s doporučením recreate a tasky se po recreate znovu namountují.
 
+**Hotovo.** Nejnižší verze sbx je 0.49.2 (`MinSBXVersion`, ta ověřená); starší doctor hlásí jako chybu. `sbx env plan` se pouští až s kompletními args, ukáže jeho souhrnný řádek nebo první řádek chyby. `env.rememberHostCommands` zapnuté je varování, ne chyba. Osiřelé mounty se čtou z `/proc/self/mountinfo` jen v běžícím sandboxu; kořen virtiofs mountu je cesta na hostu, takže rada je přesný `sbx umount <sandbox> host:cíl`. Chybějící mount tasku je varování: příští `resume` ho namountuje znovu, stejně jako po recreate (test).
+
 ### Fáze 5: Úklid kódu a dokumentace
 
 - Smazat vše z tabulky "Co zmizí", `api` zvednout na v2 (`Sandbox.Profile` → `Sandbox.Env`).

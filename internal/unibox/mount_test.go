@@ -152,3 +152,67 @@ func TestATaskMountsDirectoriesAndClonesTheRestUnlessTold(t *testing.T) {
 		}
 	}
 }
+
+func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testing.T) {
+	t.Parallel()
+	_, host := remoteFixture(t)
+	host, _ = filepath.EvalSymlinks(host)
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "local", Author: "Person <person@example.com>", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
+		t.Fatal(err)
+	}
+	target := "/work/local/" + filepath.Base(host)
+	drift := func() (missing, stray [][2]string) {
+		t.Helper()
+		b, err := m.sandbox("dev")
+		if err != nil {
+			t.Fatal(err)
+		}
+		missing, stray, err = m.MountDrift(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return missing, stray
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	odd := filepath.Join(t.TempDir(), "with space")
+	if err := f.Mount(ctx, "dev", odd, "/work/gone/x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Unmount(ctx, "dev", host, target); err != nil {
+		t.Fatal(err)
+	}
+	missing, stray := drift()
+	if len(missing) != 1 || missing[0] != [2]string{host, target} {
+		t.Fatalf("%v", missing)
+	}
+	if len(stray) != 1 || stray[0] != [2]string{odd, "/work/gone/x"} {
+		t.Fatalf("%v", stray)
+	}
+	// A recreated sandbox has no mounts; its tasks wait to be prepared
+	// again, which mounts them.
+	if err := m.Recreate(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "local"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage.Close()
+	taskLock.Close()
+	if calls := f.called("mount "); len(calls) != 3 || calls[2] != "mount "+host+":"+target {
+		t.Fatalf("%v", calls)
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+}

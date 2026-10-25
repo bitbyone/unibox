@@ -61,6 +61,21 @@ func (o *options) doctorCommand() *cobra.Command {
 				}
 				add("sbx", c.Name, c.Status, c.Message, hint)
 			}
+			if version, err := sbx.Version(ctx); err != nil {
+				add("sbx", "for unibox", "warn", err.Error(), "")
+			} else if !unibox.VersionAtLeast(version, unibox.MinSBXVersion) {
+				sbxOK = false
+				add("sbx", "for unibox", "fail", version+", older than the "+unibox.MinSBXVersion+" unibox needs", "update Docker Sandboxes")
+			} else {
+				add("sbx", "for unibox", "pass", version+", new enough", "")
+			}
+			if remember, err := sbx.Setting(ctx, "env.rememberHostCommands"); err == nil {
+				if remember == "true" {
+					add("sbx", "host commands", "warn", "sbx runs an env's host commands again without asking", "sbx settings set env.rememberHostCommands false has it ask each time")
+				} else {
+					add("sbx", "host commands", "pass", "sbx asks before an env's host commands run", "")
+				}
+			}
 			allowed, said := o.manager.Config.SSHAgent()
 			forwarding, err := sbx.SSHForwarding(ctx)
 			switch {
@@ -110,6 +125,19 @@ func (o *options) doctorCommand() *cobra.Command {
 				for _, u := range unknown {
 					add(area, "arg "+u, "warn", "set, but the env declares no such arg", "unibox var rm -e "+name+" "+u)
 				}
+				if sbxOK {
+					var plan string
+					err := o.working("planning env "+name, func() error {
+						var err error
+						plan, err = o.manager.Plan(ctx, env)
+						return err
+					})
+					if err != nil {
+						add(area, "plan", "fail", err.Error(), "sbx env plan shows the whole of it")
+					} else {
+						add(area, "plan", "pass", plan, "")
+					}
+				}
 			}
 			sandbox := env.SandboxName()
 			if !sbxOK {
@@ -152,6 +180,24 @@ func (o *options) doctorCommand() *cobra.Command {
 				if b.State == "missing" {
 					add("Sandboxes", b.Name, "warn", "sbx no longer has it", "unibox prune forgets it, or unibox sandbox recreate "+b.Name+" makes it again")
 					continue
+				}
+				if b.State == "running" {
+					var missing [][2]string
+					var stray [][2]string
+					err := o.working("reading the mounts of sandbox "+b.Name, func() error {
+						var err error
+						missing, stray, err = o.manager.MountDrift(ctx, b)
+						return err
+					})
+					if err != nil {
+						add("Sandboxes", b.Name, "warn", "mounts not checked: "+err.Error(), "")
+					}
+					for _, mt := range missing {
+						add("Sandboxes", b.Name, "warn", mt[0]+" is not mounted at "+mt[1], "unibox resume of its task mounts it again")
+					}
+					for _, mt := range stray {
+						add("Sandboxes", b.Name, "warn", mt[0]+" is mounted at "+mt[1]+", but no task has it", "sbx umount "+b.Name+" "+unibox.Quote(mt[0]+":"+mt[1]))
+					}
 				}
 				for _, t := range b.Tasks {
 					for _, r := range t.Repositories {

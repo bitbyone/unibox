@@ -22,16 +22,19 @@ import (
 // directory, and its ports behave as sbx's do: published ones stay across
 // a stop, an ephemeral one gets a host port of its own.
 type fakeRuntime struct {
-	mu                                   sync.Mutex
-	root                                 string
-	boxes                                []Box
-	creates, removes, envRemoves, stops  int
-	calls                                []string
-	args                                 string
-	kits                                 map[string]Kit
-	secrets                              []Secret
-	remotes                              map[string]string
-	published                            map[string][]api.PublishedPort
+	mu                                  sync.Mutex
+	root                                string
+	boxes                               []Box
+	creates, removes, envRemoves, stops int
+	calls                               []string
+	args                                string
+	kits                                map[string]Kit
+	secrets                             []Secret
+	remotes                             map[string]string
+	published                           map[string][]api.PublishedPort
+	// mounted is what each sandbox has mounted, host and target, which
+	// the guest's /proc/self/mountinfo shows.
+	mounted                              map[string][][2]string
 	next                                 int
 	failCreate, failUnmount, keepMounted bool
 	unavailable                          error
@@ -120,6 +123,7 @@ func (f *fakeRuntime) Remove(_ context.Context, name string) error {
 	f.record("rm " + name)
 	f.boxes = slices.DeleteFunc(f.boxes, func(b Box) bool { return b.Name == name })
 	delete(f.published, name)
+	delete(f.mounted, name)
 	return os.RemoveAll(filepath.Join(f.root, name))
 }
 
@@ -134,6 +138,17 @@ func (f *fakeRuntime) KitInspect(_ context.Context, ref string, args map[string]
 	}
 	return Kit{Name: filepath.Base(ref), Kind: "mixin"}, nil
 }
+
+func (f *fakeRuntime) Version(context.Context) (string, error) { return MinSBXVersion, nil }
+
+func (f *fakeRuntime) EnvPlan(_ context.Context, name, args string, files []string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("env plan " + name)
+	return "  1 to add · 0 to change · 0 to destroy\n", nil
+}
+
+func (f *fakeRuntime) Setting(context.Context, string) (string, error) { return "false", nil }
 
 func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	f.mu.Lock()
@@ -157,6 +172,10 @@ func (f *fakeRuntime) Mount(_ context.Context, sandbox, host, target string) err
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.record("mount " + host + ":" + target)
+	if f.mounted == nil {
+		f.mounted = map[string][][2]string{}
+	}
+	f.mounted[sandbox] = append(f.mounted[sandbox], [2]string{host, target})
 	at := f.guest(sandbox, target)
 	if err := os.MkdirAll(filepath.Dir(at), 0o755); err != nil {
 		return err
@@ -176,6 +195,7 @@ func (f *fakeRuntime) Unmount(_ context.Context, sandbox, host, target string) e
 	if f.keepMounted {
 		return nil
 	}
+	f.mounted[sandbox] = slices.DeleteFunc(f.mounted[sandbox], func(mt [2]string) bool { return mt == [2]string{host, target} })
 	at := f.guest(sandbox, target)
 	if err := os.Remove(at); err != nil {
 		return err
@@ -252,6 +272,15 @@ func (f *fakeRuntime) Exec(ctx context.Context, name string, c Command) *exec.Cm
 		args[i] = replace(a)
 	}
 	f.mu.Lock()
+	if slices.Contains(c.Args, "/proc/self/mountinfo") {
+		info := "99 69 0:29 / / rw,relatime - overlay overlay rw\n"
+		for i, mt := range f.mounted[name] {
+			info += fmt.Sprintf("%d 99 0:55 %s %s rw,nosuid - virtiofs host rw\n", 100+i, strings.ReplaceAll(mt[0], " ", `\040`), strings.ReplaceAll(mt[1], " ", `\040`))
+		}
+		at := filepath.Join(f.root, name+".mountinfo")
+		_ = os.WriteFile(at, []byte(info), 0o600)
+		args = []string{"cat", at}
+	}
 	f.record("exec " + name + " " + strings.Join(c.Args, " "))
 	f.mu.Unlock()
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)

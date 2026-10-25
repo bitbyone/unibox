@@ -37,6 +37,9 @@ type Runtime interface {
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)
 	PublishPort(ctx context.Context, sandbox, spec string, log io.Writer) error
 	UnpublishPort(ctx context.Context, sandbox string, p api.PublishedPort, log io.Writer) error
+	Version(ctx context.Context) (string, error)
+	EnvPlan(ctx context.Context, name, args string, files []string) (string, error)
+	Setting(ctx context.Context, key string) (string, error)
 	Diagnose(ctx context.Context) ([]RuntimeCheck, error)
 	SSHForwarding(ctx context.Context) (bool, error)
 	SetSSHForwarding(ctx context.Context, on bool) error
