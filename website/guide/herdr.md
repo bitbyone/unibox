@@ -1,7 +1,7 @@
 # herdr
 
 [herdr](https://herdr.dev) recognises an agent by its
-pane's foreground process. An agent behind the runtime's exec is not one it
+pane's foreground process. An agent behind `sbx exec` is not one it
 knows, so a sandboxed agent would show no state. unibox fills that in with a
 herdr plugin of its own.
 

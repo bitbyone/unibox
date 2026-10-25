@@ -1,16 +1,15 @@
 # Getting Started
 
-unibox is a command-line wrapper over Docker Sandboxes (`sbx`) for running
-coding agents -
-claude, codex, copilot and opencode - on your machine during local
-development. It gives both one profile format, kept in a git repository of
-yours, and sets up what the runtime needs. The runtime makes the sandbox, a
-micro-VM, and keeps your tokens out of it; the agent clones your
-repositories inside, commits and pushes to a branch, and you pull.
+unibox is a thin extension of Docker Sandboxes (`sbx`) for running coding
+agents - claude, codex, copilot or opencode - on your machine during local
+development. sbx makes the sandbox, a micro-VM, and keeps your tokens out of
+it; your team describes the sandbox in its own `*.sbxenv.yaml` files and
+kits. unibox adds what sbx leaves to you: your own values for the args those
+files ask for, the logins they need, tasks that put your repositories in front
+of an agent, named ports, and a doctor that says what is missing or changed.
 
-An experimental adapter for microsandbox (`msb`) shows that the same
-profile runs on another runtime; it is used only when asked for. Using the
-runtime directly still works.
+unibox is never a condition. The same files work with plain
+`sbx env create`, for anyone who would rather not use it.
 
 ## Install unibox
 
@@ -39,148 +38,124 @@ make install     # -> ~/.local/bin/unibox
 ```
 
 `unibox --version` (or `unibox version`) prints the release it was built
-from, for example `0.1`. A build that is not a release calls itself `dev`,
-with its commit: `dev (<commit>)`. `unibox version --json` adds the profile
-format it reads and the version of its JSON contract.
+from, for example `2.0`. A build that is not a release calls itself `dev`,
+with its commit: `dev (<commit>)`. `unibox version --json` adds the version
+of its JSON contract.
 
 ### Requirements
 
 - **macOS** (verified on Apple Silicon) or **Linux**
-- **Docker Sandboxes** (`sbx`), signed in with `sbx login`. The
-  experimental msb runtime needs nothing more: unibox installs it into
-  `~/.microsandbox` the first time it is used (Apple silicon Macs, Linux
-  with KVM)
-- **Docker**, for building the profiles' images
+- **Docker Sandboxes** (`sbx`) **0.49.2** or newer, signed in with
+  `sbx login`
+- **An sbxenv file**, usually your team's, in a repository of sbxenv files
+  and kits
 - **git**
 - **Go 1.26** or newer, only to build unibox from a checkout
 
-`unibox runtime ls` shows which runtimes are installed and what each isolates.
-
-## Your environments repository
-
-Profiles live in a git repository of yours, the
-[environments repository](./environments-repository). The first command lays
-it out and makes it unibox's configured one:
+## Set it up
 
 ```sh
-unibox init --dir ~/my-envs
+unibox init
 ```
 
-Then add a profile. `--agents` names the agents its image installs (copilot
-when you name none); `--cpus` and `--memory` take a fixed amount or a share of
-the host's:
-
-```sh
-unibox init web --agents claude,codex --cpus 4 --memory 50%
-```
-
-`unibox init -i` walks you through all of it instead, as small forms at the
-terminal, each answer checked as you give it. It shows where you are and what
-is left:
-
-```
-✓ Runtime  ✓ Repository  ✓ Profile  ▸ Agents  · Services  · Build  · Run   (4/7)
-```
+walks you through five steps at the terminal. Each runs the command it
+stands for, so what the walk does and what the commands do never differ,
+and a step already done is only said.
 
 | Step | What it does |
 | --- | --- |
-| Runtime | checks sbx - installed, signed in (offering `sbx login`), its daemon - and asks whether sandboxes may use your SSH agent. Without sbx it offers the experimental msb |
-| Repository | where the environments repository goes, when none is configured |
-| Profile | its name, agents, CPUs and memory - or, with `--from`, which of a template's profiles to copy |
-| Values | with `--from`, the values and tokens the template's profile asks of you |
-| Agents | signs the agents in, as `unibox agent login -i` |
-| Services | the forges your repositories live on and services such as Artifactory, one at a time until you are done - the forge of the repository you started in offered first: their tokens, and your commit identity or user name kept in your `vars.toml`, the profile referring to it |
-| Build | builds the image |
-| Run | runs an agent in the repository you started in |
+| sbx | checks sbx is installed and signed in, and asks whether sandboxes may use your SSH agent |
+| Env | names your team's sbxenv file as an env, as `unibox env add` |
+| Values | asks for the args the file requires and you have not set, as `unibox var set` |
+| Logins | lists the tokens the env's kits need and has sbx ask for the missing ones, as `unibox login set` |
+| Sandbox | creates the env's sandbox, as `unibox sandbox create`; sbx shows what it makes and asks you to approve it |
 
-From Agents on, each step can be skipped, or the rest left for later: the
-profile is written as it is, the build is offered, and init lists what to
-run later. Without sbx `init` without `-i` warns. `unibox run` before
-anything is set up offers this walk, and goes on to run the agent at its
-end. You now have
-`sandboxes/web/sandbox.yaml` and `sandboxes/web/sandbox.dockerfile`, ready to
-edit. Commit them as you would any repository; unibox reads the working tree,
-so what you see in your editor is what runs.
-
-::: tip
-`unibox profile validate` checks the whole repository - its layout, every
-profile and every instruction text - and `unibox profile ls` lists the profiles with their
-agents and the state of their images.
-:::
-
-## Sign it in
-
-An agent signs in through the runtime; unibox writes how it does into the
-profile. A git forge is a **service** the sandbox pushes to with a token of
-its own:
+The same by hand:
 
 ```sh
-unibox agent login -p web          # sign its agents in
-unibox service add github -p web   # a token for git on github.com
+unibox env add dev ~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml --default
+unibox var set -e dev user jdoe        # an arg the file asks of each person
+unibox login set -e dev                 # sbx asks for each missing token
+unibox sandbox create -e dev
+unibox doctor                           # what is still missing, and what to run
 ```
 
-Tokens are asked for on a hidden prompt and kept in the platform's store - the
-login keychain on macOS, the Secret Service on Linux. They never enter a
-sandbox. [Agents](./agents) and [Services and Secrets](./services-and-secrets)
-say more.
+[Envs](./envs) and [Logins](./logins) say more.
 
 ## Your first run
 
-From inside a repository whose branch is on the forge:
+From inside a repository:
 
 ```sh
 cd ~/src/web
-unibox run -p web -s web-1 --branch feat/login --agent claude
+unibox run
 ```
 
-This builds the image when it needs to, creates sandbox `web-1` from profile
-`web`, clones the repository at `feat/login` into `/work/<task>/web` inside it,
-and runs claude in your terminal. When claude ends, the sandbox is stopped if
-no other agent of unibox's is left in it; its disk, caches and tasks stay.
+This creates the env's sandbox when it does not exist yet, mounts the
+repository into it at `/work/<task>/web`, and runs the agent the env's kit
+runs, in your terminal. The agent works on your files and your `.git` as they
+are. When it ends, the sandbox is stopped if no other session of unibox's is
+left in it; its disk and tasks stay.
 
-The agent pushes to `feat/login`. You pull as you would a colleague's commits.
+To keep the agent out of your checkout, give it a clone from the forge
+instead:
+
+```sh
+unibox run --clone --branch feat/login
+```
+
+It then pushes to `feat/login`, and you pull as you would a colleague's
+commits. [Mount or Clone](./mount) weighs the two.
 
 ```sh
 unibox task ls                 # every task, in every sandbox
 unibox resume <task>           # continue it later
-unibox sandbox shell web-1     # a shell inside the sandbox
+unibox resume <task> --shell   # a shell in the task's directory
 unibox sandbox ls              # every sandbox
 ```
 
-Commands are a noun, then a verb, and take the profile they work in as `-p`
-and the sandbox as `-s`. To leave those out, set a context once:
+Commands are a noun, then a verb, and take the env a sandbox is created from
+as `-e` and the sandbox they work in as `-s`. To leave those out, set a
+context once:
 
 ```sh
-unibox context use -s web-1 -p web
-unibox sandbox shell           # now in web-1
+unibox context use -s dev -e dev
 ```
 
-`UNIBOX_SANDBOX` and `UNIBOX_PROFILE` win over the context; with neither, a
-sandbox or profile that is the only one serves. [Tasks](./tasks#the-context)
-says more.
+`UNIBOX_SANDBOX` and `UNIBOX_ENV` win over the context; with neither, a
+sandbox or env that is the only one serves, and for an env, `default_env`
+before that. [Tasks](./tasks#the-context) says more.
 
 ::: warning Protect your branches
-The agent can push to any branch its token may push to. Protect `main` and
-release branches on the forge, and give the sandbox a narrow token.
+An agent that can push can push to any branch its token may push to.
+Protect `main` and release branches on the forge, and give the sandbox a
+narrow token.
 :::
 
 ## Before a start
 
-`unibox task check` takes the same arguments as `run` and lists anything in the
-way: an image to build, logins and secrets, a branch the forge does not have,
-and what changed in the profile. `run` fixes what it can.
-
-```sh
-unibox task check -p web -s web-1 --branch feat/login --agent claude
-```
+`unibox task check` takes the same arguments as `run` and lists anything in
+the way - an arg not set, a branch the forge does not have, local work a
+clone would not see, the env changed since its sandbox was made - without
+changing anything. `run` fixes what it can, and asks for a missing arg at
+the terminal.
 
 Every command accepts `--json`, and with `--json` or `--yes` none asks a
 question.
 
+## Coming from unibox 1
+
+unibox 2 has no profiles, `sandbox.yaml`, environments repository, image
+builds or templates: the team's sbxenv files and kits say all of that now,
+network rules are `sbx policy`'s and tokens `sbx secret`'s. The first
+command of unibox 2 sets the old state aside as `state.v1.json` and names
+the sandboxes of unibox 1, which it no longer manages; remove them with
+`sbx rm` once their work is safe.
+
 ## Where next
 
-- [What unibox Is](./why): what it does, what it leaves to the runtime, and the threat model
-- [Concepts](./concepts): environments repository, profile, sandbox, task, runtime
-- [Profiles](./profiles): what `sandbox.yaml` says
+- [What unibox Is](./why): what it adds to sbx, and the threat model
+- [Concepts](./concepts): env, sandbox, task, login, agent
+- [Envs](./envs): the sbxenv files and your values for them
 - [Tasks](./tasks): branches, several repositories, resuming
 - [Command Line](/reference/cli): every command and flag

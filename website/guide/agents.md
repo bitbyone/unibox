@@ -1,195 +1,66 @@
 # Agents
 
-unibox knows four agents: `claude`, `codex`, `copilot` and `opencode`. A
-profile declares the ones its image installs; each is started with its
-permission prompts off - the sandbox is the boundary - signs in through the
-runtime, and is credited in the commits it makes.
+The agent a sandbox runs is its env's choice, not unibox's. One kit of the
+env is the workload: it installs the agent, says how it is started, and
+declares the token it signs in with. unibox runs it in the task's directory,
+has it trust that directory first, and credits it in the commits it makes.
 
-## Declaring agents
+## Which agent
 
-```yaml
-agents: [claude, codex]
-```
-
-or, with what the profile says of each:
-
-```yaml
-agents:
-  claude:
-    auth: {token: secret:claude}
-    co_author: Claude <noreply@anthropic.com>
-    config:
-      .claude.json: _data/claude/.claude.json
-      settings.json: _data/claude/settings.json
-  codex:
-    auth: oauth
-    config:
-      config.toml: _data/codex/config.toml
-```
-
-The image must install every declared agent; the [build checks
-it](./images#the-agents-check). `unibox init <profile> --agents claude,codex`
-writes both the declaration and the Dockerfile's `@install` line.
-
-When a profile offers several agents, `run` needs `--agent`; `resume` can
-run the task with any of the profile's agents.
-
-## How each one runs
-
-| Agent | Started as | Its instructions file |
-| --- | --- | --- |
-| `claude` | `claude --dangerously-skip-permissions`, with `DISABLE_AUTOUPDATER=1` | `~/.claude/CLAUDE.md` |
-| `codex` | `codex --dangerously-bypass-approvals-and-sandbox` | `~/.codex/AGENTS.md` |
-| `copilot` | `copilot --allow-all`, with `COPILOT_ALLOW_ALL=true` | `~/.copilot/copilot-instructions.md` |
-| `opencode` | `opencode --auto` | `~/.config/opencode/AGENTS.md` |
-
-Every agent starts with all permissions: the sandbox is the boundary, not
-the agent's questions. A profile adds arguments of its own with `args`, or
-with `args_override: true` puts them in place of unibox's - then unibox gives
-the agent nothing of its own, not `COPILOT_ALLOW_ALL` either:
-
-```yaml
-agents:
-  claude:
-    args: [--model, opus]          # claude --dangerously-skip-permissions --model opus
-  copilot:
-    args: [--allow-tool, shell]
-    args_override: true            # copilot --allow-tool shell
-```
-
-`unibox agent ls` shows what each agent starts with. Init writes no `args`.
-Both are read at each session's start, so a change needs no recreation.
-
-Arguments after `--` on `run` or `resume` go to the agent, after all of these:
+The sbxenv file's `agent:` names the workload kit; without it, the first kit
+of the sandbox kind with an entrypoint is. Its command is what the kit gives as the
+sandbox's entrypoint and default command, the permissive flags the kit
+chose included - the sandbox is the boundary, not the agent's questions.
 
 ```sh
-unibox run -p web --agent claude -- --model opus
+unibox env show dev       # env dev, sandbox team-dev, agent sbx-kit-copilot
 ```
 
-No agent stops to ask whether to trust what unibox prepared: before every
-session codex gets `trust_level = "trusted"` for `/work`'s task directories in
-its `config.toml`, claude `hasTrustDialogAccepted` for `/work`, the task and
-its repositories in `~/.claude.json`, and copilot reads `COPILOT_ALLOW_ALL` as
-trust for every folder (unless the profile overrides its arguments).
+A sandbox has one agent. Arguments after `--` on `run` or `resume` go to it,
+after the kit's own:
 
-No agent updates itself; the image fixes its version. A new version is a
-rebuild.
+```sh
+unibox run -- --model <model>
+unibox resume login -- --continue
+```
+
+An env whose kits run no agent - only tools, say - is used with
+`unibox run --shell`, which opens a shell in the task instead.
+
+## What unibox knows of each
+
+unibox recognises four agents by the command the kit starts, and prepares
+each before every session so it does not stop to ask:
+
+| Agent | Prepared before each session |
+| --- | --- |
+| `claude` | the task, `/work` and each repository trusted, and the bypass mode accepted, in `~/.claude.json`; no self-update (`DISABLE_AUTOUPDATER=1`) |
+| `codex` | the task's directories trusted in `~/.codex/config.toml`, between unibox's markers |
+| `copilot` | the task's directories added to `trusted_folders` in `~/.copilot/config.json` |
+| `opencode` | nothing |
+
+What unibox writes is merged into the agent's own file: its other settings
+and state stay. Any other agent a kit starts is run all the same, with
+nothing prepared and no co-author.
+
+The kit's image fixes the agent's version, and a new version is a new kit.
 
 ## Signing in
 
-```sh
-unibox agent login -p web              # every agent of profile web
-unibox agent login -i -p web           # walked through: pages opened, gh offered
-unibox agent login claude -p web       # one
-unibox agent login --renew -p web      # ask for every token again
-unibox agent login claude -p web --command '/path/to/unagit credential get claude'
-unibox agent ls -p web                 # how each signs in and is credited
-```
-
-`agent login` signs agents in and writes their `auth` into the profile. A
-token is asked for on a hidden prompt, or read from stdin
-(`op read … | unibox agent login copilot -p web`) - never an argument, which
-`ps` and the shell's history would show. With `-i` it walks you through each
-agent: the page where a token is made opened in the browser, `claude
-setup-token` run, and gh offered for copilot. `unibox init -i` ends with the
-same, if you want it.
-
-- **codex** - through the runtime's ChatGPT login, in the browser, with sbx;
-  with msb, which keeps no OAuth logins, through an OpenAI API key;
-- **claude** - through `claude setup-token` on your terminal (with `-i`),
-  then a hidden prompt for the long-lived token it prints;
-- **copilot** - through a fine-grained GitHub token with the **Copilot
-  Requests** permission alone: unibox says what to grant and where it is made
-  (opening the page with `-i`), then asks for it on a hidden prompt.
-
-A token is kept in the platform's store - the login keychain on macOS, the
-Secret Service on Linux - where the profile names it as `secret:<name>`. It
-never enters a sandbox: the runtime reads it on the host, and the sandbox
-sees a placeholder the proxy swaps. With `--command`, for one agent, the
-token comes from another program's store instead - the command prints it
-whenever the runtime asks, and unibox asks for nothing and stores nothing.
-
-### `auth` values
-
-| `auth` | Meaning |
-| --- | --- |
-| `oauth` | the provider's own login |
-| `api-key` | an API key |
-| `{command: <cmd>}` | a host command that prints the key, e.g. `gh auth token` |
-| `{token: <cmd>}` | a host command that prints a long-lived login token, e.g. one from `claude setup-token`, or a GitHub token for copilot alone |
-
-`<cmd>` is `secret:<name>` for a secret unibox keeps, or any host command for
-a store unibox does not keep - `vault kv get -field=token ...`,
-`op read ...`. unibox turns `secret:<name>` into the platform's own command,
-so a profile is shared between macOS and Linux.
-
-A missing `token` or `command` login is stored in the runtime on `run`
-without asking - its source is in the profile you wrote. An OAuth login or a
-key is asked for in your terminal by the runtime itself. Either way the value
-never passes through unibox.
-
-::: warning One OAuth login per sandbox
-The runtime signs one agent of a sandbox in by OAuth, so two `oauth` agents in
-one profile are refused. That is why claude beside codex signs in by `token`:
-claude's subscription goes through a long-lived token from
-`claude setup-token`, and codex keeps its ChatGPT `oauth`.
-:::
-
-::: info msb
-msb runs no OAuth flow: `oauth` is refused there, so claude signs in by
-`token` and codex by `api-key` or `command`. Nothing is stored in msb; each
-login's command runs when msb boots the sandbox, and again before each
-session, so a new token reaches a running sandbox.
-:::
-
-### Copilot through your gh login
-
-```sh
-unibox agent login copilot --gh -p web
-```
-
-has copilot read its token by `gh auth token`. `agent login -i` offers it
-where gh is installed and signed in; a token of its own stays the
-recommended choice. The profile keeps `copilot: {token: secret:copilot}`, as
-a template's would, and the choice is yours, in your `vars.toml`:
-
-```toml
-[secrets.names]
-copilot = "gh auth token"
-```
-
-so a profile shared with people without gh stays as it is. It is your whole
-gh login - every repository and scope it has - but as a token login it
-reaches only Copilot's hosts, not github.com, so git on github.com is still
-left to the profile's [services](./services-and-secrets). `unibox secret
-source --reset --name copilot`, or choosing a token with `--renew`, takes it
-back.
-
-::: tip
-Sign copilot in by `token`, not `command`. `command` stores sbx's built-in
-`github` secret, and with it sbx signs every request to github.com itself -
-over the git services of the profile. `unibox task check` warns when it is stored.
-:::
+The kit declares the service its agent signs in to, and the env's bindings
+the hosts that token may reach; sbx keeps the token and its proxy puts it
+into the agent's requests. `unibox login ls` shows whether sbx has it, and
+`unibox login set` has sbx ask for it - see [Logins](./logins).
 
 ## Co-authors
 
 Commits carry your git identity and one co-author line for the agent of the
-session that commits. A task resumed with another agent credits that one; a
-commit you make in `unibox sandbox shell` credits none.
+session that commits; a commit you make in a shell credits none.
 
-unibox alone says it. claude's and copilot's own bylines are off in their
-seeds (`includeCoAuthoredBy: false`), and a `commit-msg` hook in each clone
-takes out a trailer an agent adds of itself - copilot always does - before
-adding the profile's, or none where `co_author: false`.
-
-```sh
-unibox agent co-author -p web                                    # how each is credited
-unibox agent co-author claude --as "Claude <noreply@anthropic.com>" -p web
-unibox agent co-author codex --as "Codex <>" -p web              # no address, linked to no account
-unibox agent co-author codex --reset -p web                      # back to the default
-```
-
-The defaults:
+unibox alone says it. A `commit-msg` hook takes out a trailer an agent adds
+of itself - copilot always does - before adding unibox's. For a clone the
+hook is the clone's own; for a mount it comes through the sandbox's global
+git configuration, so your `.git` is not changed.
 
 | Agent | Credited as |
 | --- | --- |
@@ -198,27 +69,9 @@ The defaults:
 | `copilot` | `Copilot <Copilot@users.noreply.github.com>` |
 | `opencode` | `opencode <noreply@opencode.ai>` |
 
-`init` writes the default out into each agent's `co_author`, so the profile
-shows it. It is read per session, so changing it recreates nothing.
+## Instructions and settings
 
-## Configuration seeds
-
-`unibox init` writes each agent's first answers into the profile's
-`_data/<agent>/<file>` and names them under the agent's `config`, by the
-file's own name. Before every session they are merged into the agent's own
-files in the sandbox, JSON or TOML: the seed's keys win, the agent's own state
-stays, and a list keeps what the agent added.
-
-| Agent | Files | What the seed sets |
-| --- | --- | --- |
-| `claude` | `.claude.json`, `settings.json` | onboarding done, a theme, bypass-permissions accepted; no byline of its own |
-| `codex` | `config.toml` | `approval_policy = "never"`, `sandbox_mode = "danger-full-access"` |
-| `copilot` | `settings.json` (`config.json` is known, not seeded) | trusts `/work`, default theme, no banner, no updates, no byline |
-| `opencode` | `opencode.json` | allowed to edit, run and fetch; no autoupdate |
-
-Edit the seeds as you like. Only files unibox knows may be named, and the
-merge leaves what unibox writes between its own markers alone - codex's
-login routing and its trust of `/work`, for example. Seeds are not image
-inputs: changing one rebuilds nothing.
-
-So a codex started by hand in `unibox sandbox shell` is as free as one unibox runs.
+What an agent is told and how it is configured - an `AGENTS.md`, skills, MCP
+servers, its model - is the kit's to install, or the repository's own. unibox
+adds nothing to it, so a change to it is a change to the team's kit,
+reviewed there, and reaches a sandbox at its recreation.

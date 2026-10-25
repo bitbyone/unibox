@@ -179,6 +179,8 @@ Navíc: mounty přežijí stop/start a chybějící host cesta start shodí, pro
 - Přepsat README, `docs/design.md` (ponechat ověřená fakta o sbx), web a AGENTS.md (mapa balíčků, rozhodnutí).
 - Release `v2.0`. Starý stav (`state.json` s profily) se nečte; při startu se jednou ohlásí, že sandboxy z v1 je potřeba odstranit přes `sbx rm`.
 
+**Hotovo**, kromě release. Mazání a `api` v2 proběhly už ve fázi 2. README, AGENTS.md, `docs/design.md` (ověřená fakta o sbx zůstala v oddílu "What was verified about sbx", s daty) a web jsou přepsané; stránky o profilech, šablonách, buildech a msb zmizely, přibyly `envs`, `logins` a `ports`. Při psaní se našly dvě chyby: `resume` hotového tasku znovu nenamountoval, co mu chybělo (teď ano), a "nenalezeno" končilo exit kódem 404, což shell vidí jako 148 (teď `4`). Release `v2.0` a merge do main čekají na souhlas.
+
 ## Testy
 
 - Fake `sbx` na PATH (`testenv.WriteExecutable`) zapisuje volání do souboru a vrací připravené JSON odpovědi. Testy, které ho používají, jsou sériové.

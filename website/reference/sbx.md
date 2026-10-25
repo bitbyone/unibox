@@ -1,161 +1,113 @@
-# The sbx Runtime
+# What unibox Asks of sbx
 
-[Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) is unibox's
-supported runtime: one sbx sandbox is one micro-VM with its own kernel, its
-own Docker Engine and its own disk, persistent until removed. The agent runs
-in the VM as a non-root user with sudo.
+[Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) does the
+work: one sbx sandbox is one micro-VM with its own kernel, its own Docker
+Engine and its own disk, persistent until removed, with the agent running in
+it as a non-root user with sudo. unibox runs nothing of its own in it beyond
+a few lines of shell per task.
 
-This page collects what unibox relies on, as verified against sbx 0.47 on
-macOS (Apple Silicon) on throwaway sandboxes. Where sbx's behaviour shows
-through, it says so.
+unibox needs **sbx 0.49.2 or newer**, the version it was verified against on
+macOS (Apple Silicon), on throwaway sandboxes. `unibox doctor` fails on an
+older one. Where sbx's behaviour shows through, this page says so.
 
 ::: tip Before you start
-`sbx login` once. `unibox runtime ls` shows whether sbx is installed and
-available, and what it isolates.
+`sbx login` once. `unibox doctor` checks the rest.
 :::
 
-## How a profile becomes sbx
+## The commands unibox runs
 
-| Profile | sbx |
+| unibox | sbx |
 | --- | --- |
-| `sandbox.dockerfile` | `docker build`, `docker save`, `sbx template load`; the template `unibox/<profile>:<tree>` |
-| `image` | the template named |
-| `resources` | `--cpus`, `--memory`; a share resolved by the adapter |
-| `network.deny` | `--deny-network` at creation; `sbx policy` live |
-| `network.allow` | `sbx policy allow network --sandbox`, live |
-| `network.ports` | `sbx ports --publish` / `--unpublish`, live |
-| `env` | `-e NAME` |
-| `caches` | the host directory read-only as an extra workspace, and its path in the named variable |
-| `start` | run by `sbx exec` when the VM's boot id is new |
-| an agent session | `sbx exec -it -w /work/<task> <sandbox> <agent command>` |
+| a sandbox created from an env | `sbx env create --name <sandbox> --env-args-file <file> <files...>`, on your terminal |
+| `doctor`'s check of an env | `sbx env plan` with the same files and args |
+| which agent and which tokens | `sbx kit inspect --json` of each kit, with `--kit-arg` from your values |
+| which tokens are stored | `sbx secret ls --json` |
+| `login set` | `sbx secret set <service> [--command <cmd>]`, on your terminal |
+| a mounted task | `sbx mount <sandbox> <host>:/work/<task>/<repo>`; `sbx umount` to remove it |
+| a session | `sbx exec -it -w <dir> <sandbox> bash -c ...` |
+| sandboxes and their state | `sbx ls --json` |
+| stop and remove | `sbx stop`; `sbx env rm --force` with the env's files, or `sbx rm --force`, after unibox's own checks |
+| named ports | `sbx ports --json`, `--publish`, `--unpublish` |
+| the SSH agent decision | `sbx settings get/set ssh.agentForwardingEnabled`, then `sbx daemon restart` |
+| `doctor` | `sbx version`, `sbx diagnose --format json`, `sbx settings get env.rememberHostCommands` |
 
-unibox names its sbx sandboxes `unibox-<sandbox>`, and stops or removes only
-those.
+unibox removes only sandboxes it created; one it adopted with
+`sandbox create --adopt` only with `--force`.
 
-## Templates and kits
+## Envs
 
-sbx has two words for shaping a sandbox:
+- **`sbx env plan` prints text, not JSON.** It does validate: a missing
+  required arg or an undeclared one exits 1 with the arg's name. So unibox
+  reads `args`, `kits`, `bindings`, `agent` and `name` from the YAML itself,
+  read-only, ignores every other field so a newer sbx's additions do not
+  break it, and runs `plan` for its verdict.
+- **Bindings are approved once, by you.** A binding not yet applied needs
+  your approval; `sbx env create` asks once, and `--force` would approve
+  without asking. unibox runs the first create on your terminal and never
+  passes `--force` for you.
+- **A kit with a required arg of its own** is read with `--kit-arg` from the
+  env's values, or `sbx kit inspect` would refuse it. A local kit is built
+  first, which takes seconds.
 
-- **A template** is the image a sandbox is made from, in sbx's own image
-  store, apart from Docker's. A profile's Dockerfile becomes one: built,
-  saved and loaded, tagged by the profile's tree.
-- **A kit** is a declarative package laid over a sandbox: files, hooks,
-  network rules, credential bindings. sbx's built-in agents are kits.
+## Agents
 
-A profile with one agent uses that agent's built-in kind. A profile with
-**several agents** is made from a generated **v3 kit**: a local kit directory
-whose descriptor declares each agent's credentials, beside a Dockerfile that
-is just `FROM` the profile's built image. unibox writes it under
-`~/.cache/unibox/sbx/kits/`.
-
-Facts that design turns on:
-
-- **v3 kits cannot mix with v2 built-ins**, so several agents means a v3
-  workload created from a local directory.
-- **A kit's credential is injected only with a binding** in
-  `~/.config/sbx/credentials.yaml`. sbx asks no question at creation, so
-  unibox writes the bindings itself when it creates a kit sandbox - each
-  agent's service with exactly the domains its declaration names - added and
-  never removed.
-- **sbx keeps one OAuth policy per sandbox**, taken from the first credential
-  declaring OAuth. So the order of a profile's agents matters, two `oauth`
-  agents are refused, and the kit declares first the services sbx holds an
-  OAuth login for.
-- **A host an agent calls that the kit does not declare gets the placeholder
-  as it is.** Copilot calls its plan's API host - `api.individual`,
-  `.business` or `.enterprise.githubcopilot.com` - besides
-  `api.githubcopilot.com`, so the kit routes all of them.
-- sbx ignores `apiKey.inject[].scheme` in v3 kits, which is why git over https
-  is signed in by an `extraHeader` placeholder instead (below).
+- **The agent's command is the workload kit's.** `sbx kit inspect --json`
+  gives `sandbox.entrypoint` (`["copilot"]`) and `sandbox.command.default`
+  (`["--yolo"]`).
+- **`sbx exec` gives the agent what `sbx run` does**: the proxy's variables,
+  the kit's `BASH_ENV` and `PATH`, the credential placeholders. Commands go
+  through bash, because `sh` is dash, which drops variables whose names are
+  not a shell's and does not read `BASH_ENV`.
+- **Two agents in one sandbox at once work**, each in its own `exec`.
 
 ## Logins
 
-sbx keeps the agents' logins on the host and its proxy signs requests to the
-providers with them; the key never enters the VM.
+- **Which tokens a sandbox needs** is the union of `credentials[].service`
+  over its kits, from `kit inspect --json`, and the env's bindings. Inspect
+  drops a credential's `optional`, which only the kit's YAML has.
+- **What is stored** is `sbx secret ls --json`: a name, a scope and the
+  secret masked as `(stored)` or `(oauth configured)`, never a value.
+- **A command secret is stored as its source.** The sbx daemon runs the
+  command on the host when it verifies the secret and whenever it refreshes,
+  from a fresh temporary directory, with no terminal. The command must reach
+  its secret alone - a keychain, an agent socket.
+- **`sbx env rm` deletes a sandbox's own secrets**, which is why unibox
+  stores every token globally.
+- **sbx's own `github` secret takes github.com over**: with it stored, the
+  proxy sets `Authorization` on every request to github.com itself, over any
+  the sandbox sent.
 
-- sbx stores locally only ChatGPT's OAuth login (codex). Claude's OAuth is a
-  sign-in inside the sandbox, so claude beside another agent signs in by a
-  long-lived `token` from `claude setup-token`: sbx stores the host command as
-  a custom secret, claude sees a placeholder in `CLAUDE_CODE_OAUTH_TOKEN`, and
-  the login outlives a recreated sandbox.
-- Copilot reads its token from `COPILOT_GITHUB_TOKEN` and accepts a
-  placeholder of the token's shape there, so it signs in without sbx's
-  built-in `github` secret.
-- **sbx's built-in `github` secret takes github.com over**: with it stored,
-  the proxy sets `Authorization` on every request to github.com and
-  overwrites any the sandbox sent. A git service on github.com never reaches
-  GitHub while it is stored.
+## Mounts
 
-## Custom secrets and git
-
-Services become sbx custom secrets, scoped to the sandbox:
-
-- **A local custom secret substitutes its placeholder verbatim** in request
-  headers, on requests to its hosts, and nowhere else.
-- So git cannot use its own credential: it base64-encodes `user:password`,
-  and the placeholder would never appear. unibox sets
-  `http.https://<host>/.extraHeader` to `Authorization: <placeholder>`, and
-  the stored value is the whole header, composed on the host.
-- `http.<url>.extraHeader` is a list gathered from every matching URL, and an
-  empty value resets it. unibox writes it so the most specific URL's header
-  alone is sent - which is how one forge carries several owners' tokens.
-- **A command secret is stored as its source**: the sbx daemon runs the command
-  on the host at verification and whenever it refreshes, from a fresh
-  temporary directory, with no terminal. A custom secret refreshes on demand
-  unless a refresh interval is given.
-- **Private hosts work.** The proxy resolves and connects from the host, so a
-  host behind your VPN is reached once allowed.
-
-## Network policy, live
-
-- sbx refuses what its policy does not list (403 from the proxy) and already
-  allows the usual registries.
-- `sbx policy allow network --sandbox` and `sbx policy deny network
-  --sandbox` change a running sandbox's rules at once, and removing a rule by
-  id undoes either - no restart.
-- sbx refuses a deny for a host an allow rule of the sandbox names exactly;
-  the allow goes first. unibox applies the difference and removes only rules
-  it added.
+- `sbx mount <sandbox> HOST:TARGET` mounts into a running sandbox: live,
+  writable, taken out by `sbx umount`, leaving an empty mount point.
+  Removing the sandbox leaves the host's files alone.
+- **Mounts are kept across stop and start**, and a mount whose host path is
+  gone fails the start until it is removed with `sbx umount`. So `task rm`
+  unmounts before anything else, and `doctor` checks every mounted path
+  exists.
+- **sbx lists no mounts.** `/proc/self/mountinfo` in a running sandbox shows
+  each with its target, which is how `doctor` finds a mount no task has.
+- **The parents of a mount are root's**, mode 755: the agent cannot write
+  beside the repository. Inside it git works, a commit is the host's at
+  once, and `.git/hooks` is writable.
 
 ## Ports
 
 - `sbx ports` publishes a port live on the host's loopback, tcp4 when no
   protocol is named. A host port already taken is refused.
-- Published ports survive a stop: listed as none while stopped, back at the
-  start, an ephemeral one with a new host port.
 - `--unpublish` takes a port back only by its exact host port. So unibox
-  records what it published by name and mapping, and leaves a port it did not
-  publish alone.
-- A start that finds a sandbox stopped drops the switches and publishes the
-  profile's defaults; a switch on a stopped sandbox is refused, since
-  publishing would start it.
-
-## Mounts
-
-`sbx mount HOST:TARGET` mounts into a running sandbox: live, writable, kept
-across a stop, taken out by `sbx umount` leaving an empty mount point.
-Removing the sandbox leaves the host's files alone. A recreated sandbox has
-no mounts.
-
-## Resources
-
-- `--cpus 0` is all host CPUs; CPUs are shared by time, so all of them takes
-  nothing from the host's own work but priority.
-- **sbx refuses more than 75% of the host's memory.** unibox caps a share
-  there and says so, rather than fail a start.
-
-## Images
-
-- `sbx template rm --force` removes a template a sandbox was made from, and
-  the sandbox starts and runs as before: it needs its image only to be made.
-  So a build removes the profile's older images, and making a sandbox removes
-  the older images sbx made of its kit (`sbx-kit-src:...`), the newest kept
-  for a recreation to reuse.
+  records what it published by name and mapping, and leaves a port it did
+  not publish alone.
+- **A kit's ports get new host ports at every start**, which is why named
+  ports are the person's, in unibox's configuration.
+- A switch on a stopped sandbox is refused, since publishing would start it.
 
 ## Lifecycle
 
-- `sbx exec` starts a stopped VM. A VM can be started by something other than
-  unibox, so `start` is keyed to the kernel's boot id, not to unibox's own
-  starts.
-- unibox stops a sandbox when the last agent it started there ends, unless
-  `runtimes.sbx.stop_idle` is `false`. The disk, caches and tasks stay.
+- `sbx exec` starts a stopped VM.
+- unibox stops a sandbox when the last session it started there ends,
+  unless `stop_idle` is `false`. The disk and tasks stay.
+- With `env.rememberHostCommands` on, sbx runs an env's host commands again
+  without asking; `unibox doctor` warns and suggests
+  `sbx settings set env.rememberHostCommands false`.

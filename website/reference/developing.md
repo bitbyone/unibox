@@ -9,13 +9,12 @@ changing how a sandbox is created or signed in.
 
 ## The one hard rule
 
-**Logins are never yours to read.** They live in the runtime's store on the
-host and reach a sandbox only as placeholders the proxy replaces. Never print
-a token or a secret's value, never ask anyone to paste one into a
-conversation, never `cat` an auth file - read key names, whether a value is
-set, or the shape sbx masks it to. unibox itself never handles a value it
-does not have to: a missing login is taken by the runtime on the user's
-terminal.
+**Logins are never yours to read.** They live in sbx's store on the host and
+reach a sandbox only as placeholders the proxy replaces. Never print a token
+or a secret's value, never ask anyone to paste one into a conversation, never
+`cat` an auth file - read key names, whether a value is set, or the shape sbx
+masks it to. unibox itself never handles a value: a missing login is asked
+for by sbx on the user's terminal, and a token never enters a sandbox.
 
 ## Building and testing
 
@@ -35,33 +34,33 @@ needs Go 1.26 or newer.
 | Package | What it owns |
 | --- | --- |
 | `cmd/unibox` | the entry point |
-| `internal/unibox` | profiles, the manager, tasks, runtimes, the sbx adapter and its kit |
+| `internal/unibox` | envs and the sbxenv reader, your values, logins, the manager, tasks, mounts, ports, the herdr plugin, and `Runtime` with its one implementation, sbx |
 | `internal/unibox/api` | the versioned JSON contract other programs read |
-| `internal/unibox/cli` | the cobra commands, preflight and its questions |
-| `internal/unibox/templates` | what `unibox init` lays out and keeps current: `managed/` (`.shared`), `user/` (`_shared`'s examples), `profile/`, `seeds/<agent>/<file>`, and the `@install` runner |
+| `internal/unibox/cli` | the cobra commands, `init`'s walk, `doctor`, preflight and its questions |
 | `internal/testenv` | the isolated environment every package's tests run in |
 | `internal/version` | which unibox this is |
 
 ## Decisions worth knowing
 
-- **A profile knows no runtime.** It says what the environment is, how each
-  agent signs in and what it may reach; an adapter (`sbx.go`, `sbx_kit.go`,
-  `sbx_auth.go`) turns that into the runtime's own means. Nothing above the
-  adapter names sbx.
-- **Host access is tracked.** Environment, caches, network rules, services and
-  `auth` are `HostAccess`; a change of them is told at the next start. A new
-  field of it is `omitempty` in JSON, or every recorded profile reads as
-  changed.
-- **Several agents mean a generated v3 kit**, with its bindings written into
-  sbx's `credentials.yaml`, one OAuth login per sandbox from the first
-  credential declaring one, so the order of declarations matters.
-- **Agents are prepared before every session**: codex's login and trust in
-  its `config.toml`, claude's trust in `~/.claude.json`, copilot's through
-  `COPILOT_ALLOW_ALL`. What unibox writes into an agent's own file sits
+- **The team's files are sbx's.** unibox reads an sbxenv file's `name`,
+  `agent`, `args`, `kits` and `bindings`, read-only, and ignores every other
+  field, so a newer sbx's additions do not break it. It writes no sbxenv
+  file, kit or sbx configuration.
+- **What is the person's stays out of the team's files**: values in
+  `vars.toml`, named ports and sandbox names in `config.yaml`, tokens in
+  sbx's store.
+- **A change is told, not applied.** A sandbox records a digest of its env's
+  files, its local kits and its args; when it differs, unibox says so and
+  `sandbox recreate` applies it. Nothing is recreated unasked.
+- **The user approves bindings.** The first `sbx env create` runs on the
+  user's terminal; unibox never passes `--force` to it.
+- **Tokens are stored globally**, as `sbx env rm` deletes a sandbox's own.
+- **Agents are prepared before every session**: trust of the task's
+  directories in claude's `~/.claude.json`, copilot's `config.json` and
+  codex's `config.toml`. What unibox writes into an agent's own file sits
   between markers or is merged, never over the user's settings.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox.
-- **Unknown profile fields are errors**, and a released migration is frozen.
 
 ## Tests
 
@@ -72,8 +71,9 @@ that it does: a temporary home, a git configuration of the run's own, and a
 - A test that needs sbx, herdr or an agent puts a stand-in on its own `PATH`
   with `testenv.WriteExecutable`, and is serial (`t.Setenv`). Every other
   test calls `t.Parallel()`.
-- The fake runtime in `unibox_test.go` runs a sandbox's commands in a
-  temporary directory.
+- The fake runtime in `fake_test.go` stands in for sbx behind the `Runtime`
+  interface, running a sandbox's commands on files in a temporary
+  directory.
 - No token appears in any argument list or environment unibox builds; tests
   hold it.
 - Check against the real sbx on a throwaway sandbox, and remove it

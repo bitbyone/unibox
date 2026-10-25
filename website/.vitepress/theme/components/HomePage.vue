@@ -22,62 +22,62 @@ async function copy() {
 
 const flow = [
   {
-    where: 'Environments repository',
-    what: 'git, yours',
-    lines: ['sandboxes/<profile>/', '  sandbox.yaml', '  sandbox.dockerfile', '_shared/  .shared/'],
+    where: "Team's repository",
+    what: 'git, the team\'s',
+    lines: ['sandboxes/', '  dev.sbxenv.yaml', 'kits/', '  ...'],
   },
   {
     where: 'Host',
-    what: 'unibox and the runtime',
-    lines: ['unibox: profile → settings', 'sbx: the VM,', '  credential proxy,', '  network policy'],
+    what: 'unibox and sbx',
+    lines: ['unibox: env, your args,', '  tasks, named ports', 'sbx: the VM, your logins,', '  proxy, policy'],
   },
   {
     where: 'Sandbox',
     what: 'a micro-VM',
-    lines: ['/work/<task>/<repo>', 'a fresh clone, its branch', 'claude · codex · copilot', 'commits and pushes'],
+    lines: ['/work/<task>/<repo>', 'mounted, or cloned', "the kit's agent", 'claude · codex · copilot'],
   },
   {
-    where: 'Forge',
-    what: 'GitHub, GitLab',
-    lines: ['the branch arrives', 'protected branches', 'you pull, as from', 'a colleague'],
+    where: 'You',
+    what: 'your checkout',
+    lines: ['a mount: its changes', '  on your disk at once', 'a clone: its branch', '  fetched from the forge'],
   },
 ]
 
 const features = [
   {
-    title: 'One profile format',
-    text: 'A sandbox.yaml and a Dockerfile in a git repository of yours. It names no runtime: the same profile runs in the experimental msb too.',
-    link: '/guide/profiles',
+    title: "The team's sbxenv files, as they are",
+    text: 'unibox has no format of its own. An env names the sbxenv files and kits your team keeps; sbx reads them.',
+    link: '/guide/envs',
   },
   {
-    title: 'Setup done by commands',
-    text: 'unibox init lays out the repository, unibox agent login and unibox service add sign agents and forges in. No runtime configuration by hand.',
-    link: '/guide/',
+    title: 'Your values, once',
+    text: 'The args an env asks of each person are kept in vars.toml and handed to sbx at every create.',
+    link: '/guide/envs#your-values-for-its-args',
   },
   {
-    title: 'Logins kept on the host',
-    text: 'Tokens stay in the keychain. unibox hands them to the runtime, whose proxy puts them into requests; the sandbox sees placeholders.',
-    link: '/guide/services-and-secrets',
+    title: 'Logins kept by sbx',
+    text: 'unibox says which tokens an env needs and has sbx ask for the missing ones. It never reads a value; the sandbox sees placeholders.',
+    link: '/guide/logins',
   },
   {
-    title: 'Agents side by side',
-    text: 'claude, codex, copilot and opencode in one image, each signed in and credited in commits.',
-    link: '/guide/agents',
-  },
-  {
-    title: 'Tasks on clones',
-    text: 'A task is clones of your repositories on a branch inside a sandbox. Resume it later, with any agent of the profile.',
+    title: 'Tasks, mounted or cloned',
+    text: 'A task is your repositories at /work/<task>, mounted from your checkout or cloned from the forge. Resume it, grow it, remove it safely.',
     link: '/guide/tasks',
   },
   {
-    title: 'Network rules and ports by name',
-    text: 'Allow or deny hosts and publish ports with a command; sbx applies a change to running sandboxes.',
-    link: '/guide/network-and-ports',
+    title: 'Agents ready to work',
+    text: "The env's kit runs the agent. unibox starts it in the task, has it trust the task first, and credits it in commits.",
+    link: '/guide/agents',
   },
   {
-    title: 'Images rebuilt when needed',
-    text: 'An image is tagged with the profile\'s revision, built again when an input changed, and old ones are removed.',
-    link: '/guide/images',
+    title: 'Ports by name',
+    text: 'Your own mapping of the sandbox\'s ports to the host\'s, published at every start or on request.',
+    link: '/guide/ports',
+  },
+  {
+    title: 'Drift told, not applied',
+    text: 'When the env changes after its sandbox was made, unibox says so, and sandbox recreate puts the tasks back.',
+    link: '/guide/envs#when-the-env-changes',
   },
   {
     title: 'Scriptable',
@@ -90,15 +90,14 @@ const features = [
 <template>
   <div class="home">
     <section class="hero">
-      <p class="kicker">A wrapper for Docker Sandboxes</p>
-      <h1>Coding agents in local sandboxes,<br /><span>from one profile format.</span></h1>
+      <p class="kicker">A thin extension of Docker Sandboxes</p>
+      <h1>Coding agents in local sandboxes,<br /><span>from your team's sbxenv files.</span></h1>
       <p class="lead">
-        unibox is a command-line wrapper over Docker Sandboxes (sbx). It gives it a profile format
-        and sets up the rest - the image, the agents' logins, forge tokens, network rules - so an
-        agent runs in a sandbox on your machine with one command. The isolation, the credential
-        proxy and the network policy are sbx's; unibox configures them. An experimental adapter for
-        microsandbox (msb) shows the same profile runs elsewhere. It is for local development, and
-        nothing more.
+        unibox runs coding agents in Docker Sandboxes (sbx) on your machine. sbx makes the sandbox
+        from your team's sbxenv files and kits, keeps the tokens and enforces the network policy;
+        unibox adds what each person would otherwise repeat - their own values for the env's args,
+        the logins it needs, tasks mounted or cloned into the sandbox, named ports, and a doctor
+        that says what is missing. It is for local development, and nothing more.
       </p>
 
       <div class="install">
@@ -128,8 +127,8 @@ const features = [
     <section class="how" aria-label="How unibox works">
       <h2>How it works</h2>
       <p class="sub">
-        A profile describes the environment. unibox turns it into the runtime's settings. The agent
-        works on clones in the sandbox and pushes to a branch, which you pull.
+        The team describes the sandbox in sbxenv files and kits. sbx makes it, with your values and
+        your logins. The agent works on your repositories in it, mounted or cloned.
       </p>
       <ol class="flow">
         <li v-for="(step, i) in flow" :key="step.where" class="step">
@@ -144,45 +143,50 @@ const features = [
         </li>
       </ol>
       <p class="note">
-        The runtime's proxy puts the real token into requests to the hosts a login or a service
-        names. Inside the VM there is only a placeholder.
+        sbx's proxy puts the real token into requests to the hosts a binding names. Inside the VM
+        there is only a placeholder.
       </p>
     </section>
 
     <section class="screen" aria-label="unibox in a terminal">
       <div class="window">
         <div class="bar"><i /><i /><i /><span>~/src/web</span></div>
-        <pre class="term"><span class="dim"># create sandbox web-1 from profile web, clone this repository, run claude</span>
-<span class="dim">$</span> <b>unibox run --profile web --sandbox web-1 --branch feat/login --agent claude</b>
+        <pre class="term"><span class="dim"># name the team's sbxenv file, set what it asks of you, store its tokens</span>
+<span class="dim">$</span> <b>unibox env add dev ~/team/sandboxes/dev.sbxenv.yaml --default</b>
+<span class="dim">$</span> <b>unibox var set user jdoe</b>
+<span class="dim">$</span> <b>unibox login set</b>
+
+<span class="dim"># mount this repository into the env's sandbox and run its agent</span>
+<span class="dim">$</span> <b>unibox run --branch feat/login</b>
 
 <span class="dim"># every task in every sandbox, and one picked up again later</span>
-<span class="dim">$</span> <b>unibox tasks</b>
-<span class="dim">$</span> <b>unibox resume</b> <em>&lt;task&gt;</em> <b>--agent codex</b>
-
-<span class="dim"># reach a host the policy refuses: written into the profile</span>
-<span class="dim">$</span> <b>unibox network allow web jitpack.io</b>
+<span class="dim">$</span> <b>unibox task ls</b>
+<span class="dim">$</span> <b>unibox resume</b> <em>&lt;task&gt;</em>
 
 <span class="dim"># publish the dev server on localhost by name, at every start</span>
-<span class="dim">$</span> <b>unibox network port web fe 3000:3000</b></pre>
+<span class="dim">$</span> <b>unibox port set fe --map 3000:3000</b></pre>
       </div>
     </section>
 
     <section class="arrangement">
       <div class="copy-col">
-        <h2>Work comes back through the forge</h2>
+        <h2>Mount or clone, knowingly</h2>
         <p>
-          No host directory is mounted by default, and nothing of the sandbox reaches your
-          checkout. A <code>.git</code> the agent could write holds commands your machine would
-          run later: hooks, <code>core.fsmonitor</code>, <code>credential.helper</code>. A fetch
-          from the forge carries objects and refs, never config or hooks.
+          A task mounts your checkout by default, so you see each change at once. The agent can
+          then write your <code>.git</code>, whose hooks and <code>core.fsmonitor</code> your
+          machine runs later; unibox says so the first time. With <code>--clone</code> it works on
+          a clone of its own, and its work comes back by a fetch from the forge, which carries
+          objects and refs, never config or hooks.
         </p>
-        <a :href="withBase('/reference/security')">What crosses the boundary →</a>
+        <a :href="withBase('/guide/mount')">Mount or clone →</a>
       </div>
-      <pre class="formula"><span>host</span>      your checkout   <span class="dim">← git pull ─┐</span>
-                                       <span class="dim">│</span>
-<span>forge</span>     the task's branch <span class="dim">◄──────┤</span>
-                                       <span class="dim">│</span>
-<span>sandbox</span>   /work/&lt;task&gt;/&lt;repo&gt; <span class="dim">─ git push</span></pre>
+      <pre class="formula"><span>mount</span>     your checkout  <span class="dim">◄─── the agent writes here</span>
+
+<span>clone</span>     your checkout  <span class="dim">◄─ git fetch ─┐</span>
+                                         <span class="dim">│</span>
+          forge, the branch <span class="dim">◄──────┤</span>
+                                         <span class="dim">│</span>
+          /work/&lt;task&gt;/&lt;repo&gt; <span class="dim">─ git push</span></pre>
     </section>
 
     <section class="features">
@@ -198,9 +202,9 @@ const features = [
     <section class="closing">
       <h2>Getting started</h2>
       <p>
-        <code>unibox init --dir ~/my-envs</code> lays out an environments repository,
-        <code>unibox init web</code> adds a profile, <code>unibox agent login web</code> signs its
-        agents in, and <code>unibox run --profile web</code> starts one.
+        <code>unibox init</code> walks you through it: sbx, an env from your team's sbxenv file,
+        your values for its args, the logins it needs, and its sandbox. Then
+        <code>unibox run</code> in a repository starts its agent.
       </p>
       <a class="btn brand" :href="withBase('/guide/')">Getting Started</a>
     </section>

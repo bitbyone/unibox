@@ -15,28 +15,19 @@ const guideSidebar = [
     ],
   },
   {
-    text: 'Environments',
+    text: 'Setting Up',
     items: [
-      { text: 'The Environments Repository', link: '/guide/environments-repository' },
-      { text: 'Profiles', link: '/guide/profiles' },
-      { text: 'Images', link: '/guide/images' },
-      { text: 'Scripts and Instructions', link: '/guide/scripts-and-instructions' },
-      { text: 'Templates', link: '/guide/templates' },
-    ],
-  },
-  {
-    text: 'Agents and Access',
-    items: [
+      { text: 'Envs', link: '/guide/envs' },
+      { text: 'Logins', link: '/guide/logins' },
       { text: 'Agents', link: '/guide/agents' },
-      { text: 'Services and Secrets', link: '/guide/services-and-secrets' },
-      { text: 'Network and Ports', link: '/guide/network-and-ports' },
     ],
   },
   {
     text: 'Working',
     items: [
       { text: 'Tasks', link: '/guide/tasks' },
-      { text: 'Mounting a Directory', link: '/guide/mount' },
+      { text: 'Mount or Clone', link: '/guide/mount' },
+      { text: 'Ports', link: '/guide/ports' },
     ],
   },
   {
@@ -53,11 +44,9 @@ const referenceSidebar = [
     text: 'Reference',
     items: [
       { text: 'Command Line', link: '/reference/cli' },
-      { text: 'sandbox.yaml', link: '/reference/sandbox-yaml' },
       { text: 'Files on Disk', link: '/reference/files' },
       { text: 'Security', link: '/reference/security' },
-      { text: 'The sbx Runtime', link: '/reference/sbx' },
-      { text: 'The msb Runtime (experimental)', link: '/reference/msb' },
+      { text: 'What unibox Asks of sbx', link: '/reference/sbx' },
       { text: 'Developing unibox', link: '/reference/developing' },
     ],
   },
@@ -67,7 +56,7 @@ export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'A command-line wrapper over Docker Sandboxes: one profile format and an easy setup for running coding agents in sandboxes during local development.',
+  description: 'A thin extension of Docker Sandboxes: your team\'s sbxenv files, your own values and logins, and tasks that run a coding agent on your repositories during local development.',
   cleanUrls: true,
   lastUpdated: true,
   head: [
