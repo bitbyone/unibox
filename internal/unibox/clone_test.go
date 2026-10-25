@@ -13,6 +13,7 @@ func TestAGitAddressIsClonedUnderItsHostAndPath(t *testing.T) {
 		"https://gitlab.example.com/a/b/envs.git":  "/d/repos/gitlab.example.com/a/b/envs",
 		"ssh://git@gitlab.example.com:2222/a/envs": "/d/repos/gitlab.example.com/a/envs",
 		"file:///srv/git/envs.git":                 "/d/repos/local/srv/git/envs",
+		"file:///C:/git/envs.git":                  "/d/repos/local/C/git/envs",
 	} {
 		if !IsGitURL(address) {
 			t.Errorf("%s is not taken for an address", address)
@@ -26,7 +27,7 @@ func TestAGitAddressIsClonedUnderItsHostAndPath(t *testing.T) {
 			t.Errorf("%s is taken for an address", path)
 		}
 	}
-	for _, address := range []string{"https://example.com/", "https://example.com/a/../b", "git@host:"} {
+	for _, address := range []string{"https://example.com/", "https://example.com/a/../b", "git@host:", "https://example.com/a/b:c", "https://example.com/a%5Cb"} {
 		if _, err := p.CloneDir(address); err == nil {
 			t.Errorf("%s was given a directory", address)
 		}

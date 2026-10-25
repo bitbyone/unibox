@@ -14,6 +14,8 @@ import (
 )
 
 // scpLike is git's short form of an SSH address, user@host:path.
+var driveLetter = regexp.MustCompile(`^[A-Za-z]:$`)
+
 var scpLike = regexp.MustCompile(`^(?:[A-Za-z0-9._-]+@)?([A-Za-z0-9.-]+):([^/\\][^:]*)$`)
 
 // IsGitURL says whether s is the address of a repository to clone, rather
@@ -49,8 +51,14 @@ func (p Paths) CloneDir(address string) (string, error) {
 		return "", fmt.Errorf("%s names no repository", address)
 	}
 	parts := append([]string{p.ReposDir(), host}, strings.Split(path, "/")...)
+	// file:///C:/x names a drive, kept as a directory C.
+	if host == "local" && len(parts) > 2 && driveLetter.MatchString(parts[2]) {
+		parts[2] = parts[2][:1]
+	}
 	for _, part := range parts[1:] {
-		if part == "" || part == "." || part == ".." {
+		// Characters Windows forbids in a name are refused everywhere, so
+		// a repository is kept under the same name on every system.
+		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, `\:*?"<>|`) {
 			return "", fmt.Errorf("%s names no repository unibox can keep", address)
 		}
 	}

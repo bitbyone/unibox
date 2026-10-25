@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -73,6 +74,11 @@ type Command struct {
 // installed runtime must not discover an unrelated token or SSH agent by accident.
 func HostEnvironment() []string {
 	keys := []string{"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "TERM", "COLORTERM", "LANG", "LC_ALL", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"}
+	if runtime.GOOS == "windows" {
+		// Without these a program on Windows finds neither its own files
+		// nor the system's, and cannot start another.
+		keys = append(keys, "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "USERPROFILE", "USERNAME", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "COMMONPROGRAMFILES")
+	}
 	env := []string{}
 	for _, key := range keys {
 		if v, ok := os.LookupEnv(key); ok {

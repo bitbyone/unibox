@@ -49,3 +49,25 @@ jobs:
           go vet ./...
       - name: Test
         run: make ${{ matrix.target }}
+
+  # unibox is built for Windows too. Its suite stands in for sbx, git hosts
+  # and agents with shell scripts, which Windows does not run, so there it
+  # builds and vets everything and runs the tests of what differs by
+  # system: locks and the names repositories are kept under.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build and vet
+        shell: bash
+        run: |
+          go build ./...
+          go vet ./...
+      - name: Test what differs on Windows
+        shell: bash
+        run: go test -count=1 -run '^(TestALockKeepsOthersOutUntilItIsClosed|TestAGitAddressIsClonedUnderItsHostAndPath|TestTheTeamsPortsAreReadBesideTheSbxenvFilesAndThePersonsWin)$' ./internal/unibox
