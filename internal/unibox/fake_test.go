@@ -152,7 +152,8 @@ func (f *fakeRuntime) EnvPlan(_ context.Context, name, args string, files []stri
 	return "  1 to add · 0 to change · 0 to destroy\n", nil
 }
 
-func (f *fakeRuntime) Setting(context.Context, string) (string, error) { return "false", nil }
+func (f *fakeRuntime) Setting(context.Context, string) (string, error)  { return "false", nil }
+func (f *fakeRuntime) SetSetting(context.Context, string, string) error { return nil }
 
 func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	f.mu.Lock()

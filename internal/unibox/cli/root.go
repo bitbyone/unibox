@@ -125,7 +125,14 @@ func (o *options) configCommand() *cobra.Command {
 	c.AddCommand(&cobra.Command{Use: "get [key]", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		var value any = cfg
-		if len(args) == 1 {
+		switch {
+		case len(args) == 1 && args[0] == "remember_host_commands":
+			v, err := o.manager.SBX.Setting(cmd.Context(), "env.rememberHostCommands")
+			if err != nil {
+				return err
+			}
+			value = v == "true"
+		case len(args) == 1:
 			v, err := configValue(cfg, args[0])
 			if err != nil {
 				return err
@@ -138,6 +145,8 @@ func (o *options) configCommand() *cobra.Command {
 		switch v := value.(type) {
 		case string:
 			fmt.Fprintln(o.output, v)
+		case bool:
+			fmt.Fprintln(o.output, v)
 		default:
 			b, _ := json.MarshalIndent(v, "", "  ")
 			fmt.Fprintln(o.output, string(b))
@@ -148,10 +157,22 @@ func (o *options) configCommand() *cobra.Command {
 
   default_env  the env a sandbox is created from when none is named
   stop_idle    whether a sandbox is stopped when its last session ends
-  ssh_agent    whether sandboxes may use your SSH agent (sbx is set to match)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
+  ssh_agent    whether sandboxes may use your SSH agent (sbx is set to match)
+  remember_host_commands
+               whether approving an env's host commands covers their later
+               runs too, rather than being asked each time (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		key, value := args[0], args[1]
 		switch key {
+		case "remember_host_commands":
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("%s must be true or false", key)
+			}
+			if err := o.manager.SBX.SetSetting(cmd.Context(), "env.rememberHostCommands", strconv.FormatBool(v)); err != nil {
+				return err
+			}
+			return o.success("configuration updated")
 		case "default_env":
 			if _, ok := cfg.Envs[value]; !ok {
 				return fmt.Errorf("there is no env %s; unibox env ls lists them", value)
@@ -173,7 +194,7 @@ func (o *options) configCommand() *cobra.Command {
 			}
 			cfg.StopIdleSandbox = &v
 		default:
-			return fmt.Errorf("unknown configuration key %q; the keys are default_env, stop_idle and ssh_agent", key)
+			return fmt.Errorf("unknown configuration key %q; the keys are %s", key, configKeys)
 		}
 		if err := o.paths.SaveConfig(cfg); err != nil {
 			return err
@@ -183,6 +204,11 @@ func (o *options) configCommand() *cobra.Command {
 	c.AddCommand(&cobra.Command{Use: "unset key", Args: cobra.ExactArgs(1), Short: "Forget a setting, back to its default", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		switch args[0] {
+		case "remember_host_commands":
+			if err := o.manager.SBX.SetSetting(cmd.Context(), "env.rememberHostCommands", ""); err != nil {
+				return err
+			}
+			return o.success("configuration updated")
 		case "default_env":
 			cfg.DefaultEnv = ""
 		case "stop_idle":
@@ -195,7 +221,7 @@ func (o *options) configCommand() *cobra.Command {
 			cfg = o.manager.Config
 			cfg.SSHAgentOn = nil
 		default:
-			return fmt.Errorf("unknown configuration key %q; the keys are default_env, stop_idle and ssh_agent", args[0])
+			return fmt.Errorf("unknown configuration key %q; the keys are %s", args[0], configKeys)
 		}
 		if err := o.paths.SaveConfig(cfg); err != nil {
 			return err
@@ -204,6 +230,9 @@ func (o *options) configCommand() *cobra.Command {
 	}})
 	return c
 }
+
+const configKeys = "default_env, stop_idle, ssh_agent and remember_host_commands"
+
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {
 	case "default_env":
@@ -429,10 +458,16 @@ func (o *options) renameCommand() *cobra.Command {
 	return c
 }
 
-// pruneCommand forgets the sandboxes removed with sbx itself.
+// pruneCommand tidies what was left behind outside unibox: sandboxes
+// removed with sbx itself, and directories still mounted for a task that
+// is gone.
 func (o *options) pruneCommand() *cobra.Command {
-	return &cobra.Command{Use: "prune", Args: cobra.NoArgs, Short: "Forget the sandboxes sbx no longer has", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "prune", Args: cobra.NoArgs, Short: "Forget the sandboxes sbx no longer has, and unmount what no task uses", RunE: func(cmd *cobra.Command, args []string) error {
 		removed, err := o.manager.Prune(cmd.Context())
+		if err != nil {
+			return err
+		}
+		unmounted, busy, err := o.manager.PruneMounts(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -442,13 +477,26 @@ func (o *options) pruneCommand() *cobra.Command {
 			}
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "forgotten": removed})
+			if unmounted == nil {
+				unmounted = []string{}
+			}
+			if busy == nil {
+				busy = []string{}
+			}
+			return o.write(map[string]any{"api_version": api.Version, "forgotten": removed, "unmounted": unmounted, "busy": busy})
 		}
-		if len(removed) == 0 {
-			fmt.Fprintln(o.output, "nothing to forget")
-			return nil
+		if len(removed) > 0 {
+			fmt.Fprintf(o.output, "forgot %s\n", strings.Join(removed, ", "))
 		}
-		fmt.Fprintf(o.output, "forgot %s\n", strings.Join(removed, ", "))
+		for _, m := range unmounted {
+			fmt.Fprintf(o.output, "unmounted %s\n", m)
+		}
+		if len(busy) > 0 {
+			fmt.Fprintf(o.output, "left %s alone while in use; prune again later\n", strings.Join(busy, ", "))
+		}
+		if len(removed)+len(unmounted)+len(busy) == 0 {
+			fmt.Fprintln(o.output, "nothing to prune")
+		}
 		return nil
 	}}
 }

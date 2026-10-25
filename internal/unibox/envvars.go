@@ -19,7 +19,7 @@ const envValuesHeader = `# Your own values for the args your envs' sbxenv files 
 # and never in the team's repository: [envs.<env>.args]. unibox var set and
 # unibox var rm change this file, and unibox passes the values to
 # sbx env create as an --env-args-file. No secret belongs here - store tokens
-# with sbx secret set (unibox login).
+# with unibox login set.
 
 `
 
@@ -119,7 +119,7 @@ func ValidArg(name, value string) error {
 		return fmt.Errorf("arg %s: a value is one line", name)
 	}
 	if strings.HasPrefix(value, "secret:") {
-		return fmt.Errorf("arg %s: no secret belongs in vars.toml; store a token with sbx secret set (unibox login)", name)
+		return fmt.Errorf("arg %s: no secret belongs in vars.toml; store a token with unibox login set", name)
 	}
 	return nil
 }

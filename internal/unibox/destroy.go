@@ -80,6 +80,49 @@ func (m *Manager) checkRemovable(ctx context.Context, b api.Sandbox) error {
 	return m.safeBox(ctx, b)
 }
 
+// PruneMounts unmounts what a running sandbox has mounted under /work
+// that no task of it has any longer, as a task removed outside unibox
+// leaves behind, each as "sandbox: host at target". A sandbox another
+// command is busy with is left for the next prune and named in busy.
+func (m *Manager) PruneMounts(ctx context.Context) (unmounted, busy []string, err error) {
+	boxes, err := m.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, b := range boxes {
+		if b.State != "running" {
+			continue
+		}
+		guard, err := m.guard(b.Name)
+		if err != nil {
+			busy = append(busy, b.Name)
+			continue
+		}
+		err = func() error {
+			defer guard.Close()
+			current, err := m.sandbox(b.Name)
+			if err != nil {
+				return err
+			}
+			_, stray, err := m.MountDrift(ctx, current)
+			if err != nil {
+				return err
+			}
+			for _, mt := range stray {
+				if err := m.SBX.Unmount(ctx, b.Name, mt[0], mt[1]); err != nil {
+					return err
+				}
+				unmounted = append(unmounted, fmt.Sprintf("%s: %s at %s", b.Name, mt[0], mt[1]))
+			}
+			return nil
+		}()
+		if err != nil {
+			return unmounted, busy, err
+		}
+	}
+	return unmounted, busy, nil
+}
+
 // Prune forgets the sandboxes sbx no longer has, removed with sbx itself,
 // and says which.
 func (m *Manager) Prune(ctx context.Context) ([]string, error) {

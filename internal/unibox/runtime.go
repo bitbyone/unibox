@@ -39,6 +39,7 @@ type Runtime interface {
 	UnpublishPort(ctx context.Context, sandbox string, p api.PublishedPort, log io.Writer) error
 	Version(ctx context.Context) (string, error)
 	EnvPlan(ctx context.Context, name, args string, files []string) (string, error)
+	SetSetting(ctx context.Context, key, value string) error
 	Setting(ctx context.Context, key string) (string, error)
 	Diagnose(ctx context.Context) ([]RuntimeCheck, error)
 	// SignedIn says whether the runtime is signed in to its account, and

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -203,6 +204,21 @@ func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testi
 	usage.Close()
 	taskLock.Close()
 	if missing, stray := drift(); len(missing) != 0 || len(stray) != 1 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	// Prune unmounts what no task has, but not while the sandbox is busy.
+	guard, err := m.guard("dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unmounted, busy, err := m.PruneMounts(ctx); err != nil || len(unmounted) != 0 || !slices.Equal(busy, []string{"dev"}) {
+		t.Fatalf("%v %v %v", unmounted, busy, err)
+	}
+	guard.Close()
+	if unmounted, busy, err := m.PruneMounts(ctx); err != nil || len(busy) != 0 || !slices.Equal(unmounted, []string{"dev: " + odd + " at /work/gone/x"}) {
+		t.Fatalf("%v %v %v", unmounted, busy, err)
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
 		t.Fatalf("%v %v", missing, stray)
 	}
 	// A recreated sandbox has no mounts; its tasks wait to be prepared

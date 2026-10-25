@@ -430,3 +430,23 @@ func TestNetworkRulesAreForTheSandboxUnlessGlobal(t *testing.T) {
 		t.Fatalf("a bad host reached sbx:\n%s", calls)
 	}
 }
+
+func TestRememberingHostCommandsIsSbxsSetting(t *testing.T) {
+	log := fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if out, _, err := run(t, paths, "", "config", "get", "remember_host_commands"); err != nil || out != "false\n" {
+		t.Fatalf("%v %q", err, out)
+	}
+	if _, _, err := run(t, paths, "", "config", "set", "remember_host_commands", "yes"); err == nil {
+		t.Fatal("a value that is no bool went through")
+	}
+	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}} {
+		if _, _, err := run(t, paths, "", args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls, _ := os.ReadFile(log)
+	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") {
+		t.Fatalf("%s", calls)
+	}
+}

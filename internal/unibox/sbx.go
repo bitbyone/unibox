@@ -25,6 +25,19 @@ type SBX struct {
 // SSHForwarding says whether sbx forwards the host's SSH agent now.
 func (r *SBX) SSHForwarding(ctx context.Context) (bool, error) { return sbxForwarding(ctx) }
 
+// SetSetting overrides one of sbx's settings, or with value "" takes the
+// override away, back to sbx's default.
+func (r *SBX) SetSetting(ctx context.Context, key, value string) error {
+	args := []string{"settings", "set", key, value}
+	if value == "" {
+		args = []string{"settings", "unset", key}
+	}
+	if err := runQuiet(hostCommand(ctx, "sbx", args...)); err != nil {
+		return fmt.Errorf("sbx did not change %s: %w", key, err)
+	}
+	return nil
+}
+
 // SetSSHForwarding turns sbx's forwarding of the host's SSH agent on or
 // off, and restarts its daemon, which a change takes effect with; running
 // sandboxes keep the connections they have until they restart.
@@ -76,7 +89,7 @@ func (r *SBX) Present() bool {
 
 func (r *SBX) Available(ctx context.Context) error {
 	if _, err := exec.LookPath("sbx"); err != nil {
-		return fmt.Errorf("sbx is not installed; install Docker Sandboxes and run sbx login")
+		return fmt.Errorf("sbx is not installed; install Docker Sandboxes, then unibox init signs you in")
 	}
 	forwarding, err := sbxForwarding(ctx)
 	if err != nil {

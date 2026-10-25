@@ -73,7 +73,7 @@ func (o *options) doctorCommand() *cobra.Command {
 			}
 			if remember, err := sbx.Setting(ctx, "env.rememberHostCommands"); err == nil {
 				if remember == "true" {
-					add("sbx", "host commands", "warn", "sbx runs an env's host commands again without asking", "sbx settings set env.rememberHostCommands false has it ask each time")
+					add("sbx", "host commands", "warn", "sbx runs an env's host commands again without asking", "unibox config set remember_host_commands false has it ask each time")
 				} else {
 					add("sbx", "host commands", "pass", "sbx asks before an env's host commands run", "")
 				}
@@ -136,7 +136,7 @@ func (o *options) doctorCommand() *cobra.Command {
 						return err
 					})
 					if err != nil {
-						add(area, "plan", "fail", err.Error(), "sbx env plan shows the whole of it")
+						add(area, "plan", "fail", err.Error(), "fix the env's files; unibox env show "+name+" shows what they declare")
 					} else {
 						add(area, "plan", "pass", plan, "")
 					}
@@ -215,7 +215,7 @@ func (o *options) doctorCommand() *cobra.Command {
 						add("Sandboxes", b.Name, "warn", mt[0]+" is not mounted at "+mt[1], "unibox resume of its task mounts it again")
 					}
 					for _, mt := range stray {
-						add("Sandboxes", b.Name, "warn", mt[0]+" is mounted at "+mt[1]+", but no task has it", "sbx umount "+b.Name+" "+unibox.Quote(mt[0]+":"+mt[1]))
+						add("Sandboxes", b.Name, "warn", mt[0]+" is mounted at "+mt[1]+", but no task has it", "unibox prune unmounts it")
 					}
 				}
 				for _, t := range b.Tasks {
