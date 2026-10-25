@@ -24,18 +24,23 @@ make build             # the unibox binary
 make test              # go test -race ./...
 make test-fast         # while iterating; race before commit
 make install           # into ~/.local/bin
+make dist VERSION=1.2  # release archives for every system, into dist/
 gofmt -l . && go vet ./...
 ```
 
 Everything must be gofmt-clean, vet-clean and race-clean before a commit.
 
 CI (`.github/workflows`): `test` runs on every push and pull request, the
-race detector on Linux and the suite without it on macOS; `website`
+race detector on Linux and the suite without it on macOS, and Windows
+builds, vets and runs the tests that need no shell stand-in; `website`
 builds `website/` with VitePress and publishes it to GitHub Pages; a
 `vX.Y` tag on a commit of main whose tests passed releases it - `release`
-builds it, checks `unibox --version` prints the tag's version, and points `Formula/unibox.rb`, the
-Homebrew tap this repository is, at the tag and its commit. Release by
-pushing such a tag; never edit the formula's tag or revision by hand.
+builds it, checks `unibox --version` prints the tag's version, publishes
+`make dist`'s archives for Linux, macOS and Windows as the tag's GitHub
+release, and points `Formula/unibox.rb` (the Homebrew tap this repository
+is) and `bucket/unibox.json` (its Scoop bucket) at it. Release by pushing
+such a tag; never edit the formula's tag or revision, or the manifest, by
+hand.
 A test that fails one run in a few is a bug to find, not to rerun: the
 lock tests did, until FileLock.Close unlocked before closing (a forked
 child holds a copy of the descriptor, and with it the flock).
