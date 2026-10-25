@@ -55,7 +55,7 @@ func (m *Manager) sandbox(name string) (api.Sandbox, error) {
 	}
 	b, ok := s.Sandboxes[name]
 	if !ok {
-		return b, Fail(404, "sandbox_not_found", "sandbox %s is not unibox's; unibox sandbox ls lists them, unibox sandbox create makes one", name)
+		return b, Fail(4, "sandbox_not_found", "sandbox %s is not unibox's; unibox sandbox ls lists them, unibox sandbox create makes one", name)
 	}
 	return b, nil
 }

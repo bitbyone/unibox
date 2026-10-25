@@ -350,6 +350,8 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 			return b, t, nil, nil, err
 		}
 		t.State = "ready"
+	} else if err = m.remount(ctx, b, t); err != nil {
+		return b, t, nil, nil, err
 	}
 	replaceTask(&b, t)
 	if err = m.saveBox(b); err != nil {
@@ -729,6 +731,29 @@ func (m *Manager) MountDrift(ctx context.Context, b api.Sandbox) (missing, stray
 		}
 	}
 	return missing, stray, nil
+}
+
+// remount mounts again what a ready task has lost of its mounts, as
+// after sbx umount by hand, so its agent never starts on an empty
+// directory.
+func (m *Manager) remount(ctx context.Context, b api.Sandbox, t api.Task) error {
+	if len(mounts(t)) == 0 {
+		return nil
+	}
+	missing, _, err := m.MountDrift(ctx, b)
+	if err != nil {
+		return err
+	}
+	for _, mt := range missing {
+		if !slices.Contains(mounts(t), mt) {
+			continue
+		}
+		if err := m.SBX.Mount(ctx, b.Name, mt[0], mt[1]); err != nil {
+			return err
+		}
+		fmt.Fprintf(m.Log, "mounted %s at %s in sandbox %s again\n", mt[0], mt[1], b.Name)
+	}
+	return nil
 }
 
 // guestMounts are the mounts under /work in a mountinfo, where unibox

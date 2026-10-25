@@ -262,7 +262,7 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 		return nil, false, err
 	}
 	if b.State == "missing" {
-		return nil, false, Fail(404, "sandbox_not_found", "sandbox %s is not unibox's; unibox sandbox ls lists them", name)
+		return nil, false, Fail(4, "sandbox_not_found", "sandbox %s is not unibox's; unibox sandbox ls lists them", name)
 	}
 	ports := env.Config.Ports
 	box, exists, err := m.findBox(ctx, b)

@@ -151,3 +151,22 @@ func TestSbxListsReadInTheFormOfEitherVersion(t *testing.T) {
 		t.Fatalf("%v %+v", err, got)
 	}
 }
+
+func TestVersionsAreComparedByNumberNotText(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		version, min string
+		ok           bool
+	}{
+		{"0.49.2", "0.49.2", true},
+		{"0.49.10", "0.49.2", true},
+		{"v1.0.0", "0.49.2", true},
+		{"0.48.9", "0.49.2", false},
+		{"0.49.1", "0.49.2", false},
+		{"nightly", "0.49.2", false},
+	} {
+		if got := VersionAtLeast(c.version, c.min); got != c.ok {
+			t.Errorf("%s >= %s: %v", c.version, c.min, got)
+		}
+	}
+}

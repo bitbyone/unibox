@@ -195,6 +195,16 @@ func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testi
 	if len(stray) != 1 || stray[0] != [2]string{odd, "/work/gone/x"} {
 		t.Fatalf("%v", stray)
 	}
+	// Resuming the ready task mounts what it lost, and nothing else.
+	_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "local"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage.Close()
+	taskLock.Close()
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 1 {
+		t.Fatalf("%v %v", missing, stray)
+	}
 	// A recreated sandbox has no mounts; its tasks wait to be prepared
 	// again, which mounts them.
 	if err := m.Recreate(ctx, "dev"); err != nil {
@@ -203,13 +213,13 @@ func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testi
 	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
 		t.Fatalf("%v %v", missing, stray)
 	}
-	_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "local"}, true)
+	_, _, usage, taskLock, err = m.prepare(ctx, Request{Sandbox: "dev", Task: "local"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	usage.Close()
 	taskLock.Close()
-	if calls := f.called("mount "); len(calls) != 3 || calls[2] != "mount "+host+":"+target {
+	if calls := f.called("mount "); len(calls) != 4 || calls[3] != "mount "+host+":"+target {
 		t.Fatalf("%v", calls)
 	}
 	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {

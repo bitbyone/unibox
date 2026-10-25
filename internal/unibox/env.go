@@ -36,9 +36,9 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	if !ok {
 		known := sortedKeys(c.Envs)
 		if len(known) == 0 {
-			return Env{}, Fail(404, "env_not_found", "there is no env %s; add one with unibox env add %s <file.sbxenv.yaml>", name, name)
+			return Env{}, Fail(4, "env_not_found", "there is no env %s; add one with unibox env add %s <file.sbxenv.yaml>", name, name)
 		}
-		return Env{}, Fail(404, "env_not_found", "there is no env %s; the envs are %v, unibox env add adds one", name, known)
+		return Env{}, Fail(4, "env_not_found", "there is no env %s; the envs are %v, unibox env add adds one", name, known)
 	}
 	sbx, err := ReadSBXEnv(ec.Files)
 	if err != nil {
