@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -10,20 +11,25 @@ import (
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-// portCommand names the ports a person publishes from an env's sandbox.
-// They are the person's, kept with the env in config.yaml: the team's
-// files say what the sandbox is, not which host port someone uses.
+// portCommand names the ports a sandbox publishes. A team names its
+// env's in the unibox file beside the sbxenv file, which sbx does not
+// read; what a person changes of them, and their own, is kept with the
+// env in config.yaml, so the team's file never says which host port
+// someone uses.
 func (o *options) portCommand() *cobra.Command {
-	c := &cobra.Command{Use: "port", Short: "Your named ports of an env, and those a running sandbox publishes", Long: `A port is published on the host's loopback. set and unset change the
-env's ports, for its sandbox, and apply at once while it runs; publish and
-unpublish switch a running sandbox's ports alone, and its next start goes
-back to the env's.
+	c := &cobra.Command{Use: "port", Short: "The named ports of an env, and those a running sandbox publishes", Long: `A port is published on the host's loopback. The team names an env's ports
+in the unibox file beside its sbxenv file (dev.unibox.yaml beside
+dev.sbxenv.yaml); set adds your own or gives one of the team's another
+mapping. on and off say whether a sandbox starts with a port published,
+and unset goes back to the team's. Each applies at once to a running
+sandbox. publish and unpublish switch a running sandbox's ports alone,
+and its next start goes back to the env's.
 
 A mapping is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any
-free host port, 8080:3000 host port 8080.`, Example: "  unibox port set actuator --map 9080:9080 --off -e dev\n  unibox port publish actuator -s dev\n  unibox port publish --map 9090:9090 -s dev"}
+free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  unibox port set actuator --map 9080:9080 --off -e dev\n  unibox port publish actuator -s dev\n  unibox port publish --map 9090:9090 -s dev"}
 	var envFlagValue, sandbox, mapping string
 	var off bool
-	edit := func(cmd *cobra.Command, change func(ports map[string]unibox.Port) error) (string, error) {
+	edit := func(cmd *cobra.Command, change func(ports map[string]unibox.Port, team map[string]unibox.TeamPort) error) (string, error) {
 		name, err := o.envName(envFlagValue)
 		if err != nil {
 			return "", err
@@ -33,12 +39,22 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port set actuator
 		if !ok {
 			return "", fmt.Errorf("there is no env %s; unibox env ls lists them", name)
 		}
+		team, err := unibox.ReadTeamPorts(ec.Files)
+		if err != nil {
+			return name, err
+		}
 		ports := map[string]unibox.Port{}
 		for k, v := range ec.Ports {
 			ports[k] = v
 		}
-		if err = change(ports); err != nil {
+		if err = change(ports, team); err != nil {
 			return name, err
+		}
+		// A switch that says what the team says is no change of the person's.
+		for k, v := range ports {
+			if t, ok := team[k]; ok && v.Spec == "" && v.Default == t.Default {
+				delete(ports, k)
+			}
 		}
 		ec.Ports = ports
 		if len(ports) == 0 {
@@ -58,7 +74,7 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port set actuator
 		if _, err := unibox.ParsePortSpec(mapping); err != nil {
 			return err
 		}
-		env, err := edit(cmd, func(ports map[string]unibox.Port) error {
+		env, err := edit(cmd, func(ports map[string]unibox.Port, _ map[string]unibox.TeamPort) error {
 			ports[args[0]] = unibox.Port{Spec: mapping, Default: !off}
 			return nil
 		})
@@ -75,10 +91,13 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port set actuator
 	set.Flags().BoolVar(&off, "off", false, "Publish it only when asked to, not at start")
 	_ = set.MarkFlagRequired("map")
 	envFlag(set, &envFlagValue)
-	unset := &cobra.Command{Use: "unset name...", Args: cobra.MinimumNArgs(1), Short: "Take ports out of the env", RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := edit(cmd, func(ports map[string]unibox.Port) error {
+	unset := &cobra.Command{Use: "unset name...", Args: cobra.MinimumNArgs(1), Short: "Take your ports out of the env, or go back to the team's", RunE: func(cmd *cobra.Command, args []string) error {
+		env, err := edit(cmd, func(ports map[string]unibox.Port, team map[string]unibox.TeamPort) error {
 			for _, port := range args {
 				if _, ok := ports[port]; !ok {
+					if _, ok := team[port]; ok {
+						return fmt.Errorf("port %s is the team's and you have not changed it; unibox port off %s keeps it from being published", port, port)
+					}
 					return fmt.Errorf("the env has no port %s; unibox port ls lists them", port)
 				}
 				delete(ports, port)
@@ -88,9 +107,34 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port set actuator
 		if err != nil {
 			return err
 		}
-		return o.success(fmt.Sprintf("took port %s out of env %s", strings.Join(args, ", "), env))
+		return o.success(fmt.Sprintf("took your port %s out of env %s", strings.Join(args, ", "), env))
 	}}
 	envFlag(unset, &envFlagValue)
+	turn := func(on bool) *cobra.Command {
+		use, short := "on", "Publish ports at every start of the env's sandbox, and now while it runs"
+		if !on {
+			use, short = "off", "Stop publishing ports at start, and now while the sandbox runs"
+		}
+		cmd := &cobra.Command{Use: use + " name...", Args: cobra.MinimumNArgs(1), Short: short, RunE: func(cmd *cobra.Command, args []string) error {
+			env, err := edit(cmd, func(ports map[string]unibox.Port, team map[string]unibox.TeamPort) error {
+				for _, port := range args {
+					p, mine := ports[port]
+					if _, theirs := team[port]; !mine && !theirs {
+						return fmt.Errorf("the env has no port %s; unibox port ls lists them, unibox port set adds one", port)
+					}
+					p.Default = on
+					ports[port] = p
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			return o.success(fmt.Sprintf("env %s publishes port %s %s", env, strings.Join(args, ", "), map[bool]string{true: "at every start", false: "only when asked to (unibox port publish)"}[on]))
+		}}
+		envFlag(cmd, &envFlagValue)
+		return cmd
+	}
 	var maps []string
 	publish := func(on bool) *cobra.Command {
 		use, short := "publish", "Publish ports of a running sandbox: the env's by name, others by --map"
@@ -126,7 +170,7 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port set actuator
 		return o.listPorts(cmd, name)
 	}}
 	sandboxFlag(ls, &sandbox)
-	c.AddCommand(set, unset, ls, publish(true), publish(false))
+	c.AddCommand(set, unset, turn(true), turn(false), ls, publish(true), publish(false))
 	return c
 }
 
@@ -143,7 +187,7 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 			if published == nil {
 				published = []api.PublishedPort{}
 			}
-			out = append(out, api.Port{Name: p.Name, Port: p.Spec, Default: p.Default, Named: p.Named, On: p.On, Published: published})
+			out = append(out, api.Port{Name: p.Name, Port: p.Spec, Description: p.Description, Team: p.Team, Default: p.Default, Named: p.Named, On: p.On, Published: published})
 		}
 		return o.write(map[string]any{"api_version": api.Version, "sandbox": name, "running": running, "ports": out})
 	}
@@ -152,7 +196,7 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "PORT\tMAPPING\tAT START\tNOW\tURL")
+	fmt.Fprintln(w, "PORT\tMAPPING\tFROM\tAT START\tNOW\tURL\tDESCRIPTION")
 	for _, p := range ports {
 		at := "off"
 		if p.Default {
@@ -178,7 +222,14 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 				urls = append(urls, fmt.Sprintf("http://%s:%d", host, q.HostPort))
 			}
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.Spec, at, now, strings.Join(urls, " "))
+		from := "you"
+		if p.Team {
+			from = "team"
+		}
+		if !p.Named {
+			from = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Spec, from, at, now, cmp.Or(strings.Join(urls, " "), "-"), p.Description)
 	}
 	return w.Flush()
 }

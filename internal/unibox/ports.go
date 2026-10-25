@@ -16,9 +16,15 @@ import (
 // Port is one of an env's ports, published on the host's loopback by
 // name: Spec is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL], as Docker
 // says it; Default is whether a sandbox starts with it published.
+//
+// In config.yaml Spec may be empty: the entry then only switches the
+// team's port of its name on or off. Description and Team are the team's,
+// never kept with the person's.
 type Port struct {
-	Spec    string `yaml:"port" json:"port"`
-	Default bool   `yaml:"default" json:"default"`
+	Spec        string `yaml:"port" json:"port,omitempty"`
+	Default     bool   `yaml:"default" json:"default"`
+	Description string `yaml:"-" json:"-"`
+	Team        bool   `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML takes a port as its spec alone, on by default, or as
@@ -53,6 +59,9 @@ func (p *Port) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML writes a port on by default as its spec alone, as a person
 // would write it.
 func (p Port) MarshalYAML() (any, error) {
+	if p.Spec == "" {
+		return map[string]string{"default": map[bool]string{true: "on", false: "off"}[p.Default]}, nil
+	}
 	if p.Default {
 		return p.Spec, nil
 	}
@@ -135,12 +144,16 @@ func (p PortSpec) matches(q api.PublishedPort) bool {
 }
 
 // validatePorts checks an env's ports: names a command can say, specs
-// that parse, and no host port asked for twice.
+// that parse, and no host port asked for twice. A port with no spec is a
+// person's switch of the team's port, checked with the team's.
 func validatePorts(ports map[string]Port) error {
 	hosts := map[string]string{}
 	for _, name := range sortedKeys(ports) {
 		if !portName.MatchString(name) {
 			return fmt.Errorf("port name %q must be lower case letters, digits and dashes, starting with a letter", name)
+		}
+		if ports[name].Spec == "" {
+			continue
 		}
 		spec, err := ParsePortSpec(ports[name].Spec)
 		if err != nil {
@@ -183,7 +196,7 @@ func wantedPorts(ports map[string]Port, b api.Sandbox) map[string]string {
 // have, touching only ports unibox published or should; a port published
 // by hand with sbx ports stays.
 func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, env Env) error {
-	want := wantedPorts(env.Config.Ports, *b)
+	want := wantedPorts(env.Ports, *b)
 	if len(want) == 0 && len(b.Ports) == 0 {
 		return nil
 	}
@@ -246,8 +259,10 @@ func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, env Env) error 
 
 // PortState is one port of a sandbox as unibox port ls shows it.
 type PortState struct {
-	Name, Spec string
-	Default    bool
+	Name, Spec, Description string
+	// Team is whether the team named it, in its unibox file.
+	Team    bool
+	Default bool
 	// Named is false for a port switched on for the sandbox alone.
 	Named     bool
 	On        bool
@@ -264,7 +279,7 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	if b.State == "missing" {
 		return nil, false, Fail(4, "sandbox_not_found", "sandbox %s is not unibox's; unibox sandbox ls lists them", name)
 	}
-	ports := env.Config.Ports
+	ports := env.Ports
 	box, exists, err := m.findBox(ctx, b)
 	if err != nil {
 		return nil, false, err
@@ -281,8 +296,9 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 		want = wantedPorts(ports, b)
 	}
 	out := []PortState{}
-	add := func(name, spec string, def, named bool) {
-		s := PortState{Name: name, Spec: spec, Default: def, Named: named}
+	add := func(name string, p Port, named bool) {
+		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, Default: p.Default, Named: named}
+		spec := p.Spec
 		if _, s.On = want[name]; s.On {
 			parsed, _ := ParsePortSpec(spec)
 			for _, q := range actual {
@@ -294,11 +310,11 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 		out = append(out, s)
 	}
 	for _, n := range sortedKeys(ports) {
-		add(n, ports[n].Spec, ports[n].Default, true)
+		add(n, ports[n], true)
 	}
 	for _, key := range sortedKeys(b.PortSwitches) {
 		if _, named := ports[key]; !named && b.PortSwitches[key] {
-			add(key, key, false, false)
+			add(key, Port{Spec: key}, false)
 		}
 	}
 	return out, running, nil
@@ -328,7 +344,7 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 		b.PortSwitches = map[string]bool{}
 	}
 	for key, on := range switches {
-		if _, named := env.Config.Ports[key]; !named {
+		if _, named := env.Ports[key]; !named {
 			if _, err := ParsePortSpec(key); err != nil {
 				return fmt.Errorf("env %s has no port %s, and it is not a mapping either; unibox port ls -s %s lists them", env.Name, key, name)
 			}

@@ -24,6 +24,8 @@ type Env struct {
 	Name   string
 	Config EnvConfig
 	SBX    SBXEnv
+	// Ports are the team's and the person's, as a sandbox gets them.
+	Ports map[string]Port
 }
 
 // SandboxName is the name of the env's sandbox: the user's, else the
@@ -49,7 +51,11 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
-	return Env{Name: name, Config: ec, SBX: sbx}, nil
+	ports, err := envPorts(ec)
+	if err != nil {
+		return Env{}, fmt.Errorf("env %s: %w", name, err)
+	}
+	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports}, nil
 }
 
 // ValidEnvConfig checks what an env says before it is kept: a name, files
@@ -72,5 +78,6 @@ func ValidEnvConfig(name string, ec EnvConfig) error {
 	if _, err := ReadSBXEnv(ec.Files); err != nil {
 		return err
 	}
-	return validatePorts(ec.Ports)
+	_, err := envPorts(ec)
+	return err
 }

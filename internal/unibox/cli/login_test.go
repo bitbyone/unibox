@@ -450,3 +450,58 @@ func TestRememberingHostCommandsIsSbxsSetting(t *testing.T) {
 		t.Fatalf("%s", calls)
 	}
 }
+
+func TestTheTeamsPortsAreOfferedAndEachPersonSwitchesThem(t *testing.T) {
+	fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	if err := os.WriteFile(unibox.TeamFile(file), []byte("ports:\n  vite: {port: 5173, description: Vite dev server}\n  api: {port: '8080:8080', description: The API, default: on}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// SSH agent: no; the arg; store the logins; of the ports, api (offered
+	// first, being on) off and vite on; no sandbox yet.
+	_, said, err := runAt(t, paths, "1\nperson\ny\n1\n2\n0\nn\n", "init", filepath.Dir(filepath.Dir(file)))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	mine := func() map[string]unibox.Port {
+		t.Helper()
+		cfg, err := paths.LoadConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg.Envs["team"].Ports
+	}
+	if got := mine(); len(got) != 2 || got["vite"] != (unibox.Port{Default: true}) || got["api"] != (unibox.Port{}) {
+		t.Fatalf("%+v\n%s", got, said)
+	}
+	// Back to what the team says, either way.
+	if _, _, err := run(t, paths, "", "port", "on", "api", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "port", "unset", "vite", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if got := mine(); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+	if _, _, err := run(t, paths, "", "port", "unset", "api", "-e", "team"); err == nil || !strings.Contains(err.Error(), "unibox port off api") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "port", "on", "nope", "-e", "team"); err == nil {
+		t.Fatal("a port no one named was switched on")
+	}
+	// A mapping of one's own for the team's port; its description stays.
+	if _, _, err := run(t, paths, "", "port", "set", "vite", "--map", "9173:5173", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "env", "show", "team")
+	if err != nil || !strings.Contains(out, "port vite 9173:5173, the team's, on at start: Vite dev server") || !strings.Contains(out, "port api 8080:8080, the team's, on at start: The API") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// Two ports asking for one host port are refused before they are kept.
+	if _, _, err := run(t, paths, "", "port", "set", "vite", "--map", "8080:5173", "-e", "team"); err == nil || !strings.Contains(err.Error(), "same host port") {
+		t.Fatalf("%v", err)
+	}
+}

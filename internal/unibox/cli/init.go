@@ -265,7 +265,7 @@ func (o *options) initQuietly(cmd *cobra.Command, root string, named, vars []str
 
 // walkStep heads a step of the walk.
 func (o *options) walkStep(n int, title string) {
-	fmt.Fprintf(o.log, "\n%d/5 %s\n", n, title)
+	fmt.Fprintf(o.log, "\n%d/6 %s\n", n, title)
 }
 
 func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) error {
@@ -372,7 +372,48 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 	}
 
-	o.walkStep(5, "Sandboxes")
+	o.walkStep(5, "Ports")
+	anyPorts := false
+	for _, env := range envs {
+		team := []string{}
+		for _, name := range sorted(env.Ports) {
+			if env.Ports[name].Team {
+				team = append(team, name)
+			}
+		}
+		if len(team) == 0 {
+			continue
+		}
+		anyPorts = true
+		labels, on, byLabel := []string{}, []string{}, map[string]string{}
+		for _, name := range team {
+			p := env.Ports[name]
+			label := name + " (" + p.Spec + ")"
+			if p.Description != "" {
+				label += " " + p.Description
+			}
+			labels, byLabel[label] = append(labels, label), name
+			if p.Default {
+				on = append(on, label)
+			}
+		}
+		picked, err := o.askChoices("Ports of env "+env.Name+" to publish at every start", "The team names them; the rest stay off until unibox port publish <name>", labels, on, nil)
+		if err != nil {
+			return err
+		}
+		for _, label := range labels {
+			if want := slices.Contains(picked, label); want != slices.Contains(on, label) {
+				if err = o.runStep(cmd, "port", map[bool]string{true: "on", false: "off"}[want], byLabel[label], "-e", env.Name); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if !anyPorts {
+		fmt.Fprintln(o.log, "  no env names ports; unibox port set adds your own")
+	}
+
+	o.walkStep(6, "Sandboxes")
 	state, err := o.paths.ReadState()
 	if err != nil {
 		return err

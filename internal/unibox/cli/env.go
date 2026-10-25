@@ -217,7 +217,17 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		}
 		mine := values.Envs[name]
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "ports": e.Config.Ports})
+			type port struct {
+				Port        string `json:"port"`
+				Description string `json:"description,omitempty"`
+				Team        bool   `json:"team,omitempty"`
+				Default     bool   `json:"default"`
+			}
+			ports := map[string]port{}
+			for k, v := range e.Ports {
+				ports[k] = port{v.Spec, v.Description, v.Team, v.Default}
+			}
+			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "ports": ports})
 		}
 		fmt.Fprintf(o.output, "env %s, sandbox %s, agent %s\n", name, e.SandboxName(), e.SBX.Agent)
 		for _, f := range e.SBX.Files {
@@ -251,8 +261,18 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		for _, k := range e.SBX.Kits {
 			fmt.Fprintf(o.output, "  kit %s\n", k.Source)
 		}
-		for _, p := range sorted(e.Config.Ports) {
-			fmt.Fprintf(o.output, "  port %s %s\n", p, e.Config.Ports[p].Spec)
+		for _, p := range sorted(e.Ports) {
+			port := e.Ports[p]
+			from := "yours"
+			if port.Team {
+				from = "the team's"
+			}
+			at := map[bool]string{true: "on", false: "off"}[port.Default]
+			about := ""
+			if port.Description != "" {
+				about = ": " + port.Description
+			}
+			fmt.Fprintf(o.output, "  port %s %s, %s, %s at start%s\n", p, port.Spec, from, at, about)
 		}
 		return nil
 	}})

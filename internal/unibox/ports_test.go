@@ -3,6 +3,7 @@ package unibox
 import (
 	"context"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func TestPortsArePublishedByTheEnvAndSwitchedWhileASandboxRuns(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	setPorts(map[string]Port{"fe": {"3000:3000", true}, "devtools": {"9333:9222", false}})
+	setPorts(map[string]Port{"fe": {Spec: "3000:3000", Default: true}, "devtools": {Spec: "9333:9222", Default: false}})
 	if _, err := m.Create(ctx, Request{Env: "dev"}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestPortsArePublishedByTheEnvAndSwitchedWhileASandboxRuns(t *testing.T) {
 	f.setState("dev", "running")
 
 	// A change of the env's ports is applied live to a running sandbox.
-	setPorts(map[string]Port{"fe": {"3100:3000", true}})
+	setPorts(map[string]Port{"fe": {Spec: "3100:3000", Default: true}})
 	if err := m.ApplyPorts(ctx, "dev"); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func TestAPortIsASpecOrASpecWithItsDefault(t *testing.T) {
 	if err := yaml.Unmarshal([]byte("ports:\n  fe: '3000:3000'\n  devtools: {port: '9333:9222', default: off}\n  api: {port: 8080}\n"), &c); err != nil {
 		t.Fatal(err)
 	}
-	if c.Ports["fe"] != (Port{"3000:3000", true}) || c.Ports["devtools"] != (Port{"9333:9222", false}) || c.Ports["api"] != (Port{"8080", true}) {
+	if c.Ports["fe"] != (Port{Spec: "3000:3000", Default: true}) || c.Ports["devtools"] != (Port{Spec: "9333:9222", Default: false}) || c.Ports["api"] != (Port{Spec: "8080", Default: true}) {
 		t.Fatalf("%+v", c.Ports)
 	}
 	for body, want := range map[string]string{
@@ -132,5 +133,25 @@ func TestAPortIsASpecOrASpecWithItsDefault(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", body, err)
 		}
+	}
+}
+
+func TestASandboxStartsWithTheTeamsPortsThatAreOn(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	file := m.Config.Envs["dev"].Files[0]
+	if err := os.WriteFile(TeamFile(file), []byte("ports:\n  web: {port: '3000:3000', default: on}\n  debug: {port: '9229:9229'}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Create(ctx, Request{Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.hostPorts("dev"); !slices.Equal(got, []int{3000}) {
+		t.Fatalf("%v", got)
+	}
+	ports, running, err := m.SandboxPorts(ctx, "dev")
+	if err != nil || !running || len(ports) != 2 || !ports[0].Team || ports[0].Name != "debug" || ports[0].On || !ports[1].On {
+		t.Fatalf("%+v %v %v", ports, running, err)
 	}
 }
