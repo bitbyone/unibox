@@ -45,6 +45,14 @@ type Runtime interface {
 	// Login signs it in on the user's terminal.
 	SignedIn(ctx context.Context) (bool, error)
 	Login(ctx context.Context, in io.Reader, out, errout io.Writer) error
+	// NetworkRules are the network rules for sandbox, or all of them;
+	// SetNetworkRule allows or denies hosts to sandbox, or to every one,
+	// RemoveNetworkRule takes such a rule away, and NetworkLog writes the
+	// latest requests the policy decided.
+	NetworkRules(ctx context.Context, sandbox string) ([]NetworkRule, error)
+	SetNetworkRule(ctx context.Context, decision, sandbox string, hosts []string) error
+	RemoveNetworkRule(ctx context.Context, sandbox string, hosts []string) error
+	NetworkLog(ctx context.Context, sandbox string, limit int, out io.Writer) error
 	SSHForwarding(ctx context.Context) (bool, error)
 	SetSSHForwarding(ctx context.Context, on bool) error
 	// AllowSSHAgent records the user's leave for sandboxes to use their

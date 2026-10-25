@@ -343,3 +343,10 @@ kits:
 	m.In, m.Out, m.Err = strings.NewReader(""), &log, &log
 	return m, f
 }
+
+func (f *fakeRuntime) NetworkRules(context.Context, string) ([]NetworkRule, error) {
+	return nil, nil
+}
+func (f *fakeRuntime) SetNetworkRule(context.Context, string, string, []string) error { return nil }
+func (f *fakeRuntime) RemoveNetworkRule(context.Context, string, []string) error      { return nil }
+func (f *fakeRuntime) NetworkLog(context.Context, string, int, io.Writer) error       { return nil }

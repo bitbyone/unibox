@@ -29,6 +29,7 @@ case "$1 $2" in
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "plan-error")) + ` ]; then echo "Error: $(cat ` + unibox.Quote(filepath.Join(dir, "plan-error")) + `)" >&2; echo "  try: sbx env --help" >&2; exit 1; fi
 	printf 'SANDBOX\n  + team\n\n  1 to add · 0 to change · 0 to destroy\n' ;;
 "ls --json") echo '[]' ;;
+"policy ls") echo '{"rules":[{"id":"1","name":"kit:team","applies_to":"all","decision":"allow","resource_type":"network","resources":["gitlab.example.com"],"status":"active","provenance":{"created_via":"provisioned"}},{"id":"2","applies_to":"sandbox:dev","decision":"deny","resource_type":"network","resources":["ads.example.com"],"status":"active","editable":true,"provenance":{"created_via":"added"}},{"id":"3","applies_to":"all","decision":"allow","resource_type":"filesystem:read","resources":["/"]}]}' ;;
 "kit inspect") echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}' ;;
 "secret ls")
 	printf '['; sep=''
@@ -394,5 +395,38 @@ func TestAMissingArgIsAskedForBeforeTheSandboxIsCreated(t *testing.T) {
 	}
 	if !strings.Contains(calls(t, log), "env create --name team") {
 		t.Fatalf("%s", calls(t, log))
+	}
+}
+
+func TestNetworkRulesAreForTheSandboxUnlessGlobal(t *testing.T) {
+	log := fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	t.Setenv("UNIBOX_SANDBOX", "dev")
+	if out, _, err := run(t, paths, "", "network", "allow", "registry.npmjs.org", "*.npmjs.org"); err != nil || !strings.Contains(out, "sandbox dev may reach registry.npmjs.org, *.npmjs.org") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "network", "deny", "ads.example.com", "--global"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "network", "rm", "ads.example.com", "-s", "box"); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range [][]string{{"network", "allow", "a,b"}, {"network", "allow", "--", "-x"}, {"network", "allow", "a", "--global", "-s", "dev"}} {
+		if _, _, err := run(t, paths, "", bad...); err == nil {
+			t.Fatalf("%v went through", bad)
+		}
+	}
+	out, _, err := run(t, paths, "", "network", "ls")
+	if err != nil || !strings.Contains(out, "allow     all  kit") || !strings.Contains(out, "deny      dev  added") || strings.Contains(out, "/") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	calls, _ := os.ReadFile(log)
+	for _, want := range []string{"policy allow network --sandbox dev registry.npmjs.org,*.npmjs.org", "policy deny network ads.example.com\n", "policy rm network --force --resource ads.example.com --sandbox box", "policy ls --json --type network dev"} {
+		if !strings.Contains(string(calls), want) {
+			t.Fatalf("no %q in\n%s", want, calls)
+		}
+	}
+	if strings.Contains(string(calls), "a,b") || strings.Contains(string(calls), "-x") {
+		t.Fatalf("a bad host reached sbx:\n%s", calls)
 	}
 }

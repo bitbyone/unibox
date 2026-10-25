@@ -79,7 +79,7 @@ type PublishedPort struct {
 	Protocol    string `json:"protocol"`
 }
 
-// Port is one of a sandbox's ports, as unibox network port ls lists it.
+// Port is one of a sandbox's ports, as unibox port ls lists it.
 type Port struct {
 	Name      string          `json:"name"`
 	Port      string          `json:"port"`
@@ -87,6 +87,19 @@ type Port struct {
 	Named     bool            `json:"named"`
 	On        bool            `json:"on"`
 	Published []PublishedPort `json:"published"`
+}
+
+// NetworkRule is a rule of the network policy, as unibox network ls lists
+// it. Sandbox is empty for a rule every sandbox has; From is default,
+// kit, added or approval.
+type NetworkRule struct {
+	ID       string   `json:"id"`
+	Decision string   `json:"decision"`
+	Sandbox  string   `json:"sandbox,omitempty"`
+	From     string   `json:"from"`
+	Hosts    []string `json:"hosts"`
+	Editable bool     `json:"editable"`
+	Active   bool     `json:"active"`
 }
 
 type Need struct {
