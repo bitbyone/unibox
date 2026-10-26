@@ -156,13 +156,13 @@ func TestASandboxsOwnResourcesWinOverItsEnvsAndGoWithIt(t *testing.T) {
 	if _, err := m.Create(ctx, Request{Env: "dev"}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Paths.SetSandboxResources("big", Resources{Memory: "8g"}); err != nil {
+	if err := m.Paths.SetSandboxResources("big", Resources{Memory: "1g"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Create(ctx, Request{Env: "dev", Sandbox: "big"}, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(f.overlay, "sandboxOptions:\n  cpus: 2\n  memory: \"8g\"\n") {
+	if !strings.Contains(f.overlay, "sandboxOptions:\n  cpus: 2\n  memory: \"1g\"\n") {
 		t.Fatalf("%q", f.overlay)
 	}
 	if check, _ := m.Check(ctx, Request{Env: "dev"}); len(check.Needs) != 0 {
