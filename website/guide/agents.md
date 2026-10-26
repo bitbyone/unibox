@@ -16,8 +16,22 @@ chose included - the sandbox is the boundary, not the agent's questions.
 unibox env show dev       # env dev, sandbox team-dev, agent sbx-kit-copilot
 ```
 
-A sandbox has one agent. Arguments after `--` on `run` or `resume` go to it,
-after the kit's own:
+The env's agent is the one its `agent:` names. When the env has a kit for
+another agent too, or its image carries one, `--agent` runs that one
+instead, as sbx's kit for it would start it; the task remembers it for the
+next `resume`:
+
+```sh
+unibox run --agent codex
+unibox resume login --agent claude
+```
+
+An agent the sandbox does not have is refused, with the ones it has; ask
+the team to add a kit for it to the env. Signing in is the kit's: an agent
+without its kit has no credentials of its own.
+
+Arguments after `--` on `run` or `resume` go to the agent, after the kit's
+own:
 
 ```sh
 unibox run -- --model <model>

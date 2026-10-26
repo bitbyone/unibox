@@ -37,9 +37,11 @@ func (v *orderedValue) Set(value string) error {
 }
 
 // shellFlag lets run and resume open a shell in the task's directory
-// instead of the agent; the two exclude each other.
+// instead of the agent, or choose the agent; the two exclude each other.
 func shellFlag(c *cobra.Command, r *unibox.Request) {
 	c.Flags().BoolVar(&r.Shell, "shell", false, "Open a shell in the task's directory instead of running an agent")
+	c.Flags().StringVar(&r.Agent, "agent", "", "Agent to run - claude, codex, copilot, opencode - when the sandbox has it (default: the task's last, else the env's)")
+	c.MarkFlagsMutuallyExclusive("shell", "agent")
 }
 
 func taskFlags(c *cobra.Command, r *unibox.Request) {

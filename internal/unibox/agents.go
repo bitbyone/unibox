@@ -10,6 +10,9 @@ import (
 // ask, and how its commits credit it.
 type Agent struct {
 	ID, Command, CoAuthor string
+	// Args are what sbx's own kit for the agent starts it with, used when
+	// no kit of the env names the agent but its sandbox has it.
+	Args []string
 	// Config is the JSON file in the guest home Trust is merged into.
 	Config string
 	// Setup runs in the guest before every session of the agent.
@@ -45,9 +48,9 @@ func copilotTrust(dirs []string) map[string]any {
 var Agents = []Agent{
 	// The kit's image fixes each agent's version, so none updates itself,
 	// and unibox's commit hook says the co-author, so no agent's own byline.
-	{ID: "claude", Command: "claude", CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust},
-	{ID: "codex", Command: "codex", CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup},
-	{ID: "copilot", Command: "copilot", CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust},
+	{ID: "claude", Command: "claude", Args: []string{"--dangerously-skip-permissions"}, CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust},
+	{ID: "codex", Command: "codex", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup},
+	{ID: "copilot", Command: "copilot", Args: []string{"--yolo"}, CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust},
 	{ID: "opencode", Command: "opencode", CoAuthor: "opencode <noreply@opencode.ai>"},
 }
 

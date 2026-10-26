@@ -173,10 +173,11 @@ into the sandbox of the default env.
 | `-e`, `--env <name>` | the env to create the sandbox from, named as the env names it unless `-s` says |
 | `-s`, `--sandbox <name>` | the sandbox to work in |
 | `--shell` | open a shell in the task's directory instead of running an agent |
+| `--agent <name>` | the agent to run - `claude`, `codex`, `copilot`, `opencode` - when the sandbox has it; the task remembers it (default: the task's last, else the env's) |
 | `--task <name>` | the task's name, unique across sandboxes (default: its first repository and a digest) |
 | `--mount` | mount the host's directories: the agent works on your files and `.git` as they are (the default for directories) |
 | `--clone` | clone the repositories from the forge inside the sandbox instead |
-| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone |
+| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone (default: a directory's current branch, a URL's default branch on the forge) |
 | `--repo <[name=]source>` | a repository path or https URL, optionally `name=source` (repeatable) |
 | `--author "Name <email>"` | the commit author |
 | `--push` | push the selected local branches; create one nobody has from the local HEAD, or a URL's default tip; never forces |
@@ -185,11 +186,12 @@ into the sandbox of the default env.
 ### `unibox resume`
 
 ```
-unibox resume <task> [-- agent-args...] [--shell]
+unibox resume <task> [-- agent-args...] [--shell | --agent <name>]
 ```
 
 Runs a prepared task's agent again, or with `--shell` a shell in its
-directory, in the sandbox that holds it.
+directory, in the sandbox that holds it. `--agent` runs another agent the
+sandbox has, and the task keeps it.
 
 ### `unibox task`
 

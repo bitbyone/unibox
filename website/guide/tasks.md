@@ -81,7 +81,8 @@ unibox run --clone --repo https://github.com/acme/web --repo docs=https://github
 
 ## Branches
 
-Without `--branch`, each repository's current branch is used. `--branch`
+Without `--branch`, each directory's current branch is used, and a URL's
+default branch on the forge (usually `main`). `--branch`
 before every repository sets a shared branch; after a repository it
 overrides that one alone:
 

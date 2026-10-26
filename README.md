@@ -104,6 +104,7 @@ unibox run --clone --repo ../api --repo .       # fresh clones from the forge in
 unibox task ls                                  # every task in every sandbox
 unibox resume <task>                            # continue later
 unibox resume <task> --shell                    # a shell beside its agent
+unibox resume <task> --agent codex              # another agent the env has
 unibox task add-repo <task> ../web              # one more, even while it runs
 unibox task rm <task>                           # unmounts; never deletes your files
 unibox sandbox recreate dev                     # after the team changed the env

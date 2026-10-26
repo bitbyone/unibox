@@ -440,7 +440,7 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
 		return err
 	}
-	b.Agent, b.AgentCommand = m.agentOf(ctx, env)
+	b.Agent, b.AgentCommand, b.Agents = m.agentOf(ctx, env)
 	for i := range b.Tasks {
 		b.Tasks[i].State = "pending"
 	}
@@ -452,8 +452,9 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 
 // agentOf reads which agent an env's sandbox runs and how: the workload
 // kit's entrypoint and default arguments. The kit the env's agent names is
-// read first; the first kit of the sandbox kind is the workload.
-func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string) {
+// read first; the first kit of the sandbox kind is the workload, the
+// default agent, and every such kit's agent is one a task may choose.
+func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string, map[string][]string) {
 	kits := slices.Clone(env.SBX.Kits)
 	slices.SortStableFunc(kits, func(a, b EnvKit) int {
 		ma, mb := kitName(a.Source) == env.SBX.Agent, kitName(b.Source) == env.SBX.Agent
@@ -466,6 +467,7 @@ func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string) {
 		return 0
 	})
 	values, _ := m.Paths.LoadEnvValues()
+	id, command, all := "", []string(nil), map[string][]string{}
 	for _, k := range kits {
 		ref := k.Source
 		if k.Dir != "" {
@@ -479,11 +481,21 @@ func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string) {
 		if kit.Kind != "sandbox" || len(kit.Sandbox.Entrypoint) == 0 {
 			continue
 		}
-		command := append(slices.Clone(kit.Sandbox.Entrypoint), kit.Sandbox.Command.Default...)
-		return AgentFor(kit.Sandbox.Entrypoint).ID, command
+		c := append(slices.Clone(kit.Sandbox.Entrypoint), kit.Sandbox.Command.Default...)
+		a := AgentFor(kit.Sandbox.Entrypoint).ID
+		if _, seen := all[a]; seen {
+			continue
+		}
+		all[a] = c
+		if id == "" {
+			id, command = a, c
+		}
 	}
-	fmt.Fprintf(m.Log, "no kit of env %s runs an agent; unibox run --shell opens a shell instead\n", env.Name)
-	return "", nil
+	if id == "" {
+		fmt.Fprintf(m.Log, "no kit of env %s runs an agent; unibox run --shell opens a shell instead\n", env.Name)
+		return "", nil, nil
+	}
+	return id, command, all
 }
 
 // kitName is a kit's name as an sbxenv's agent names it: the last part of
@@ -528,7 +540,7 @@ func (m *Manager) Create(ctx context.Context, req Request, adopt bool) (api.Sand
 		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
 			return b, err
 		}
-		b.Agent, b.AgentCommand = m.agentOf(ctx, env)
+		b.Agent, b.AgentCommand, b.Agents = m.agentOf(ctx, env)
 		return b, m.saveBox(b)
 	}
 	return b, m.ensure(ctx, &b, env, false)

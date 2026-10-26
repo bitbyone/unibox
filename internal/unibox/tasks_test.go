@@ -571,3 +571,54 @@ func TestATaskAliasIsTakenWhereverItsIDIs(t *testing.T) {
 		t.Fatalf("%+v", b.Tasks)
 	}
 }
+
+func TestATaskWorksOnTheForgesDefaultBranchAndRunsTheAgentChosen(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	// The host reaches the forge as well, to read its default branch.
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	write(t, global, "[include]\n\tpath = "+os.Getenv("GIT_CONFIG_GLOBAL")+"\n[url \"file://"+remote+"\"]\n\tinsteadOf = "+url+"\n")
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	bin := t.TempDir()
+	seen := filepath.Join(t.TempDir(), "agent")
+	for _, a := range []string{"claude", "codex"} {
+		mustWriteExecutable(t, filepath.Join(bin, a), []byte("#!/bin/sh\nprintf '%s' \"$(basename \"$0\") $*|$UNIBOX_AGENT\" > "+Quote(seen)+"\n"))
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	ran := func(req Request) string {
+		t.Helper()
+		os.Remove(seen)
+		if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := os.ReadFile(seen)
+		return string(got)
+	}
+	// No branch: the forge's default one. The env's agent runs.
+	if got := ran(Request{Sandbox: "dev", Task: "refunds", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url}}}); got != "claude --dangerously-skip-permissions|Claude" {
+		t.Fatalf("ran %q", got)
+	}
+	b, err := m.sandbox("dev")
+	if err != nil || b.Tasks[0].Repositories[0].Branch != "main" {
+		t.Fatalf("%+v %v", b.Tasks, err)
+	}
+	// Another agent the sandbox has, as sbx's kit for it starts it; the
+	// task remembers it for the next resume.
+	if got := ran(Request{Task: "refunds", Agent: "codex"}); got != "codex --dangerously-bypass-approvals-and-sandbox|Codex" {
+		t.Fatalf("ran %q", got)
+	}
+	if got := ran(Request{Task: "refunds"}); !strings.HasPrefix(got, "codex ") {
+		t.Fatalf("resumed %q", got)
+	}
+	// One it does not have is named, with the env's.
+	err = m.Run(ctx, Request{Task: "refunds", Agent: "opencode"}, strings.NewReader(""), io.Discard, io.Discard, nil)
+	if err == nil || !strings.Contains(err.Error(), "sandbox dev has no opencode; its env runs claude") {
+		t.Fatalf("%v", err)
+	}
+}

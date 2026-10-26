@@ -304,3 +304,14 @@ func TestDestroyAsksAndAllRemovesUniboxsOwnFiles(t *testing.T) {
 		t.Fatal("the env's file went")
 	}
 }
+
+func TestRunTakesEitherAShellOrAnAgent(t *testing.T) {
+	t.Parallel()
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	for _, command := range []string{"run", "resume"} {
+		_, _, err := run(t, paths, "", command, "refunds", "--shell", "--agent", "codex")
+		if err == nil || !strings.Contains(err.Error(), "[agent shell] were all set") {
+			t.Fatalf("%s: %v", command, err)
+		}
+	}
+}

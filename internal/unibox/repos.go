@@ -20,6 +20,8 @@ type Request struct {
 	Push, IgnoreLocal, Yes             bool
 	// Shell opens a shell in the task's directory instead of its agent.
 	Shell bool
+	// Agent is the agent to run, rather than the task's or the env's.
+	Agent string
 	// Mount mounts the selected directories of the host into the sandbox,
 	// Clone clones them in it instead; with neither, a task mounts when
 	// every source is a directory of the host, and clones otherwise.
@@ -158,7 +160,12 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 				return nil, nil, err
 			}
 			if r.Branch == "" {
-				return nil, nil, fmt.Errorf("a URL needs --branch; select a work branch")
+				// Without a branch the task works where the forge's work
+				// lands: its default branch, bounded by the forge's
+				// protection of it.
+				if r.Branch, err = forgeDefaultBranch(ctx, r.URL); err != nil {
+					return nil, nil, err
+				}
 			}
 			if r.Author == "" {
 				name, _ := git(ctx, ".", "config", "user.name")
@@ -226,6 +233,20 @@ func remoteRefs(ctx context.Context, dir, url, branch string) (string, string, e
 		}
 	}
 	return defaultBranch, tip, nil
+}
+
+// forgeDefaultBranch is the branch a repository's HEAD names on the forge.
+func forgeDefaultBranch(ctx context.Context, url string) (string, error) {
+	out, err := git(ctx, ".", "ls-remote", "--symref", url, "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("cannot reach %s to find its default branch; check forge access or pass --branch: %w", url, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if fields := strings.Fields(line); len(fields) == 3 && fields[0] == "ref:" && fields[2] == "HEAD" {
+			return strings.TrimPrefix(fields[1], "refs/heads/"), nil
+		}
+	}
+	return "", fmt.Errorf("%s names no default branch; pass --branch", url)
 }
 
 // createRemoteBranch starts the chosen branch on the forge from its default

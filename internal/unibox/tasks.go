@@ -1,10 +1,12 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -53,7 +55,6 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 	if len(req.Repositories) == 0 && req.Task != "" {
 		for _, t := range b.Tasks {
 			if t.ID == req.Task {
-				t.Agent = b.Agent
 				return t, nil
 			}
 		}
@@ -85,7 +86,7 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 	if other := taskOwner(state, id); other != "" && other != b.Name {
 		return api.Task{}, fmt.Errorf("task %s already exists in sandbox %s; choose another --task name", id, other)
 	}
-	t := api.Task{ID: id, Sandbox: b.Name, Directory: "/work/" + id, Repositories: repos, Agent: b.Agent, State: "pending"}
+	t := api.Task{ID: id, Sandbox: b.Name, Directory: "/work/" + id, Repositories: repos, State: "pending"}
 	for _, old := range b.Tasks {
 		if old.ID == id {
 			// A task grown by add-repo is still the task its first
@@ -97,7 +98,6 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 				t.Repositories = old.Repositories
 			}
 			if resume && old.State == "ready" {
-				old.Agent = b.Agent
 				return old, nil
 			}
 		}
@@ -335,7 +335,8 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 			t.State = "pending"
 		}
 	}
-	t.Agent = b.Agent
+	// The agent asked for, else the one the task ran last, else the env's.
+	t.Agent = cmp.Or(req.Agent, t.Agent, b.Agent)
 	if !resume || t.State != "ready" {
 		t.State = "preparing"
 		replaceTask(&b, t)
@@ -477,14 +478,15 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if err != nil {
 		return err
 	}
-	if !req.Shell && len(b.AgentCommand) == 0 {
-		usage.Close()
-		taskLock.Close()
-		return fmt.Errorf("no kit of sandbox %s's env runs an agent; open a shell in the task with unibox resume %s --shell", b.Name, t.ID)
-	}
-	agent := b.Agent
-	if req.Shell {
-		agent = ""
+	var command []string
+	agent := ""
+	if !req.Shell {
+		agent = t.Agent
+		if command, err = m.agentCommand(ctx, b, agent); err != nil {
+			usage.Close()
+			taskLock.Close()
+			return err
+		}
 	}
 	run, lease, err := m.recordRun(b, t, agent)
 	if err != nil {
@@ -502,8 +504,8 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		// commits.
 		return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
-	a := FindAgent(b.Agent)
-	args := append(slices.Clone(b.AgentCommand), extra...)
+	a := FindAgent(agent)
+	args := append(command, extra...)
 	env := slices.Clone(a.Env)
 	if a.CoAuthor != "" {
 		name, _, _ := strings.Cut(a.CoAuthor, " <")
@@ -535,6 +537,33 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		return &Failure{code, "agent_exit", fmt.Sprintf("agent exited with status %d", code)}
 	}
 	return err
+}
+
+// agentCommand is how a sandbox starts an agent: as the env's kit for it
+// says, else as sbx's own kit would, when the sandbox has the agent's
+// command - an image with several agents, say.
+func (m *Manager) agentCommand(ctx context.Context, b api.Sandbox, id string) ([]string, error) {
+	if id == "" {
+		return nil, Fail(4, "agent_missing", "no kit of sandbox %s's env runs an agent; open a shell with --shell", b.Name)
+	}
+	if id == b.Agent && len(b.AgentCommand) > 0 {
+		return slices.Clone(b.AgentCommand), nil
+	}
+	if c, ok := b.Agents[id]; ok {
+		return slices.Clone(c), nil
+	}
+	a := FindAgent(id)
+	if err := ValidName(a.Command); err != nil {
+		return nil, fmt.Errorf("agent %q: %w", id, err)
+	}
+	if m.SBX.Exec(ctx, b.Name, Command{Args: []string{"sh", "-c", "command -v " + a.Command}}).Run() != nil {
+		known := slices.Sorted(maps.Keys(b.Agents))
+		if len(known) == 0 && b.Agent != "" {
+			known = []string{b.Agent}
+		}
+		return nil, Fail(4, "agent_missing", "sandbox %s has no %s; its env runs %s - pick one with --agent, or have the team add a kit for %s", b.Name, id, strings.Join(known, ", "), id)
+	}
+	return append([]string{a.Command}, a.Args...), nil
 }
 
 // withEnv runs a command with the variables set, through env(1).

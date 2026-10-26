@@ -318,7 +318,12 @@ no proof its guest process did.
    idle sandbox and update its records. It passes the terminal, signals
    and the window size through, and exits with the agent's status.
 
-`unibox resume <task>` runs a prepared task's agent again; `--shell` opens
+A repository given as a URL without `--branch` works on the forge's
+default branch (`git ls-remote --symref`); the forge's branch protection
+bounds what a push may do there.
+
+`unibox resume <task>` runs a prepared task's agent again; `--agent` another
+the sandbox has; `--shell` opens
 a shell in the task beside its running agent instead. `unibox sandbox
 create` does steps 1 to 6 with no task.
 
@@ -453,6 +458,12 @@ replaces.
   unibox writes into an agent's file is merged or between markers, never
   over the user's or the kit's settings. claude also gets
   `DISABLE_AUTOUPDATER=1`, as the kit's image fixes its version.
+- **`--agent` picks another agent the sandbox has**: one of the env's
+  other workload kits, as that kit starts it, or one of the four unibox
+  knows found on the sandbox's PATH, with the arguments sbx's kit for it
+  passes. The task remembers it. One the sandbox lacks is refused with
+  the env's agents named; unibox does not check its credentials, which
+  are the kit's.
 - **An agent unibox does not know is still run**, with nothing prepared.
   An env whose kits run no agent gets a shell (`--shell`).
 
@@ -644,7 +655,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox var ls\|set\|rm -e E` | the person's values for an env's args |
 | `unibox login ls\|set -e E [--command C] [--all]` | the tokens an env needs, and having sbx store them |
 | `unibox run [dir...] [--clone] [-- args]` | prepares a task, runs the kit's agent (or `--shell`) here |
-| `unibox resume <task> [--shell]` | a prepared task's agent again, in the sandbox that holds it |
+| `unibox resume <task> [--shell \| --agent]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox task check\|prepare …` | what stands in the way, as `needs` with a `code` each; the task ready, JSON at the end |
 | `unibox task ls [-s S]`, `task add-repo`, `task rename`, `task rm` | tasks across sandboxes; one more repository; an alias; removal |
 | `unibox sandbox create [--adopt]\|ls\|inspect\|shell\|stop\|recreate\|rm` | as named; removal checks for sessions and unpushed work |

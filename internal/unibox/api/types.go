@@ -57,6 +57,9 @@ type Sandbox struct {
 	// how the kit starts it: its entrypoint and default arguments.
 	Agent        string   `json:"agent,omitempty"`
 	AgentCommand []string `json:"agent_command,omitempty"`
+	// Agents is every agent a workload kit of the env runs, with how; a
+	// task may run any of them, or another its sandbox has.
+	Agents map[string][]string `json:"agents,omitempty"`
 	// Adopted says unibox took over a sandbox it did not create, which it
 	// then removes only when forced.
 	Adopted bool   `json:"adopted,omitempty"`
