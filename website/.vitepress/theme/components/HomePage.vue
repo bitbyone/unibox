@@ -23,24 +23,25 @@ async function copy() {
 
 const flow = [
   {
-    where: 'Env repository',
-    what: "the team's, in git",
-    lines: ['sandboxes/', '  dev.sbxenv.yaml', 'kits/', '  ...'],
+    who: 'Your team',
+    when: 'once, in git',
+    title: 'Describes the sandbox',
+    text: 'An env repository of sbxenv files and kits: the image, the tools, the agent, the hosts it may reach and the tokens it needs.',
+    code: 'sandboxes/dev.sbxenv.yaml\nkits/agent/',
   },
   {
-    where: 'Host',
-    what: 'unibox and sbx',
-    lines: ['unibox: envs, your values,', '  tasks, ports', 'sbx: the VM, your tokens,', '  proxy, network policy'],
+    who: 'You',
+    when: 'once',
+    title: 'Set it up',
+    text: 'unibox clones the env repository, asks for your own values and tokens, and has sbx create the sandbox.',
+    code: '$ unibox init git@github.com:acme/agent-envs.git',
   },
   {
-    where: 'Sandbox',
-    what: 'a micro-VM',
-    lines: ['/work/<task>/<repo>', 'mounted, or cloned', "the kit's agent", 'claude, codex, copilot'],
-  },
-  {
-    where: 'You',
-    what: 'your checkout',
-    lines: ['a mount: its changes', '  on your disk at once', 'a clone: its branch', '  fetched from the forge'],
+    who: 'You',
+    when: 'for each piece of work',
+    title: 'Run the agent',
+    text: 'unibox puts the repository into the sandbox and starts the agent on it. The task stays, to resume later.',
+    code: '$ cd ~/code/api\n$ unibox run',
   },
 ]
 
@@ -138,24 +139,22 @@ const features = [
     <section class="how" aria-label="How unibox works">
       <h2>How it works</h2>
       <p class="sub">
-        The team describes the sandbox in its env repository. sbx builds it with your values and
-        tokens. The agent works on your repositories inside it.
+        Three steps, and only the last one is daily work.
       </p>
       <ol class="flow">
-        <li v-for="(step, i) in flow" :key="step.where" class="step">
+        <li v-for="(step, i) in flow" :key="step.title" class="step">
           <div class="step-head">
             <span class="num">{{ i + 1 }}</span>
-            <div>
-              <h3>{{ step.where }}</h3>
-              <p>{{ step.what }}</p>
-            </div>
+            <p class="who">{{ step.who }} <span>· {{ step.when }}</span></p>
           </div>
-          <pre><span v-for="l in step.lines" :key="l" class="line">{{ l }}</span></pre>
+          <h3>{{ step.title }}</h3>
+          <p class="text">{{ step.text }}</p>
+          <pre><span v-for="l in step.code.split('\n')" :key="l" class="line">{{ l }}</span></pre>
         </li>
       </ol>
       <p class="note">
-        Inside the sandbox every token is a placeholder. sbx's proxy on your machine swaps in the
-        real value, only for the hosts the env allows.
+        Your tokens never enter the sandbox. It sees placeholders, and sbx's proxy on your
+        machine puts the real value into requests to the hosts the env allows.
       </p>
     </section>
 
@@ -377,16 +376,17 @@ h2 {
   gap: 16px;
   text-align: left;
 }
-@media (min-width: 720px) { .flow { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1100px) { .flow { grid-template-columns: repeat(4, 1fr); gap: 28px; } }
+@media (min-width: 900px) { .flow { grid-template-columns: repeat(3, 1fr); gap: 28px; } }
 .step {
   position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--ub-frame);
   border-radius: 14px;
   padding: 20px;
   background: var(--vp-c-bg);
 }
-@media (min-width: 1100px) {
+@media (min-width: 900px) {
   .step:not(:last-child)::after {
     content: '→';
     position: absolute;
@@ -397,7 +397,9 @@ h2 {
     font-size: 18px;
   }
 }
-.step-head { display: flex; gap: 12px; align-items: flex-start; }
+.step-head { display: flex; gap: 10px; align-items: center; }
+.who { font-size: 13px; font-weight: 600; color: var(--ub-brand); }
+.who span { font-weight: 400; color: var(--vp-c-text-3); }
 .num {
   flex: none;
   width: 26px;
@@ -410,8 +412,8 @@ h2 {
   background: var(--ub-brand-soft);
   color: var(--ub-brand);
 }
-.step h3 { font-size: 16px; font-weight: 600; color: var(--vp-c-text-1); line-height: 1.4; }
-.step-head p { font-size: 13px; color: var(--vp-c-text-3); }
+.step h3 { margin-top: 14px; font-size: 18px; font-weight: 600; color: var(--vp-c-text-1); line-height: 1.4; }
+.step .text { margin-top: 6px; font-size: 15px; line-height: 1.6; color: var(--vp-c-text-2); flex: 1; }
 .step pre {
   margin: 16px 0 0;
   padding: 12px 14px;
