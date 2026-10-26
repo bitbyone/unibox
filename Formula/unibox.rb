@@ -5,8 +5,8 @@ class Unibox < Formula
   desc "Wrapper over Docker Sandboxes for running coding agents locally"
   homepage "https://bitbyone.github.io/unibox/"
   url "https://github.com/bitbyone/unibox.git",
-      tag:      "v0.1",
-      revision: "787d2adfe19c629ab7c984f34d10022e9bb30d83"
+      tag:      "v0.2",
+      revision: "06af3564d989d743d618d10f95b22721f04c2e3a"
   license "MIT"
   head "https://github.com/bitbyone/unibox.git", branch: "main"
 
