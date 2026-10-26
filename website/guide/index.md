@@ -154,6 +154,7 @@ It then pushes to `feat/login`, and you pull as you would a colleague's
 commits. [Mount or Clone](./mount) weighs the two.
 
 ```sh
+unibox task                    # pick a task and act on it by a key
 unibox task ls                 # every task, in every sandbox
 unibox resume <task>           # continue it later
 unibox resume <task> --shell   # a shell in the task's directory

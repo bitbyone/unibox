@@ -9,12 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -268,24 +271,9 @@ func (o *options) listCommand() *cobra.Command {
 func (o *options) tasksCommand() *cobra.Command {
 	var sandbox string
 	c := &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List prepared tasks, in every sandbox or with -s in one", RunE: func(cmd *cobra.Command, args []string) error {
-		boxes, err := o.manager.List(cmd.Context())
+		tasks, runs, _, err := o.allTasks(cmd, sandbox)
 		if err != nil {
 			return err
-		}
-		tasks, runs := []api.Task{}, []api.Run{}
-		found := false
-		for _, b := range boxes {
-			if sandbox != "" && b.Name != sandbox {
-				continue
-			}
-			found = true
-			sorted := slices.Clone(b.Tasks)
-			slices.SortFunc(sorted, func(x, y api.Task) int { return strings.Compare(x.ID, y.ID) })
-			tasks = append(tasks, sorted...)
-			runs = append(runs, b.Runs...)
-		}
-		if sandbox != "" && !found {
-			return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
 		}
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "tasks": tasks, "runs": runs})
@@ -329,9 +317,100 @@ func (o *options) tasksCommand() *cobra.Command {
 	return c
 }
 
+// allTasks reads the tasks of every sandbox, or of one, with their
+// sessions and the agents each task's sandbox runs.
+func (o *options) allTasks(cmd *cobra.Command, sandbox string) ([]api.Task, []api.Run, []taskRow, error) {
+	boxes, err := o.manager.List(cmd.Context())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	tasks, runs, rows := []api.Task{}, []api.Run{}, []taskRow{}
+	found := false
+	for _, b := range boxes {
+		if sandbox != "" && b.Name != sandbox {
+			continue
+		}
+		found = true
+		sorted := slices.Clone(b.Tasks)
+		slices.SortFunc(sorted, func(x, y api.Task) int { return strings.Compare(x.ID, y.ID) })
+		tasks = append(tasks, sorted...)
+		runs = append(runs, b.Runs...)
+		agents := slices.Sorted(maps.Keys(b.Agents))
+		for _, t := range sorted {
+			row := taskRow{Task: t, agents: agents}
+			for _, r := range b.Runs {
+				if r.Task == t.ID {
+					row.sessions++
+				}
+			}
+			rows = append(rows, row)
+		}
+	}
+	if sandbox != "" && !found {
+		return nil, nil, nil, fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
+	}
+	return tasks, runs, rows, nil
+}
+
+// tasksUI lets a person pick a task at a terminal and resume it, open a
+// shell in it, name or remove it. Naming and removing come back to the
+// list; resuming takes the terminal and ends it.
+func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
+	ctx := cmd.Context()
+	for {
+		_, _, rows, err := o.allTasks(cmd, sandbox)
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			fmt.Fprintln(o.log, "no tasks yet; unibox run <directory> prepares one")
+			return nil
+		}
+		lipgloss.HasDarkBackground()
+		out, err := tea.NewProgram(tasksModel{rows: rows}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run()
+		if err != nil {
+			return err
+		}
+		chosen := out.(tasksModel).chosen
+		if chosen == nil {
+			return nil
+		}
+		t := chosen.task
+		switch chosen.kind {
+		case "resume", "shell":
+			req := unibox.Request{Task: t.ID, Agent: chosen.agent, Shell: chosen.kind == "shell"}
+			if err := o.preflight(cmd, &req); err != nil {
+				return err
+			}
+			return o.manager.Run(ctx, req, o.input, o.output, o.log, nil)
+		case "rename":
+			alias, err := o.askText("Name of task "+t.ID, "Its ID takes the alias away", cmp.Or(t.Alias, t.ID), nil)
+			if err != nil {
+				return err
+			}
+			if _, err := o.manager.AliasTask(t.ID, alias); err != nil {
+				fmt.Fprintln(o.log, err)
+			}
+		case "remove":
+			if err := o.manager.Remove(ctx, t.Sandbox, t.ID, false); err != nil {
+				fmt.Fprintln(o.log, err)
+			} else {
+				fmt.Fprintf(o.log, "removed task %s\n", t.ID)
+			}
+		}
+	}
+}
+
 func (o *options) resumeCommand() *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: "resume task [-- agent-args...]", Args: cobra.MinimumNArgs(1), Short: "Run a prepared task's agent again, or a shell in it, in the sandbox that holds it", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "resume [task] [-- agent-args...]", Args: cobra.ArbitraryArgs, Short: "Run a prepared task's agent again, or a shell in it, in the sandbox that holds it", Long: `Run a prepared task's agent again, or a shell in it, in the sandbox that
+holds it. Without a task at a terminal, it lists the tasks to pick one.`, RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 || cmd.ArgsLenAtDash() == 0 {
+			if o.json || !o.interactive {
+				return fmt.Errorf("name the task to resume; unibox task ls lists them")
+			}
+			return o.tasksUI(cmd, "")
+		}
 		if n := cmd.ArgsLenAtDash(); n > 1 || (n < 0 && len(args) > 1) {
 			return fmt.Errorf("resume takes one task; agent arguments go after --")
 		}

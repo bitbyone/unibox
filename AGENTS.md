@@ -149,6 +149,12 @@ about it. Keep command output short: pipe through `head`, `tail` or
   refuses that until `ssh_agent` in config.yaml says yes or no (`init`
   asks, recommending no) and sets sbx to match. With it, sessions get
   `GIT_SSH_COMMAND` with `StrictHostKeyChecking=accept-new`.
+- **A noun alone at a terminal is a list to act in.** `unibox port`
+  switches a running sandbox's ports, `unibox task` (and `resume` without
+  a task) resumes, names or removes a task, each by a key (`portsui.go`,
+  `tasksui.go`, bubbletea). An action that takes the terminal or asks
+  more ends the list and runs as its command would; without a terminal
+  or with `--json` the noun lists as `ls` does.
 - **Commands are a noun, then a verb** (`unibox sandbox stop`); only
   `run`, `resume`, `init`, `doctor`, `context`, `config`, `prune`,
   `destroy` and `version` stand alone. The argument is what a command

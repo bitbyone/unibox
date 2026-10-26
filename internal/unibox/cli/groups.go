@@ -5,7 +5,20 @@ import "github.com/spf13/cobra"
 // Each group is a noun and its words verbs: unibox task rm.
 
 func (o *options) taskGroup() *cobra.Command {
-	c := &cobra.Command{Use: "task", Short: "Prepare, list, name and remove tasks; unibox run and resume work in them"}
+	var sandbox string
+	c := &cobra.Command{Use: "task", Args: cobra.NoArgs, Short: "Prepare, list, name and remove tasks; unibox run and resume work in them", Long: `Prepare, list, name and remove tasks; unibox run and resume work in them.
+Alone at a terminal, unibox task lists the tasks to resume one, with its
+agent, another or a shell, or to name or remove it, each by a key.`}
+	c.Flags().StringVarP(&sandbox, "sandbox", "s", "", "Only this sandbox's tasks")
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		if o.json || !o.interactive {
+			if sandbox != "" {
+				return o.runStep(cmd, "task", "ls", "-s", sandbox)
+			}
+			return o.runStep(cmd, "task", "ls")
+		}
+		return o.tasksUI(cmd, sandbox)
+	}
 	c.AddCommand(o.tasksCommand(), o.taskCommand("prepare"), o.taskCommand("check"), o.addRepoCommand(), o.renameCommand(), o.removeCommand(true))
 	return c
 }

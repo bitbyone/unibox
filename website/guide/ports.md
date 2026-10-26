@@ -102,6 +102,7 @@ envs:
 ## Switching ports on a running sandbox
 
 ```sh
+unibox port -s dev                        # switch them with the arrows or h and l
 unibox port ls -s dev                     # its ports, with their URLs
 unibox port on devtools -s dev            # by name
 unibox port on vite=15173 -s dev          # a named port on another host port

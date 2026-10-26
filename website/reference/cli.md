@@ -190,16 +190,18 @@ into the sandbox of the default env.
 ### `unibox resume`
 
 ```
-unibox resume <task> [-- agent-args...] [--shell | --agent <name>]
+unibox resume [<task>] [-- agent-args...] [--shell | --agent <name>]
 ```
 
 Runs a prepared task's agent again, or with `--shell` a shell in its
 directory, in the sandbox that holds it. `--agent` runs another agent the
-sandbox has, and the task keeps it.
+sandbox has, and the task keeps it. Without a task at a terminal it lists
+the tasks, as `unibox task` does.
 
 ### `unibox task`
 
 ```
+unibox task [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
 unibox task ls [-s <sandbox>]
@@ -207,6 +209,19 @@ unibox task add-repo <task> [directory|url] [flags]
 unibox task rename <task> [<name>] [--reset]
 unibox task rm <task>
 ```
+
+Alone at a terminal, `unibox task` lists the tasks to act on one by a
+key; elsewhere it is `task ls`:
+
+| Key | What it does |
+| --- | --- |
+| `↑` `↓`, `j` `k` | move |
+| `enter`, `r` | resume the task with its agent |
+| `a` | resume it with another agent the sandbox has, picked with `←` `→` or `h` `l` |
+| `s` | a shell in the task's directory |
+| `n` | name it, as `task rename` |
+| `d` | remove it, as `task rm`, after `y` |
+| `q`, `esc` | leave |
 
 `check` explains what a task needs before it can start, each with a code
 (see [Tasks](/guide/tasks#what-task-check-reports)), and changes nothing.
@@ -268,6 +283,7 @@ does; `rm` always names it.
 ### `unibox port`
 
 ```
+unibox port [-s <sandbox>]
 unibox port on [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
 unibox port off [name...] [--map <mapping>...] [-s <sandbox>]
 unibox port ls [-s <sandbox>]
@@ -281,7 +297,10 @@ order. `on` and `off` switch a running sandbox's ports for as long as it
 runs - by name, `name=HOST_PORT` for a named port on another host port, or
 `--map` for one no file names - and its next start goes back to the
 files. They are refused on a stopped sandbox. `ls` lists a sandbox's
-ports, where each comes from, and their URLs.
+ports, where each comes from, and their URLs. Alone at a terminal,
+`unibox port` lists a running sandbox's ports to switch where they
+stand: `↑` `↓` or `j` `k` to move, `←` or `h` off, `→` or `l` on, `space`
+to switch, `enter` or `q` to leave; elsewhere it is `port ls`.
 
 A mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`: `3000` takes
 any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).

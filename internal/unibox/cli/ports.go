@@ -6,7 +6,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
@@ -28,8 +31,11 @@ name, by name=HOST_PORT for a named port on another host port, or by
 --map for a mapping no file names. Its next start goes back to the
 files.
 
+Alone at a terminal, unibox port shows a running sandbox's ports to
+switch with the arrows or h and l.
+
 A mapping is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any
-free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  unibox port on vite=15173 -s dev\n  unibox port on --map 9090:9090\n  unibox port off vite"}
+free host port, 8080:3000 host port 8080.`, Example: "  unibox port -s dev\n  unibox port on vite\n  unibox port on vite=15173 -s dev\n  unibox port on --map 9090:9090\n  unibox port off vite"}
 	var sandbox string
 	var maps []string
 	turn := func(on bool) *cobra.Command {
@@ -67,7 +73,46 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 	}}
 	sandboxFlag(ls, &sandbox)
 	c.AddCommand(turn(true), turn(false), ls)
+	c.Args = cobra.NoArgs
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(sandbox)
+		if err != nil {
+			return err
+		}
+		return o.portsUI(cmd, name)
+	}
+	sandboxFlag(c, &sandbox)
 	return c
+}
+
+// portsUI lets a person switch a running sandbox's ports at a terminal;
+// anywhere else, or with the sandbox stopped, it lists them as ls does.
+func (o *options) portsUI(cmd *cobra.Command, name string) error {
+	ctx := cmd.Context()
+	ports, running, err := o.manager.SandboxPorts(ctx, name)
+	if err != nil {
+		return err
+	}
+	if o.json || !o.interactive || !running || len(ports) == 0 {
+		if !o.json && o.interactive && !running {
+			fmt.Fprintf(o.log, "sandbox %s is not running; its ports can be switched once it runs (unibox resume, unibox sandbox shell)\n", name)
+		}
+		return o.listPorts(cmd, name)
+	}
+	m := portsModel{sandbox: name, rows: ports, switchPort: func(key string, on bool) ([]unibox.PortState, error) {
+		if err := o.manager.SwitchPorts(ctx, name, map[string]bool{key: on}); err != nil {
+			return nil, err
+		}
+		ports, _, err := o.manager.SandboxPorts(ctx, name)
+		return ports, err
+	}}
+	// The theme asks the terminal for its background; asked here, before
+	// the program reads keys, the answer is not taken for typing.
+	lipgloss.HasDarkBackground()
+	if _, err := tea.NewProgram(m, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run(); err != nil {
+		return err
+	}
+	return o.listPorts(cmd, name)
 }
 
 // listPorts shows a sandbox's ports, what each does at start and now.
@@ -108,16 +153,7 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 		if !running {
 			now = "stopped"
 		}
-		urls := []string{}
-		for _, q := range p.Published {
-			if strings.HasPrefix(q.Protocol, "tcp") {
-				host := q.HostIP
-				if strings.Contains(host, ":") {
-					host = "[" + host + "]"
-				}
-				urls = append(urls, fmt.Sprintf("http://%s:%d", host, q.HostPort))
-			}
-		}
+		urls := portURLs(p)
 		from := cmp.Or(p.From, "you")
 		if !p.Named {
 			from = "-"

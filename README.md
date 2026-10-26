@@ -101,6 +101,7 @@ cd ~/src/payments
 unibox run --branch feat/refunds                # mount this checkout, run the agent
 unibox run --clone --repo ../api --repo .       # fresh clones from the forge instead
 
+unibox task                                     # pick a task: resume, another agent, shell, rename, remove
 unibox task ls                                  # every task in every sandbox
 unibox resume <task>                            # continue later
 unibox resume <task> --shell                    # a shell beside its agent
