@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
 // Each group is a noun and its words verbs: unibox task rm.
@@ -55,7 +56,11 @@ func first(args []string) string {
 // or prints ends it.
 func (o *options) sandboxesUI(cmd *cobra.Command) error {
 	for {
-		boxes, err := o.manager.List(cmd.Context())
+		var boxes []api.Sandbox
+		err := o.waiting("reading the sandboxes", func() (err error) {
+			boxes, err = o.manager.List(cmd.Context())
+			return err
+		})
 		if err != nil {
 			return err
 		}

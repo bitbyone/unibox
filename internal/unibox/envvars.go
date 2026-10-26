@@ -25,7 +25,7 @@ const envValuesHeader = `# Your own values for the args your envs' sbxenv files 
 # --env-args-file. [resources] and [envs.<env>.resources] are the CPUs and
 # memory your sandboxes get, a size or a share of this machine such as 75%,
 # written here by hand. No secret belongs here - store tokens
-# with unibox login set.
+# with unibox secret set.
 
 `
 
@@ -230,7 +230,7 @@ func ValidArg(name, value string) error {
 		return fmt.Errorf("arg %s: a value is one line", name)
 	}
 	if strings.HasPrefix(value, "secret:") {
-		return fmt.Errorf("arg %s: no secret belongs in vars.toml; store a token with unibox login set", name)
+		return fmt.Errorf("arg %s: no secret belongs in vars.toml; store a token with unibox secret set", name)
 	}
 	return nil
 }

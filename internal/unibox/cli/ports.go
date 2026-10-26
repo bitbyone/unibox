@@ -90,7 +90,12 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port -s dev\n  un
 // anywhere else, or with the sandbox stopped, it lists them as ls does.
 func (o *options) portsUI(cmd *cobra.Command, name string) error {
 	ctx := cmd.Context()
-	ports, running, err := o.manager.SandboxPorts(ctx, name)
+	var ports []unibox.PortState
+	var running bool
+	err := o.waiting("reading the ports", func() (err error) {
+		ports, running, err = o.manager.SandboxPorts(ctx, name)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -129,7 +134,12 @@ func (o *options) portsUI(cmd *cobra.Command, name string) error {
 
 // listPorts shows a sandbox's ports, what each does at start and now.
 func (o *options) listPorts(cmd *cobra.Command, name string) error {
-	ports, running, err := o.manager.SandboxPorts(cmd.Context(), name)
+	var ports []unibox.PortState
+	var running bool
+	err := o.waiting("reading the ports", func() (err error) {
+		ports, running, err = o.manager.SandboxPorts(cmd.Context(), name)
+		return err
+	})
 	if err != nil {
 		return err
 	}

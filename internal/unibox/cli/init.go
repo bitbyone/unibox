@@ -45,14 +45,14 @@ func (o *options) inspectCommand() *cobra.Command {
 }
 
 // initCommand sets unibox up for a team's repository: sbx, the envs of its
-// sbxenv files, the person's args, logins and sandboxes. At a terminal it
+// sbxenv files, the person's args, secrets and sandboxes. At a terminal it
 // walks through each step, running the command the step stands for, so the
 // walk and the commands never differ; what is in place already is only
 // said. With --no-input, or away from a terminal, it asks nothing.
 func (o *options) initCommand() *cobra.Command {
 	var noInput bool
 	var files, vars []string
-	c := &cobra.Command{Use: "init [directory|file|git-address]", Args: cobra.MaximumNArgs(1), Short: "Set unibox up for a team's repository: sbx, its envs, your args, logins and sandboxes", Long: `Run in your team's repository, init finds every sbxenv file in it - the
+	c := &cobra.Command{Use: "init [directory|file|git-address]", Args: cobra.MaximumNArgs(1), Short: "Set unibox up for a team's repository: sbx, its envs, your args, secrets and sandboxes", Long: `Run in your team's repository, init finds every sbxenv file in it - the
 whole repository when you are in a part of it - and makes an env of each you
 pick, named as the file names its sandbox, else by the file. It then asks
 for the args an env leaves to you, has sbx store the tokens it lacks, and
@@ -67,7 +67,7 @@ never pulled.
 With --no-input, or without a terminal, it asks nothing: it sets up every
 file found, or those of --file, takes values from --var, and fails naming
 what is still missing. Tokens are never given on the command line;
-unibox login set stores them.`, Example: "  unibox init\n  unibox init ~/work/agent-sandboxes\n  unibox init git@github.com:team/agent-sandboxes.git\n  unibox init --no-input --file sandboxes/dev.sbxenv.yaml --var user=jan", RunE: func(cmd *cobra.Command, args []string) error {
+unibox secret set stores them.`, Example: "  unibox init\n  unibox init ~/work/agent-sandboxes\n  unibox init git@github.com:team/agent-sandboxes.git\n  unibox init --no-input --file sandboxes/dev.sbxenv.yaml --var user=jan", RunE: func(cmd *cobra.Command, args []string) error {
 		target := cmp.Or(firstArg(args), ".")
 		if unibox.IsGitURL(target) {
 			dir, cloned, err := o.paths.Clone(cmd.Context(), target, !noInput && o.canAsk(), o.input, o.log)
@@ -261,7 +261,7 @@ func (o *options) initQuietly(cmd *cobra.Command, root string, named, vars []str
 	if len(lacking) > 0 {
 		return unibox.Fail(1, "missing_values", "set up env(s) %s, which still need values of yours: pass %s, or set them with unibox var set", strings.Join(names, ", "), strings.Join(lacking, ", "))
 	}
-	return o.success(fmt.Sprintf("set up env(s) %s from %s, default %s; unibox doctor says what is left, such as tokens (unibox login set)", strings.Join(names, ", "), root, o.manager.Config.DefaultEnv))
+	return o.success(fmt.Sprintf("set up env(s) %s from %s, default %s; unibox doctor says what is left, such as tokens (unibox secret set)", strings.Join(names, ", "), root, o.manager.Config.DefaultEnv))
 }
 
 // walkStep heads a step of the walk.
@@ -331,18 +331,18 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 	}
 
-	o.walkStep(4, "Logins")
+	o.walkStep(4, "Secrets")
 	lacking := []string{}
 	for _, env := range envs {
-		var logins []unibox.Login
+		var secrets []unibox.NeededSecret
 		if err = o.working("reading the kits of env "+env.Name, func() (err error) {
-			logins, err = o.manager.Logins(ctx, env, "")
+			secrets, err = o.manager.NeededSecrets(ctx, env, "")
 			return err
 		}); err != nil {
 			return err
 		}
 		missing := []string{}
-		for _, l := range logins {
+		for _, l := range secrets {
 			if !l.Stored && !l.Optional {
 				missing = append(missing, l.Service)
 			}
@@ -362,13 +362,13 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			// sbx keeps a token for every sandbox: one stored for an env is
 			// not asked for again for the next.
 			for _, name := range lacking {
-				if err = o.runStep(cmd, "login", "set", "-e", name); err != nil {
+				if err = o.runStep(cmd, "secret", "set", "-e", name); err != nil {
 					return err
 				}
 			}
 		} else {
 			for _, name := range lacking {
-				fmt.Fprintf(o.log, "  later: unibox login set -e %s\n", name)
+				fmt.Fprintf(o.log, "  later: unibox secret set -e %s\n", name)
 			}
 		}
 	}

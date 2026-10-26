@@ -20,10 +20,10 @@ func (o *options) reloadConfig() error {
 	return err
 }
 
-// loginUI is unibox login at a terminal: the tokens an env needs, each to
+// secretUI is unibox secret at a terminal: the tokens an env needs, each to
 // have sbx store. sbx asks for a token on the terminal itself, so storing
 // one leaves the list for it.
-func (o *options) loginUI(cmd *cobra.Command, envName string, leave func() error) error {
+func (o *options) secretUI(cmd *cobra.Command, envName string, leave func() error) error {
 	ctx := cmd.Context()
 	env, err := o.manager.Config.LoadEnv(envName)
 	if err != nil {
@@ -33,7 +33,7 @@ func (o *options) loginUI(cmd *cobra.Command, envName string, leave func() error
 		return err
 	}
 	build := func() (listModel, error) {
-		list, err := o.manager.Logins(ctx, env, "")
+		list, err := o.manager.NeededSecrets(ctx, env, "")
 		if err != nil {
 			return listModel{}, err
 		}
@@ -65,11 +65,11 @@ func (o *options) loginUI(cmd *cobra.Command, envName string, leave func() error
 			if err != nil {
 				return "", err
 			}
-			return o.quietStep(cmd, "login", "set", service, "--command", command, "-e", env.Name)
+			return o.quietStep(cmd, "secret", "set", service, "--command", command, "-e", env.Name)
 		}
 		// sbx asks for the value on this terminal; it goes from the
 		// keyboard to sbx.
-		if err := o.runStep(cmd, "login", "set", service, "-e", env.Name); err != nil {
+		if err := o.runStep(cmd, "secret", "set", service, "-e", env.Name); err != nil {
 			return "", err
 		}
 		return "", nil
@@ -135,7 +135,7 @@ func (o *options) contextUI(cmd *cobra.Command, leave func() error) error {
 		if err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: "context: what commands work in when not told", header: []string{"", "KIND", "NAME"}, actions: []listAction{
+		m := listModel{title: "context: what commands work in when not told", header: []string{"", "KIND", "NAME"}, ownLeave: true, actions: []listAction{
 			{key: "enter", name: "use", help: "use"},
 			{key: "c", name: "clear", help: "clear", any: true},
 		}}

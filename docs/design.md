@@ -6,7 +6,7 @@ unibox 2 (2026-10-25) is a thin layer over Docker Sandboxes (sbx). A
 team describes its sandboxes in its own repository, as sbx's env files
 (`*.sbxenv.yaml`) and kits v3; unibox takes any such env as it is and adds
 only what sbx does not do: each person's values for the env's args, the
-logins the kits need, tasks with an agent in the user's terminal, named
+secrets the kits need, tasks with an agent in the user's terminal, named
 ports (the team's among them), a doctor, recreation when the env changed,
 and herdr's status of the agents. Someone using unibox never needs sbx's
 CLI: init sets everything up, and the network policy and sbx's settings
@@ -38,7 +38,7 @@ a VM instead of on the machine. The agent has full autonomy inside it; the
 machine, its home, its keys and the user's tokens are out of its reach.
 The team decides what the VM is (image, tools, agent, network, which
 services it may sign in to); each person adds their own values and
-logins, and picks the work.
+secrets, and picks the work.
 
 ## Two programs
 
@@ -62,7 +62,7 @@ The parts:
  team repository (git)              host                                sandbox (sbx microVM)
  +---------------------------+   +--------------------------------+   +-------------------------+
  | sandboxes/dev.sbxenv.yaml |-->| unibox                         |   | the kits' image         |
- | kits/...                  |   |   envs, your args, logins,     |   | /work/<task>/<repo>     |
+ | kits/...                  |   |   envs, your args, secrets,     |   | /work/<task>/<repo>     |
  +---------------------------+   |   tasks, ports, doctor         |   |   your checkout mounted,|
                                  |   herdr plugin                 |   |   or a clone            |
  ~/.config/unibox/               |        |                       |   | the kit's agent, run by |
@@ -81,7 +81,7 @@ Where each kind of setting lives:
  team repository              ~/.config/unibox/                    sbx
  (the team's, in git)         (the person's, on this machine)      (sbx's own store)
  +----------------------+     +-------------------------------+    +---------------------+
- | *.sbxenv.yaml        |<----| config.yaml                   |    | secrets (logins),   |
+ | *.sbxenv.yaml        |<----| config.yaml                   |    | secrets (secrets),   |
  |   image, kits, args, |     |   envs: files, name, ports    |    |   global            |
  |   mounts, bindings,  |     |   default_env, context,       |    | settings: SSH agent,|
  |   resources          |     |   stop_idle, ssh_agent        |    |   rememberHost-     |
@@ -130,7 +130,7 @@ What crosses the line between the machine and the VM:
   the same facts.
 - **No secret is an arg.** vars.toml and the args file are plain text, so
   `unibox var set` refuses a value that is a secret reference; a token is
-  a login, kept by sbx.
+  a secret, kept by sbx.
 
 ### Envs, sandboxes, tasks
 
@@ -370,7 +370,7 @@ docs/sandboxes.md.
 - **Without a terminal, or with `--no-input`, init asks nothing**: it sets
   up every file found or those of `--file`, takes values from `--var
   name=value`, and fails naming what is missing and the flag that gives
-  it. A token is never a flag; `unibox login set` stores it.
+  it. A token is never a flag; `unibox secret set` stores it.
 - `unibox env add [<env>] [<file...>] [--name N] [--default]` keeps the files
   in config.yaml after checking they read; `env show` prints what they
   declare and what the person set; `env rm` forgets the env, its files and
@@ -412,9 +412,9 @@ docs/sandboxes.md.
   it what sbx made for that sandbox alone, its sandbox-scoped secrets
   included; one whose files are gone is removed by name.
 
-## Logins
+## Secrets
 
-**Logins are never unibox's to read.** They live in sbx's store on the
+**Secrets are never unibox's to read.** They live in sbx's store on the
 host (the keychain) and reach a sandbox only as placeholders the proxy
 replaces.
 
@@ -424,9 +424,9 @@ replaces.
   `optional` is read from the kit's YAML, as inspect drops it.
 - **Which sbx has** is `sbx secret ls --json`: name, scope and a mask
   (`(stored)`, `(oauth configured)`), never a value.
-- **`unibox login set`** has `sbx secret set <service>` ask for each
+- **`unibox secret set`** has `sbx secret set <service>` ask for each
   missing one on the user's own terminal, which unibox only hands over;
-  a value piped to `unibox login set` goes straight to `sbx secret set`
+  a value piped to `unibox secret set` goes straight to `sbx secret set`
   on its standard input. Either way it never reaches argv, a log,
   `--json`, state or config.yaml. `--command` stores instead a host
   command that prints the token - a keychain read, a vault - which sbx
@@ -560,7 +560,7 @@ failure with the command that fixes it:
   asking); the SSH agent against the user's decision.
 - **each env**: its files read; each required arg given, and an arg set
   that the env does not declare; `sbx env plan` with the complete args,
-  its summary line or the first line of its error; each login stored or
+  its summary line or the first line of its error; each secret stored or
   missing (optional ones a warning); a change since its sandbox was made.
 - **the sandboxes**: one sbx no longer has; in a running one, the mounts
   under `/work` compared with the tasks'. sbx lists no mounts; the
@@ -573,13 +573,13 @@ failure with the command that fixes it:
   cannot start.
 
 Every fix doctor or an error names is a unibox command - `unibox prune`,
-`unibox config set remember_host_commands false`, `unibox login set` -
+`unibox config set remember_host_commands false`, `unibox secret set` -
 never sbx's, so that nobody using unibox needs its CLI.
 
 `init` sets up what doctor checks, as a walk of five steps (`cli/init.go`):
 sbx (installed, `sbx login` run for the person, the SSH agent), Envs,
-Values, Logins, Sandboxes. Each step runs the command it stands for
-(`env add`, `var set`, `login set`, `sandbox create`), so the
+Values, Secrets, Sandboxes. Each step runs the command it stands for
+(`env add`, `var set`, `secret set`, `sandbox create`), so the
 walk and the commands never differ; what is in place already is only said.
 
 ## The SSH agent
@@ -669,11 +669,11 @@ build that is not one); `unibox version --json` adds `api_version`.
 
 | command | does |
 | --- | --- |
-| `unibox init` | the walk: sbx, an env, its args, logins, the sandbox |
+| `unibox init` | the walk: sbx, an env, its args, secrets, the sandbox |
 | `unibox doctor [-e E]` | what a run needs, and what to fix |
 | `unibox env add\|ls\|rm\|show` | the envs: sbxenv files, the sandbox's name |
 | `unibox var ls\|set\|rm -e E` | the person's values for an env's args |
-| `unibox login ls\|set -e E [--command C] [--all]` | the tokens an env needs, and having sbx store them |
+| `unibox secret ls\|set -e E [--command C] [--all]` | the tokens an env needs, and having sbx store them |
 | `unibox run [dir\|url] [--repo ...] [--clone] [-- args]` | prepares a task, runs the kit's agent (or `--shell`) here |
 | `unibox resume <task> [--shell \| --agent]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox task check\|prepare …` | what stands in the way, as `needs` with a `code` each; the task ready, JSON at the end |
@@ -701,7 +701,7 @@ context's sandbox clears it. Two places do not default, so a forgotten
 context cannot do harm: `unibox sandbox rm` always names its sandbox, and
 `unibox task ls` lists every sandbox's tasks unless given `-s`.
 
-`destroy` and `--all` leave the team's files, the kits and the logins in
+`destroy` and `--all` leave the team's files, the kits and the secrets in
 sbx alone: they are the team's and sbx's.
 
 Exit codes say what kind of failure: 4 refused (`arg_missing`,
@@ -899,7 +899,7 @@ to the team's kits and bindings; what sbx does stays true.
   agent socket - and an environment variable or an unlocked parent cannot
   carry it there. A short-lived token fits this well with a refresh
   shorter than its lifetime: each refresh fetches the next one. This is
-  what `unibox login set --command` relies on.
+  what `unibox secret set --command` relies on.
 - **sbx's own `github` secret takes github.com over.** With the built-in
   `github` service stored (copilot's `gh auth token`), the proxy sets
   Authorization on requests to github.com itself, and overwrites any the
@@ -1061,11 +1061,11 @@ fragile code unibox had. So unibox 2 dropped:
 - the agents' configuration seeds, which a kit carries;
 - the microsandbox runtime, and with it the promise of runtime
   neutrality;
-- tokens kept in the platform's store by unibox: logins are sbx's
+- tokens kept in the platform's store by unibox: secrets are sbx's
   secrets.
 
 What stayed is what sbx does not do: tasks and their mounts and clones,
-the person's values, logins checked against the kits, named ports,
+the person's values, secrets checked against the kits, named ports,
 doctor, the agents' trust and co-author, herdr. unibox 2 sets the old
 state aside as `state.v1.json` and names the old sandboxes once, to be
 removed with `sbx rm` when their work is safe; config.yaml's old keys are

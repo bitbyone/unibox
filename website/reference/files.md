@@ -82,7 +82,7 @@ memory = '16g'
 Kept with mode `0600`. Args are changed with `unibox var set` and
 `unibox var rm` (`-g` for `[args]`); values are one line each, and one
 beginning with `secret:` is refused: a token is a
-[login](/guide/logins).
+[secret](/guide/secrets).
 
 Resources are written by hand. `cpus` is a count, `0` for all of them, or
 a share of this machine's from `1%` to `100%`; `memory` a size (`k`, `m`,

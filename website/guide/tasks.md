@@ -71,7 +71,7 @@ changes are handled. [Mount or Clone](./mount) has the trade.
 unibox takes the repositories from the directories and URLs named. For a clone, each
 one's URL comes from its `origin` - credentials stripped, an ssh URL turned
 into https where the host is plain. The sandbox clones over https, signed in
-by the token the env's kits give it ([Logins](./logins)).
+by the token the env's kits give it ([Secrets](./secrets)).
 
 A task of several repositories names each with `--repo`, a directory or an
 https URL; a positional argument and `--repo` do not mix. Each repository
@@ -135,7 +135,7 @@ fixes what it can:
 | `remote_check_pending` | the branch is checked inside the sandbox when it is cloned (a warning) |
 | `branch_switch` | a mounted checkout will be switched to the branch (a warning) |
 
-A missing token is not among them: `unibox login ls` and `unibox doctor` say
+A missing token is not among them: `unibox secret ls` and `unibox doctor` say
 which the env lacks.
 
 ## Naming a task

@@ -9,11 +9,11 @@ changing how a sandbox is created or signed in.
 
 ## The one hard rule
 
-**Logins are never yours to read.** They live in sbx's store on the host and
+**Secrets are never yours to read.** They live in sbx's store on the host and
 reach a sandbox only as placeholders the proxy replaces. Never print a token
 or a secret's value, never ask anyone to paste one into a conversation, never
 `cat` an auth file - read key names, whether a value is set, or the shape sbx
-masks it to. unibox itself never handles a value: a missing login is asked
+masks it to. unibox itself never handles a value: a missing secret is asked
 for by sbx on the user's terminal, and a token never enters a sandbox.
 
 ## Building and testing
@@ -39,7 +39,7 @@ need no shell stand-in.
 | Package | What it owns |
 | --- | --- |
 | `cmd/unibox` | the entry point |
-| `internal/unibox` | envs and the sbxenv reader, your values, logins, the manager, tasks, mounts, ports and the team's ports (`teamports.go`), the network policy (`policy.go`), finding sbxenv files (`discover.go`) and cloning a team's repository (`clone.go`), file locks per system (`lock_unix.go`, `lock_windows.go`), the herdr plugin, and `Runtime` with its one implementation, sbx |
+| `internal/unibox` | envs and the sbxenv reader, your values, secrets, the manager, tasks, mounts, ports and the team's ports (`teamports.go`), the network policy (`policy.go`), finding sbxenv files (`discover.go`) and cloning a team's repository (`clone.go`), file locks per system (`lock_unix.go`, `lock_windows.go`), the herdr plugin, and `Runtime` with its one implementation, sbx |
 | `internal/unibox/api` | the versioned JSON contract other programs read |
 | `internal/unibox/cli` | the cobra commands, `init`'s walk, `doctor`, preflight and its questions |
 | `internal/testenv` | the isolated environment every package's tests run in |

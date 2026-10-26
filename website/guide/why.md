@@ -10,7 +10,7 @@ and adds only what sbx does not do:
   person sets - a user name, a mirror, an amount of memory. unibox keeps
   yours in `vars.toml` and hands them to sbx at every create, so nobody types
   them twice.
-- **Logins.** It reads which tokens the env's kits and bindings need, says
+- **Secrets.** It reads which tokens the env's kits and bindings need, says
   which sbx has, and has sbx ask for the missing ones on your terminal.
 - **Tasks.** Your repositories, mounted into the sandbox or cloned inside it,
   with an agent started in them and a record kept, so a task can be resumed,
@@ -26,7 +26,7 @@ use it creates the same sandbox with `sbx env create` from the same files.
 
 A coding agent is most useful when it may do anything: install a package,
 run the tests, start a database. Doing that on your own machine puts your
-home directory, your SSH keys and your logins within its reach; a sandbox
+home directory, your SSH keys and your secrets within its reach; a sandbox
 keeps them out, and unibox makes working in one quick.
 
 ## Why the team's files and not a format of unibox's
@@ -53,7 +53,7 @@ can it reach?
 disk and its own Docker Engine. Your home, your keys and your other projects
 are not there.
 
-**Not your tokens.** Logins stay in sbx's store on the host. The sandbox gets
+**Not your tokens.** Secrets stay in sbx's store on the host. The sandbox gets
 placeholders; sbx's proxy, on the host, puts the real value in place of the
 placeholder on requests to the hosts a binding names. An agent that prints
 its environment prints a placeholder.

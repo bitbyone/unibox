@@ -23,7 +23,7 @@ func (o *options) envCommand() *cobra.Command {
 merged by sbx in the order given; a later file, such as a local overlay,
 overrides an earlier one. unibox never changes the files: it reads the args
 they declare, which you set once with unibox var set, and their kits, to
-know which logins a sandbox needs. Envs are kept in
+know which secrets a sandbox needs. Envs are kept in
 ~/.config/unibox/config.yaml.`}
 	var sandbox string
 	var makeDefault bool
@@ -197,7 +197,7 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 			}
 		}
 		if updated {
-			said = append(said, "unibox doctor checks the logins they need")
+			said = append(said, "unibox doctor checks the secrets they need")
 		}
 		return o.success(strings.Join(said, "\n"))
 	}})

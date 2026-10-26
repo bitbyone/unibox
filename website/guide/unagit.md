@@ -19,8 +19,8 @@ Agent - is unagit's to build, and not there yet.
 - **unagit drives unibox through its command line**, as it drives herdr or
   Zellij: `--json` for what it reads, `--yes` where a question would come.
 - **unagit configures unibox only through its commands** - an env with
-  `unibox env add`, a person's values with `unibox var set`, logins with
-  `unibox login set`, a running sandbox's ports with `unibox port on`. unagit writes no YAML, and
+  `unibox env add`, a person's values with `unibox var set`, secrets with
+  `unibox secret set`, a running sandbox's ports with `unibox port on`. unagit writes no YAML, and
   reads the team's sbxenv files only through `unibox env show --json`.
 
 `api_version` versions the JSON contract, and changes only when a field a
@@ -34,7 +34,7 @@ reader relies on changes meaning or goes.
 | envs, a person's values for their args, named ports | which worktree, which repositories, which branch |
 | sandboxes and tasks, through sbx: create, start, stop, remove | pushing the branch, with its own token |
 | a task's preparation: mounts or clones, author, co-author hook, the agent's trust | clone URLs from the forge's API |
-| which logins an env needs; sbx keeps them | pickers, a Sandboxes tab, Activity |
+| which secrets an env needs; sbx keeps them | pickers, a Sandboxes tab, Activity |
 | running the agent, stopping an idle sandbox | the questions: set an arg, sign in, commit first, recreate |
 | its herdr plugin | its own token vault |
 
@@ -42,7 +42,7 @@ reader relies on changes meaning or goes.
 
 1. unagit fills its pickers - env, sandbox, place - from
    `unibox env ls --json` and `unibox sandbox ls --json`, and asks
-   `unibox login ls --json` whether sbx has the env's tokens.
+   `unibox secret ls --json` whether sbx has the env's tokens.
 2. `unibox task check --json` answers with what is needed, each with a code
    unagit turns into a dialog of its own: set an arg, commit first, recreate.
 3. For a clone, unagit pushes the branch from the host, with its own credentials.

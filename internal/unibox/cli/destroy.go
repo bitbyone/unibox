@@ -17,7 +17,7 @@ nothing is removed, unless --force discards them. A mounted directory of
 the host is never deleted, and a sandbox unibox adopted is only forgotten.
 
 --all goes on to the herdr plugin and unibox's state, configuration and
-your args. The env files, the kits and your logins in sbx stay: they are
+your args. The env files, the kits and your secrets in sbx stay: they are
 the team's and sbx's.`, RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := o.paths.ReadState()
 		if err != nil {

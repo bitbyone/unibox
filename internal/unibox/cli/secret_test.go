@@ -91,33 +91,33 @@ func calls(t *testing.T, log string) string {
 	return string(b)
 }
 
-func TestLoginsAreListedAndTheMissingOnesStoredBySbx(t *testing.T) {
+func TestSecretsAreListedAndTheMissingOnesStoredBySbx(t *testing.T) {
 	log := fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := run(t, paths, "", "login", "ls")
+	out, _, err := run(t, paths, "", "secret", "ls")
 	if err != nil || !strings.Contains(out, "anthropic  no      yes     An Anthropic API key") || !strings.Contains(out, "gitlab     no      yes     the env's bindings") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	// Away from a terminal sbx can be given one token, piped in.
-	if _, _, err = run(t, paths, "", "login", "set"); err == nil || !strings.Contains(err.Error(), "pipe one service's token in") {
+	if _, _, err = run(t, paths, "", "secret", "set"); err == nil || !strings.Contains(err.Error(), "pipe one service's token in") {
 		t.Fatalf("%v", err)
 	}
-	if _, _, err = run(t, paths, "token", "login", "set", "gitlab"); err != nil {
+	if _, _, err = run(t, paths, "token", "secret", "set", "gitlab"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = run(t, paths, "", "login", "set", "anthropic", "--command", "security find-generic-password -s anthropic -w"); err != nil {
+	if _, _, err = run(t, paths, "", "secret", "set", "anthropic", "--command", "security find-generic-password -s anthropic -w"); err != nil {
 		t.Fatal(err)
 	}
 	if c := calls(t, log); !strings.Contains(c, "secret set gitlab\n") || !strings.Contains(c, "secret set anthropic --command security find-generic-password -s anthropic -w\n") {
 		t.Fatalf("%s", c)
 	}
-	if out, _, err = run(t, paths, "", "login", "set"); err != nil || !strings.Contains(out, "sbx has every token env team needs") {
+	if out, _, err = run(t, paths, "", "secret", "set"); err != nil || !strings.Contains(out, "sbx has every token env team needs") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, _, err = run(t, paths, "", "login", "set", "Not A Name"); err == nil {
+	if _, _, err = run(t, paths, "", "secret", "set", "Not A Name"); err == nil {
 		t.Fatal("a name sbx does not take was passed on")
 	}
 }
@@ -136,10 +136,10 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	if _, _, err := run(t, paths, "", "var", "set", "-e", "team", "user", "me"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := run(t, paths, "token", "login", "set", "gitlab"); err != nil {
+	if _, _, err := run(t, paths, "token", "secret", "set", "gitlab"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := run(t, paths, "token", "login", "set", "anthropic"); err != nil {
+	if _, _, err := run(t, paths, "token", "secret", "set", "anthropic"); err != nil {
 		t.Fatal(err)
 	}
 	if out, _, err := run(t, paths, "", "doctor"); err != nil || !strings.Contains(out, "1 to add · 0 to change · 0 to destroy") {
@@ -167,13 +167,13 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	}
 }
 
-func TestInitWalksThroughAnEnvItsArgsAndLogins(t *testing.T) {
+func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	log := fakeSBX(t)
 	t.Setenv("ACCESSIBLE", "1")
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the one file is taken without asking; the arg; store
-	// the logins; no sandbox yet.
+	// the secrets; no sandbox yet.
 	_, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", repo)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
@@ -206,10 +206,10 @@ func TestInitAwayFromARepositoryAsksForTheFile(t *testing.T) {
 	t.Setenv("ACCESSIBLE", "1")
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	file := teamEnv(t)
-	// SSH agent: no; the file; its name as it says; the arg; no logins
+	// SSH agent: no; the file; its name as it says; the arg; no secrets
 	// stored; no sandbox.
 	_, said, err := runAt(t, paths, "1\n"+file+"\n\nperson\nn\nn\n", "init", t.TempDir())
-	if err != nil || !strings.Contains(said, "no sbxenv file in") || !strings.Contains(said, "later: unibox login set -e team") {
+	if err != nil || !strings.Contains(said, "no sbxenv file in") || !strings.Contains(said, "later: unibox secret set -e team") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if cfg, _ := paths.LoadConfig(); cfg.DefaultEnv != "team" {
@@ -459,7 +459,7 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	if err := os.WriteFile(unibox.TeamFile(file), []byte("ports:\n  vite: {port: 5173, description: Vite dev server}\n  api: {port: '8080:8080', description: The API, default: on}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// SSH agent: no; the arg; store the logins; no sandbox yet. The walk
+	// SSH agent: no; the arg; store the secrets; no sandbox yet. The walk
 	// asks nothing of ports.
 	_, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", filepath.Dir(filepath.Dir(file)))
 	if err != nil {

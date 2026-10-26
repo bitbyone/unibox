@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -26,6 +27,10 @@ type Manager struct {
 	// sbx secret set talk to directly.
 	In       io.Reader
 	Out, Err io.Writer
+	// kits are the kits read so far, by reference and args: reading one
+	// from a registry takes seconds, and a list drawn again after each
+	// action asks for the same ones.
+	kits sync.Map
 }
 
 func Open(paths Paths, log io.Writer) (*Manager, error) {

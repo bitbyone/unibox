@@ -5,7 +5,7 @@ agents - claude, codex, copilot or opencode - on your machine during local
 development. sbx makes the sandbox, a micro-VM, and keeps your tokens out of
 it; your team describes the sandbox in its own `*.sbxenv.yaml` files and
 kits. unibox adds what sbx leaves to you: your own values for the args those
-files ask for, the logins they need, tasks that put your repositories in front
+files ask for, the secrets they need, tasks that put your repositories in front
 of an agent, named ports, and a doctor that says what is missing or changed.
 
 unibox is never a condition. The same files work with plain
@@ -92,7 +92,7 @@ new - a file the team added, an arg it now asks for - and skips the rest.
 | sbx | checks sbx is installed and signed in (running `sbx login` for you), and asks whether sandboxes may use your SSH agent |
 | Envs | names each sbxenv file you picked as an env, as `unibox env add`, and which is the default when there are several |
 | Values | asks for the args the files require and you have not set, as `unibox var set` |
-| Logins | lists the tokens the envs' kits need and has sbx ask for the missing ones, as `unibox login set` |
+| Secrets | lists the tokens the envs' kits need and has sbx ask for the missing ones, as `unibox secret set` |
 | Sandboxes | creates the envs' sandboxes, as `unibox sandbox create`; sbx shows what it makes and asks you to approve it |
 
 You need no checkout of the repository first: given its git address, init
@@ -121,12 +121,12 @@ The same by hand:
 ```sh
 unibox env add dev ~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml --default
 unibox var set -e dev user jdoe        # an arg the file asks of each person
-unibox login set -e dev                 # sbx asks for each missing token
+unibox secret set -e dev                 # sbx asks for each missing token
 unibox sandbox create -e dev
 unibox doctor                           # what is still missing, and what to run
 ```
 
-[Envs](./envs) and [Logins](./logins) say more.
+[Envs](./envs) and [Secrets](./secrets) say more.
 
 ## Your first run
 
@@ -170,7 +170,7 @@ context once:
 unibox context use -s dev -e dev
 ```
 
-At a terminal, a noun alone - `unibox env`, `var`, `login`, `network`,
+At a terminal, a noun alone - `unibox env`, `var`, `secret`, `network`,
 `context`, `port` - is the same kind of list: pick a row, press a key.
 
 `UNIBOX_SANDBOX` and `UNIBOX_ENV` win over the context; with neither, a
@@ -199,7 +199,7 @@ question.
 unibox 2 has no profiles, `sandbox.yaml`, environments repository, image
 builds or templates: the team's sbxenv files and kits say all of that now,
 network rules are sbx's policy (`unibox network`) and tokens sbx's
-secrets (`unibox login`). The first
+secrets (`unibox secret`). The first
 command of unibox 2 sets the old state aside as `state.v1.json` and names
 the sandboxes of unibox 1, which it no longer manages; remove them with
 `sbx rm` once their work is safe.
@@ -207,7 +207,7 @@ the sandboxes of unibox 1, which it no longer manages; remove them with
 ## Where next
 
 - [What unibox Is](./why): what it adds to sbx, and the threat model
-- [Concepts](./concepts): env, sandbox, task, login, agent
+- [Concepts](./concepts): env, sandbox, task, secret, agent
 - [Envs](./envs): the sbxenv files and your values for them
 - [Tasks](./tasks): branches, several repositories, resuming
 - [Command Line](/reference/cli): every command and flag

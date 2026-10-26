@@ -76,7 +76,11 @@ sandbox's. A host is a name, *.name for its subdomains or name:port.`, Example: 
 		if global {
 			name = ""
 		}
-		rules, err := o.manager.SBX.NetworkRules(cmd.Context(), name)
+		var rules []unibox.NetworkRule
+		err := o.waiting("reading the network policy", func() (err error) {
+			rules, err = o.manager.SBX.NetworkRules(cmd.Context(), name)
+			return err
+		})
 		if err != nil {
 			return err
 		}

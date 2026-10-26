@@ -13,12 +13,12 @@ import (
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-// loginCommand shows and stores the tokens an env's sandboxes use. They
+// secretCommand shows and stores the tokens an env's sandboxes use. They
 // are sbx's secrets: unibox reads which are stored, never a value, and has
 // sbx ask for a missing one on the person's own terminal.
-func (o *options) loginCommand() *cobra.Command {
+func (o *options) secretCommand() *cobra.Command {
 	var envFlag string
-	c := &cobra.Command{Use: "login", Short: "The tokens an env's sandboxes use, kept by sbx", Long: `An env's kits declare the services they take a token for, and its
+	c := &cobra.Command{Use: "secret", Short: "The tokens an env's sandboxes use, kept by sbx", Long: `An env's kits declare the services they take a token for, and its
 bindings name the hosts each token may reach. The tokens are sbx's secrets,
 stored once on this machine and used by every sandbox that needs them; the
 proxy puts them into requests, so none enters a sandbox.
@@ -26,12 +26,12 @@ proxy puts them into requests, so none enters a sandbox.
 ls lists them and whether sbx has each. set has sbx ask for the missing
 ones on this terminal - the value goes from the keyboard to sbx, never
 through unibox - or with --command stores a command sbx runs on the host
-for it, a keychain read say.`, Example: `  unibox login ls -e dev
-  unibox login set -e dev
-  unibox login set copilot --command 'security find-generic-password -s copilot -w'
-  security find-generic-password -s artifactory -w | unibox login set artifactory`}
+for it, a keychain read say.`, Example: `  unibox secret ls -e dev
+  unibox secret set -e dev
+  unibox secret set copilot --command 'security find-generic-password -s copilot -w'
+  security find-generic-password -s artifactory -w | unibox secret set artifactory`}
 	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
-	logins := func(cmd *cobra.Command) (unibox.Env, []unibox.Login, error) {
+	needed := func(cmd *cobra.Command) (unibox.Env, []unibox.NeededSecret, error) {
 		name, err := o.envName(envFlag)
 		if err != nil {
 			return unibox.Env{}, nil, err
@@ -43,16 +43,20 @@ for it, a keychain read say.`, Example: `  unibox login ls -e dev
 		if err = o.manager.SBX.Available(cmd.Context()); err != nil {
 			return env, nil, err
 		}
-		l, err := o.manager.Logins(cmd.Context(), env, "")
+		var l []unibox.NeededSecret
+		err = o.waiting("reading the kits of env "+env.Name, func() (err error) {
+			l, err = o.manager.NeededSecrets(cmd.Context(), env, "")
+			return err
+		})
 		return env, l, err
 	}
 	c.AddCommand(&cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List the tokens an env needs and whether sbx has each", RunE: func(cmd *cobra.Command, args []string) error {
-		env, list, err := logins(cmd)
+		env, list, err := needed(cmd)
 		if err != nil {
 			return err
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "env": env.Name, "logins": list})
+			return o.write(map[string]any{"api_version": api.Version, "env": env.Name, "secrets": list})
 		}
 		if len(list) == 0 {
 			fmt.Fprintf(o.output, "env %s needs no token\n", env.Name)
@@ -75,7 +79,7 @@ for it, a keychain read say.`, Example: `  unibox login ls -e dev
 	var command string
 	var all bool
 	set := &cobra.Command{Use: "set [service...]", Short: "Have sbx store the tokens an env lacks, or those named", RunE: func(cmd *cobra.Command, args []string) error {
-		env, list, err := logins(cmd)
+		env, list, err := needed(cmd)
 		if err != nil {
 			return err
 		}
@@ -102,7 +106,7 @@ for it, a keychain read say.`, Example: `  unibox login ls -e dev
 			if !unibox.ValidSecretName(service) {
 				return fmt.Errorf("%q is no service name sbx takes; use letters, digits and dashes", service)
 			}
-			i := slices.IndexFunc(list, func(l unibox.Login) bool { return l.Service == service })
+			i := slices.IndexFunc(list, func(l unibox.NeededSecret) bool { return l.Service == service })
 			if i < 0 {
 				fmt.Fprintf(o.log, "env %s does not ask for %s; it is stored all the same\n", env.Name, service)
 			} else if o.canAsk() && command == "" {
@@ -119,7 +123,7 @@ for it, a keychain read say.`, Example: `  unibox login ls -e dev
 	c.AddCommand(set)
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
-		ls := func() error { return o.runStep(cmd, append([]string{"login", "ls"}, envArgs(envFlag)...)...) }
+		ls := func() error { return o.runStep(cmd, append([]string{"secret", "ls"}, envArgs(envFlag)...)...) }
 		if !o.interactive || o.json {
 			return ls()
 		}
@@ -127,7 +131,7 @@ for it, a keychain read say.`, Example: `  unibox login ls -e dev
 		if err != nil {
 			return err
 		}
-		return o.loginUI(cmd, name, func() error { return o.runStep(cmd, "login", "ls", "-e", name) })
+		return o.secretUI(cmd, name, func() error { return o.runStep(cmd, "secret", "ls", "-e", name) })
 	}
 	return c
 }

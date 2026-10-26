@@ -10,7 +10,7 @@ later; this one says how they fit.
  │   dev.sbxenv.yaml    │──▶│  env, your args,      │──▶│   mounted or cloned   │
  │ kits/                │   │  tasks, ports         │   │                       │
  │   ...                │   │ sbx                   │   │ the kit's agent       │
- └──────────────────────┘   │  the VM, your logins, │◀──│                       │
+ └──────────────────────┘   │  the VM, your secrets, │◀──│                       │
                             │  proxy, policy        │   └───────────────────────┘
                             └───────────────────────┘             │
                                       │ real tokens added         ▼
@@ -41,12 +41,12 @@ amount of memory. Your values for them are yours, in
 `~/.config/unibox/vars.toml`, set with `unibox var set` and passed to sbx at
 every create. A sandbox is not created while a required one is missing.
 
-## Login
+## Secret
 
 A token a sandbox uses - for a model provider, a forge, a registry. The kits
 declare which they take; sbx keeps them, in its own store on the host, and
-its proxy puts them into requests. `unibox login ls` says which are stored,
-`unibox login set` has sbx ask for the missing ones. [More](./logins).
+its proxy puts them into requests. `unibox secret ls` says which are stored,
+`unibox secret set` has sbx ask for the missing ones. [More](./secrets).
 
 ## Sandbox
 

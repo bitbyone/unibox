@@ -7,7 +7,7 @@ unibox [command] [flags]
 ## Conventions
 
 **Nouns, then verbs.** Commands come in groups named for what they work on -
-`env`, `var`, `login`, `task`, `sandbox`, `port`, `herdr` - and the verb
+`env`, `var`, `secret`, `task`, `sandbox`, `port`, `herdr` - and the verb
 follows: `unibox sandbox stop`, `unibox port on`. Only the everyday
 commands stand alone: `run`, `resume`, `init`, `doctor`, `context`, `config`,
 `prune`, `destroy` and `version`.
@@ -65,7 +65,7 @@ your own git. It finds every `*.sbxenv.yaml` there and offers them to pick,
 then goes step by step, each shown as it goes: **sbx** (installed, recent
 enough, signed in, the SSH agent decided), **Envs** (each file picked
 added as an env, and the default one), **Values** (the args they ask of
-you), **Logins** (the tokens sbx lacks, asked for by sbx), **Ports** (the
+you), **Secrets** (the tokens sbx lacks, asked for by sbx), **Ports** (the
 team's ports switched on or off) and **Sandboxes** (created, on your
 terminal). A step already done is said and passed; running it again adds
 what is new.
@@ -84,10 +84,10 @@ See [Getting Started](/guide/#set-it-up).
 unibox doctor [-e <env>]
 ```
 
-Checks sbx, the envs, your args and logins, and the sandboxes, and says what
+Checks sbx, the envs, your args and secrets, and the sandboxes, and says what
 to fix: sbx's version (0.49.2 or newer) and `sbx diagnose`; the SSH agent
 decision; that each env's files read and `sbx env plan` accepts them with
-your args; every required arg and login; whether a sandbox still matches its
+your args; every required arg and secret; whether a sandbox still matches its
 env, and is still in sbx; mounted directories that are gone, and mounts a
 running sandbox has that no task does; a clone of unibox's that is behind
 its remote. Each finding names the unibox command that fixes it. With `-e`,
@@ -145,7 +145,7 @@ Your own values for the args an env asks for - a user name, a mirror - kept
 in `~/.config/unibox/vars.toml`, with `-g` for every env that declares the
 arg, or for one env, which wins; passed to `sbx env create` as an args
 file. A sandbox is not created while a required one is missing. No secret
-belongs here; store tokens with `unibox login`. The CPUs and memory your
+belongs here; store tokens with `unibox secret`. The CPUs and memory your
 sandboxes get are written in the same file by hand; see
 [files](./files#vars-toml).
 
@@ -153,12 +153,12 @@ Alone at a terminal, `unibox var` lists the args to set: `enter` sets the
 one under the cursor, `a` adds a value of another name, `d` removes yours
 after `y`. Elsewhere it is `var ls`.
 
-### `unibox login`
+### `unibox secret`
 
 ```
-unibox login [-e <env>]
-unibox login ls [-e <env>]
-unibox login set [service...] [-e <env>] [--all] [--command <cmd>]
+unibox secret [-e <env>]
+unibox secret ls [-e <env>]
+unibox secret set [service...] [-e <env>] [--all] [--command <cmd>]
 ```
 
 The tokens an env's sandboxes use, kept by sbx. `ls` lists the services the
@@ -173,11 +173,11 @@ a terminal, one service's token may be piped in.
 | `--all` | ask for the optional tokens too |
 | `--command <cmd>` | a command sbx runs on the host for the token, instead of asking for it; one service |
 
-Alone at a terminal, `unibox login` lists the tokens: `enter` has sbx ask
+Alone at a terminal, `unibox secret` lists the tokens: `enter` has sbx ask
 for the one under the cursor, `c` stores a command for it. Elsewhere it is
-`login ls`.
+`secret ls`.
 
-See [Logins](/guide/logins).
+See [Secrets](/guide/secrets).
 
 ## Tasks
 
@@ -389,7 +389,7 @@ nothing is removed, unless `--force` discards them. A mounted directory of
 the host is never deleted, and a sandbox unibox adopted is only forgotten.
 
 `--all` goes on to the herdr plugin and unibox's state, configuration and
-your args. The env files, the kits and your logins in sbx stay: they are the
+your args. The env files, the kits and your secrets in sbx stay: they are the
 team's and sbx's; so do the repositories init cloned, in
 `~/.local/share/unibox/repos`.
 

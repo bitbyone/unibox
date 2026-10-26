@@ -25,11 +25,11 @@ type doctorCheck struct {
 }
 
 // doctorCommand checks what a run needs, before a run fails on it: sbx,
-// each env's files, the person's args and logins, and the sandboxes unibox
+// each env's files, the person's args and secrets, and the sandboxes unibox
 // keeps.
 func (o *options) doctorCommand() *cobra.Command {
 	var only string
-	c := &cobra.Command{Use: "doctor", Args: cobra.NoArgs, Short: "Check sbx, the envs, your args and logins, and the sandboxes, and say what to fix", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "doctor", Args: cobra.NoArgs, Short: "Check sbx, the envs, your args and secrets, and the sandboxes, and say what to fix", RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		checks := []doctorCheck{}
 		add := func(area, name, status, message, hint string) {
@@ -145,25 +145,25 @@ func (o *options) doctorCommand() *cobra.Command {
 			}
 			sandbox := env.SandboxName()
 			if !sbxOK {
-				add(area, "logins", "warn", "not checked: sbx is not ready", "")
+				add(area, "secrets", "warn", "not checked: sbx is not ready", "")
 			} else {
-				var logins []unibox.Login
+				var secrets []unibox.NeededSecret
 				err := o.working("reading the kits of env "+name, func() error {
 					var err error
-					logins, err = o.manager.Logins(ctx, env, sandbox)
+					secrets, err = o.manager.NeededSecrets(ctx, env, sandbox)
 					return err
 				})
 				if err != nil {
-					add(area, "logins", "warn", err.Error(), "")
+					add(area, "secrets", "warn", err.Error(), "")
 				}
-				for _, l := range logins {
+				for _, l := range secrets {
 					switch {
 					case l.Stored:
-						add(area, "login "+l.Service, "pass", "stored ("+l.Scope+")", "")
+						add(area, "secret "+l.Service, "pass", "stored ("+l.Scope+")", "")
 					case l.Optional:
-						add(area, "login "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "unibox login set -e "+name+" "+l.Service)
+						add(area, "secret "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "unibox secret set -e "+name+" "+l.Service)
 					default:
-						add(area, "login "+l.Service, "fail", cmp.Or(l.Description, "not stored"), "unibox login set -e "+name+" "+l.Service)
+						add(area, "secret "+l.Service, "fail", cmp.Or(l.Description, "not stored"), "unibox secret set -e "+name+" "+l.Service)
 					}
 				}
 			}

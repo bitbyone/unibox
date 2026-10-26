@@ -289,14 +289,14 @@ func TestPruneForgetsWhatSbxNoLongerHas(t *testing.T) {
 	}
 }
 
-func TestLoginsAreTheKitsCredentialsAndTheEnvsBindings(t *testing.T) {
+func TestNeededSecretsAreTheKitsCredentialsAndTheEnvsBindings(t *testing.T) {
 	t.Parallel()
 	m, f := managerFixture(t)
 	file := m.Config.Envs["dev"].Files[0]
 	data, _ := os.ReadFile(file)
 	write(t, file, string(data)+"bindings:\n  github: {apiKey: {domains: [api.github.com]}}\n")
 	f.secrets = []Secret{{Scope: "global", Name: "github"}, {Scope: "other", Name: "anthropic"}}
-	logins, err := m.Logins(context.Background(), mustEnv(t, m), "dev")
+	logins, err := m.NeededSecrets(context.Background(), mustEnv(t, m), "dev")
 	if err != nil || len(logins) != 2 {
 		t.Fatalf("%v %+v", err, logins)
 	}
@@ -305,5 +305,16 @@ func TestLoginsAreTheKitsCredentialsAndTheEnvsBindings(t *testing.T) {
 	}
 	if logins[1].Service != "github" || !logins[1].Stored || logins[1].Scope != "global" {
 		t.Fatalf("%+v", logins[1])
+	}
+	// Without a sandbox, a token stored for the one the env creates is
+	// stored all the same; the kits are not read again.
+	env := mustEnv(t, m)
+	f.mu.Lock()
+	f.secrets = []Secret{{Scope: env.SandboxName(), Name: "anthropic"}}
+	f.kits = nil
+	f.mu.Unlock()
+	logins, err = m.NeededSecrets(context.Background(), env, "")
+	if err != nil || !logins[0].Stored || logins[0].Scope != env.SandboxName() || len(logins[0].Kits) != 1 {
+		t.Fatalf("%v %+v", err, logins)
 	}
 }

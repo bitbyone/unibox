@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"text/tabwriter"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -38,6 +39,8 @@ type listModel struct {
 	pending *listAction
 	chosen  *listAction
 	done    bool
+	// ownLeave has leave print what stays, rather than the rows.
+	ownLeave bool
 	// width and height are the terminal's, once it says them.
 	width, height int
 }
@@ -162,12 +165,17 @@ func (o *options) runList(cmd *cobra.Command, m listModel) (*listAction, string,
 }
 
 // actList draws a list again after each action, at the row it was on,
-// with what the action said, until it is left; then leave says where
-// things stand, as the noun's ls would.
+// with what the action said, until it is left; then the list stays as the
+// noun's ls prints it - the rows just read, not read again - or, with
+// none or a leave of its own, leave says where things stand.
 func (o *options) actList(cmd *cobra.Command, build func() (listModel, error), act func(action, id string) (string, error), leave func() error) error {
 	note, at := "", ""
 	for {
-		m, err := build()
+		var m listModel
+		err := o.waiting("reading", func() (err error) {
+			m, err = build()
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -180,7 +188,10 @@ func (o *options) actList(cmd *cobra.Command, build func() (listModel, error), a
 			return err
 		}
 		if a == nil {
-			return leave()
+			if len(m.rows) == 0 || m.ownLeave {
+				return leave()
+			}
+			return o.printRows(m)
 		}
 		at = id
 		note, err = act(a.name, id)
@@ -201,17 +212,33 @@ const errListDone = "\x00done"
 // says, which would land among the list's lines, and gives its last line.
 func (o *options) quietStep(cmd *cobra.Command, args ...string) (string, error) {
 	var said bytes.Buffer
-	out, log, mlog := o.output, o.log, o.manager.Log
-	o.output, o.log, o.manager.Log = &said, &said, &said
-	yes := o.yes
-	// What a list asks is asked before the step.
-	o.yes = true
-	err := o.runStep(cmd, args...)
-	o.output, o.log, o.manager.Log, o.yes = out, log, mlog, yes
+	err := o.waiting("working", func() error {
+		out, log, mlog := o.output, o.log, o.manager.Log
+		o.output, o.log, o.manager.Log = &said, &said, &said
+		yes := o.yes
+		// What a list asks is asked before the step.
+		o.yes = true
+		defer func() { o.output, o.log, o.manager.Log, o.yes = out, log, mlog, yes }()
+		return o.runStep(cmd, args...)
+	})
 	return lastLine(said.String()), err
 }
 
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+// printRows prints a list's rows as its ls does.
+func (o *options) printRows(m listModel) error {
+	w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, strings.Join(m.header, "\t"))
+	for _, r := range m.rows {
+		cells := make([]string, len(r))
+		for i, c := range r {
+			cells[i] = ansi.Strip(c)
+		}
+		fmt.Fprintln(w, strings.Join(cells, "\t"))
+	}
+	return w.Flush()
 }

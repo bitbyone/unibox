@@ -21,7 +21,7 @@ themselves - a user name, a mirror. The values are yours, kept in
 ~/.config/unibox/vars.toml - with --global for every env that declares the
 arg, or for one env, which wins - and passed to sbx env create as an args
 file. A sandbox is not created while a required one is missing. No secret
-belongs here; store tokens with unibox login.`}
+belongs here; store tokens with unibox secret.`}
 	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
 	c.PersistentFlags().BoolVarP(&global, "global", "g", false, "For every env that declares the arg, rather than one env")
 	c.MarkFlagsMutuallyExclusive("env", "global")

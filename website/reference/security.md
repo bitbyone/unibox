@@ -7,7 +7,7 @@ lists it.
 
 ```
    +------------- trusted --------------+       +----- untrusted -----+
-   | host: home, ~/.ssh, your logins    |       | VM: the agent, sudo,|
+   | host: home, ~/.ssh, your secrets    |       | VM: the agent, sudo,|
    | your configuration, the team's     | <-X-- | its clones, its     |
    | sbxenv files and kits              |       | Docker              |
    +-----------------+------------------+       +----------+----------+
@@ -54,7 +54,7 @@ Nothing of the VM is mounted on the host.
 
 - **unibox never reads a token.** It learns which tokens an env needs from
   its kits and bindings, and whether sbx has each from `sbx secret ls`,
-  which masks every value. `unibox login set` has sbx ask for a token on
+  which masks every value. `unibox secret set` has sbx ask for a token on
   your terminal; a token piped in is handed to sbx unread.
 - **A token never enters a sandbox.** Tokens are kept by sbx on the host, in
   its store, and reach the sandbox only as placeholders. sbx's proxy, on the
@@ -64,7 +64,7 @@ Nothing of the VM is mounted on the host.
   with `secret:`, and nothing of unibox's state, logs or `--json` output
   carries one.
 - **A command source runs on the host.** A token stored with
-  `login set --command` is read by sbx's daemon running that command on the
+  `secret set --command` is read by sbx's daemon running that command on the
   host, whenever it refreshes. It is your command, run as you.
 - **Tokens are stored globally**, for every sandbox that needs them.
 

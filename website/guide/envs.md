@@ -123,7 +123,7 @@ arg's name and the `unibox var set` that fixes it.
 
 ::: warning No secrets in vars.toml
 The args file is plain text, and so is `vars.toml`. A value starting with
-`secret:` is refused: tokens are [logins](./logins), kept by sbx.
+`secret:` is refused: tokens are [secrets](./secrets), kept by sbx.
 :::
 
 ## Resources
@@ -212,4 +212,4 @@ unibox doctor -e dev     # one
 
 checks that the files read, that every required arg is set, that
 `sbx env plan` accepts the files with your args, that sbx has the env's
-logins, and whether the sandbox still matches the env.
+secrets, and whether the sandbox still matches the env.

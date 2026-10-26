@@ -64,7 +64,7 @@ func (o *options) root() *cobra.Command {
 	// What a command works on is a word of a group (unibox task rm); only
 	// the everyday ones stand alone.
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
-		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.loginCommand(), o.portCommand(), o.networkCommand(),
+		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.secretCommand(), o.portCommand(), o.networkCommand(),
 		o.herdrCommand(), o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
 	return root
 }
@@ -258,7 +258,11 @@ func configValue(c unibox.Config, key string) (any, error) {
 
 func (o *options) listCommand() *cobra.Command {
 	return &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List unibox's sandboxes and their state in sbx", RunE: func(cmd *cobra.Command, args []string) error {
-		boxes, err := o.manager.List(cmd.Context())
+		var boxes []api.Sandbox
+		err := o.waiting("reading the sandboxes", func() (err error) {
+			boxes, err = o.manager.List(cmd.Context())
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -325,7 +329,11 @@ func (o *options) tasksCommand() *cobra.Command {
 // allTasks reads the tasks of every sandbox, or of one, with their
 // sessions and the agents each task's sandbox runs.
 func (o *options) allTasks(cmd *cobra.Command, sandbox string) ([]api.Task, []api.Run, []taskRow, error) {
-	boxes, err := o.manager.List(cmd.Context())
+	var boxes []api.Sandbox
+	err := o.waiting("reading the tasks", func() (err error) {
+		boxes, err = o.manager.List(cmd.Context())
+		return err
+	})
 	if err != nil {
 		return nil, nil, nil, err
 	}

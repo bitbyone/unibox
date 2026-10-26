@@ -18,7 +18,7 @@ const guideSidebar = [
     text: 'Setting Up',
     items: [
       { text: 'Envs', link: '/guide/envs' },
-      { text: 'Logins', link: '/guide/logins' },
+      { text: 'Secrets', link: '/guide/secrets' },
       { text: 'Agents', link: '/guide/agents' },
     ],
   },
@@ -56,7 +56,7 @@ export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'A thin extension of Docker Sandboxes: your team\'s sbxenv files, your own values and logins, and tasks that run a coding agent on your repositories during local development.',
+  description: 'A thin extension of Docker Sandboxes: your team\'s sbxenv files, your own values and secrets, and tasks that run a coding agent on your repositories during local development.',
   cleanUrls: true,
   lastUpdated: true,
   head: [

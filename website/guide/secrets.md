@@ -1,4 +1,4 @@
-# Logins
+# Secrets
 
 A sandbox signs in to things: a model provider for the agent, a forge to push
 to, a registry for images. The tokens for them are sbx's secrets. They are
@@ -16,7 +16,7 @@ The env's kits declare the services they take a token for; its bindings say
 which hosts each may reach.
 
 ```sh
-unibox login ls -e dev
+unibox secret ls -e dev
 ```
 
 ```
@@ -26,15 +26,20 @@ github     no      yes       the token git pushes with
 npm        no      optional  ../kits/registry
 ```
 
-`STORED` says whether sbx has it, stored globally, or not. A token a kit marks optional is one
-the sandbox works without.
+`STORED` says whether sbx has it, stored globally or for the env's sandbox
+alone, or not. A token a kit marks optional is one the sandbox works without.
+
+The list is what the env's files declare, read through `sbx kit inspect` and
+`sbx secret ls`; unibox never sees a value. So it cannot tell that a stored
+token has expired or lacks a scope - the request it is put into says that -
+and a service the agent calls that no kit nor binding names is not on it.
 
 ## Storing them
 
 ```sh
-unibox login set -e dev                # each missing required token
-unibox login set -e dev --all          # the optional ones too
-unibox login set github                # one, by name
+unibox secret set -e dev                # each missing required token
+unibox secret set -e dev --all          # the optional ones too
+unibox secret set github                # one, by name
 ```
 
 sbx asks for each on your terminal; what you type goes from the keyboard to
@@ -43,22 +48,22 @@ agent. Away from a terminal, one token can be piped in, which unibox hands
 on to sbx unread:
 
 ```sh
-security find-generic-password -s artifactory -w | unibox login set artifactory
+security find-generic-password -s artifactory -w | unibox secret set artifactory
 ```
 
 Rather than a value, sbx can keep a command it runs on the host whenever it
 needs the token - a keychain read, a password manager, `gh auth token`:
 
 ```sh
-unibox login set copilot --command 'security find-generic-password -s copilot -w'
-unibox login set github --command 'gh auth token'
+unibox secret set copilot --command 'security find-generic-password -s copilot -w'
+unibox secret set github --command 'gh auth token'
 ```
 
 A rotated token is then read fresh, and none is copied anywhere.
 
 ## Why global
 
-unibox stores every token globally: one login serves every sandbox that
+unibox stores every token globally: one secret serves every sandbox that
 needs it. A token stored for one sandbox alone goes with that sandbox, so a
 recreate would lose it and ask again. `unibox doctor` still counts one you
 stored for the env's sandbox with `sbx secret set` yourself.
@@ -70,7 +75,7 @@ unibox doctor -e dev
 ```
 
 fails while a required token is missing and warns about an optional one,
-naming the `unibox login set` that fixes it. `unibox init` asks for the
+naming the `unibox secret set` that fixes it. `unibox init` asks for the
 missing ones as one of its steps.
 
 The tokens are sbx's to manage further: `sbx secret ls` lists them, `sbx

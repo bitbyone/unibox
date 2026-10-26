@@ -3,7 +3,7 @@
 A thin layer over Docker Sandboxes (`sbx`) for running coding agents on
 your work. The team describes its sandboxes in its own repository, as
 sbx's env files (`*.sbxenv.yaml`) and kits; unibox adds what each person
-needs on top: their own values for the env's args, logins kept by sbx,
+needs on top: their own values for the env's args, secrets kept by sbx,
 tasks - your checkouts mounted, or fresh clones - with an agent in your
 terminal, named ports, a doctor that says what to fix, and herdr's status
 of the agents. The isolation, the credential proxy and the network policy
@@ -75,7 +75,7 @@ for a build that is not one; `unibox version --json` adds the API version.
 
 The quickest start: in your team's repository of sbxenv files, `init`
 finds every `*.sbxenv.yaml`, lets you pick, and walks you through it - sbx,
-the envs, your args, logins, the team's ports, the sandboxes - one step at
+the envs, your args, secrets, the team's ports, the sandboxes - one step at
 a time. Given a git address, it clones the repository for you first.
 
 ```sh
@@ -93,8 +93,8 @@ Each step also has its command:
 ```sh
 unibox env add dev ~/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml
 unibox var set -e dev artifactoryUser tobola    # a value the env asks of you
-unibox login ls -e dev                          # the tokens it needs, and which sbx has
-unibox login set -e dev                         # have sbx store the missing ones
+unibox secret ls -e dev                          # the tokens it needs, and which sbx has
+unibox secret set -e dev                         # have sbx store the missing ones
 unibox sandbox create -e dev                    # or let run create it
 
 cd ~/src/payments
@@ -151,11 +151,11 @@ unibox var set -e dev artifactoryUser tobola
 
 `run` and `sandbox create` ask for a required one that is missing.
 
-## Logins
+## Secrets
 
 The env's kits and bindings name the tokens its sandboxes use.
-`unibox login ls` shows each, whether sbx has it and what it is for;
-`unibox login set` has sbx ask for the missing ones, or stores the one piped in. `--command` gives sbx a host command that
+`unibox secret ls` shows each, whether sbx has it and what it is for;
+`unibox secret set` has sbx ask for the missing ones, or stores the one piped in. `--command` gives sbx a host command that
 prints the token - a keychain, a vault - which sbx runs itself. Secrets
 are stored globally: sbx removes a sandbox's own with the sandbox.
 
@@ -216,7 +216,7 @@ kit.
 
 `unibox doctor` checks sbx (installed, its own diagnosis, a version unibox
 supports, `env.rememberHostCommands`, the SSH agent), each env (its files,
-your args, `sbx env plan`, the logins, a change since its sandbox was
+your args, `sbx env plan`, the secrets, a change since its sandbox was
 made, a clone of unibox's behind its remote) and the sandboxes (gone from
 sbx, a mounted directory gone from the host, a mount a running sandbox
 lacks or no task has), each with the unibox command that fixes it;

@@ -63,8 +63,8 @@ The kit's image fixes the agent's version, and a new version is a new kit.
 
 The kit declares the service its agent signs in to, and the env's bindings
 the hosts that token may reach; sbx keeps the token and its proxy puts it
-into the agent's requests. `unibox login ls` shows whether sbx has it, and
-`unibox login set` has sbx ask for it - see [Logins](./logins).
+into the agent's requests. `unibox secret ls` shows whether sbx has it, and
+`unibox secret set` has sbx ask for it - see [Secrets](./secrets).
 
 ## Co-authors
 

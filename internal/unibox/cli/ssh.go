@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const sshAgentRisk = "An agent then signs with every key in your SSH agent: it can push to every repository and reach every server your keys reach, as you, beyond the services the env names. It never sees the keys, and cannot add or remove them."
@@ -75,4 +77,34 @@ func (o *options) askSSHAgent(cmd *cobra.Command) error {
 		return err
 	}
 	return o.setSSHAgent(cmd, choice == "yes")
+}
+
+// waiting shows a spinner while do runs, as long as it takes more than a
+// moment, and takes it away after: what follows, a list or a table, is
+// what stays. Only on a terminal; anywhere else it would be noise in what
+// a program reads.
+func (o *options) waiting(what string, do func() error) error {
+	f, ok := o.log.(*os.File)
+	if !ok || o.json || !term.IsTerminal(int(f.Fd())) {
+		return do()
+	}
+	done := make(chan error, 1)
+	go func() { done <- do() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(150 * time.Millisecond):
+	}
+	frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for i := 0; ; i++ {
+		fmt.Fprintf(f, "\r%c %s", frames[i%len(frames)], what)
+		select {
+		case err := <-done:
+			fmt.Fprint(f, "\r\x1b[K")
+			return err
+		case <-tick.C:
+		}
+	}
 }

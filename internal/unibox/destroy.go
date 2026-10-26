@@ -11,7 +11,7 @@ import (
 // DestroyOptions say how far unibox destroy goes. Without All it removes
 // every sandbox unibox created and so every task; All removes what unibox
 // keeps on the host besides. Force removes sandboxes with running sessions
-// or unpushed work. The env files, the kits and the logins in sbx are
+// or unpushed work. The env files, the kits and the secrets in sbx are
 // the team's and the user's, and stay.
 type DestroyOptions struct {
 	All, Force bool

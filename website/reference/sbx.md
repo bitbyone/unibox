@@ -22,7 +22,7 @@ older one. Where sbx's behaviour shows through, this page says so.
 | `doctor`'s check of an env | `sbx env plan` with the same files and args |
 | which agent and which tokens | `sbx kit inspect --json` of each kit, with `--kit-arg` from your values |
 | which tokens are stored | `sbx secret ls --json` |
-| `login set` | `sbx secret set <service> [--command <cmd>]`, on your terminal |
+| `secret set` | `sbx secret set <service> [--command <cmd>]`, on your terminal |
 | a mounted task | `sbx mount <sandbox> <host>:/work/<task>/<repo>`; `sbx umount` to remove it |
 | a session | `sbx exec -it -w <dir> <sandbox> bash -c ...` |
 | sandboxes and their state | `sbx ls --json` |
@@ -66,7 +66,7 @@ unibox removes only sandboxes it created; one it adopted with
   not a shell's and does not read `BASH_ENV`.
 - **Two agents in one sandbox at once work**, each in its own `exec`.
 
-## Logins
+## Secrets
 
 - **Which tokens a sandbox needs** is the union of `credentials[].service`
   over its kits, from `kit inspect --json`, and the env's bindings. Inspect

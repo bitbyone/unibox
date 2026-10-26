@@ -7,12 +7,12 @@ sandbox is created or signed in.
 
 ## The one hard rule
 
-**Logins are never yours to read.** They live in sbx's store on the
+**Secrets are never yours to read.** They live in sbx's store on the
 host (the keychain) and reach a sandbox only as
 placeholders the proxy replaces. Never print a token or a secret's value,
 never ask the user to paste one into the conversation, never `cat` an
 auth file - read key names (`jq 'keys'`), whether a value is set, or the
-shape sbx masks it to. A value the user types or pipes to `unibox login
+shape sbx masks it to. A value the user types or pipes to `unibox secret
 set` goes straight to `sbx secret set` on its standard input - never argv,
 a log, `--json`, state or config.yaml - and a token never enters a
 sandbox.
@@ -61,7 +61,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
 | Package | What it owns |
 | --- | --- |
 | `cmd/unibox` | the entry point |
-| `internal/unibox` | envs and their sbxenv files (`env.go`, `sbxenv.go`), finding them in a repository (`discover.go`) and cloning one (`clone.go`), the person's values (`envvars.go`), logins, the manager, tasks and their mounts, ports and the team's (`teamports.go`), the network policy (`policy.go`), locks per system (`lock_unix.go`, `lock_windows.go`), agents, herdr, and `sbx.go`, the one client of sbx behind the `Runtime` interface |
+| `internal/unibox` | envs and their sbxenv files (`env.go`, `sbxenv.go`), finding them in a repository (`discover.go`) and cloning one (`clone.go`), the person's values (`envvars.go`), secrets, the manager, tasks and their mounts, ports and the team's (`teamports.go`), the network policy (`policy.go`), locks per system (`lock_unix.go`, `lock_windows.go`), agents, herdr, and `sbx.go`, the one client of sbx behind the `Runtime` interface |
 | `internal/unibox/api` | the versioned JSON contract other programs read |
 | `internal/unibox/cli` | the cobra commands, preflight, the `init` walk and doctor |
 | `internal/version` | the release unibox was built from, set from the tag at build time |
@@ -95,7 +95,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
   applied only by `sandbox recreate`, which brings the tasks back.
   `--adopt` takes over a sandbox made with sbx, which unibox then removes
   only when forced.
-- **Logins are sbx's secrets, always global.** `unibox login` reads which
+- **Secrets are sbx's secrets, always global.** `unibox secret` reads which
   services an env needs from its kits (`sbx kit inspect`, with
   `--kit-arg` from the env's values) and bindings, compares them with
   `sbx secret ls`, and has `sbx secret set` store the rest. A sandbox's
@@ -119,8 +119,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **init starts from the team's repository** (`cli/init.go`): the
   current one, a path, or a git address, which it clones with the user's
   own git into `$XDG_DATA_HOME/unibox/repos/<host>/<path>`. It offers every
-  sbxenv file found and walks five steps: sbx, Envs, Values, Logins,
-  Sandboxes. A step runs its command (`login set`, `sandbox create`), so the walk and the commands never differ. Without a
+  sbxenv file found and walks five steps: sbx, Envs, Values, Secrets,
+  Sandboxes. A step runs its command (`secret set`, `sandbox create`), so the walk and the commands never differ. Without a
   terminal or with `--no-input` it asks nothing and fails naming the flag
   (`--file`, `--var`) that gives what is missing. `unibox doctor` checks
   what the walk sets up.
@@ -152,7 +152,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **A noun alone at a terminal is a list to act in.** `unibox port`
   switches a running sandbox's ports, `unibox task` (and `resume` without
   a task) resumes, names or removes a task, `unibox sandbox` opens,
-  stops, recreates or removes a sandbox; `env`, `var`, `login`,
+  stops, recreates or removes a sandbox; `env`, `var`, `secret`,
   `network` and `context` are lists of `listModel` (`listui.go`), whose
   actions run their subcommand through `runStep`, each by a key (`*ui.go`,
   bubbletea). A list's line is cut to the terminal's width, or it wraps
