@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { withBase } from 'vitepress'
 import ArchDiagram from './ArchDiagram.vue'
 import Terminal, { type TermLine } from './Terminal.vue'
+import Compare from './Compare.vue'
 
 const installs = {
   Homebrew: 'brew tap bitbyone/unibox https://github.com/bitbyone/unibox\nbrew trust bitbyone/unibox\nbrew install unibox',
@@ -57,7 +58,7 @@ const steps = [
     who: 'You',
     when: 'every day',
     title: 'Run the agent',
-    text: 'unibox run in a repository mounts it into the sandbox and starts the agent in your terminal. The work is a task: it stays, and unibox resume picks it up later.',
+    text: 'unibox run in a repository mounts it into the sandbox and starts the agent in your terminal. The work is a task: it stays, and unibox resume picks it up later, with the same agent or any other the sandbox has.',
     code: ['$ cd ~/code/api', '$ unibox run'],
   },
 ]
@@ -80,55 +81,8 @@ const session: TermLine[] = [
   { kind: 'cmd', text: 'unibox port on vite' },
   { kind: 'ok', text: 'vite  http://127.0.0.1:5173  on' },
   { kind: 'blank' },
-  { kind: 'cmd', text: 'unibox resume login' },
-]
-
-const compare = [
-  {
-    what: 'Setting up',
-    sbx: 'Clone the team\'s repository, find the right sbxenv file, run sbx env create with every arg.',
-    unibox: 'unibox init clones it, lists the envs, asks for your values and creates the sandbox.',
-  },
-  {
-    what: 'Your own values',
-    sbx: '--env-arg and --kit-arg on every create.',
-    unibox: 'Asked once, kept in vars.toml, passed on every create.',
-  },
-  {
-    what: 'Tokens',
-    sbx: 'Read the kits to learn which secrets they need, then sbx secret set for each.',
-    unibox: 'unibox secret ls shows what the env needs and what is missing; unibox secret set stores the rest, through sbx.',
-  },
-  {
-    what: 'Working on a repository',
-    sbx: 'Mount it at create time, sbx exec into the sandbox, start the agent yourself.',
-    unibox: 'unibox run mounts or clones it and starts the agent. It is a task: resume it, add a repository, remove it cleanly.',
-  },
-  {
-    what: 'Ports',
-    sbx: 'sbx ports --publish 5173:5173.',
-    unibox: 'Named in the env by the team: unibox port on vite.',
-  },
-  {
-    what: 'Network',
-    sbx: 'sbx policy, one policy for every sandbox, and the sandbox has to exist first.',
-    unibox: 'Rules per sandbox, kept across recreates, with the hosts that were refused listed next to them.',
-  },
-  {
-    what: 'CPUs and memory',
-    sbx: 'Fixed in the sbxenv file.',
-    unibox: 'Yours, per env or sandbox, as numbers or as a share of the host.',
-  },
-  {
-    what: 'When the env changes',
-    sbx: 'git pull, notice the change, recreate by hand.',
-    unibox: 'unibox env update; the next start says what changed; sandbox recreate applies it and brings your tasks back.',
-  },
-  {
-    what: 'Checks',
-    sbx: 'sbx diagnose.',
-    unibox: 'unibox doctor: sbx, the envs, your values, the tokens and the sandboxes, each with the command that fixes it.',
-  },
+  { kind: 'cmd', text: 'unibox resume login --agent codex' },
+  { kind: 'dim', text: 'starting codex in /work/login, where claude left off ...' },
 ]
 
 const features = [
@@ -143,8 +97,8 @@ const features = [
     link: '/guide/secrets',
   },
   {
-    title: 'Tasks you can resume',
-    text: 'unibox run starts an agent on a repository. unibox resume picks the task up again, with the same agent or another the sandbox has.',
+    title: 'Resume a task with any agent',
+    text: 'Start with claude, continue with codex. unibox resume picks the task up where it was, with the same agent or any other the sandbox has.',
     link: '/guide/tasks',
   },
   {
@@ -297,7 +251,7 @@ const features = [
             <li><code>unibox init</code> walks five steps and can be run again</li>
             <li><code>unibox run</code> mounts the repository and starts the agent</li>
             <li><code>unibox port on</code> opens a port on localhost</li>
-            <li><code>unibox resume</code> picks a task up later</li>
+            <li><code>unibox resume</code> picks a task up later, with any agent</li>
           </ul>
           <a :href="withBase('/guide/')">Getting started →</a>
         </div>
@@ -348,24 +302,12 @@ const features = [
     <section id="compare" class="compare" aria-label="unibox beside sbx">
       <h2>What unibox adds to sbx</h2>
       <p class="sub">
-        unibox is a layer, not a replacement. The isolation, the proxy and the network policy are
-        sbx's. The env files are plain sbx, and anyone on the team can use them with
-        <code>sbx env create</code> alone.
+        unibox is a layer, not a replacement: the isolation, the proxy and the network policy
+        are sbx's, and the env files stay plain sbx. What unibox adds is the part you would
+        otherwise do by hand.
       </p>
-      <div class="table">
-        <table>
-          <thead>
-            <tr><th></th><th>sbx alone</th><th>with unibox</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in compare" :key="row.what">
-              <th scope="row">{{ row.what }}</th>
-              <td>{{ row.sbx }}</td>
-              <td>{{ row.unibox }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <Compare />
+      <p class="hint">Click a line for what it saves you, as the commands you would type.</p>
     </section>
 
     <section class="features">
@@ -764,29 +706,12 @@ h2 code,
 /* beside sbx */
 .compare h2 { text-align: center; }
 .compare .sub { text-align: center; margin-bottom: 40px; }
-.compare .table {
-  overflow-x: auto;
-  border: 1px solid var(--ub-frame);
-  border-radius: 14px;
+.compare .hint {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--vp-c-text-3);
 }
-.compare table { width: 100%; min-width: 640px; border-collapse: collapse; margin: 0; display: table; }
-.compare th,
-.compare td {
-  padding: 14px 20px;
-  border: none;
-  border-bottom: 1px solid var(--ub-frame);
-  text-align: left;
-  vertical-align: top;
-  font-size: 15px;
-  line-height: 1.6;
-}
-.compare tbody tr:last-child th,
-.compare tbody tr:last-child td { border-bottom: none; }
-.compare tr { background: none; border: none; }
-.compare thead th { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--vp-c-text-3); background: var(--ub-code-bg); }
-.compare tbody th { font-weight: 600; color: var(--vp-c-text-1); white-space: nowrap; }
-.compare td { color: var(--vp-c-text-2); }
-.compare td:last-child { color: var(--vp-c-text-1); }
 
 /* features */
 .features h2 { text-align: center; margin-bottom: 48px; }
