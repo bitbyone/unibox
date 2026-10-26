@@ -50,6 +50,8 @@ type Config struct {
 	// Ports are the person's for every env: their own, or another mapping
 	// or switch of a port the teams name, under each env's own.
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
+	// Sandboxes are what the person keeps for one sandbox, by its name.
+	Sandboxes map[string]SandboxConfig `yaml:"sandboxes,omitempty" json:"sandboxes,omitempty"`
 
 	// What unibox 1 kept here is read so an old file still loads, and
 	// dropped when the file is next written.
@@ -133,6 +135,13 @@ func (p Paths) LoadConfig() (Config, error) {
 	}
 	if err = validatePorts(c.Ports); err != nil {
 		return c, fmt.Errorf("invalid unibox configuration: ports: %w", err)
+	}
+	for name, s := range c.Sandboxes {
+		for _, r := range s.Network {
+			if err = r.Validate(); err != nil {
+				return c, fmt.Errorf("invalid unibox configuration: sandboxes.%s.network: %w", name, err)
+			}
+		}
 	}
 	if r, ok := c.Runtimes["sbx"]; ok {
 		if c.StopIdleSandbox == nil {

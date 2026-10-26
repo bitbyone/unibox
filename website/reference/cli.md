@@ -355,23 +355,26 @@ any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).
 ### `unibox network`
 
 ```
-unibox network [-s <sandbox>] [--global]
-unibox network ls [-s <sandbox>] [--global]
-unibox network allow <host...> [-s <sandbox>] [--global]
-unibox network deny <host...> [-s <sandbox>] [--global]
-unibox network rm <host...> [-s <sandbox>] [--global]
-unibox network log [-s <sandbox>] [--limit <n>]
+unibox network [-s <sandbox>]
+unibox network ls [-s <sandbox>] [--all]
+unibox network allow <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
+unibox network deny <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
+unibox network rm <host...> [-s <sandbox>]
 ```
 
-The hosts a sandbox may reach, as sbx's network policy says. A rule is
-for the sandbox unless `--global` makes it every sandbox's; `ls --global`
-lists every rule. `rm` takes away a rule you added; the defaults' and the
-kits' are not to be removed. `log` shows the latest requests and what the
-policy decided.
+The hosts a sandbox may reach beyond its env's. Your rules are kept in
+`config.yaml` under the sandbox's name and applied to it, once it is
+created if it is not yet, again after each recreation; they go with the
+sandbox. `ls` lists them, rules added with sbx itself, and the hosts the
+sandbox was refused lately; `--all` adds the env's kits' and sbx's
+defaults. `rm` takes your rule or sbx's for the sandbox away; the env's
+and the defaults stay. `--json` lists everything, each host with where it
+comes from (`yours`, `sbx`, `env`, `default`), and the refused hosts.
 
-Alone at a terminal, `unibox network` lists the rules: `a` allows hosts,
-`n` denies them, `d` removes the rule under the cursor after `y`, `l` shows
-the latest requests below the list. Elsewhere it is `network ls`. See
+Alone at a terminal, `unibox network` lists your rules and the refused
+hosts: `a` allows the refused host under the cursor, or hosts you type
+with their protocol, `n` denies likewise, `d` removes the rule under the
+cursor after `y`. Elsewhere it is `network ls`. See
 [Ports](/guide/ports#what-a-sandbox-may-reach).
 
 ### `unibox prune`

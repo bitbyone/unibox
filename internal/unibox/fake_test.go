@@ -361,6 +361,10 @@ kits:
 func (f *fakeRuntime) NetworkRules(context.Context, string) ([]NetworkRule, error) {
 	return nil, nil
 }
-func (f *fakeRuntime) SetNetworkRule(context.Context, string, string, []string) error { return nil }
-func (f *fakeRuntime) RemoveNetworkRule(context.Context, string, []string) error      { return nil }
-func (f *fakeRuntime) NetworkLog(context.Context, string, int, io.Writer) error       { return nil }
+func (f *fakeRuntime) SetNetworkRule(context.Context, string, string, string, []string) error {
+	return nil
+}
+func (f *fakeRuntime) RemoveNetworkRule(context.Context, string, []string) error { return nil }
+func (f *fakeRuntime) NetworkBlocked(context.Context, string) ([]BlockedHost, error) {
+	return nil, nil
+}

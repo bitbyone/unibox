@@ -2,10 +2,11 @@ package unibox
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
-	"strconv"
+	"slices"
 	"strings"
+	"time"
 )
 
 // NetworkRule is a rule of the runtime's network policy: hosts a sandbox
@@ -20,6 +21,63 @@ type NetworkRule struct {
 	Hosts    []string `json:"hosts"`
 	Editable bool     `json:"editable"`
 	Active   bool     `json:"active"`
+	// Protocols are tcp, udp or both.
+	Protocols []string `json:"protocols,omitempty"`
+}
+
+// SandboxConfig is what the person keeps for one sandbox in config.yaml.
+type SandboxConfig struct {
+	// Network are hosts they let the sandbox reach, or keep it from, over
+	// what its env's kits and the runtime's defaults say.
+	Network []HostRule `yaml:"network,omitempty" json:"network,omitempty"`
+}
+
+// HostRule allows or denies one host, over tcp unless Protocol says udp
+// or tcp,udp.
+type HostRule struct {
+	Allow    string `yaml:"allow,omitempty" json:"allow,omitempty"`
+	Deny     string `yaml:"deny,omitempty" json:"deny,omitempty"`
+	Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
+}
+
+func (r HostRule) Host() string { return r.Allow + r.Deny }
+
+func (r HostRule) Decision() string {
+	if r.Deny != "" {
+		return "deny"
+	}
+	return "allow"
+}
+
+func (r HostRule) Proto() string {
+	if r.Protocol == "" {
+		return "tcp"
+	}
+	return r.Protocol
+}
+
+// Protocols are what a rule may say it is over.
+var Protocols = []string{"tcp", "udp", "tcp,udp"}
+
+func (r HostRule) Validate() error {
+	if (r.Allow == "") == (r.Deny == "") {
+		return fmt.Errorf("a rule says allow: <host> or deny: <host>, one of them")
+	}
+	if err := ValidHosts([]string{r.Host()}); err != nil {
+		return err
+	}
+	if r.Protocol != "" && !slices.Contains(Protocols, r.Protocol) {
+		return fmt.Errorf("protocol is tcp, udp or tcp,udp, not %s", r.Protocol)
+	}
+	return nil
+}
+
+// BlockedHost is a host a sandbox asked for and the policy refused.
+type BlockedHost struct {
+	Host     string    `json:"host"`
+	Reason   string    `json:"reason"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
 }
 
 // ValidHosts checks hosts before they reach the runtime, where a comma
@@ -57,6 +115,7 @@ func (r *SBX) NetworkRules(ctx context.Context, sandbox string) ([]NetworkRule, 
 		Provenance   struct {
 			CreatedVia string `json:"created_via"`
 		} `json:"provenance"`
+		Actions []string `json:"actions"`
 	}](b, "rules")
 	if err != nil {
 		return nil, fmt.Errorf("cannot read sbx's network policy; update sbx: %w", err)
@@ -70,15 +129,21 @@ func (r *SBX) NetworkRules(ctx context.Context, sandbox string) ([]NetworkRule, 
 		if strings.HasPrefix(v.Name, "kit:") {
 			from = "kit"
 		}
+		protocols := []string{}
+		for _, a := range v.Actions {
+			if p, ok := strings.CutPrefix(a, "net:connect:"); ok {
+				protocols = append(protocols, p)
+			}
+		}
 		out = append(out, NetworkRule{
 			ID: v.ID, Decision: v.Decision, Sandbox: strings.TrimPrefix(strings.TrimPrefix(v.AppliesTo, "all"), "sandbox:"),
-			From: from, Hosts: v.Resources, Editable: v.Editable, Active: v.Status == "" || v.Status == "active",
+			From: from, Hosts: v.Resources, Editable: v.Editable, Active: v.Status == "" || v.Status == "active", Protocols: protocols,
 		})
 	}
 	return out, nil
 }
 
-func (r *SBX) SetNetworkRule(ctx context.Context, decision, sandbox string, hosts []string) error {
+func (r *SBX) SetNetworkRule(ctx context.Context, decision, sandbox, protocol string, hosts []string) error {
 	if decision != "allow" && decision != "deny" {
 		return fmt.Errorf("a rule allows or denies, not %s", decision)
 	}
@@ -88,6 +153,9 @@ func (r *SBX) SetNetworkRule(ctx context.Context, decision, sandbox string, host
 	args := []string{"policy", decision, "network"}
 	if sandbox != "" {
 		args = append(args, "--sandbox", sandbox)
+	}
+	if protocol != "" && protocol != "tcp" {
+		args = append(args, "--protocol", protocol)
 	}
 	return runQuiet(hostCommand(ctx, "sbx", append(args, strings.Join(hosts, ","))...))
 }
@@ -103,16 +171,32 @@ func (r *SBX) RemoveNetworkRule(ctx context.Context, sandbox string, hosts []str
 	return runQuiet(hostCommand(ctx, "sbx", args...))
 }
 
-func (r *SBX) NetworkLog(ctx context.Context, sandbox string, limit int, out io.Writer) error {
-	args := []string{"policy", "log", "--type", "network", "--limit", strconv.Itoa(limit)}
-	if sandbox != "" {
-		args = append(args, sandbox)
+// NetworkBlocked are the hosts the policy refused a sandbox lately, the
+// latest first. Names a sandbox's DNS search domain made are left out:
+// nobody asked for them.
+func (r *SBX) NetworkBlocked(ctx context.Context, sandbox string) ([]BlockedHost, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "policy", "log", "--json", "--type", "network", "--limit", "500", sandbox))
+	if err != nil {
+		return nil, err
 	}
-	var errout strings.Builder
-	c := hostCommand(ctx, "sbx", args...)
-	c.Stdout, c.Stderr = out, &errout
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("sbx policy log failed: %s", strings.TrimSpace(errout.String()))
+	var log struct {
+		Blocked []struct {
+			Host     string    `json:"host"`
+			Reason   string    `json:"reason"`
+			Count    int       `json:"count"`
+			LastSeen time.Time `json:"last_seen"`
+		} `json:"blocked"`
 	}
-	return nil
+	if err = json.Unmarshal(b, &log); err != nil {
+		return nil, fmt.Errorf("cannot read sbx's policy log; update sbx: %w", err)
+	}
+	out := []BlockedHost{}
+	for _, v := range log.Blocked {
+		if v.Host == "" || strings.HasSuffix(v.Host, ".docker.internal") {
+			continue
+		}
+		out = append(out, BlockedHost{Host: v.Host, Reason: v.Reason, Count: v.Count, LastSeen: v.LastSeen})
+	}
+	slices.SortFunc(out, func(a, b BlockedHost) int { return b.LastSeen.Compare(a.LastSeen) })
+	return out, nil
 }

@@ -41,6 +41,13 @@ envs:
       vite: {default: on}     # a port of the team's, switched on for you
 ports:                    # yours for every env, under each env's own
   devtools: {port: '19222:9222', default: off}
+sandboxes:                # a sandbox's own network rules
+  dev-mine:
+    network:
+      - allow: jitpack.io
+      - allow: stun.example.com:3478
+        protocol: udp
+      - deny: gist.github.com
 context:
   sandbox: dev-mine
 stop_idle: true
@@ -48,13 +55,16 @@ ssh_agent: false
 ```
 
 `repo` is the repository init found the files in, and `source` the
-address it cloned it from; only a repository with a `source` is pulled by
-`unibox env update`. `ports:` are written by hand, at the top for every env
+address it cloned it from; `unibox env update` pulls the repository, one
+without a `source` only while it has nothing uncommitted and its branch
+follows a remote one. `ports:` are written by hand, at the top for every env
 or under one; a port with no mapping of its own is one of the team's,
 given another default here ([Ports](/guide/ports#which-wins)).
+`sandboxes:` are what `unibox network` keeps for a sandbox and applies to
+it ([What a sandbox may reach](/guide/ports#what-a-sandbox-may-reach)).
 
 Change it with unibox's commands rather than by hand - `unibox env`,
-`unibox context`, `unibox config` - all but `ports:`:
+`unibox context`, `unibox config`, `unibox network` - all but `ports:`:
 
 ```sh
 unibox config set default_env dev

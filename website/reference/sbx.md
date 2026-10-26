@@ -30,10 +30,9 @@ older one. Where sbx's behaviour shows through, this page says so.
 | named ports | `sbx ports --json`, `--publish`, `--unpublish` |
 | the SSH agent decision | `sbx settings get/set ssh.agentForwardingEnabled`, then `sbx daemon restart` |
 | `config set remember_host_commands` | `sbx settings set/unset env.rememberHostCommands` |
-| `network ls` | `sbx policy ls --json --type network [<sandbox>]` |
-| `network allow`, `deny` | `sbx policy allow/deny network [--sandbox <sandbox>] <hosts>` |
+| `network ls` | `sbx policy ls --json --type network <sandbox>`, `sbx policy log --json --type network --limit 500 <sandbox>` |
+| `network allow`, `deny`, and after a create | `sbx policy allow/deny network --sandbox <sandbox> [--protocol <p>] <hosts>` |
 | `network rm` | `sbx policy rm network --force --resource <hosts> [--sandbox <sandbox>]` |
-| `network log` | `sbx policy log --type network --limit <n> [<sandbox>]` |
 | `prune` | `sbx ls --json`, and `sbx umount` of a mount no task has |
 | `doctor` | `sbx version`, `sbx diagnose --format json`, `sbx settings get env.rememberHostCommands` |
 

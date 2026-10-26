@@ -49,12 +49,12 @@ type Runtime interface {
 	Login(ctx context.Context, in io.Reader, out, errout io.Writer) error
 	// NetworkRules are the network rules for sandbox, or all of them;
 	// SetNetworkRule allows or denies hosts to sandbox, or to every one,
-	// RemoveNetworkRule takes such a rule away, and NetworkLog writes the
-	// latest requests the policy decided.
+	// RemoveNetworkRule takes such a rule away, and NetworkBlocked are
+	// the hosts the policy refused the sandbox lately.
 	NetworkRules(ctx context.Context, sandbox string) ([]NetworkRule, error)
-	SetNetworkRule(ctx context.Context, decision, sandbox string, hosts []string) error
+	SetNetworkRule(ctx context.Context, decision, sandbox, protocol string, hosts []string) error
 	RemoveNetworkRule(ctx context.Context, sandbox string, hosts []string) error
-	NetworkLog(ctx context.Context, sandbox string, limit int, out io.Writer) error
+	NetworkBlocked(ctx context.Context, sandbox string) ([]BlockedHost, error)
 	SSHForwarding(ctx context.Context) (bool, error)
 	SetSSHForwarding(ctx context.Context, on bool) error
 	// AllowSSHAgent records the user's leave for sandboxes to use their

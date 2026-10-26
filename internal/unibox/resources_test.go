@@ -171,10 +171,19 @@ func TestASandboxsOwnResourcesWinOverItsEnvsAndGoWithIt(t *testing.T) {
 	if check, _ := m.Check(ctx, Request{Env: "dev", Sandbox: "big"}); len(check.Needs) != 0 {
 		t.Fatalf("%+v", check.Needs)
 	}
+	if _, err := m.SetHostRules(ctx, "big", "allow", "udp", []string{"stun.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := m.Paths.LoadConfig(); len(c.Sandboxes["big"].Network) != 1 || c.Sandboxes["big"].Network[0].Proto() != "udp" {
+		t.Fatalf("%+v", c.Sandboxes)
+	}
 	if err := m.Remove(ctx, "big", "", false); err != nil {
 		t.Fatal(err)
 	}
 	if v, _ := m.Paths.LoadEnvValues(); len(v.SandboxResources) != 0 || v.EnvResources["dev"].CPUs != "2" {
 		t.Fatalf("%+v", v)
+	}
+	if c, _ := m.Paths.LoadConfig(); len(c.Sandboxes) != 0 {
+		t.Fatalf("the sandbox's network rules stayed: %+v", c.Sandboxes)
 	}
 }

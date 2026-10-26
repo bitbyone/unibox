@@ -459,6 +459,9 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 	if err = m.syncPorts(ctx, b, env); err != nil {
 		return err
 	}
+	if err = m.syncNetwork(ctx, b.Name); err != nil {
+		return err
+	}
 	return m.saveBox(*b)
 }
 

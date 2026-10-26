@@ -100,17 +100,27 @@ type Port struct {
 	Published []PublishedPort `json:"published"`
 }
 
-// NetworkRule is a rule of the network policy, as unibox network ls lists
-// it. Sandbox is empty for a rule every sandbox has; From is default,
-// kit, added or approval.
+// NetworkRule is a host a sandbox may or may not reach, as unibox network
+// ls lists it. From is yours (kept by unibox), sbx (added outside unibox),
+// env (the env's kits) or default (sbx's own); Sandbox is empty for a rule
+// every sandbox has. Applied says sbx has a rule of yours, which it cannot
+// while the sandbox is not created.
 type NetworkRule struct {
-	ID       string   `json:"id"`
-	Decision string   `json:"decision"`
-	Sandbox  string   `json:"sandbox,omitempty"`
-	From     string   `json:"from"`
-	Hosts    []string `json:"hosts"`
-	Editable bool     `json:"editable"`
-	Active   bool     `json:"active"`
+	Decision string `json:"decision"`
+	Host     string `json:"host"`
+	Protocol string `json:"protocol"`
+	From     string `json:"from"`
+	Sandbox  string `json:"sandbox,omitempty"`
+	Applied  bool   `json:"applied"`
+}
+
+// BlockedHost is a host the policy refused a sandbox lately: what its env
+// leaves out, unless it is to stay out.
+type BlockedHost struct {
+	Host     string    `json:"host"`
+	Reason   string    `json:"reason"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
 }
 
 type Need struct {

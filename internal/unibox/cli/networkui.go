@@ -1,79 +1,83 @@
 package cli
 
 import (
-	"bytes"
-	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-// networkUI is unibox network at a terminal: the rules a sandbox has, or
-// every rule with --global, to add to and take away from, and what the
-// policy decided lately.
-func (o *options) networkUI(cmd *cobra.Command, sandbox string, global bool, leave func() error) error {
+// networkUI is unibox network at a terminal: a sandbox's own rules and the
+// hosts it was refused lately, to allow or deny by a key.
+func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 	ctx := cmd.Context()
-	var rules []unibox.NetworkRule
-	title := "network rules of " + who(sandbox)
-	if global {
-		title = "every network rule"
-	}
-	scope := func(ruleSandbox string) []string {
-		if ruleSandbox == "" {
-			return []string{"--global"}
-		}
-		return []string{"-s", ruleSandbox}
-	}
+	var rules []api.NetworkRule
+	blocked := map[string]bool{}
 	build := func() (listModel, error) {
-		var err error
-		if rules, err = o.manager.SBX.NetworkRules(ctx, sandbox); err != nil {
+		v, err := o.manager.Network(ctx, sandbox)
+		if err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: title, header: []string{"DECISION", "FOR", "FROM", "HOSTS"}, actions: []listAction{
-			{key: "a", name: "allow", help: "allow hosts", any: true},
-			{key: "n", name: "deny", help: "deny hosts", any: true},
-			{key: "d", name: "rm", help: "remove", confirm: "take rule %s away?"},
-			{key: "l", name: "log", help: "latest requests", any: true},
+		rules = networkRules(v, false)
+		m := listModel{title: "network of sandbox " + sandbox + " - " + beyond(v), header: []string{"RULE", "HOST", "PROTOCOL", "FROM"}, actions: []listAction{
+			{key: "a", name: "allow", help: "allow", any: true},
+			{key: "n", name: "deny", help: "deny", any: true},
+			{key: "d", name: "rm", help: "remove", confirm: "take the rule for %s away?"},
 		}}
 		for _, r := range rules {
-			decision := r.Decision
-			if !r.Active {
-				decision += " (inactive)"
+			decision := portOn.Render(r.Decision)
+			if r.Decision == "deny" {
+				decision = portErr.Render(r.Decision)
 			}
-			m.rows = append(m.rows, []string{decision, cmp.Or(r.Sandbox, "all"), r.From, strings.Join(r.Hosts, ", ")})
-			m.ids = append(m.ids, r.ID)
+			m.rows = append(m.rows, []string{decision, r.Host, r.Protocol, fromText(r)})
+			m.ids = append(m.ids, r.Host)
+		}
+		clear(blocked)
+		for _, b := range v.Blocked {
+			if slices.Contains(m.ids, b.Host) {
+				continue
+			}
+			blocked[b.Host] = true
+			m.rows = append(m.rows, []string{portOff.Render("refused"), b.Host, "", portOff.Render(fmt.Sprintf("%d×, %s", b.Count, ago(b.LastSeen)))})
+			m.ids = append(m.ids, b.Host)
 		}
 		return m, nil
 	}
 	act := func(action, id string) (string, error) {
 		switch action {
 		case "allow", "deny":
-			hosts, err := o.askText("Hosts "+who(sandbox)+" may "+map[string]string{"allow": "reach", "deny": "not reach"}[action],
+			if blocked[id] {
+				return o.quietStep(cmd, "network", action, id, "-s", sandbox)
+			}
+			hosts, err := o.askText("Hosts sandbox "+sandbox+" may "+map[string]string{"allow": "reach", "deny": "not reach"}[action],
 				"Names, *.name for subdomains or name:port, separated by spaces", "", func(s string) error { return unibox.ValidHosts(strings.Fields(s)) })
 			if err != nil || strings.TrimSpace(hosts) == "" {
 				return "", err
 			}
-			return o.quietStep(cmd, append(append([]string{"network", action}, strings.Fields(hosts)...), scope(sandbox)...)...)
-		case "rm":
-			for _, r := range rules {
-				if r.ID != id {
-					continue
-				}
-				if !r.Editable {
-					return "", fmt.Errorf("the rule comes from %s and is not to be removed here", r.From)
-				}
-				return o.quietStep(cmd, append(append([]string{"network", "rm"}, r.Hosts...), scope(r.Sandbox)...)...)
-			}
-		case "log":
-			var out bytes.Buffer
-			if err := o.manager.SBX.NetworkLog(ctx, sandbox, 10, &out); err != nil {
+			protocol, err := o.askChoice("Protocol", "", unibox.Protocols, "tcp", nil)
+			if err != nil {
 				return "", err
 			}
-			return strings.TrimRight(out.String(), "\n"), nil
+			return o.quietStep(cmd, append(append([]string{"network", action}, strings.Fields(hosts)...), "-s", sandbox, "--protocol", protocol)...)
+		case "rm":
+			if blocked[id] {
+				return "a refused host has no rule to take away; a allows it", nil
+			}
+			i := slices.IndexFunc(rules, func(r api.NetworkRule) bool { return r.Host == id })
+			if i >= 0 && rules[i].From == "sbx" && rules[i].Sandbox == "" {
+				// A rule of every sandbox's, added with sbx: unibox network
+				// has no command for it, being about one sandbox.
+				if err := o.manager.RemoveHostRules(ctx, "", []string{id}); err != nil {
+					return "", err
+				}
+				return "took the rule for " + id + " away from every sandbox", nil
+			}
+			return o.quietStep(cmd, "network", "rm", id, "-s", sandbox)
 		}
 		return "", nil
 	}
-	return o.actList(cmd, build, act, leave)
+	return o.actList(cmd, build, act, func() error { return nil })
 }

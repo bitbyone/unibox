@@ -719,7 +719,10 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 	if err = m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil }); err != nil {
 		return err
 	}
-	// Resources given to this sandbox alone go with it.
+	// Resources and network rules given to this sandbox alone go with it.
+	if err = m.forgetNetwork(name); err != nil {
+		return err
+	}
 	if v, err := m.Paths.LoadEnvValues(); err == nil && v.SandboxResources[name] != (Resources{}) {
 		return m.Paths.SetSandboxResources(name, Resources{})
 	}

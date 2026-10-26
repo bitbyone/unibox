@@ -204,9 +204,8 @@ the team's file.
 ## Network
 
 ```sh
-unibox network ls -s dev                 # the hosts the sandbox may reach
-unibox network allow jitpack.io -s dev   # --global for every sandbox
-unibox network log -s dev                # what was asked, and what was decided
+unibox network ls -s dev                 # your rules, and the hosts refused lately
+unibox network allow jitpack.io -s dev   # kept by unibox, for this sandbox
 ```
 
 The rules are sbx's network policy; a rule the team needs belongs in a

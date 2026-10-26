@@ -542,13 +542,19 @@ never in an sbxenv.
 
 What a sandbox may reach is sbx's network policy; unibox gives it
 commands so nobody needs `sbx policy` (`policy.go`, `cli/network.go`):
-`network ls|allow|deny|rm|log`. A rule is the sandbox's - sbx's `local`
-policy, scoped to it - unless `--global`, as a forgotten `-s` should not
-open a host to every sandbox; `-s` and `--global` together are an error.
-Hosts are joined with commas for sbx, so one holding a comma or
-whitespace, or starting with `-`, is refused first. The defaults' and the
-kits' rules are listed but not unibox's to remove; a rule the whole team
-needs belongs in a kit, reviewed with the env.
+`network ls|allow|deny|rm`. A rule is one sandbox's, never every
+sandbox's, as a forgotten `-s` should not open a host to all of them.
+sbx refuses a rule for a sandbox it does not have, so unibox keeps the
+person's in config.yaml (`sandboxes.<name>.network`, `network.go`) and
+applies what sbx lacks after each create and when one is added; they go
+when the sandbox is removed. `ls` is about the difference: the person's
+rules, ones added with sbx itself, and the hosts `sbx policy log` says
+were refused (the DNS search-domain guesses under `docker.internal` left
+out) - what the env's files may want to say; the kits' and the defaults'
+hosts are only counted unless `--all`. Hosts are joined with commas for
+sbx, so one holding a comma or whitespace, or starting with `-`, is
+refused first. A rule the whole team needs belongs in a kit, reviewed
+with the env.
 
 ## Doctor
 

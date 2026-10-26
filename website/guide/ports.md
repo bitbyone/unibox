@@ -129,18 +129,31 @@ sessions and files.
 ## What a sandbox may reach
 
 A sandbox reaches only the hosts sbx's network policy allows: the
-defaults, the hosts the env's kits add, and rules of your own. unibox
-changes those rules with sbx, for one sandbox or with `--global` for every
-one:
+defaults, the hosts the env's kits add, and rules of your own for that
+sandbox. unibox keeps yours in `config.yaml` under the sandbox's name and
+applies them to it - right away when it exists, otherwise once it is
+created, and again after each recreation. They go when the sandbox is
+removed.
 
 ```sh
-unibox network ls -s dev                    # the rules the sandbox has
+unibox network ls -s dev                    # your rules, and the hosts refused lately
 unibox network allow jitpack.io -s dev
-unibox network deny gist.github.com --global
+unibox network allow stun.example.com:3478 --protocol udp
+unibox network deny gist.github.com         # even if the env allows it
 unibox network rm jitpack.io -s dev         # take a rule of yours away
-unibox network log -s dev                   # the latest requests, and what was decided
+unibox network ls --all                     # the env's and sbx's hosts too
 ```
 
+`ls` lists your rules and those added with sbx itself, then the hosts the
+sandbox was refused lately: what the env leaves out, and a rule of yours
+or a kit may want to add. The env's and sbx's defaults are counted, and
+listed with `--all`.
+
 A host is as sbx takes it: a name, a wildcard such as `*.example.com`, an
-IP address or CIDR prefix, each with an optional port (`example.com:443`). The defaults' and the kits' rules are not to be removed. A rule the
+IP address or CIDR prefix, each with an optional port (`example.com:443`);
+the protocol is tcp unless `--protocol` says udp or `tcp,udp`. A rule the
 whole team needs belongs in a kit, where it is reviewed with the env.
+
+At a terminal, `unibox network` is a list of the same: `a` allows a host,
+`n` denies one - the refused host under the cursor, or one you type, with
+its protocol - and `d` takes a rule away.

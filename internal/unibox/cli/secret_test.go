@@ -28,7 +28,8 @@ case "$1 $2" in
 "env plan")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "plan-error")) + ` ]; then echo "Error: $(cat ` + unibox.Quote(filepath.Join(dir, "plan-error")) + `)" >&2; echo "  try: sbx env --help" >&2; exit 1; fi
 	printf 'SANDBOX\n  + team\n\n  1 to add · 0 to change · 0 to destroy\n' ;;
-"ls --json") echo '[]' ;;
+"ls --json") cat ` + unibox.Quote(filepath.Join(dir, "boxes")) + ` 2>/dev/null || echo '[]' ;;
+"policy log") echo '{"allowed":[],"blocked":[{"host":"pypi.org","reason":"no rule","count":3,"last_seen":"2025-01-01T10:00:00Z"},{"host":"x.org.dev.docker.internal","count":1}]}' ;;
 "policy ls") echo '{"rules":[{"id":"1","name":"kit:team","applies_to":"all","decision":"allow","resource_type":"network","resources":["gitlab.example.com"],"status":"active","provenance":{"created_via":"provisioned"}},{"id":"2","applies_to":"sandbox:dev","decision":"deny","resource_type":"network","resources":["ads.example.com"],"status":"active","editable":true,"provenance":{"created_via":"added"}},{"id":"3","applies_to":"all","decision":"allow","resource_type":"filesystem:read","resources":["/"]}]}' ;;
 "kit inspect") echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}' ;;
 "secret ls")
@@ -458,36 +459,56 @@ func TestASandboxCreatedWithResourcesKeepsThemInVarsToml(t *testing.T) {
 	}
 }
 
-func TestNetworkRulesAreForTheSandboxUnlessGlobal(t *testing.T) {
+func TestNetworkRulesAreKeptForTheSandbox(t *testing.T) {
 	log := fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	t.Setenv("UNIBOX_SANDBOX", "dev")
-	if out, _, err := run(t, paths, "", "network", "allow", "registry.npmjs.org", "*.npmjs.org"); err != nil || !strings.Contains(out, "sandbox dev may reach registry.npmjs.org, *.npmjs.org") {
+	// Before the sandbox exists the rule is only kept.
+	if out, _, err := run(t, paths, "", "network", "allow", "registry.npmjs.org", "*.npmjs.org"); err != nil || !strings.Contains(out, "sandbox dev may reach registry.npmjs.org, *.npmjs.org; it applies once the sandbox is created") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, _, err := run(t, paths, "", "network", "deny", "ads.example.com", "--global"); err != nil {
+	if strings.Contains(calls(t, log), "policy allow") {
+		t.Fatalf("a rule reached sbx before its sandbox:\n%s", calls(t, log))
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "boxes"), []byte(`[{"name":"dev","status":"running"}]`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := run(t, paths, "", "network", "rm", "ads.example.com", "-s", "box"); err != nil {
+	if out, _, err := run(t, paths, "", "network", "allow", "stun.example.com:3478", "--protocol", "udp"); err != nil || strings.Contains(out, "once the sandbox") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "network", "deny", "ads.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range [][]string{{"network", "allow", "a,b"}, {"network", "allow", "--", "-x"}, {"network", "allow", "a", "--global", "-s", "dev"}} {
+	config, err := paths.LoadConfig()
+	if err != nil || len(config.Sandboxes["dev"].Network) != 4 {
+		t.Fatalf("%v %+v", err, config.Sandboxes)
+	}
+	for _, bad := range [][]string{{"network", "allow", "a,b"}, {"network", "allow", "--", "-x"}, {"network", "allow", "a", "--protocol", "icmp"}} {
 		if _, _, err := run(t, paths, "", bad...); err == nil {
 			t.Fatalf("%v went through", bad)
 		}
 	}
 	out, _, err := run(t, paths, "", "network", "ls")
-	if err != nil || !strings.Contains(out, "allow     all  kit") || !strings.Contains(out, "deny      dev  added") || strings.Contains(out, "/") {
+	if err != nil || !strings.Contains(out, "stun.example.com:3478") || !strings.Contains(out, "udp") || !strings.Contains(out, "pypi.org") || strings.Contains(out, "docker.internal") || strings.Contains(out, "gitlab.example.com") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	calls, _ := os.ReadFile(log)
-	for _, want := range []string{"policy allow network --sandbox dev registry.npmjs.org,*.npmjs.org", "policy deny network ads.example.com\n", "policy rm network --force --resource ads.example.com --sandbox box", "policy ls --json --type network dev"} {
-		if !strings.Contains(string(calls), want) {
-			t.Fatalf("no %q in\n%s", want, calls)
+	if out, _, err := run(t, paths, "", "network", "ls", "--all"); err != nil || !strings.Contains(out, "gitlab.example.com") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "network", "rm", "ads.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if config, _ := paths.LoadConfig(); len(config.Sandboxes["dev"].Network) != 3 {
+		t.Fatalf("%+v", config.Sandboxes)
+	}
+	got := calls(t, log)
+	for _, want := range []string{"policy allow network --sandbox dev --protocol udp stun.example.com:3478", "policy allow network --sandbox dev registry.npmjs.org\n", "policy allow network --sandbox dev *.npmjs.org\n", "policy deny network --sandbox dev ads.example.com", "policy rm network --force --resource ads.example.com --sandbox dev", "policy log --json --type network --limit 500 dev"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("no %q in\n%s", want, got)
 		}
 	}
-	if strings.Contains(string(calls), "a,b") || strings.Contains(string(calls), "-x") {
-		t.Fatalf("a bad host reached sbx:\n%s", calls)
+	if strings.Contains(got, "a,b") || strings.Contains(got, "-x") {
+		t.Fatalf("a bad host reached sbx:\n%s", got)
 	}
 }
 
