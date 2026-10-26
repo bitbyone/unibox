@@ -117,5 +117,17 @@ for it, a keychain read say.`, Example: `  unibox login ls -e dev
 	set.Flags().StringVar(&command, "command", "", "A command sbx runs on the host for the token, instead of asking for it")
 	set.Flags().BoolVar(&all, "all", false, "Ask for the optional tokens too")
 	c.AddCommand(set)
+	c.Args = cobra.NoArgs
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		ls := func() error { return o.runStep(cmd, append([]string{"login", "ls"}, envArgs(envFlag)...)...) }
+		if !o.interactive || o.json {
+			return ls()
+		}
+		name, err := o.envName(envFlag)
+		if err != nil {
+			return err
+		}
+		return o.loginUI(cmd, name, func() error { return o.runStep(cmd, "login", "ls", "-e", name) })
+	}
 	return c
 }

@@ -96,6 +96,7 @@ one env alone. Exits `4` on a failure.
 ### `unibox env`
 
 ```
+unibox env
 unibox env add [<env>] [<file>...] [--name <sandbox>] [--default]
 unibox env ls
 unibox env show [<env>]
@@ -117,11 +118,24 @@ ports - and what you set. `update` brings the repositories unibox init cloned
 up to their remote, by a fast-forward alone, and says what that changes; a
 checkout of your own is never pulled. `rm` forgets an env; its files and
 sandbox stay.
+
+Alone at a terminal, `unibox env` lists the envs to act on one by a key;
+elsewhere it is `env ls`:
+
+| Key | What it does |
+| --- | --- |
+| `enter` | show it, as `env show` |
+| `space` | make it the default, as `config set default_env` |
+| `u` | update it, as `env update` |
+| `c` | create its sandbox, as `sandbox create -e` |
+| `d` | forget it, after `y` |
+
 See [Envs](/guide/envs).
 
 ### `unibox var`
 
 ```
+unibox var [-e <env> | -g]
 unibox var ls [-e <env> | -g]
 unibox var set <name> <value> [-e <env> | -g]
 unibox var rm <name> [-e <env> | -g]
@@ -135,9 +149,14 @@ belongs here; store tokens with `unibox login`. The CPUs and memory your
 sandboxes get are written in the same file by hand; see
 [files](./files#vars-toml).
 
+Alone at a terminal, `unibox var` lists the args to set: `enter` sets the
+one under the cursor, `a` adds a value of another name, `d` removes yours
+after `y`. Elsewhere it is `var ls`.
+
 ### `unibox login`
 
 ```
+unibox login [-e <env>]
 unibox login ls [-e <env>]
 unibox login set [service...] [-e <env>] [--all] [--command <cmd>]
 ```
@@ -153,6 +172,10 @@ a terminal, one service's token may be piped in.
 | --- | --- |
 | `--all` | ask for the optional tokens too |
 | `--command <cmd>` | a command sbx runs on the host for the token, instead of asking for it; one service |
+
+Alone at a terminal, `unibox login` lists the tokens: `enter` has sbx ask
+for the one under the cursor, `c` stores a command for it. Elsewhere it is
+`login ls`.
 
 See [Logins](/guide/logins).
 
@@ -324,6 +347,7 @@ any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).
 ### `unibox network`
 
 ```
+unibox network [-s <sandbox>] [--global]
 unibox network ls [-s <sandbox>] [--global]
 unibox network allow <host...> [-s <sandbox>] [--global]
 unibox network deny <host...> [-s <sandbox>] [--global]
@@ -335,7 +359,12 @@ The hosts a sandbox may reach, as sbx's network policy says. A rule is
 for the sandbox unless `--global` makes it every sandbox's; `ls --global`
 lists every rule. `rm` takes away a rule you added; the defaults' and the
 kits' are not to be removed. `log` shows the latest requests and what the
-policy decided. See [Ports](/guide/ports#what-a-sandbox-may-reach).
+policy decided.
+
+Alone at a terminal, `unibox network` lists the rules: `a` allows hosts,
+`n` denies them, `d` removes the rule under the cursor after `y`, `l` shows
+the latest requests below the list. Elsewhere it is `network ls`. See
+[Ports](/guide/ports#what-a-sandbox-may-reach).
 
 ### `unibox prune`
 
@@ -379,7 +408,9 @@ created from as `-e`. Left out, it comes from `UNIBOX_SANDBOX` or
 `UNIBOX_ENV`, then from the context set here, then from there being only one
 (for an env, the configuration's `default_env` before that). `context` alone
 shows what commands would use, and why; `use` sets the sandbox, the env or
-both, checking they exist; `clear` forgets the context.
+both, checking they exist; `clear` forgets the context. At a terminal,
+`context` alone lists the sandboxes and envs, the context's marked: `enter`
+uses the one under the cursor, `c` clears the context; leaving shows it.
 
 ### `unibox config`
 

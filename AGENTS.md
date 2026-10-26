@@ -152,8 +152,11 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **A noun alone at a terminal is a list to act in.** `unibox port`
   switches a running sandbox's ports, `unibox task` (and `resume` without
   a task) resumes, names or removes a task, `unibox sandbox` opens,
-  stops, recreates or removes a sandbox, each by a key (`*ui.go`,
-  bubbletea). Nothing may write to the terminal while a list is drawn. An action that takes the terminal or asks
+  stops, recreates or removes a sandbox; `env`, `var`, `login`,
+  `network` and `context` are lists of `listModel` (`listui.go`), whose
+  actions run their subcommand through `runStep`, each by a key (`*ui.go`,
+  bubbletea). A list's line is cut to the terminal's width, or it wraps
+  and is no longer drawn over. Nothing may write to the terminal while a list is drawn. An action that takes the terminal or asks
   more ends the list and runs as its command would; without a terminal
   or with `--json` the noun lists as `ls` does.
 - **Commands are a noun, then a verb** (`unibox sandbox stop`); only

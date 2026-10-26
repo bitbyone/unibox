@@ -170,6 +170,9 @@ context once:
 unibox context use -s dev -e dev
 ```
 
+At a terminal, a noun alone - `unibox env`, `var`, `login`, `network`,
+`context`, `port` - is the same kind of list: pick a row, press a key.
+
 `UNIBOX_SANDBOX` and `UNIBOX_ENV` win over the context; with neither, a
 sandbox or env that is the only one serves, and for an env, `default_env`
 before that. [Tasks](./tasks#the-context) says more.

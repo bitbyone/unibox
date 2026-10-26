@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
@@ -530,6 +531,21 @@ func (o *options) runStep(cmd *cobra.Command, args ...string) error {
 	if err != nil {
 		return err
 	}
+	// A command run before as a step keeps the flags it was given then;
+	// only unibox's own, such as --yes, are to stay as the user gave them.
+	reset := func(f *pflag.Flag) {
+		if !f.Changed || cmd.Root().PersistentFlags().Lookup(f.Name) != nil {
+			return
+		}
+		if v, ok := f.Value.(pflag.SliceValue); ok {
+			_ = v.Replace(nil)
+		} else {
+			_ = f.Value.Set(f.DefValue)
+		}
+		f.Changed = false
+	}
+	c.LocalFlags().VisitAll(reset)
+	c.InheritedFlags().VisitAll(reset)
 	if err = c.ParseFlags(rest); err != nil {
 		return err
 	}

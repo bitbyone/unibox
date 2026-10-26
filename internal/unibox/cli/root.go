@@ -39,6 +39,11 @@ func New(paths unibox.Paths, in io.Reader, out, errout io.Writer) *cobra.Command
 	if f, ok := in.(*os.File); ok {
 		o.interactive = term.IsTerminal(int(f.Fd()))
 	}
+	return o.root()
+}
+
+func (o *options) root() *cobra.Command {
+	paths, in, out, errout := o.paths, o.input, o.output, o.log
 	root := &cobra.Command{Use: "unibox", Short: "Run coding agents in independent sandbox environments", SilenceErrors: true, SilenceUsage: true, Version: version.String()}
 	// As unagit: the release alone, or dev and the commit while developing.
 	root.SetVersionTemplate("{{.Version}}\n")

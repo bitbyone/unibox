@@ -162,14 +162,14 @@ func drawTable(cols [][]string, cursor int) string {
 	widths := make([]int, len(cols[0]))
 	for _, c := range cols {
 		for i, v := range c {
-			widths[i] = max(widths[i], len(v))
+			widths[i] = max(widths[i], lipgloss.Width(v))
 		}
 	}
 	var b strings.Builder
 	for n, c := range cols {
 		cells := []string{}
 		for i, v := range c {
-			cells = append(cells, fmt.Sprintf("%-*s", widths[i], v))
+			cells = append(cells, v+strings.Repeat(" ", widths[i]-lipgloss.Width(v)))
 		}
 		line := strings.TrimRight(strings.Join(cells, "  "), " ")
 		switch {

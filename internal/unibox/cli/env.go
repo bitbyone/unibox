@@ -289,7 +289,23 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		}
 		return nil
 	}})
+	c.Args = cobra.NoArgs
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		ls := func() error { return o.runStep(cmd, "env", "ls") }
+		if !o.interactive || o.json {
+			return ls()
+		}
+		return o.envUI(cmd, ls)
+	}
 	return c
+}
+
+// envArgs passes on an env flag a command was given.
+func envArgs(env string) []string {
+	if env == "" {
+		return nil
+	}
+	return []string{"-e", env}
 }
 
 // addEnv keeps an env of files, or gives one new files, with the

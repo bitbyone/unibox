@@ -76,7 +76,12 @@ func (o *options) contextCommand() *cobra.Command {
 	c := &cobra.Command{Use: "context", Args: cobra.NoArgs, Short: "Show or set the sandbox and env commands work in when not told", Long: `Commands take the sandbox they work in as -s and the env a new one is
 created from as -e. Left out, it comes from UNIBOX_SANDBOX or UNIBOX_ENV,
 then from the context set here, then from there being only one (for an
-env, the configuration's default_env before that).`, Example: "  unibox context use -s dev\n  unibox context\n  unibox context clear", RunE: func(cmd *cobra.Command, args []string) error { return show() }}
+env, the configuration's default_env before that).`, Example: "  unibox context use -s dev\n  unibox context\n  unibox context clear", RunE: func(cmd *cobra.Command, args []string) error {
+		if !o.interactive || o.json {
+			return show()
+		}
+		return o.contextUI(cmd, show)
+	}}
 	var sandbox, env string
 	use := &cobra.Command{Use: "use", Args: cobra.NoArgs, Short: "Set the context's sandbox, env or both", RunE: func(cmd *cobra.Command, args []string) error {
 		if sandbox == "" && env == "" {

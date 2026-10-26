@@ -164,7 +164,30 @@ belongs here; store tokens with unibox login.`}
 		}
 		return w.Flush()
 	}})
+	c.Args = cobra.NoArgs
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		if !o.interactive || o.json {
+			return o.runStep(cmd, append([]string{"var", "ls"}, varScope(envFlag, global)...)...)
+		}
+		name := ""
+		if !global {
+			var err error
+			if name, err = o.envName(envFlag); err != nil {
+				return err
+			}
+		}
+		return o.varUI(cmd, name, global, func() error {
+			return o.runStep(cmd, append([]string{"var", "ls"}, varScope(name, global)...)...)
+		})
+	}
 	return c
+}
+
+func varScope(env string, global bool) []string {
+	if global {
+		return []string{"-g"}
+	}
+	return envArgs(env)
 }
 
 func sorted[V any](m map[string]V) []string {

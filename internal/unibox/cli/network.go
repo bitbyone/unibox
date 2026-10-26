@@ -114,6 +114,20 @@ sandbox's. A host is a name, *.name for its subdomains or name:port.`, Example: 
 	sandboxFlag(log, &sandbox)
 	log.Flags().IntVar(&limit, "limit", 30, "How many requests")
 	c.AddCommand(ls, rule("allow"), rule("deny"), rm, log)
+	c.Args = cobra.NoArgs
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		ls.SetContext(cmd.Context())
+		if !o.interactive || o.json {
+			return ls.RunE(ls, nil)
+		}
+		name := cmp.Or(sandbox, o.defaultSandbox())
+		if global {
+			name = ""
+		}
+		return o.networkUI(cmd, name, global, func() error { return ls.RunE(ls, nil) })
+	}
+	sandboxFlag(c, &sandbox)
+	c.Flags().BoolVar(&global, "global", false, "Every rule, not only a sandbox's")
 	return c
 }
 
