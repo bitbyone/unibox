@@ -20,13 +20,16 @@ type portsModel struct {
 	cursor  int
 	busy    bool
 	err     error
+	note    string
 	done    bool
-	// switchPort publishes or unpublishes a port and reads the ports anew.
-	switchPort func(key string, on bool) ([]unibox.PortState, error)
+	// switchPort publishes or unpublishes a port and reads the ports anew,
+	// with the last line it would have said.
+	switchPort func(key string, on bool) ([]unibox.PortState, string, error)
 }
 
 type portsSwitched struct {
 	rows []unibox.PortState
+	note string
 	err  error
 }
 
@@ -35,7 +38,7 @@ func (m portsModel) Init() tea.Cmd { return nil }
 func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case portsSwitched:
-		m.busy, m.err = false, msg.err
+		m.busy, m.err, m.note = false, msg.err, msg.note
 		if msg.err == nil {
 			m.rows = msg.rows
 			m.cursor = min(m.cursor, max(len(m.rows)-1, 0))
@@ -71,10 +74,10 @@ func (m portsModel) turn(to func(bool) bool) (tea.Model, tea.Cmd) {
 	if on == row.On {
 		return m, nil
 	}
-	m.busy, m.err = true, nil
+	m.busy, m.err, m.note = true, nil, ""
 	return m, func() tea.Msg {
-		rows, err := m.switchPort(row.Name, on)
-		return portsSwitched{rows, err}
+		rows, note, err := m.switchPort(row.Name, on)
+		return portsSwitched{rows, note, err}
 	}
 }
 
@@ -114,6 +117,10 @@ func (m portsModel) View() string {
 		b.WriteString("switching...\n")
 	case m.err != nil:
 		b.WriteString(portErr.Render(m.err.Error()) + "\n")
+	case m.note != "":
+		b.WriteString(portHelp.Render(m.note) + "\n")
+	default:
+		b.WriteString("\n")
 	}
 	b.WriteString(portHelp.Render("↑/↓ j/k move · ←/h off · →/l on · space switch · enter/q done") + "\n")
 	return b.String()

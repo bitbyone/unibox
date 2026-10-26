@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"cmp"
 	"fmt"
 	"strings"
@@ -99,12 +100,23 @@ func (o *options) portsUI(cmd *cobra.Command, name string) error {
 		}
 		return o.listPorts(cmd, name)
 	}
-	m := portsModel{sandbox: name, rows: ports, switchPort: func(key string, on bool) ([]unibox.PortState, error) {
-		if err := o.manager.SwitchPorts(ctx, name, map[string]bool{key: on}); err != nil {
-			return nil, err
+	// What unibox and sbx would say while a switch is made would land
+	// among the list's lines, which the list then draws over; it is kept
+	// and its last line shown in the list instead.
+	said := &bytes.Buffer{}
+	log := o.manager.Log
+	o.manager.Log = said
+	defer func() { o.manager.Log = log }()
+	m := portsModel{sandbox: name, rows: ports, switchPort: func(key string, on bool) ([]unibox.PortState, string, error) {
+		said.Reset()
+		err := o.manager.SwitchPorts(ctx, name, map[string]bool{key: on})
+		lines := strings.Split(strings.TrimSpace(said.String()), "\n")
+		note := strings.TrimSpace(lines[len(lines)-1])
+		if err != nil {
+			return nil, note, err
 		}
 		ports, _, err := o.manager.SandboxPorts(ctx, name)
-		return ports, err
+		return ports, note, err
 	}}
 	// The theme asks the terminal for its background; asked here, before
 	// the program reads keys, the answer is not taken for typing.

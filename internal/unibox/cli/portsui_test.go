@@ -13,17 +13,17 @@ func TestPortsAreSwitchedWhereTheyStandWithArrowsAndHL(t *testing.T) {
 	t.Parallel()
 	rows := []unibox.PortState{{Name: "api", Spec: "8080:8080", Named: true, On: true}, {Name: "vite", Spec: "5173:5173", Named: true}}
 	calls := []string{}
-	m := portsModel{sandbox: "dev", rows: append([]unibox.PortState(nil), rows...), switchPort: func(key string, on bool) ([]unibox.PortState, error) {
+	m := portsModel{sandbox: "dev", rows: append([]unibox.PortState(nil), rows...), switchPort: func(key string, on bool) ([]unibox.PortState, string, error) {
 		calls = append(calls, key+map[bool]string{true: " on", false: " off"}[on])
 		if key == "api" && on {
-			return nil, errors.New("host port 8080 is taken")
+			return nil, "", errors.New("host port 8080 is taken")
 		}
 		for i := range rows {
 			if rows[i].Name == key {
 				rows[i].On = on
 			}
 		}
-		return append([]unibox.PortState(nil), rows...), nil
+		return append([]unibox.PortState(nil), rows...), "ports of sandbox dev: " + key, nil
 	}}
 	press := func(key string) {
 		t.Helper()
@@ -54,7 +54,7 @@ func TestPortsAreSwitchedWhereTheyStandWithArrowsAndHL(t *testing.T) {
 	if len(calls) != 2 || calls[0] != "api off" || calls[1] != "vite on" || m.cursor != 1 || m.rows[0].On || !m.rows[1].On {
 		t.Fatalf("%v %d %+v", calls, m.cursor, m.rows)
 	}
-	if v := m.View(); !strings.Contains(v, "> on   vite") || !strings.Contains(v, "  off  api") {
+	if v := m.View(); !strings.Contains(v, "ports of sandbox dev: vite") || !strings.Contains(v, "> on   vite") || !strings.Contains(v, "  off  api") {
 		t.Fatalf("%q", v)
 	}
 	// A switch that fails is said, and the list stays as it was.
