@@ -68,6 +68,10 @@ func TestArgsAndResourcesForEveryEnvAreKeptAndAnEnvsOwnWin(t *testing.T) {
 	if err := m.Paths.SaveEnvValues(v); err != nil {
 		t.Fatal(err)
 	}
+	data, _ := os.ReadFile(m.Paths.VarsFile())
+	if strings.Contains(string(data), "[envs]\n") || strings.Contains(string(data), "[envs.dev]\n") {
+		t.Fatalf("tables holding only others were written:\n%s", data)
+	}
 	got, err := m.Paths.LoadEnvValues()
 	if err != nil {
 		t.Fatal(err)

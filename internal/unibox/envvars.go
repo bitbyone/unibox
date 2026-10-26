@@ -193,7 +193,31 @@ func (p Paths) SaveEnvValues(v EnvValues) error {
 	if err := e.Encode(doc); err != nil {
 		return err
 	}
-	return AtomicWrite(p.VarsFile(), append([]byte(envValuesHeader), out.Bytes()...), 0o600)
+	return AtomicWrite(p.VarsFile(), append([]byte(envValuesHeader), withoutBareTables(out.Bytes())...), 0o600)
+}
+
+// withoutBareTables leaves out the headers of tables that hold nothing but
+// the next one, such as [envs] before [envs.dev.args], which the encoder
+// writes and a person need not read.
+func withoutBareTables(b []byte) []byte {
+	lines := strings.SplitAfter(string(b), "\n")
+	var out strings.Builder
+	for i, line := range lines {
+		head := strings.TrimSpace(line)
+		if strings.HasPrefix(head, "[") && !strings.HasPrefix(head, "[[") {
+			next := ""
+			for _, l := range lines[i+1:] {
+				if next = strings.TrimSpace(l); next != "" {
+					break
+				}
+			}
+			if strings.HasPrefix(next, strings.TrimSuffix(head, "]")+".") {
+				continue
+			}
+		}
+		out.WriteString(line)
+	}
+	return []byte(out.String())
 }
 
 // ValidArg says whether a value can be kept for an arg: a name sbx takes, a
