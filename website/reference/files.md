@@ -14,7 +14,7 @@ paths below, under your home directory on Windows too.
 | `~/.config/unibox/state.lock`, `locks/` | locks that keep two unibox commands from changing the same thing at once |
 | `~/.config/unibox/herdr-plugin/` | the herdr plugin's manifest, when installed |
 | `~/.cache/unibox/args/` | the args file for one `sbx env create`, readable only by you and removed after it |
-| `~/.local/share/unibox/repos/<host>/<path>` | the team repositories `unibox init` cloned from a git address, kept current by `unibox env pull`; `destroy --all` leaves them |
+| `~/.local/share/unibox/repos/<host>/<path>` | the team repositories `unibox init` cloned from a git address, kept current by `unibox env update`; `destroy --all` leaves them |
 
 The team's sbxenv files and kits are wherever the team keeps them; unibox
 records their paths and never writes them. Beside an sbxenv file, the team
@@ -46,7 +46,7 @@ ssh_agent: false
 
 `repo` is the repository init found the files in, and `source` the
 address it cloned it from; only a repository with a `source` is pulled by
-`unibox env pull`. A port with no mapping of its own is one of the team's,
+`unibox env update`. A port with no mapping of its own is one of the team's,
 switched by `unibox port on` or `off`.
 
 Change it with unibox's commands rather than by hand - `unibox env`,

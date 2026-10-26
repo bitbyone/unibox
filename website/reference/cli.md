@@ -99,7 +99,7 @@ one env alone. Exits `4` on a failure.
 unibox env add [<env>] [<file>...] [--name <sandbox>] [--default]
 unibox env ls
 unibox env show [<env>]
-unibox env pull [<env>]
+unibox env update [<env>]
 unibox env rm <env>
 ```
 
@@ -113,7 +113,7 @@ one sbxenv file in the current directory, and without a name the name that
 file gives its sandbox. `--name` names its sandbox (default: the file's
 `name:`, or the env's); `--default` makes it the env new sandboxes come
 from. `show` prints what the files declare - args, kits, agent, the team's
-ports - and what you set. `pull` brings the repositories unibox init cloned
+ports - and what you set. `update` brings the repositories unibox init cloned
 up to their remote, by a fast-forward alone, and says what that changes; a
 checkout of your own is never pulled. `rm` forgets an env; its files and
 sandbox stay.

@@ -70,8 +70,8 @@ init cloned it.
 ## Keeping the team's repository current
 
 ```sh
-unibox env pull          # every repository unibox cloned
-unibox env pull dev      # the one dev's files are in
+unibox env update          # every repository unibox cloned
+unibox env update dev      # the one dev's files are in
 ```
 
 brings each repository unibox init cloned from a git address up to its

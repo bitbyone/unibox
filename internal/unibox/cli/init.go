@@ -60,7 +60,7 @@ says what is in place.
 
 Given a git address instead, init clones the repository with your own git
 into ~/.local/share/unibox/repos/<host>/<path> and sets it up from there;
-unibox env pull keeps such a clone current. A repository of your own is
+unibox env update keeps such a clone current. A repository of your own is
 never pulled.
 
 With --no-input, or without a terminal, it asks nothing: it sets up every
@@ -76,7 +76,7 @@ unibox login set stores them.`, Example: "  unibox init\n  unibox init ~/work/ag
 			if cloned {
 				fmt.Fprintf(o.log, "cloned %s into %s\n", target, dir)
 			} else {
-				fmt.Fprintf(o.log, "%s is cloned in %s already; unibox env pull updates it\n", target, dir)
+				fmt.Fprintf(o.log, "%s is cloned in %s already; unibox env update updates it\n", target, dir)
 			}
 			target = dir
 		}

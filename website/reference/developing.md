@@ -59,7 +59,7 @@ need no shell stand-in.
   unibox is limited by nothing. A person's choice in `config.yaml` wins
   over the team's default.
 - **unibox pulls only what it cloned.** `init` clones a git address into
-  the data directory and records its `source`; `env pull` fast-forwards
+  the data directory and records its `source`; `env update` fast-forwards
   those clones alone. A checkout of the person's own is never pulled, and
   `destroy --all` leaves the clones.
 - **No hint names sbx's CLI.** Whatever doctor or an error suggests is a

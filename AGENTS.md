@@ -124,7 +124,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
   what the walk sets up.
 - **unibox pulls only what it cloned.** An env keeps the repository its
   files are in (`repo`) and the address unibox cloned it from
-  (`source`); `env pull` fast-forwards those with a `source` alone. The
+  (`source`); `env update` fast-forwards those with a `source` alone. The
   user's own checkout is never pulled, and `destroy --all` leaves the
   clones.
 - **What only unibox reads sits beside the sbxenv file.** The team's

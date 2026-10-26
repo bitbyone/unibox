@@ -359,7 +359,7 @@ docs/sandboxes.md.
 - **A git address is cloned with the person's own git** - their keys,
   their credential helper; unibox never sees them - into
   `$XDG_DATA_HOME/unibox/repos/<host>/<path>` (`clone.go`), and the env
-  keeps the address as `source`. `unibox env pull` fast-forwards such
+  keeps the address as `source`. `unibox env update` fast-forwards such
   clones alone and says what the change means: a new arg asked of the
   person, a sandbox to recreate, a new sbxenv file for init. A checkout of
   the person's own has no `source` and is never pulled: their branch,

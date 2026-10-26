@@ -102,10 +102,10 @@ clones it with your own git into
 
 ```sh
 unibox init git@github.com:team/agent-sandboxes.git
-unibox env pull        # later: brings the clone up to date, and says what that changes
+unibox env update        # later: brings the clone up to date, and says what that changes
 ```
 
-`unibox env pull` pulls only the clones unibox made; a checkout of your own
+`unibox env update` updates only the clones unibox made; a checkout of your own
 is yours to pull. `unibox doctor` says when such a clone is behind.
 
 Without a terminal, or with `--no-input`, init asks nothing: it sets up

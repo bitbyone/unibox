@@ -81,7 +81,7 @@ a time. Given a git address, it clones the repository for you first.
 ```sh
 cd ~/team/agent-sandboxes && unibox init
 unibox init git@github.com:team/agent-sandboxes.git   # cloned into ~/.local/share/unibox/repos
-unibox env pull                                       # later: update that clone, say what it changes
+unibox env update                                       # later: update that clone, say what it changes
 unibox doctor                                         # what a run needs, and what to fix
 ```
 

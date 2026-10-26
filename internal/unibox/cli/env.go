@@ -126,7 +126,7 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 		return o.success("removed env " + args[0])
 	}})
 
-	c.AddCommand(&cobra.Command{Use: "pull [env]", Args: cobra.MaximumNArgs(1), Short: "Update the repositories unibox cloned, and say what that changes", Long: `Brings each repository unibox init cloned from an address up to its
+	c.AddCommand(&cobra.Command{Use: "update [env]", Args: cobra.MaximumNArgs(1), Short: "Update the repositories unibox cloned, and say what that changes", Long: `Brings each repository unibox init cloned from an address up to its
 remote, by a fast-forward alone, and says what it changes for the envs of
 it: values they now ask for, sandboxes to recreate, new sbxenv files. A
 repository of your own is never pulled; update it with git.`, RunE: func(cmd *cobra.Command, args []string) error {
@@ -138,7 +138,7 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 				return fmt.Errorf("there is no env %s; unibox env ls lists them", args[0])
 			}
 			if ec.Source == "" || ec.Repo == "" {
-				return unibox.Fail(4, "not_a_clone", "env %s is in a repository of yours, which unibox does not pull; update it with git", args[0])
+				return unibox.Fail(4, "not_a_clone", "env %s is in a repository of yours, which unibox does not update; update it with git", args[0])
 			}
 		}
 		for _, name := range sorted(cfg.Envs) {

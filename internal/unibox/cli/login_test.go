@@ -336,11 +336,11 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "1 commit(s) behind its remote") {
 		t.Fatalf("%s", out)
 	}
-	out, _, err = run(t, paths, "", "env", "pull")
+	out, _, err = run(t, paths, "", "env", "update")
 	if err != nil || !strings.Contains(out, dir+": updated") || !strings.Contains(out, "env dev now asks for mirror") || !strings.Contains(out, "new sbxenv file(s) extra/new.sbxenv.yaml") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if out, _, err = run(t, paths, "", "env", "pull", "dev"); err != nil || !strings.Contains(out, ": up to date") {
+	if out, _, err = run(t, paths, "", "env", "update", "dev"); err != nil || !strings.Contains(out, ": up to date") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "as its remote") {
@@ -350,7 +350,7 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	if _, _, err = run(t, paths, "", "env", "add", "mine", filepath.Join(repo, "extra", "new.sbxenv.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = run(t, paths, "", "env", "pull", "mine"); err == nil || !strings.Contains(err.Error(), "update it with git") {
+	if _, _, err = run(t, paths, "", "env", "update", "mine"); err == nil || !strings.Contains(err.Error(), "update it with git") {
 		t.Fatalf("%v", err)
 	}
 	// An address that cannot be cloned leaves nothing behind.

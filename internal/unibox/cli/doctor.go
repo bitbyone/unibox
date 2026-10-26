@@ -183,7 +183,7 @@ func (o *options) doctorCommand() *cobra.Command {
 					case err != nil:
 						add(area, "clone", "warn", err.Error(), "")
 					case n > 0:
-						add(area, "clone", "warn", fmt.Sprintf("%d commit(s) behind its remote", n), "unibox env pull")
+						add(area, "clone", "warn", fmt.Sprintf("%d commit(s) behind its remote", n), "unibox env update")
 					default:
 						add(area, "clone", "pass", "as its remote", "")
 					}
