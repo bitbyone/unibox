@@ -4,6 +4,7 @@ import { withBase } from 'vitepress'
 
 const installs = {
   Homebrew: 'brew tap bitbyone/unibox https://github.com/bitbyone/unibox\nbrew trust bitbyone/unibox\nbrew install unibox',
+  'Scoop (Windows)': 'scoop bucket add unibox https://github.com/bitbyone/unibox\nscoop install unibox',
   'From source': 'git clone https://github.com/bitbyone/unibox\ncd unibox && make install',
 }
 type Way = keyof typeof installs
@@ -114,7 +115,7 @@ const features = [
             {{ copied ? 'Copied' : 'Copy' }}
           </button>
         </div>
-        <pre><code><span v-for="line in installs[way].split('\n')" :key="line" class="line"><span class="prompt">$</span> {{ line }}</span></code></pre>
+        <pre><code><span v-for="line in installs[way].split('\n')" :key="line" class="line"><span class="prompt">{{ way.startsWith('Scoop') ? 'PS>' : '$' }}</span> {{ line }}</span></code></pre>
       </div>
 
       <div class="actions">
