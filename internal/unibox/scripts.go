@@ -24,7 +24,16 @@ func prepareScript(t api.Task) string {
 		}
 		name, email, _ := AuthorParts(r.Author)
 		fmt.Fprintf(&b, "url=%s\nbranch=%s\ndir=%s\n", Quote(r.URL), Quote(r.Branch), Quote(dir))
-		b.WriteString(`refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch")
+		// A forge that redirects the URL - GitLab's without .git - has git
+		// warn on every request; the first one finds where it leads, and
+		// the rest go there.
+		b.WriteString(`given=$url
+errs="$dir.unibox-ls-remote"
+refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch" 2>"$errs") || true
+grep -v '^warning: redirecting to ' "$errs" >&2 || true
+moved=$(sed -n 's/^warning: redirecting to //p' "$errs" | head -n 1)
+rm -f "$errs"
+[ -z "$moved" ] || url=${moved%/}
 tip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$branch" '$2 == ref {print $1}')
 [ -n "$tip" ] || { echo 'branch does not exist on the forge; push it first' >&2; exit 4; }
 if [ ! -d "$dir" ]; then
@@ -34,7 +43,8 @@ if [ ! -d "$dir" ]; then
   mv "$tmp" "$dir"
 else
   [ -d "$dir/.git" ] || { echo 'task directory is not a clone; inspect it in unibox sandbox shell' >&2; exit 4; }
-  [ "$(git -C "$dir" remote get-url origin)" = "$url" ] || { echo 'task origin changed; inspect it in unibox sandbox shell' >&2; exit 4; }
+  origin=$(git -C "$dir" remote get-url origin)
+  [ "$origin" = "$url" ] || [ "$origin" = "$given" ] || { echo 'task origin changed; inspect it in unibox sandbox shell' >&2; exit 4; }
   [ "$(git -C "$dir" symbolic-ref --short HEAD)" = "$branch" ] || { echo 'task branch changed; restore it in unibox sandbox shell' >&2; exit 4; }
   [ -z "$(git -C "$dir" status --porcelain --untracked-files=all)" ] || { echo 'task has local edits; finish them in unibox sandbox shell before preparing again' >&2; exit 4; }
   git -C "$dir" fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"

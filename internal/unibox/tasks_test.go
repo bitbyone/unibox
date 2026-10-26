@@ -622,3 +622,36 @@ func TestATaskWorksOnTheForgesDefaultBranchAndRunsTheAgentChosen(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestACloneFollowsTheForgesRedirectOnceAndQuietly(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	moved := remote + "-moved.git"
+	if err := os.Symlink(remote, moved); err != nil {
+		t.Fatal(err)
+	}
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// git warns of a redirect on each request to the URL as given, as it
+	// does for GitLab's without .git.
+	bin := t.TempDir()
+	mustWriteExecutable(t, filepath.Join(bin, "git"), []byte("#!/bin/sh\ncase \" $* \" in *' file://"+remote+" '*) echo 'warning: redirecting to file://"+moved+"/' >&2 ;; esac\nexec "+Quote(real)+" \"$@\"\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	work := t.TempDir()
+	task := api.Task{ID: "t", Directory: work, Repositories: []api.Repository{{Name: "payments", URL: "file://" + remote, Branch: "main"}}}
+	for range 2 {
+		var errout bytes.Buffer
+		c := exec.Command("sh", "-c", prepareScript(task))
+		c.Stderr = &errout
+		if err := c.Run(); err != nil {
+			t.Fatalf("%v: %s", err, errout.String())
+		}
+		if strings.Contains(errout.String(), "redirecting") {
+			t.Fatalf("warned: %s", errout.String())
+		}
+	}
+	if got := gitTest(t, filepath.Join(work, "payments"), "remote", "get-url", "origin"); got != "file://"+moved {
+		t.Fatalf("origin %q", got)
+	}
+}
