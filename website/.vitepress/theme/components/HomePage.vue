@@ -23,19 +23,19 @@ async function copy() {
 
 const flow = [
   {
-    where: "Team's repository",
-    what: 'git, the team\'s',
+    where: 'Env repository',
+    what: "the team's, in git",
     lines: ['sandboxes/', '  dev.sbxenv.yaml', 'kits/', '  ...'],
   },
   {
     where: 'Host',
     what: 'unibox and sbx',
-    lines: ['unibox: env, your args,', '  tasks, named ports', 'sbx: the VM, your logins,', '  proxy, policy'],
+    lines: ['unibox: envs, your values,', '  tasks, ports', 'sbx: the VM, your tokens,', '  proxy, network policy'],
   },
   {
     where: 'Sandbox',
     what: 'a micro-VM',
-    lines: ['/work/<task>/<repo>', 'mounted, or cloned', "the kit's agent", 'claude · codex · copilot'],
+    lines: ['/work/<task>/<repo>', 'mounted, or cloned', "the kit's agent", 'claude, codex, copilot'],
   },
   {
     where: 'You',
@@ -46,43 +46,43 @@ const flow = [
 
 const features = [
   {
-    title: "The team's sbxenv files, as they are",
-    text: 'unibox has no format of its own. An env names the sbxenv files and kits your team keeps; sbx reads them.',
-    link: '/guide/envs',
+    title: 'One command to set up',
+    text: 'unibox init clones the env repository, asks for your values and tokens, and creates the sandbox.',
+    link: '/guide/',
   },
   {
-    title: 'Your values, once',
-    text: 'The args an env asks of each person are kept in vars.toml and handed to sbx at every create.',
-    link: '/guide/envs#your-values-for-its-args',
+    title: 'Tokens stay on your machine',
+    text: 'sbx stores them and its proxy adds them to requests. The sandbox sees only placeholders.',
+    link: '/guide/secrets',
   },
   {
-    title: 'Logins kept by sbx',
-    text: 'unibox says which tokens an env needs and has sbx ask for the missing ones. It never reads a value; the sandbox sees placeholders.',
-    link: '/guide/logins',
-  },
-  {
-    title: 'Tasks, mounted or cloned',
-    text: 'A task is your repositories at /work/<task>, mounted from your checkout or cloned from the forge. Resume it, grow it, remove it safely.',
+    title: 'Tasks you can resume',
+    text: 'unibox run starts an agent on a repository; unibox resume picks the task up again later.',
     link: '/guide/tasks',
   },
   {
-    title: 'Agents ready to work',
-    text: "The env's kit runs the agent. unibox starts it in the task, has it trust the task first, and credits it in commits.",
-    link: '/guide/agents',
+    title: 'Mount or clone',
+    text: 'Work on your checkout directly, or on a clone from the forge that never touches your .git.',
+    link: '/guide/tasks#mount-or-clone',
   },
   {
     title: 'Ports by name',
-    text: 'Your own mapping of the sandbox\'s ports to the host\'s, published at every start or on request.',
+    text: 'unibox port on vite publishes the dev server on localhost.',
     link: '/guide/ports',
   },
   {
-    title: 'Drift told, not applied',
-    text: 'When the env changes after its sandbox was made, unibox says so, and sandbox recreate puts the tasks back.',
-    link: '/guide/envs#when-the-env-changes',
+    title: 'Network rules per sandbox',
+    text: 'See which hosts were refused and allow them with unibox network allow.',
+    link: '/guide/network',
+  },
+  {
+    title: 'Env changes, on your terms',
+    text: 'When the team changes the env, unibox says so; sandbox recreate applies it and restores your tasks.',
+    link: '/guide/updating',
   },
   {
     title: 'Scriptable',
-    text: 'Every command takes --json and --yes, with a versioned JSON contract, so a program such as unagit can drive it.',
+    text: 'Every command takes --json and --yes.',
     link: '/reference/cli',
   },
 ]
@@ -91,14 +91,12 @@ const features = [
 <template>
   <div class="home">
     <section class="hero">
-      <p class="kicker">A thin extension of Docker Sandboxes</p>
-      <h1>Coding agents in local sandboxes,<br /><span>from your team's sbxenv files.</span></h1>
+      <p class="kicker">A CLI for Docker Sandboxes</p>
+      <h1>Coding agents in a sandbox,<br /><span>set up from your team's env repository.</span></h1>
       <p class="lead">
-        unibox runs coding agents in Docker Sandboxes (sbx) on your machine. sbx makes the sandbox
-        from your team's sbxenv files and kits, keeps the tokens and enforces the network policy;
-        unibox adds what each person would otherwise repeat - their own values for the env's args,
-        the logins it needs, tasks mounted or cloned into the sandbox, named ports, and a doctor
-        that says what is missing. It is for local development, and nothing more.
+        unibox runs claude, codex, copilot or opencode on your repositories inside a Docker
+        Sandbox, a micro-VM on your machine. Point it at your team's env repository, answer its
+        questions, and run <code>unibox run</code> in a repository.
       </p>
 
       <div class="install">
@@ -120,7 +118,7 @@ const features = [
 
       <div class="actions">
         <a class="btn brand" :href="withBase('/guide/')">Get Started</a>
-        <a class="btn alt" :href="withBase('/guide/why')">What it is</a>
+        <a class="btn alt" :href="withBase('/guide/how-it-works')">How it works</a>
         <a class="btn alt" href="https://github.com/bitbyone/unibox">GitHub</a>
       </div>
     </section>
@@ -128,8 +126,8 @@ const features = [
     <section class="how" aria-label="How unibox works">
       <h2>How it works</h2>
       <p class="sub">
-        The team describes the sandbox in sbxenv files and kits. sbx makes it, with your values and
-        your logins. The agent works on your repositories in it, mounted or cloned.
+        The team describes the sandbox in its env repository. sbx builds it with your values and
+        tokens. The agent works on your repositories inside it.
       </p>
       <ol class="flow">
         <li v-for="(step, i) in flow" :key="step.where" class="step">
@@ -144,42 +142,39 @@ const features = [
         </li>
       </ol>
       <p class="note">
-        sbx's proxy puts the real token into requests to the hosts a binding names. Inside the VM
-        there is only a placeholder.
+        Inside the sandbox every token is a placeholder. sbx's proxy on your machine swaps in the
+        real value, only for the hosts the env allows.
       </p>
     </section>
 
     <section class="screen" aria-label="unibox in a terminal">
       <div class="window">
-        <div class="bar"><i /><i /><i /><span>~/src/web</span></div>
-        <pre class="term"><span class="dim"># name the team's sbxenv file, set what it asks of you, store its tokens</span>
-<span class="dim">$</span> <b>unibox env add dev ~/team/sandboxes/dev.sbxenv.yaml --default</b>
-<span class="dim">$</span> <b>unibox var set user jdoe</b>
-<span class="dim">$</span> <b>unibox login set</b>
+        <div class="bar"><i /><i /><i /><span>~/code/api</span></div>
+        <pre class="term"><span class="dim"># once: the team's env repository, your values and tokens, the sandbox</span>
+<span class="dim">$</span> <b>unibox init git@github.com:acme/agent-envs.git</b>
 
-<span class="dim"># mount this repository into the env's sandbox and run its agent</span>
-<span class="dim">$</span> <b>unibox run --branch feat/login</b>
+<span class="dim"># mount this repository into the sandbox and start the agent</span>
+<span class="dim">$</span> <b>unibox run --task login --branch feat/login</b>
 
-<span class="dim"># every task in every sandbox, and one picked up again later</span>
+<span class="dim"># later</span>
 <span class="dim">$</span> <b>unibox task ls</b>
-<span class="dim">$</span> <b>unibox resume</b> <em>&lt;task&gt;</em>
+<span class="dim">$</span> <b>unibox resume login</b>
 
-<span class="dim"># publish the dev server on localhost by name, at every start</span>
-<span class="dim">$</span> <b>unibox port set fe --map 3000:3000</b></pre>
+<span class="dim"># open the dev server on localhost</span>
+<span class="dim">$</span> <b>unibox port on vite</b></pre>
       </div>
     </section>
 
     <section class="arrangement">
       <div class="copy-col">
-        <h2>Mount or clone, knowingly</h2>
+        <h2>Mount or clone</h2>
         <p>
-          A task mounts your checkout by default, so you see each change at once. The agent can
-          then write your <code>.git</code>, whose hooks and <code>core.fsmonitor</code> your
-          machine runs later; unibox says so the first time. With <code>--clone</code> it works on
-          a clone of its own, and its work comes back by a fetch from the forge, which carries
-          objects and refs, never config or hooks.
+          By default a task mounts your checkout: you see each change at once, but the agent can
+          also write hooks into your <code>.git</code> that your machine runs later. With
+          <code>--clone</code> it works on its own clone from the forge, and you get its work with
+          <code>git fetch</code>.
         </p>
-        <a :href="withBase('/guide/mount')">Mount or clone →</a>
+        <a :href="withBase('/guide/tasks#mount-or-clone')">Mount or clone →</a>
       </div>
       <pre class="formula"><span>mount</span>     your checkout  <span class="dim">◄─── the agent writes here</span>
 
@@ -203,9 +198,8 @@ const features = [
     <section class="closing">
       <h2>Getting started</h2>
       <p>
-        <code>unibox init</code> walks you through it: sbx, an env from your team's sbxenv file,
-        your values for its args, the logins it needs, and its sandbox. Then
-        <code>unibox run</code> in a repository starts its agent.
+        Install unibox, run <code>unibox init</code> with your team's env repository, then
+        <code>unibox run</code> in a repository.
       </p>
       <a class="btn brand" :href="withBase('/guide/')">Getting Started</a>
     </section>

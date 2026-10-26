@@ -1,146 +1,108 @@
 # Security
 
-The sandbox is the boundary, so it matters exactly what crosses it. This page
-lists it.
+## Trust
 
-## Trusted and untrusted
+**Trusted:** your machine, and the env repository's sbxenv files and kits,
+which the team reviews and sbx applies after you approve their bindings.
 
-```
-   +------------- trusted --------------+       +----- untrusted -----+
-   | host: home, ~/.ssh, your secrets    |       | VM: the agent, sudo,|
-   | your configuration, the team's     | <-X-- | its clones, its     |
-   | sbxenv files and kits              |       | Docker              |
-   +-----------------+------------------+       +----------+----------+
-                     | only:                               ^ | only:
-                     |  what the env's kits put in --------+ |
-                     |  directories a task mounts ---------+ |
-                     |                                       |
-                     +---- git fetch <---- forge <-----------+ git push
-                          (objects and refs only,     (a narrow token,
-                           no config, no hooks)        protected branches)
-```
+**Untrusted:** everything in the sandbox - the agent (which has sudo
+there), its clones, its Docker - and any host directory a task mounts.
 
-**Trusted**: your machine, and the team's sbxenv files and kits - reviewed in
-the team's repository, applied by sbx after you approve their bindings. No
-agent edits them on its own, and the repositories being worked on choose
-nothing of the sandbox.
+## What crosses
 
-**Untrusted**: everything inside the VM - the agent, which has sudo there, its
-clones, its Docker - and whatever the agent can write on the host, which is
-a mounted directory.
-
-## What goes in
-
-| What | How |
+| Into the sandbox | How |
 | --- | --- |
-| the sandbox | made by sbx from the env's files and kits, with your args |
-| a task's directories | mounted from the host, by default; or cloned inside the sandbox from the forge, over https, with `--clone` |
-| placeholders | for every token, in place of its value |
-| the agent's trust of the task | merged into its configuration in the sandbox's home |
-| the author and co-author hook | in the sandbox's git configuration, or the clone's |
+| the sandbox itself | built by sbx from the env's files and kits, with your values |
+| a task's repositories | mounted from the host (default), or cloned from the forge over HTTPS |
+| tokens | placeholders only |
+| the agent's trust of the task, author, co-author hook | written into the sandbox's own config |
 
-## What comes out
-
-| What | How |
+| Out of the sandbox | How |
 | --- | --- |
-| files and `.git` of a mounted directory | at once, on your disk |
-| commits of a clone | pushed to the forge by the agent; fetched by you |
-| ports | published on the host's **loopback** only |
+| a mounted directory's files and `.git` | at once, on your disk |
+| a clone's commits | pushed to the forge, fetched by you |
+| ports | published on `127.0.0.1` only |
 | network requests | through sbx's proxy, under its policy |
 
-Nothing of the VM is mounted on the host.
+Nothing of the sandbox is mounted on the host.
 
 ## Tokens
 
-- **unibox never reads a token.** It learns which tokens an env needs from
-  its kits and bindings, and whether sbx has each from `sbx secret ls`,
-  which masks every value. `unibox secret set` has sbx ask for a token on
-  your terminal; a token piped in is handed to sbx unread.
-- **A token never enters a sandbox.** Tokens are kept by sbx on the host, in
-  its store, and reach the sandbox only as placeholders. sbx's proxy, on the
-  host, replaces a placeholder with the value on requests to the hosts a
-  binding names, and nowhere else.
-- **No token is in unibox's files.** `vars.toml` refuses a value beginning
-  with `secret:`, and nothing of unibox's state, logs or `--json` output
-  carries one.
-- **A command source runs on the host.** A token stored with
-  `secret set --command` is read by sbx's daemon running that command on the
-  host, whenever it refreshes. It is your command, run as you.
-- **Tokens are stored globally**, for every sandbox that needs them.
+- **unibox never reads a token.** It learns which an env needs from its
+  kits and bindings, and whether sbx has each from `sbx secret ls`, which
+  masks values. `unibox secret set` has sbx prompt on your terminal; a
+  piped token goes to sbx unread.
+- **No token enters a sandbox.** sbx's proxy on the host replaces the
+  placeholder on requests to the hosts the binding names, nowhere else.
+- **No token is in unibox's files, logs or `--json`.** `vars.toml` refuses
+  values starting with `secret:`.
+- **A `--command` secret runs on the host**, as you, whenever sbx refreshes
+  it.
+- **Tokens are stored globally**, because `sbx env rm` deletes a sandbox's
+  own secrets.
+
+::: warning sbx's built-in github secret
+With sbx's `github` secret stored, sbx signs every request to github.com
+with it, over any narrower token a kit sends.
+:::
 
 ## Git
 
-A `.git` directory the agent can write holds commands the host would run: a
-hook, `core.fsmonitor`, `core.sshCommand`, a filter, `credential.helper`.
-Editors, git GUIs and shell prompts run git in your checkouts all the time.
+A `.git` holds commands your machine runs later: hooks, `core.fsmonitor`,
+`core.sshCommand`, filters, `credential.helper`. Editors and shell prompts
+run git all the time.
 
-**A mounted task gives the agent your `.git`.** That is the default, because
-it is how most people work with an agent, and unibox says so once, the first
-time it mounts each directory. Mount a repository you would let the agent
-configure.
-
-**A cloned task keeps it out.** With `--clone` the agent works on its own
-clone, and what you take back is a fetch from the forge, which carries
-objects and refs, never config or hooks.
-
-unibox itself writes nothing into a host `.git`. The author and the
-co-author hook of a mounted repository reach git in the sandbox through the
-sandbox's own global configuration. See [Mount or Clone](/guide/mount).
+- **A mounted task gives the agent your `.git`.** unibox says so the first
+  time it mounts each directory. Mount only repositories you would let the
+  agent configure.
+- **A cloned task keeps it out.** You get its work by `git fetch`, which
+  carries objects and refs, not config or hooks.
+- unibox writes nothing into a host `.git`; a mount's author and hook come
+  from the sandbox's global git config.
 
 ## The forge is the boundary
 
-The sandbox pushes with the token the env gives it. Within that token's reach
-the agent can push to any branch, force-push and delete.
+The agent can do whatever the env's forge token allows: push any branch,
+force-push, delete.
 
-- **Protect `main` and release branches** on the forge: GitLab protected
-  branches and push rules, GitHub rulesets.
-- **Issue the token narrow**: a GitLab project or group access token with
-  Developer on the projects concerned; a GitHub fine-grained token on the
-  repositories concerned, contents write, and `workflow` left out so the
-  agent cannot change GitHub Actions.
-- **If possible, restrict the token to the work branches.**
-
-::: warning sbx's built-in github secret
-With sbx's built-in `github` secret stored, sbx signs every request to
-github.com itself, over any narrower token a kit would send.
-:::
+- Protect `main` and release branches (GitLab protected branches, GitHub
+  rulesets).
+- Keep the token narrow: a GitLab project or group token with Developer on
+  the projects concerned; a GitHub fine-grained token on those
+  repositories, contents write, no `workflow`.
+- Restrict it to work branches where the forge allows.
 
 ## Your SSH agent
 
-sbx can forward your SSH agent into a sandbox. unibox refuses to work while
-sbx does and you have not said whether it may, as that would hand every key
-over unasked. `unibox init` asks, recommending no, and
-`unibox config set ssh_agent true|false` says it later; either sets sbx to
-match.
+sbx can forward your SSH agent into sandboxes. unibox refuses to run while
+sbx forwards it and you have not decided. `unibox init` asks (recommending
+no); `unibox config set ssh_agent true|false` decides later and sets sbx
+to match.
 
 | | No (recommended) | Yes |
 | --- | --- | --- |
-| git | over HTTPS, with the env's tokens | also over SSH, with no token - a mounted checkout pushes as you do |
-| What an agent can reach | the hosts and owners the env's tokens allow | every repository and server your SSH keys reach, as you |
-| Your keys | out of reach | never seen, but used to sign, as many times as the agent wants |
-| Tools beyond git (`gh`, registries) | the env's tokens | the env's tokens all the same |
+| git | HTTPS with the env's tokens | also SSH, as you |
+| the agent can reach | what the env's tokens allow | every repository and server your keys reach |
+| your keys | out of reach | not readable, but usable to sign, as often as the agent wants |
 
-With it, git in a session trusts a server the first time it meets it
-(`StrictHostKeyChecking=accept-new`), as nobody is there to answer, and
-refuses one whose key has changed.
+With it, git in a session accepts a server's key the first time
+(`StrictHostKeyChecking=accept-new`) and refuses a changed one.
 
 ## Host commands
 
-An sbxenv file can run commands on the host when a sandbox is created. sbx
-asks before it runs them, unless `env.rememberHostCommands` is on, in which
-case it runs them again without asking - after a teammate changed them, too.
-`unibox doctor` warns while it is on.
+An sbxenv file can run commands on the host at create. sbx asks first,
+unless `env.rememberHostCommands` is on; then it runs them again without
+asking, even after a teammate changed them. `unibox doctor` warns while it
+is on; `unibox config set remember_host_commands false` turns it off.
 
-## Env changes are told, not applied
+## Env changes
 
-A teammate's change to the env's files or kits reaches your sandbox only
-when you recreate it: unibox says the env changed (`env_changed`) and
-`unibox sandbox recreate` applies it, with sbx asking again for any binding
-not yet approved. Read the change in the team's repository first.
+A change to the env reaches your sandbox only when you run
+`unibox sandbox recreate`; sbx asks again for any new binding. Read the
+change in the env repository first.
 
-## Sandboxes shared by tasks
+## Shared sandboxes
 
-A shared sandbox gives no isolation between the agents in it: one user with
-sudo, one filesystem, one Docker, one set of ports, and every directory any
-of its tasks mounted. Give a task that must not reach another a sandbox of
-its own.
+Tasks in one sandbox are not isolated from each other: one user with sudo,
+one filesystem, one Docker, every mounted directory. Give a task that must
+not reach another its own sandbox.

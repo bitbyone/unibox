@@ -1,159 +1,50 @@
 # Ports
 
-A sandbox's ports reach your machine only where they are published, on the
-host's loopback. Ports are named in files, by hand - the team's beside its
-sbxenv files, yours in `config.yaml` - and each says whether a sandbox
-starts with it published. `unibox port on` and `off` only publish and
-unpublish them in a running sandbox.
+Ports of a sandbox reach your machine only when published, on
+`127.0.0.1`.
 
-## Your ports
-
-```yaml
-# ~/.config/unibox/config.yaml
-envs:
-  dev:
-    files: [/home/me/team/sandboxes/dev.sbxenv.yaml]
-    ports:
-      fe: '3000:3000'                               # host 3000 to sandbox 3000
-      api: '8080'                                   # sandbox 8080 on any free host port
-      devtools: {port: '9333:9222', default: off}   # published only when asked to
-```
-
-The mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`, as Docker
-says it. A port is published whenever the env's sandbox starts unless it
-says `default: off`, and a running sandbox gets a change of the
-files at the next `unibox run`, `resume`, `sandbox shell` or `port on|off`. A port without a host
-port gets a free one, and another one at each start: `unibox port ls` shows
-where it is now. Give a host port for a page you keep open.
-
-`unibox env show` lists an env's ports with the rest of it.
-
-## The team's ports
-
-The ports a whole team uses - the dev server, Storybook, a debugger - can be
-named once, in files sbx does not read: `unibox.yaml` at the root of the
-repository for every env in it, and beside an sbxenv file for one env -
-`dev.sbxenv.yaml` has its ports in `dev.unibox.yaml`.
-
-```yaml
-# sandboxes/dev.unibox.yaml
-ports:
-  vite:
-    port: '5173:5173'
-    description: the dev server
-    default: on
-  storybook:
-    port: '6006'
-    description: Storybook, when you work on components
-```
-
-`port` is the mapping, `description` says what it is for, and `default`
-whether it is published at every start; left out, it is off. Someone using
-sbx without unibox is not limited by the file in any way: sbx never reads
-it.
-
-Each person changes the team's ports for themselves in their
-`config.yaml`, which wins over the team's file:
-
-```yaml
-envs:
-  dev:
-    ports:
-      storybook: {default: on}               # on at every start
-      vite: {port: '15173:5173'}             # on another host port, for you alone
-```
-
-`unibox port ls`
-says of each where it is named - `repo`, `env`, `yours-all`, `yours`, or
-`-` for one published by hand - and whether it is on at start:
-
-```
-PORT       MAPPING    FROM  AT START  NOW  URL                    DESCRIPTION
-storybook  6006       repo  off       off  -                      Storybook, when you work on components
-vite       5173:5173  env   on        on   http://127.0.0.1:5173  the dev server
-```
-
-## Which wins
-
-A port named in more than one place is taken from each in turn, the later
-over the earlier:
-
-1. `unibox.yaml` at the root of the team's repository, for every env in it;
-2. `<env>.unibox.yaml` beside the env's sbxenv file - of an env's several
-   files, a later one's, as its sbxenv does;
-3. yours for every env, `ports:` at the top of `config.yaml`
-4. yours for the env, under it in `config.yaml`.
-
-A later place may give a port only another mapping or switch it on or off;
-its description stays the team's. A switch of yours for every env that an
-env does not name is left out of that env.
-
-```yaml
-# config.yaml
-ports:
-  devtools: {port: '19222:9222', default: off}   # every env, on another host port
-  vite: {default: on}                            # the team's vite, on wherever it is named
-envs:
-  dev:
-    ports:
-      vite: {default: off}                       # but not in dev
-```
-
-## Switching ports on a running sandbox
+## Open a port
 
 ```sh
-unibox port -s dev                        # switch them with the arrows or h and l
-unibox port ls -s dev                     # its ports, with their URLs
-unibox port on devtools -s dev            # by name
-unibox port on vite=15173 -s dev          # a named port on another host port
-unibox port off fe -s dev
-unibox port on --map 8080:5173 -s dev     # a mapping no file names
+unibox port ls                       # the ports, whether on, and their URLs
+unibox port on vite                  # a named port
+unibox port on vite=15173            # on another host port
+unibox port on --map 8080:3000       # a port no file names
+unibox port off vite
+unibox port                          # switch them with the arrow keys or h and l
 ```
 
-`on` and `off` change the running sandbox and no file; the sandbox's next
-start goes back to what the files say. `name=HOST_PORT` keeps the port's
-sandbox port, host address and protocol. A switch on a stopped sandbox is
-refused, as publishing would start it.
+Add `-s dev` for another sandbox than the default. The sandbox must be
+running. These switches last until the sandbox stops; at the next start
+the files below decide again.
 
-A port unibox did not publish is left alone: one published with
-`sbx ports`, and one a kit declares, which sbx publishes itself, on a new
-host port at every start.
+A mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. `3000` alone
+takes any free host port, a new one at each start; `8080:3000` uses host
+port 8080.
 
-::: tip A browser for the agent
-A browser an agent drives belongs in the sandbox - Chrome for Testing and
-chrome-devtools-mcp from a kit, say - with its DevTools port published for
-you to look on. An agent driving your own browser would have its cookies,
-sessions and files.
-:::
+## Named ports
 
-## What a sandbox may reach
+The team can name ports in `unibox.yaml` at the root of the env repository
+(every env) or beside the sbxenv file (`dev.unibox.yaml` for
+`dev.sbxenv.yaml`). `unibox port ls` shows them.
 
-A sandbox reaches only the hosts sbx's network policy allows: the
-defaults, the hosts the env's kits add, and rules of your own for that
-sandbox. unibox keeps yours in `config.yaml` under the sandbox's name and
-applies them to it - right away when it exists, otherwise once it is
-created, and again after each recreation. They go when the sandbox is
-removed.
+Your own go in `~/.config/unibox/config.yaml`, for every env at the top or
+for one env under it. Yours win over the team's:
 
-```sh
-unibox network ls -s dev                    # your rules, and the hosts refused lately
-unibox network allow jitpack.io -s dev
-unibox network allow stun.example.com:3478 --protocol udp
-unibox network deny gist.github.com         # even if the env allows it
-unibox network rm jitpack.io -s dev         # take a rule of yours away
-unibox network ls --all                     # the env's and sbx's hosts too
+```yaml
+ports:                              # every env
+  devtools: {port: '19222:9222', default: off}
+envs:
+  dev:
+    ports:
+      api: '8080:8080'              # on at every start
+      vite: {port: '15173:5173'}    # the team's vite, on another host port
+      storybook: {default: on}      # the team's storybook, on at every start
 ```
 
-`ls` lists your rules and those added with sbx itself, then the hosts the
-sandbox was refused lately: what the env leaves out, and a rule of yours
-or a kit may want to add. The env's and sbx's defaults are counted, and
-listed with `--all`.
+A port with `default: off` is published only by `unibox port on`. A
+change is applied at the next `run`, `resume`, `sandbox shell` or
+`port on|off`.
 
-A host is as sbx takes it: a name, a wildcard such as `*.example.com`, an
-IP address or CIDR prefix, each with an optional port (`example.com:443`);
-the protocol is tcp unless `--protocol` says udp or `tcp,udp`. A rule the
-whole team needs belongs in a kit, where it is reviewed with the env.
-
-At a terminal, `unibox network` is a list of the same: `a` allows a host,
-`n` denies one - any host you type, the refused one under the cursor
-offered, with its protocol - and `d` takes a rule away.
+Order, later wins: `unibox.yaml`, `<env>.unibox.yaml`, your top-level
+`ports:`, your `envs.<env>.ports:`.

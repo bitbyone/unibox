@@ -2,26 +2,23 @@
 
 ## On the host
 
-unibox's home follows the XDG variables: `$XDG_CONFIG_HOME/unibox`,
-`$XDG_CACHE_HOME/unibox` and `$XDG_DATA_HOME/unibox`, which default to the
-paths below, under your home directory on Windows too.
+Paths follow `XDG_CONFIG_HOME`, `XDG_CACHE_HOME` and `XDG_DATA_HOME`, and
+default to these, on Windows too:
 
-| Path | What it holds |
+| Path | Holds |
 | --- | --- |
-| `~/.config/unibox/config.yaml` | your choices: the envs, their sandbox names and named ports, the default env, the context, `stop_idle`, `ssh_agent` |
-| `~/.config/unibox/vars.toml` | your own values for the args envs declare, and the CPUs and memory your sandboxes get |
-| `~/.config/unibox/state.json` | what use taught: sandboxes and what each was created from, tasks, runs, the directories you were told about mounting |
-| `~/.config/unibox/state.lock`, `locks/` | locks that keep two unibox commands from changing the same thing at once |
-| `~/.config/unibox/herdr-plugin/` | the herdr plugin's manifest, when installed |
-| `~/.cache/unibox/args/` | the args file for one `sbx env create`, readable only by you and removed after it |
-| `~/.local/share/unibox/repos/<host>/<path>` | the team repositories `unibox init` cloned from a git address, kept current by `unibox env update`; `destroy --all` leaves them |
+| `~/.config/unibox/config.yaml` | envs, named ports, network rules, default env, context, settings |
+| `~/.config/unibox/vars.toml` | your values for env args, and resources (mode `0600`) |
+| `~/.config/unibox/state.json` | sandboxes and what each was created from, tasks, runs |
+| `~/.config/unibox/state.lock`, `locks/` | locks between concurrent unibox commands |
+| `~/.config/unibox/herdr-plugin/` | the herdr plugin, when installed |
+| `~/.cache/unibox/args/` | the args file for one `sbx env create`, removed after |
+| `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |
 
-The team's sbxenv files and kits are wherever the team keeps them; unibox
-records their paths and never writes them. The team may keep the
-[ports it names](/guide/ports#the-team-s-ports) in files sbx does not read:
-`unibox.yaml` at the repository's root for every env, and beside an sbxenv
-file for one, `dev.sbxenv.yaml` having `dev.unibox.yaml`. Tokens are in none of these
-files: they are sbx's, in its own store (the keychain on macOS).
+In the env repository, besides sbxenv files and kits, unibox reads the
+team's named ports: `unibox.yaml` at the root (every env) and
+`<env>.unibox.yaml` beside `<env>.sbxenv.yaml`. Tokens are in none of
+these files; they are in sbx's store.
 
 ### `config.yaml`
 
@@ -30,100 +27,66 @@ default_env: dev
 envs:
   dev:
     files:
-      - /home/me/team/agent-sandboxes/sandboxes/dev.sbxenv.yaml
-      - /home/me/team/agent-sandboxes/sandboxes/local.sbxenv.yaml
-    name: dev-mine
-    repo: /home/me/.local/share/unibox/repos/github.com/team/agent-sandboxes
-    source: git@github.com:team/agent-sandboxes.git
+      - /home/me/.local/share/unibox/repos/github.com/acme/agent-envs/dev.sbxenv.yaml
+    name: dev                     # the sandbox's name
+    repo: /home/me/.local/share/unibox/repos/github.com/acme/agent-envs
+    source: git@github.com:acme/agent-envs.git   # set when init cloned it
     ports:
-      web: 3000:5173
-      storybook: {port: '6006:6006', default: off}
-      vite: {default: on}     # a port of the team's, switched on for you
-ports:                    # yours for every env, under each env's own
+      api: '8080:8080'
+      vite: {default: on}         # a team port, switched on for you
+ports:                            # yours, for every env
   devtools: {port: '19222:9222', default: off}
-sandboxes:                # a sandbox's own network rules
-  dev-mine:
+sandboxes:                        # unibox network rules
+  dev:
     network:
       - allow: jitpack.io
       - allow: stun.example.com:3478
         protocol: udp
       - deny: gist.github.com
 context:
-  sandbox: dev-mine
+  sandbox: dev
 stop_idle: true
 ssh_agent: false
 ```
 
-`repo` is the repository init found the files in, and `source` the
-address it cloned it from; `unibox env update` pulls the repository, one
-without a `source` only while it has nothing uncommitted and its branch
-follows a remote one. `ports:` are written by hand, at the top for every env
-or under one; a port with no mapping of its own is one of the team's,
-given another default here ([Ports](/guide/ports#which-wins)).
-`sandboxes:` are what `unibox network` keeps for a sandbox and applies to
-it ([What a sandbox may reach](/guide/ports#what-a-sandbox-may-reach)).
-
-Change it with unibox's commands rather than by hand - `unibox env`,
-`unibox context`, `unibox config`, `unibox network` - all but `ports:`:
-
-```sh
-unibox config set default_env dev
-unibox config set stop_idle false
-unibox config get
-```
+Edit it through `unibox env`, `config`, `context` and `network`. Only
+`ports:` is written by hand ([Ports](/guide/ports#named-ports)).
 
 ### `vars.toml`
 
 ```toml
-[args]                 # for every env that declares them
+[args]                          # every env that declares them (var set -g)
 user = 'jdoe'
 
-[resources]            # for every env
+[envs.dev.args]                 # one env, wins over [args]
+user = 'john'
+
+[resources]                     # every env, by hand
 cpus = '100%'
 memory = '75%'
 
-[envs.dev.args]        # one env's own, over the ones above
-user = 'john'
-
-[envs.dev.resources]
+[envs.dev.resources]            # one env, by hand
 memory = '16g'
 
-[sandboxes.dev-big.resources]   # one sandbox's own, over its env's
+[sandboxes.dev-big.resources]   # one sandbox: sandbox create / sandbox resources
 cpus = '8'
 ```
 
-Kept with mode `0600`. Args are changed with `unibox var set` and
-`unibox var rm` (`-g` for `[args]`); values are one line each, and one
-beginning with `secret:` is refused: a token is a
-[secret](/guide/secrets).
-
-Resources for every env or one env are written by hand; a sandbox's own by
-`unibox sandbox create --cpus/--memory` and `unibox sandbox resources`,
-and dropped with the sandbox. `cpus` is a count, `0` for all of them, or
-a share of this machine's from `1%` to `100%`; `memory` a size (`k`, `m`,
-`g`) or a share. They are read at each create, as described in
-[Envs](/guide/envs#resources).
-
-### Coming from unibox 1
-
-unibox 2 reads a unibox 1 `config.yaml` and keeps what still means something
-- `runtimes.sbx.stop_idle` and `runtimes.sbx.ssh_agent` become `stop_idle`
-and `ssh_agent` - and drops the rest at its next write. A unibox 1 `state.json` is set aside as `state.v1.json`, with a
-notice naming the old sandboxes to remove with `sbx rm`; unibox 2 does not
-manage them.
+`cpus` is a count, `0` for all, or `1%`-`100%` of this machine; `memory` a
+size (`k`, `m`, `g`) or a share. sbx takes no shares, so unibox converts
+them at each create and caps memory at sbx's 75% of the host. Values are
+one line each; one starting with `secret:` is refused.
 
 ## In the sandbox
 
-| Path | What it is |
+| Path | Is |
 | --- | --- |
-| `/work/` | where tasks live |
-| `/work/<task>/` | a task's directory; the agent starts here when the task has several repositories |
-| `/work/<task>/<repo>/` | a mounted host directory, or a clone from the forge |
-| `/var/lib/unibox/runs/` | a mark for each running session, so an idle sandbox can be told |
-| `/var/lib/unibox/mounted/` | per mounted repository, the git configuration that sets its author and co-author hook |
-| `<clone>/.git/unibox-hooks/` | a clone's co-author hook, named by its `core.hooksPath` |
+| `/work/<task>/` | a task; the agent starts here when it has several repositories |
+| `/work/<task>/<repo>/` | a mounted directory or a clone |
+| `/var/lib/unibox/runs/` | a mark per running session |
+| `/var/lib/unibox/mounted/` | per mounted repository, the git config for author and co-author hook |
+| `<clone>/.git/unibox-hooks/` | a clone's co-author hook (`core.hooksPath`) |
 
-Before every session unibox merges trust of the task's directories into the
-agent's own configuration in the sandbox's home - `~/.claude.json`,
-`~/.codex/config.toml`, `~/.copilot/config.json` - and leaves the rest of it
-as it is. See [Agents](/guide/agents).
+Before each session unibox merges trust of the task's directories into
+`~/.claude.json`, `~/.codex/config.toml` and `~/.copilot/config.json`,
+leaving the rest of each file alone.

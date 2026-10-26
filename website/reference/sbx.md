@@ -1,128 +1,72 @@
 # What unibox Asks of sbx
 
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) does the
-work: one sbx sandbox is one micro-VM with its own kernel, its own Docker
-Engine and its own disk, persistent until removed, with the agent running in
-it as a non-root user with sudo. unibox runs nothing of its own in it beyond
-a few lines of shell per task.
+work: each sandbox is a micro-VM with its own kernel, Docker Engine and
+disk, persistent until removed. unibox needs **sbx 0.49.2 or newer**,
+verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 
-unibox needs **sbx 0.49.2 or newer**, the version it was verified against on
-macOS (Apple Silicon), on throwaway sandboxes. `unibox doctor` fails on an
-older one. Where sbx's behaviour shows through, this page says so.
-
-::: tip Before you start
-`sbx login` once. `unibox doctor` checks the rest.
-:::
-
-## The commands unibox runs
+## Commands unibox runs
 
 | unibox | sbx |
 | --- | --- |
-| a sandbox created from an env | `sbx env create --name <sandbox> --env-args-file <file> <files...>`, on your terminal |
-| `doctor`'s check of an env | `sbx env plan` with the same files and args |
-| which agent and which tokens | `sbx kit inspect --json` of each kit, with `--kit-arg` from your values |
-| which tokens are stored | `sbx secret ls --json` |
+| create a sandbox | `sbx env create --name <sandbox> --env-args-file <file> <files...>`, on your terminal |
+| `doctor`'s env check | `sbx env plan` with the same files and args |
+| agent and tokens of an env | `sbx kit inspect --json`, with `--kit-arg` from your values |
+| stored tokens | `sbx secret ls --json` |
 | `secret set` | `sbx secret set <service> [--command <cmd>]`, on your terminal |
-| a mounted task | `sbx mount <sandbox> <host>:/work/<task>/<repo>`; `sbx umount` to remove it |
+| mount a task | `sbx mount <sandbox> <host>:/work/<task>/<repo>`; `sbx umount` |
 | a session | `sbx exec -it -w <dir> <sandbox> bash -c ...` |
-| sandboxes and their state | `sbx ls --json` |
-| stop and remove | `sbx stop`; `sbx env rm --force` with the env's files, or `sbx rm --force`, after unibox's own checks |
-| named ports | `sbx ports --json`, `--publish`, `--unpublish` |
-| the SSH agent decision | `sbx settings get/set ssh.agentForwardingEnabled`, then `sbx daemon restart` |
-| `config set remember_host_commands` | `sbx settings set/unset env.rememberHostCommands` |
-| `network ls` | `sbx policy ls --json --type network <sandbox>`, `sbx policy log --json --type network --limit 500 <sandbox>` |
-| `network allow`, `deny`, and after a create | `sbx policy allow/deny network --sandbox <sandbox> [--protocol <p>] <hosts>` |
+| list | `sbx ls --json` |
+| stop, remove | `sbx stop`; `sbx env rm --force` or `sbx rm --force`, after unibox's checks |
+| ports | `sbx ports --json`, `--publish`, `--unpublish` |
+| SSH agent | `sbx settings get/set ssh.agentForwardingEnabled`, `sbx daemon restart` |
+| `remember_host_commands`, `doctor` | `sbx settings get/set/unset env.rememberHostCommands` |
+| `network ls` | `sbx policy ls --json --type network`, `sbx policy log --json --type network --limit 500` |
+| `network allow`/`deny` | `sbx policy allow/deny network --sandbox <sandbox> [--protocol <p>] <hosts>` |
 | `network rm` | `sbx policy rm network --force --resource <hosts> [--sandbox <sandbox>]` |
-| `prune` | `sbx ls --json`, and `sbx umount` of a mount no task has |
-| `doctor` | `sbx version`, `sbx diagnose --format json`, `sbx settings get env.rememberHostCommands` |
+| `doctor` | `sbx version`, `sbx diagnose --format json` |
+| `prune` | `sbx ls --json`, `sbx umount` of a mount no task has |
 
-unibox removes only sandboxes it created; one it adopted with
-`sandbox create --adopt` only with `--force`.
+unibox removes only sandboxes it created; an adopted one only with
+`--force`.
 
-## Envs
+## Behaviour unibox relies on
 
-- **`sbx env plan` prints text, not JSON.** It does validate: a missing
-  required arg or an undeclared one exits 1 with the arg's name. So unibox
-  reads `args`, `kits`, `bindings`, `agent` and `name` from the YAML itself,
-  read-only, ignores every other field so a newer sbx's additions do not
-  break it, and runs `plan` for its verdict.
-- **Bindings are approved once, by you.** A binding not yet applied needs
-  your approval; `sbx env create` asks once, and `--force` would approve
-  without asking. unibox runs the first create on your terminal and never
-  passes `--force` for you.
-- **A kit with a required arg of its own** is read with `--kit-arg` from the
-  env's values, or `sbx kit inspect` would refuse it. A local kit is built
-  first, which takes seconds.
+**Envs.** `sbx env plan` validates but prints text, so unibox reads
+`name`, `agent`, `args`, `kits` and `bindings` from the YAML itself and
+ignores other fields. The first create runs on your terminal so you
+approve the bindings; unibox never passes `--force` to it. A kit with a
+required arg is inspected with `--kit-arg`.
 
-## Agents
+**Agents.** The agent's command is the workload kit's
+`sandbox.entrypoint` and `sandbox.command.default`. `sbx exec` gives it
+what `sbx run` would: proxy variables, the kit's `BASH_ENV` and `PATH`,
+the credential placeholders. Commands run through bash, as `sh` is dash.
+Two agents can run in one sandbox at once.
 
-- **The agent's command is the workload kit's.** `sbx kit inspect --json`
-  gives `sandbox.entrypoint` (`["copilot"]`) and `sandbox.command.default`
-  (`["--yolo"]`).
-- **`sbx exec` gives the agent what `sbx run` does**: the proxy's variables,
-  the kit's `BASH_ENV` and `PATH`, the credential placeholders. Commands go
-  through bash, because `sh` is dash, which drops variables whose names are
-  not a shell's and does not read `BASH_ENV`.
-- **Two agents in one sandbox at once work**, each in its own `exec`.
+**Secrets.** An env needs the union of its kits' `credentials[].service`
+and its bindings; `optional` is read from the kit's YAML, as inspect drops
+it. `sbx secret ls` shows values masked. A command secret runs on the host
+from a temporary directory with no terminal. `sbx env rm` deletes a
+sandbox's own secrets, so unibox stores tokens globally. sbx's `github`
+secret overrides any other `Authorization` to github.com.
 
-## Secrets
+**Mounts.** `sbx mount` is live and writable, kept across stop and start;
+a mount whose host path is gone fails the start, so `task rm` unmounts
+first and `doctor` checks paths. sbx lists no mounts; `doctor` reads
+`/proc/self/mountinfo` in the sandbox. A mount's parent directories are
+root's, so the agent cannot write beside the repository.
 
-- **Which tokens a sandbox needs** is the union of `credentials[].service`
-  over its kits, from `kit inspect --json`, and the env's bindings. Inspect
-  drops a credential's `optional`, which only the kit's YAML has.
-- **What is stored** is `sbx secret ls --json`: a name, a scope and the
-  secret masked as `(stored)` or `(oauth configured)`, never a value.
-- **A command secret is stored as its source.** The sbx daemon runs the
-  command on the host when it verifies the secret and whenever it refreshes,
-  from a fresh temporary directory, with no terminal. The command must reach
-  its secret alone - a keychain, an agent socket.
-- **`sbx env rm` deletes a sandbox's own secrets**, which is why unibox
-  stores every token globally.
-- **sbx's own `github` secret takes github.com over**: with it stored, the
-  proxy sets `Authorization` on every request to github.com itself, over any
-  the sandbox sent.
+**Ports.** `sbx ports` publishes live on loopback; a taken host port is
+refused. `--unpublish` needs the exact host port, so unibox records what
+it published and leaves other ports alone. A kit's ports get new host
+ports at each start. Publishing on a stopped sandbox would start it, so
+unibox refuses.
 
-## Mounts
+**Network policy.** A sandbox's rule goes into sbx's `local` policy,
+scoped to it. sbx refuses to remove default and kit rules. Hosts are
+comma-joined, so unibox refuses a host containing a comma or whitespace or
+starting with `-`.
 
-- `sbx mount <sandbox> HOST:TARGET` mounts into a running sandbox: live,
-  writable, taken out by `sbx umount`, leaving an empty mount point.
-  Removing the sandbox leaves the host's files alone.
-- **Mounts are kept across stop and start**, and a mount whose host path is
-  gone fails the start until it is removed with `sbx umount`. So `task rm`
-  unmounts before anything else, and `doctor` checks every mounted path
-  exists.
-- **sbx lists no mounts.** `/proc/self/mountinfo` in a running sandbox shows
-  each with its target, which is how `doctor` finds a mount no task has.
-- **The parents of a mount are root's**, mode 755: the agent cannot write
-  beside the repository. Inside it git works, a commit is the host's at
-  once, and `.git/hooks` is writable.
-
-## Ports
-
-- `sbx ports` publishes a port live on the host's loopback, tcp4 when no
-  protocol is named. A host port already taken is refused.
-- `--unpublish` takes a port back only by its exact host port. So unibox
-  records what it published by name and mapping, and leaves a port it did
-  not publish alone.
-- **A kit's ports get new host ports at every start**, which is why named
-  ports are the person's, in unibox's configuration.
-- A switch on a stopped sandbox is refused, since publishing would start it.
-
-## Network policy
-
-- `sbx policy ls --json` gives `rules[]`, each with `applies_to` (`all`, or
-  `sandbox:<name>`), how it was made, and for a kit's rule a name starting
-  `kit:`. unibox lists them as they are and removes only rules it can name
-  by their hosts; sbx refuses to remove the defaults' and the kits'.
-- A rule for one sandbox goes into sbx's `local` policy, scoped to it.
-  Hosts are joined by commas, so unibox refuses a host with a comma or
-  whitespace in it, or one starting with `-`, before sbx is asked.
-
-## Lifecycle
-
-- `sbx exec` starts a stopped VM.
-- unibox stops a sandbox when the last session it started there ends,
-  unless `stop_idle` is `false`. The disk and tasks stay.
-- With `env.rememberHostCommands` on, sbx runs an env's host commands again
-  without asking; `unibox doctor` warns and suggests
-  `unibox config set remember_host_commands false`.
+**Lifecycle.** `sbx exec` starts a stopped VM. unibox stops a sandbox when
+the last session it started there ends, unless `stop_idle` is `false`.

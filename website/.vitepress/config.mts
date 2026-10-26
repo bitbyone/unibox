@@ -10,24 +10,19 @@ const guideSidebar = [
     text: 'Introduction',
     items: [
       { text: 'Getting Started', link: '/guide/' },
-      { text: 'What unibox Is', link: '/guide/why' },
-      { text: 'Concepts', link: '/guide/concepts' },
+      { text: 'How it Works', link: '/guide/how-it-works' },
     ],
   },
   {
-    text: 'Setting Up',
-    items: [
-      { text: 'Envs', link: '/guide/envs' },
-      { text: 'Secrets', link: '/guide/secrets' },
-      { text: 'Agents', link: '/guide/agents' },
-    ],
-  },
-  {
-    text: 'Working',
+    text: 'Daily Work',
     items: [
       { text: 'Tasks', link: '/guide/tasks' },
-      { text: 'Mount or Clone', link: '/guide/mount' },
+      { text: 'Sandboxes', link: '/guide/sandboxes' },
       { text: 'Ports', link: '/guide/ports' },
+      { text: 'Network', link: '/guide/network' },
+      { text: 'Secrets & Agents', link: '/guide/secrets' },
+      { text: 'Keeping the Env Current', link: '/guide/updating' },
+      { text: 'Troubleshooting', link: '/guide/troubleshooting' },
     ],
   },
   {
@@ -36,6 +31,10 @@ const guideSidebar = [
       { text: 'herdr', link: '/guide/herdr' },
       { text: 'unagit', link: '/guide/unagit' },
     ],
+  },
+  {
+    text: 'More',
+    items: [{ text: 'For Env Authors', link: '/guide/env-authors' }],
   },
 ]
 
@@ -56,7 +55,7 @@ export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'A thin extension of Docker Sandboxes: your team\'s sbxenv files, your own values and secrets, and tasks that run a coding agent on your repositories during local development.',
+  description: 'Run coding agents on your repositories in Docker Sandboxes, set up from your team\'s env repository.',
   cleanUrls: true,
   lastUpdated: true,
   head: [

@@ -1,82 +1,61 @@
 # Command Line
 
-```
-unibox [command] [flags]
-```
-
 ## Conventions
 
-**Nouns, then verbs.** Commands come in groups named for what they work on -
-`env`, `var`, `secret`, `task`, `sandbox`, `port`, `herdr` - and the verb
-follows: `unibox sandbox stop`, `unibox port on`. Only the everyday
-commands stand alone: `run`, `resume`, `init`, `doctor`, `context`, `config`,
-`prune`, `destroy` and `version`.
+Commands are a noun, then a verb (`unibox sandbox stop`). `run`, `resume`,
+`init`, `doctor`, `context`, `config`, `prune`, `destroy` and `version`
+stand alone.
 
-**The argument is what the command acts on.** One name - a task, a sandbox,
-an env, a port - or a list of the same kind, such as directories. The env a
-command works in is `-e`/`--env`, the sandbox `-s`/`--sandbox`, so the same
-flag means the same thing everywhere.
+`-s`/`--sandbox` is the sandbox a command works in; `-e`/`--env` the env a
+new sandbox is created from. Left out, `-s` comes from `UNIBOX_SANDBOX`,
+the [context](#unibox-context), or the only sandbox; `-e` from
+`UNIBOX_ENV`, the context, `default_env`, or the only env.
+`unibox sandbox rm` always names its sandbox, and `unibox task ls` lists
+every sandbox unless given `-s`.
 
-**Where a command works when not told.** Left out, `-s` comes from
-`UNIBOX_SANDBOX`, then from the [context](#unibox-context), then from there
-being only one sandbox; `-e` from `UNIBOX_ENV`, the context, the
-configuration's `default_env`, then from there being only one env. A command
-that cannot tell says so and names the choices. Two exceptions keep a mistake
-cheap: `unibox sandbox rm` always names its sandbox, and `unibox task ls`
-lists every sandbox's tasks unless given `-s`.
+A noun alone at a terminal (`unibox task`, `sandbox`, `env`, `var`,
+`secret`, `network`, `port`, `context`) opens a list to act on by keys;
+elsewhere it is the noun's `ls`. `↑` `↓` or `j` `k` move, `q` or `esc`
+leave, `d` (or `x`) removes after `y`.
 
-**Global flags**, on every command:
+### Global flags
 
 | Flag | Meaning |
 | --- | --- |
-| `--json` | write versioned JSON, without prompting |
-| `-y`, `--yes` | accept operation prompts; never discards work |
-| `-h`, `--help` | help for the command |
-| `-v`, `--version` | the release unibox was built from, as `unibox version` (top level only) |
+| `--json` | versioned JSON output, no prompts; every object has `api_version` |
+| `-y`, `--yes` | accept prompts; never discards work |
+| `-h`, `--help` | help |
+| `-v`, `--version` | the release (top level only) |
 
-Every list has `--json`; a long operation prints its progress as lines, for a
-log. Called with `--json` or `--yes`, unibox never asks: what stands in the
-way is an answer, not a prompt. Every JSON object carries `api_version`.
-
-**Exit codes**:
+### Exit codes
 
 | Code | Means |
 | --- | --- |
 | `0` | success |
-| `1` | an error |
-| `4` | refused or not found: an env or sandbox unibox does not have, unpushed work, a busy sandbox, a sandbox not unibox's, host access, a confirmation required, an arg missing or invalid, a failed `doctor` |
-| the agent's | after a session, `run` and `resume` exit with the agent's status |
+| `1` | error |
+| `4` | refused or not found (missing env, sandbox, arg or token; unpushed work; busy sandbox; confirmation required; `doctor` failed) |
+| the agent's | `run` and `resume` exit with the agent's status |
 
-Under `--json` a failure is `{"api_version", "code", "message"}`. Errors are
-lower case and say what to do: `sbx is not signed in - run sbx login`.
+With `--json`, a failure is `{"api_version", "code", "message"}`.
 
 ## Setting up
 
 ### `unibox init`
 
 ```
-unibox init [<directory>|<file>|<git-address>] [--no-input] [--file <file>...] [--var <name>=<value>...]
+unibox init [directory|file|git-address] [--no-input] [--file <file>...] [--var <name>=<value>...]
 ```
 
-Sets unibox up for a team's repository of sbxenv files: the current one
-(the whole repository, from anywhere in it), the one given, or one cloned
-from a git address into `~/.local/share/unibox/repos/<host>/<path>` with
-your own git. It finds every `*.sbxenv.yaml` there and offers them to pick,
-then goes step by step, each shown as it goes: **sbx** (installed, recent
-enough, signed in, the SSH agent decided), **Envs** (each file picked
-added as an env, and the default one), **Values** (the args they ask of
-you), **Secrets** (the tokens sbx lacks, asked for by sbx), **Ports** (the
-team's ports switched on or off) and **Sandboxes** (created, on your
-terminal). A step already done is said and passed; running it again adds
-what is new.
+Sets up a team's env repository: the current one, the path given, or a git
+address cloned into `~/.local/share/unibox/repos/<host>/<path>`. Steps:
+sbx (installed, signed in, SSH agent), Envs, Values, Secrets, Sandboxes.
+Running it again adds only what is new.
 
 | Flag | Meaning |
 | --- | --- |
-| `--no-input` | ask nothing, as without a terminal; fail naming what is missing and the flag that gives it |
+| `--no-input` | ask nothing (also without a terminal); fail naming what is missing |
 | `--file <file>` | set up this sbxenv file rather than each found (repeatable) |
-| `--var <name>=<value>` | a value of yours for each env asking for it (repeatable) |
-
-See [Getting Started](/guide/#set-it-up).
+| `--var <name>=<value>` | a value for each env asking for it (repeatable) |
 
 ### `unibox doctor`
 
@@ -84,53 +63,37 @@ See [Getting Started](/guide/#set-it-up).
 unibox doctor [-e <env>]
 ```
 
-Checks sbx, the envs, your args and secrets, and the sandboxes, and says what
-to fix: sbx's version (0.49.2 or newer) and `sbx diagnose`; the SSH agent
-decision; that each env's files read and `sbx env plan` accepts them with
-your args; every required arg and secret; whether a sandbox still matches its
-env, and is still in sbx; mounted directories that are gone, and mounts a
-running sandbox has that no task does; a clone of unibox's that is behind
-its remote. Each finding names the unibox command that fixes it. With `-e`,
-one env alone. Exits `4` on a failure.
+Checks sbx (installed, `sbx diagnose`, version 0.49.2 or newer, host
+commands setting, SSH agent), `vars.toml`, each env (files, args,
+`sbx env plan`, secrets, drift, cloned repository behind), and each
+sandbox (still in sbx, mounts). Names the fix for each finding. `-e`
+checks one env. Exits `4` on a failure.
 
 ### `unibox env`
 
 ```
 unibox env
-unibox env add [<env>] [<file>...] [--name <sandbox>] [--default]
+unibox env add [env] [file...] [--name <sandbox>] [--default]
 unibox env ls
-unibox env show [<env>]
-unibox env update [<env>]
+unibox env show [env]
+unibox env update [env]
 unibox env rm <env>
 ```
 
-An env names one or more sbxenv files - the team's, as sbx reads them -
-merged by sbx in the order given; a later file, such as a local overlay,
-overrides an earlier one. unibox never changes the files. Envs are kept in
-`~/.config/unibox/config.yaml`.
+An env names one or more sbxenv files, merged by sbx in order. Kept in
+`config.yaml`.
 
-`add` adds an env, or changes the files of one; without a file it takes the
-one sbxenv file in the current directory, and without a name the name that
-file gives its sandbox. `--name` names its sandbox (default: the file's
-`name:`, or the env's); `--default` makes it the env new sandboxes come
-from. `show` prints what the files declare - args, kits, agent, the team's
-ports - and what you set. `update` brings the repositories unibox init cloned
-up to their remote, by a fast-forward alone, and says what that changes; a
-checkout of your own only while it has nothing uncommitted and its branch follows a remote one. `rm` forgets an env; its files and
-sandbox stay.
+- `add` - add an env or change its files. Without a file, the one sbxenv
+  file in this directory; without a name, the file's `name:`.
+  `--name` sets the sandbox's name; `--default` makes it `default_env`.
+- `ls` - list envs.
+- `show` - what the files declare (args, kits, agent, ports) and what you set.
+- `update` - fast-forward the env repositories and say what changes. A
+  checkout of your own only when clean and tracking a remote branch.
+- `rm` - forget an env; files and sandbox stay.
 
-Alone at a terminal, `unibox env` lists the envs to act on one by a key;
-elsewhere it is `env ls`:
-
-| Key | What it does |
-| --- | --- |
-| `enter` | show it, as `env show` |
-| `space` | make it the default, as `config set default_env` |
-| `u` | update it, as `env update` |
-| `c` | create a sandbox, asking its name and resources, as `sandbox create -e` |
-| `d` | forget it, after `y` |
-
-See [Envs](/guide/envs).
+List keys: `enter` show, `space` make default, `u` update, `c` create a
+sandbox, `d` forget.
 
 ### `unibox var`
 
@@ -141,17 +104,9 @@ unibox var set <name> <value> [-e <env> | -g]
 unibox var rm <name> [-e <env> | -g]
 ```
 
-Your own values for the args an env asks for - a user name, a mirror - kept
-in `~/.config/unibox/vars.toml`, with `-g` for every env that declares the
-arg, or for one env, which wins; passed to `sbx env create` as an args
-file. A sandbox is not created while a required one is missing. No secret
-belongs here; store tokens with `unibox secret`. The CPUs and memory your
-sandboxes get are written in the same file by hand; see
-[files](./files#vars-toml).
-
-Alone at a terminal, `unibox var` lists the args to set: `enter` sets the
-one under the cursor, `a` adds a value of another name, `d` removes yours
-after `y`. Elsewhere it is `var ls`.
+Your values for an env's args, in `vars.toml`. `-g`/`--global` is for
+every env declaring the arg; an env's own value wins. A value starting with
+`secret:` is refused. List keys: `enter` set, `a` add, `d` remove.
 
 ### `unibox secret`
 
@@ -161,23 +116,16 @@ unibox secret ls [-e <env>]
 unibox secret set [service...] [-e <env>] [--all] [--command <cmd>]
 ```
 
-The tokens an env's sandboxes use, kept by sbx. `ls` lists the services the
-env's kits and bindings take a token for, and whether sbx has each. `set` has
-sbx ask for the missing ones on this terminal, or those named - the value
-goes from the keyboard to sbx, never through unibox - or with `--command`
-stores a command sbx runs on the host for one, a keychain read say. Away from
-a terminal, one service's token may be piped in.
+The tokens an env needs, kept by sbx. `ls` lists them and whether sbx has
+each. `set` has sbx ask for the missing ones (or those named) on this
+terminal; without a terminal, one service's token may be piped in.
 
 | Flag | Meaning |
 | --- | --- |
-| `--all` | ask for the optional tokens too |
-| `--command <cmd>` | a command sbx runs on the host for the token, instead of asking for it; one service |
+| `--all` | ask for optional tokens too |
+| `--command <cmd>` | store a command sbx runs on the host for the token; one service |
 
-Alone at a terminal, `unibox secret` lists the tokens: `enter` has sbx ask
-for the one under the cursor, `c` stores a command for it. Elsewhere it is
-`secret ls`.
-
-See [Secrets](/guide/secrets).
+List keys: `enter` store, `c` store a command.
 
 ## Tasks
 
@@ -187,87 +135,66 @@ See [Secrets](/guide/secrets).
 unibox run [directory|url] [-- agent-args...] [flags]
 ```
 
-Prepares a task and runs its agent in this terminal, or with `--shell` a
-shell in the task's directory. The argument is the task's repository, a
-directory or a URL - the current directory when none is named; several are
-named with `--repo` each, which does not mix with the argument. Arguments after `--` go to the
-agent. With neither `-s` nor `-e`, the task goes into the default sandbox -
-`UNIBOX_SANDBOX`, the context's, or the only one - and when there is none,
-into the sandbox of the default env.
+Prepares a task and runs its agent, or a shell, in this terminal. The
+argument is the repository (default: the current directory); several are
+named with `--repo`, which does not mix with the argument. Arguments after
+`--` go to the agent.
 
 | Flag | Meaning |
 | --- | --- |
-| `-e`, `--env <name>` | the env to create the sandbox from, named as the env names it unless `-s` says |
-| `-s`, `--sandbox <name>` | the sandbox to work in |
-| `--shell` | open a shell in the task's directory instead of running an agent |
-| `--agent <name>` | the agent to run - `claude`, `codex`, `copilot`, `opencode` - when the sandbox has it; the task remembers it (default: the task's last, else the env's) |
-| `--task <name>` | the task's name, unique across sandboxes (default: its first repository and a digest) |
-| `--mount` | mount the host's directories: the agent works on your files and `.git` as they are (the default for directories) |
-| `--clone` | clone the repositories from the forge inside the sandbox instead |
-| `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone (default: a directory's current branch, a URL's default branch on the forge) |
-| `--repo <[dirname=]source>` | a repository, directory or https URL, repeated for several; `dirname=` names its directory in `/work/<task>/` (default: the path's or URL's last part) |
-| `--author "Name <email>"` | the commit author |
-| `--push` | push the selected local branches; create one nobody has from the local HEAD, or a URL's default tip; never forces |
-| `--ignore-local` | use the forge's version despite uncommitted or unpushed local changes |
+| `-e`, `--env <env>` | env to create the sandbox from |
+| `-s`, `--sandbox <name>` | sandbox to work in |
+| `--shell` | a shell in the task's directory instead of the agent |
+| `--agent <name>` | `claude`, `codex`, `copilot` or `opencode`, when the sandbox has it (default: the task's last, else the env's) |
+| `--task <name>` | the task's name, unique across sandboxes (default: first repository and a digest) |
+| `--mount` | mount the host's directories (default for directories) |
+| `--clone` | clone from the forge inside the sandbox |
+| `--repo <[dirname=]source>` | a directory or HTTPS URL; repeat for several |
+| `--branch <name>` | before all `--repo`: shared branch; after one: that repository's (default: current branch, or the forge's default) |
+| `--author "Name <email>"` | commit author |
+| `--push` | push the selected local branches first; create a missing one from local HEAD (or a URL's default tip); never forces |
+| `--ignore-local` | use the forge's version despite local changes |
 
 ### `unibox resume`
 
 ```
-unibox resume [<task>] [-- agent-args...] [--shell | --agent <name>]
+unibox resume [task] [-- agent-args...] [--agent <name>] [--shell]
 ```
 
-Runs a prepared task's agent again, or with `--shell` a shell in its
-directory, in the sandbox that holds it. `--agent` runs another agent the
-sandbox has, and the task keeps it. Without a task at a terminal it lists
-the tasks, as `unibox task` does.
+Runs a prepared task's agent again, or with `--shell` a shell, in its
+sandbox. `--agent` picks another agent the sandbox has; the task keeps it.
+Without a task at a terminal, lists tasks to pick.
 
 ### `unibox task`
 
 ```
 unibox task [-s <sandbox>]
+unibox task ls [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
-unibox task ls [-s <sandbox>]
 unibox task add-repo <task> [directory|url] [flags]
-unibox task rename <task> [<name>] [--reset]
+unibox task rename <task> [name] [--reset]
 unibox task rm <task>
 ```
 
-Alone at a terminal, `unibox task` lists the tasks to act on one by a
-key; elsewhere it is `task ls`:
+- `ls` - prepared tasks, in every sandbox or with `-s` in one.
+- `check` - what a task needs before it can start; changes nothing. Takes
+  `run`'s flags except `--shell` and `--agent`. Codes:
+  `runtime_unavailable`, `arg_missing`, `arg_invalid`, `env_changed`,
+  `branch_not_pushed`, `branch_missing`, `uncommitted`, `local_commits`,
+  `remote_check_pending`, `branch_switch`.
+- `prepare` - set the task up (mount or clone) and print it; takes the same
+  flags as `check`.
+- `add-repo` - add repositories, even while the agent runs, mounted or
+  cloned like the first. Flags: `--repo`, `--branch`, `--author`, `--push`,
+  `--ignore-local`.
+- `rename` - an alias usable wherever the ID is; the ID and `/work/<id>`
+  stay. `--reset` removes the alias.
+- `rm` - remove a task after checking for running sessions and unpushed
+  work. Mounted directories are unmounted, never deleted.
 
-| Key | What it does |
-| --- | --- |
-| `↑` `↓`, `j` `k` | move |
-| `enter`, `r` | resume the task with its agent |
-| `a` | resume it with another agent the sandbox has, picked with `←` `→` or `h` `l` |
-| `s` | a shell in the task's directory |
-| `n` | name it, as `task rename` |
-| `d` | remove it, as `task rm`, after `y` |
-| `q`, `esc` | leave |
-
-`check` explains what a task needs before it can start, each with a code
-(see [Tasks](/guide/tasks#what-task-check-reports)), and changes nothing.
-`prepare` makes the sandbox and the task ready - its directories mounted, or
-cloned from the forge - and prints both. Both take the repository and flags
-`run` does, except `--shell`, and choose the sandbox as it does.
-
-`ls` lists prepared tasks, in every sandbox or with `-s` in one; it does not
-take the sandbox from the context, so a forgotten context hides nothing.
-
-`add-repo` adds repositories to a prepared task, also while its agent runs:
-one directory or URL as `run` takes it, or several with `--repo`.
-They are mounted or cloned as the task's first ones were. It takes
-`--branch`, `--repo`, `--author`, `--push` and `--ignore-local` as `run`
-does.
-
-`rename` gives a task a name taken wherever its ID is (`resume`,
-`task add-repo`, `task rm`). The task keeps its ID and its directory
-`/work/<id>`, so a running session is not disturbed. A name is unique across
-sandboxes, as an ID is; `--reset` takes it away.
-
-`rm` removes a task from its sandbox, after checking for running sessions and
-unpushed work. A mounted directory is unmounted first and never deleted.
+List keys: `enter`/`r` resume, `a` another agent (`←` `→` or `h` `l`),
+`s` shell, `n` rename, `d` remove.
 
 ## Sandboxes
 
@@ -275,82 +202,51 @@ unpushed work. A mounted directory is unmounted first and never deleted.
 
 ```
 unibox sandbox
-unibox sandbox create [<name>] [-e <env>] [--cpus <n>] [--memory <size>] [--adopt]
 unibox sandbox ls
-unibox sandbox inspect [<sandbox>]
-unibox sandbox resources [<sandbox>] [--cpus <n>] [--memory <size>]
-unibox sandbox shell [<sandbox>]
-unibox sandbox stop [<sandbox>]
-unibox sandbox recreate [<sandbox>]
+unibox sandbox create [name] [-e <env>] [--cpus <n>] [--memory <size>] [--adopt]
+unibox sandbox inspect [sandbox]
+unibox sandbox shell [sandbox]
+unibox sandbox stop [sandbox]
+unibox sandbox recreate [sandbox]
+unibox sandbox resources [sandbox] [--cpus <n>] [--memory <size>]
 unibox sandbox rm <sandbox> [--force]
 ```
 
-Alone at a terminal, `unibox sandbox` lists the sandboxes to act on one
-by a key; elsewhere it is `sandbox ls`:
+- `ls` - unibox's sandboxes and their state in sbx.
+- `create` - a sandbox from an env, without a task. `--cpus` (count, `0`
+  for all, or a share like `50%`) and `--memory` (size like `16g`, or a
+  share) set its own resources. `--adopt` takes over a sandbox made with
+  sbx; unibox never recreates it and removes it only with `--force`.
+- `inspect` - what unibox records about it.
+- `shell` - an interactive shell; counts as a session.
+- `stop` - stop an idle sandbox; the disk stays.
+- `recreate` - remove and create again from the env and your values as
+  they are now, after checking for sessions and unpushed work. Tasks come
+  back; anything else in the sandbox is lost.
+- `resources` - show or set its CPUs and memory, over the env's; `-`
+  restores the env's. Kept in `vars.toml`, applied at the next recreate.
+- `rm` - remove after checking for sessions and unpushed work; `--force`
+  discards them, and removes an adopted sandbox.
 
-| Key | What it does |
-| --- | --- |
-| `↑` `↓`, `j` `k` | move |
-| `enter` | its tasks, as `unibox task -s` |
-| `s` | a shell, as `sandbox shell` |
-| `p` | its ports, as `unibox port -s` |
-| `i` | what unibox keeps of it, as `sandbox inspect` |
-| `r` | its own CPUs and memory, as `sandbox resources`, then offers to recreate it |
-| `t` | stop it |
-| `c` | recreate it, after `y` |
-| `d` | remove it, after `y`; running sessions and unpushed work still stop it |
-| `q`, `esc` | leave |
-
-`create` creates a sandbox from an env, named as the env names it unless a
-name is given. `--adopt` takes over a sandbox sbx already has, made from the
-env with sbx itself: unibox then adds tasks to it, never recreates it, and
-removes it only when forced. `--cpus` and `--memory` give the new sandbox
-its own share of the machine, over its env's.
-
-`resources` shows a sandbox's CPUs and memory and where each comes from;
-`--cpus` and `--memory` set its own, `-` gives back the env's. They are
-kept in `vars.toml` as `[sandboxes.<name>.resources]`, reach sbx when it is
-recreated, and go when it is removed. See [Envs](/guide/envs#resources).
-
-`ls` lists unibox's sandboxes and their state in sbx; `inspect` shows what
-unibox keeps about one. `shell` opens an interactive shell, which counts as
-an active session. `stop` stops an idle sandbox without deleting its disk.
-
-`recreate` removes a sandbox and creates it again from its env's files and
-your args as they are now, after checking for running sessions and unpushed
-work. Its tasks come back: mounted directories are mounted again, clones are
-made again from the forge. What the sandbox held outside its tasks is lost.
-
-`rm` removes a sandbox after checking for running sessions and unpushed
-work; `--force` removes it with them, or removes one unibox adopted.
-
-The sandbox of `inspect`, `shell`, `stop` and `recreate` defaults as `-s`
-does; `rm` always names it.
+List keys: `enter` tasks, `s` shell, `p` ports, `i` inspect, `r`
+resources (then offers a recreate), `t` stop, `c` recreate, `d` remove.
 
 ### `unibox port`
 
 ```
 unibox port [-s <sandbox>]
-unibox port on [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
-unibox port off [name...] [--map <mapping>...] [-s <sandbox>]
 unibox port ls [-s <sandbox>]
+unibox port on [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
+unibox port off [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
 ```
 
-A port is published on the host's loopback. The ports are named in files,
-by hand - the repository's `unibox.yaml`, the `.unibox.yaml` beside the
-env's sbxenv file, and your `config.yaml` - each saying whether a sandbox
-starts with it published; see [Ports](/guide/ports#which-wins) for the
-order. `on` and `off` switch a running sandbox's ports for as long as it
-runs - by name, `name=HOST_PORT` for a named port on another host port, or
-`--map` for one no file names - and its next start goes back to the
-files. They are refused on a stopped sandbox. `ls` lists a sandbox's
-ports, where each comes from, and their URLs. Alone at a terminal,
-`unibox port` lists a running sandbox's ports to switch where they
-stand: `↑` `↓` or `j` `k` to move, `←` or `h` off, `→` or `l` on, `space`
-to switch, `enter` or `q` to leave; elsewhere it is `port ls`.
-
-A mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`: `3000` takes
-any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).
+Publishes a running sandbox's ports on the host's loopback until it stops;
+the next start goes back to the named ports in the files (see
+[Ports](/guide/ports#named-ports)). `name=HOST_PORT` uses another host
+port; `--map` (repeatable) a mapping no file names, as
+`[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. `ls` lists ports, where
+each is named, and URLs. List keys: `←`/`h` off, `→`/`l` on, `space`
+switch, `enter` or `q` leave.
 
 ### `unibox network`
 
@@ -362,20 +258,13 @@ unibox network deny <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
 unibox network rm <host...> [-s <sandbox>]
 ```
 
-The hosts a sandbox may reach beyond its env's. Your rules are kept in
-`config.yaml` under the sandbox's name and applied to it, once it is
-created if it is not yet, again after each recreation; they go with the
-sandbox. `ls` lists them, rules added with sbx itself, and the hosts the
-sandbox was refused lately; `--all` adds the env's kits' and sbx's
-defaults. `rm` takes your rule or sbx's for the sandbox away; the env's
-and the defaults stay. `--json` lists everything, each host with where it
-comes from (`yours`, `sbx`, `env`, `default`), and the refused hosts.
-
-Alone at a terminal, `unibox network` lists your rules and the refused
-hosts: `a` asks for hosts to allow and their protocol, the refused host
-under the cursor offered, `n` likewise to deny, `d` removes the rule under the
-cursor after `y`. Elsewhere it is `network ls`. See
-[Ports](/guide/ports#what-a-sandbox-may-reach).
+A sandbox's own network rules, kept in `config.yaml`, applied again after
+each create, removed with the sandbox. `ls` lists your rules, rules added
+with sbx, and hosts refused lately; `--all` adds the env's and sbx's
+defaults. `deny` wins over the env. `rm` removes your rule or an sbx one
+for the sandbox. A host is `name`, `*.name`, `**.name` or `name:port`;
+`--protocol` defaults to `tcp`. List keys: `a` allow, `n` deny, `d`
+remove.
 
 ### `unibox prune`
 
@@ -383,10 +272,7 @@ cursor after `y`. Elsewhere it is `network ls`. See
 unibox prune
 ```
 
-Forgets the sandboxes sbx no longer has - removed with sbx itself, say -
-and unmounts from running sandboxes the directories no task of theirs
-mounts any more. A sandbox busy with another unibox command is passed and
-named.
+Forgets sandboxes sbx no longer has and unmounts directories no task uses.
 
 ### `unibox destroy`
 
@@ -394,15 +280,12 @@ named.
 unibox destroy [--force] [--all]
 ```
 
-Removes every sandbox unibox created, and so every task, after checking each
-for running sessions and unpushed work: one that has either stops it, and
-nothing is removed, unless `--force` discards them. A mounted directory of
-the host is never deleted, and a sandbox unibox adopted is only forgotten.
-
-`--all` goes on to the herdr plugin and unibox's state, configuration and
-your args. The env files, the kits and your secrets in sbx stay: they are the
-team's and sbx's; so do the repositories init cloned, in
-`~/.local/share/unibox/repos`.
+Removes every sandbox unibox created, and their tasks, after checking for
+running sessions and unpushed work; any found stops it unless `--force`.
+Mounted directories are never deleted; adopted sandboxes are only
+forgotten. `--all` also removes the herdr plugin and unibox's state,
+configuration and values. Tokens in sbx, env repositories and clones
+stay.
 
 ## unibox itself
 
@@ -414,34 +297,23 @@ unibox context use [-s <sandbox>] [-e <env>]
 unibox context clear
 ```
 
-Commands take the sandbox they work in as `-s` and the env a new one is
-created from as `-e`. Left out, it comes from `UNIBOX_SANDBOX` or
-`UNIBOX_ENV`, then from the context set here, then from there being only one
-(for an env, the configuration's `default_env` before that). `context` alone
-shows what commands would use, and why; `use` sets the sandbox, the env or
-both, checking they exist; `clear` forgets the context. At a terminal,
-`context` alone lists the sandboxes and envs, the context's marked: `enter`
-uses the one under the cursor, `c` clears the context; leaving shows it.
+Shows, sets or clears the default sandbox and env. List keys: `enter`
+use, `c` clear.
 
 ### `unibox config`
 
 ```
-unibox config get [<key>]
+unibox config get [key]
 unibox config set <key> <value>
 unibox config unset <key>
 ```
 
-unibox's own configuration. `get` without a key prints all of it.
-
 | Key | Meaning |
 | --- | --- |
-| `default_env` | the env a sandbox is created from when none is named |
-| `stop_idle` | whether a sandbox is stopped when its last session ends (default `true`) |
-| `ssh_agent` | whether sandboxes may use your SSH agent; sbx is set to match |
-| `remember_host_commands` | whether approving an env's host commands covers their later runs too, rather than being asked each time; sbx's own setting, `env.rememberHostCommands` (default `false`) |
-
-`unset` forgets a setting, back to its default. See
-[Your SSH agent](/reference/security#your-ssh-agent) for `ssh_agent`.
+| `default_env` | env a sandbox is created from when none is named |
+| `stop_idle` | stop a sandbox when its last session ends (default `true`) |
+| `ssh_agent` | may sandboxes use your SSH agent; sbx is set to match ([Security](./security#your-ssh-agent)) |
+| `remember_host_commands` | sbx's `env.rememberHostCommands`: approving an env's host commands covers later runs (default `false`) |
 
 ### `unibox herdr`
 
@@ -451,10 +323,8 @@ unibox herdr install-plugin
 unibox herdr uninstall-plugin
 ```
 
-`status` shows whether herdr and the plugin are installed;
-`install-plugin` installs the plugin that shows sandboxed agents' status in
-herdr, asking first unless `--yes`; `uninstall-plugin` removes it and its
-background observer. See [herdr](/guide/herdr).
+The [herdr](/guide/herdr) plugin: whether it is installed, install it
+(asks unless `--yes`), remove it and its observer.
 
 ### `unibox version`
 
@@ -462,22 +332,13 @@ background observer. See [herdr](/guide/herdr).
 unibox version [--json]
 ```
 
-Prints the release unibox was built from - the `vX.Y` tag without its `v`,
-set when it is built - as `unibox --version` does. A build that is not a
-release prints `dev (<commit>)`, with `-dirty` when the tree had changes.
-With `--json` it adds the version of its JSON contract:
-
-```json
-{
-  "api_version": 2,
-  "version": "2.0"
-}
-```
+Prints the release, such as `0.2`, or `dev (<commit>)` for a non-release
+build. `--json` adds `api_version`.
 
 ### `unibox completion`
 
 ```
-unibox completion [bash|zsh|fish|powershell]
+unibox completion bash|zsh|fish|powershell
 ```
 
-Generates the shell completion script.
+Prints a shell completion script.
