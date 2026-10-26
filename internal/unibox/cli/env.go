@@ -227,7 +227,7 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 			for k, v := range e.Ports {
 				ports[k] = port{v.Spec, v.Description, v.Team, v.Default}
 			}
-			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "resources": values.ResourcesFor(name), "ports": ports})
+			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "resources": values.ResourcesFor(name, e.SandboxName()), "ports": ports})
 		}
 		fmt.Fprintf(o.output, "env %s, sandbox %s, agent %s\n", name, e.SandboxName(), e.SBX.Agent)
 		for _, f := range e.SBX.Files {
@@ -236,7 +236,7 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		if e.Config.Repo != "" {
 			fmt.Fprintf(o.output, "  repo %s\n", e.Config.Repo)
 		}
-		if r := values.ResourcesFor(name); r != (unibox.Resources{}) {
+		if r := values.ResourcesFor(name, e.SandboxName()); r != (unibox.Resources{}) {
 			resolved, err := r.Resolve(unibox.HostResources(), io.Discard)
 			for _, n := range unibox.ResourceNames {
 				v := r.Get(n)

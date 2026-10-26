@@ -79,10 +79,10 @@ func TestArgsAndResourcesForEveryEnvAreKeptAndAnEnvsOwnWin(t *testing.T) {
 	if got.Args["user"] != "everyone" || got.Envs["dev"]["token"] != "mine" || got.Resources != v.Resources || got.EnvResources["dev"] != v.EnvResources["dev"] || got.EnvResources["ci"] != v.EnvResources["ci"] {
 		t.Fatalf("%+v", got)
 	}
-	if r := got.ResourcesFor("dev"); r != (Resources{CPUs: "100%", Memory: "8g"}) {
+	if r := got.ResourcesFor("dev", ""); r != (Resources{CPUs: "100%", Memory: "8g"}) {
 		t.Fatalf("%+v", r)
 	}
-	if r := got.ResourcesFor("other"); r != v.Resources {
+	if r := got.ResourcesFor("other", ""); r != v.Resources {
 		t.Fatalf("%+v", r)
 	}
 	env := Env{Name: "dev"}
@@ -143,5 +143,38 @@ func TestResourcesReachSbxInAFileGivenLastAndAChangeIsTold(t *testing.T) {
 	}
 	if check, _ = m.Check(ctx, Request{Env: "dev"}); len(check.Needs) != 0 {
 		t.Fatalf("%+v", check.Needs)
+	}
+}
+
+func TestASandboxsOwnResourcesWinOverItsEnvsAndGoWithIt(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if err := m.Paths.SaveEnvValues(EnvValues{EnvResources: map[string]Resources{"dev": {CPUs: "2", Memory: "4g"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Create(ctx, Request{Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Paths.SetSandboxResources("big", Resources{Memory: "8g"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Create(ctx, Request{Env: "dev", Sandbox: "big"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.overlay, "sandboxOptions:\n  cpus: 2\n  memory: \"8g\"\n") {
+		t.Fatalf("%q", f.overlay)
+	}
+	if check, _ := m.Check(ctx, Request{Env: "dev"}); len(check.Needs) != 0 {
+		t.Fatalf("the env's sandbox took another's resources: %+v", check.Needs)
+	}
+	if check, _ := m.Check(ctx, Request{Env: "dev", Sandbox: "big"}); len(check.Needs) != 0 {
+		t.Fatalf("%+v", check.Needs)
+	}
+	if err := m.Remove(ctx, "big", "", false); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := m.Paths.LoadEnvValues(); len(v.SandboxResources) != 0 || v.EnvResources["dev"].CPUs != "2" {
+		t.Fatalf("%+v", v)
 	}
 }

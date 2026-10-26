@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -250,14 +251,14 @@ func (m *Manager) args(env Env) (map[string]string, error) {
 	return env.SBX.Declared(mine), nil
 }
 
-// resources are what the person gives an env's sandboxes of this host,
+// resources are what the person gives a sandbox of an env of this host,
 // resolved into what sbx takes; a cap is said to log.
-func (m *Manager) resources(env Env, log io.Writer) (Resources, error) {
+func (m *Manager) resources(env Env, sandbox string, log io.Writer) (Resources, error) {
 	values, err := m.Paths.LoadEnvValues()
 	if err != nil {
 		return Resources{}, err
 	}
-	r, err := values.ResourcesFor(env.Name).Resolve(HostResources(), log)
+	r, err := values.ResourcesFor(env.Name, cmp.Or(sandbox, env.SandboxName())).Resolve(HostResources(), log)
 	if err != nil {
 		return r, Fail(4, "resources_invalid", "env %s: %v", env.Name, err)
 	}
@@ -266,8 +267,8 @@ func (m *Manager) resources(env Env, log io.Writer) (Resources, error) {
 
 // fingerprint stands for what a sandbox of the env would be created from
 // now, args and resources included.
-func (m *Manager) fingerprint(env Env, args map[string]string) (string, error) {
-	r, err := m.resources(env, io.Discard)
+func (m *Manager) fingerprint(env Env, sandbox string, args map[string]string) (string, error) {
+	r, err := m.resources(env, sandbox, io.Discard)
 	if err != nil {
 		return "", err
 	}
@@ -277,7 +278,7 @@ func (m *Manager) fingerprint(env Env, args map[string]string) (string, error) {
 // createFiles are what sbx env create and plan read for an env: the
 // person's args in a file, and the env's files with one of unibox's last
 // giving the resources. done removes what was written.
-func (m *Manager) createFiles(env Env, args map[string]string, log io.Writer) (argsFile string, files []string, done func(), err error) {
+func (m *Manager) createFiles(env Env, sandbox string, args map[string]string, log io.Writer) (argsFile string, files []string, done func(), err error) {
 	removes := []func(){}
 	done = func() {
 		for _, f := range removes {
@@ -292,7 +293,7 @@ func (m *Manager) createFiles(env Env, args map[string]string, log io.Writer) (a
 		removes = append(removes, remove)
 		argsFile = f
 	}
-	r, err := m.resources(env, log)
+	r, err := m.resources(env, sandbox, log)
 	if err != nil {
 		return "", nil, done, err
 	}
@@ -316,7 +317,7 @@ func (m *Manager) Plan(ctx context.Context, env Env) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	file, files, done, err := m.createFiles(env, args, io.Discard)
+	file, files, done, err := m.createFiles(env, "", args, io.Discard)
 	defer done()
 	if err != nil {
 		return "", err
@@ -356,7 +357,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 		}
 		result.Needs = append(result.Needs, api.Need{Code: code, Message: err.Error()})
 	} else if b.Fingerprint != "" {
-		if fp, err := m.fingerprint(env, args); err == nil && fp != b.Fingerprint {
+		if fp, err := m.fingerprint(env, b.Name, args); err == nil && fp != b.Fingerprint {
 			result.Needs = append(result.Needs, api.Need{Code: "env_changed", Warning: true, Message: fmt.Sprintf("env %s changed since sandbox %s was created; unibox sandbox recreate %s applies it", env.Name, b.Name, b.Name)})
 		}
 	}
@@ -409,7 +410,7 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 	if err != nil {
 		return err
 	}
-	fingerprint, err := m.fingerprint(env, args)
+	fingerprint, err := m.fingerprint(env, b.Name, args)
 	if err != nil {
 		return fmt.Errorf("env %s: %w", env.Name, err)
 	}
@@ -464,7 +465,7 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 // create has sbx create a sandbox from its env, on the user's terminal,
 // and readies it for tasks.
 func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[string]string, fingerprint string) error {
-	file, files, done, err := m.createFiles(env, args, m.Log)
+	file, files, done, err := m.createFiles(env, b.Name, args, m.Log)
 	defer done()
 	if err != nil {
 		return err
@@ -590,7 +591,7 @@ func (m *Manager) Create(ctx context.Context, req Request, adopt bool) (api.Sand
 		}
 		b.ID, b.Adopted, b.State = box.ID, true, box.State
 		if args, err := m.args(env); err == nil {
-			b.Fingerprint, _ = m.fingerprint(env, args)
+			b.Fingerprint, _ = m.fingerprint(env, b.Name, args)
 		}
 		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
 			return b, err

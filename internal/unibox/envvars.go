@@ -16,16 +16,18 @@ import (
 // declares them, [envs.<name>.args] for one. unibox hands them to sbx as an
 // --env-args-file at each create, so nobody types them twice. The
 // resources a sandbox gets of the machine are the person's alike:
-// [resources] and [envs.<name>.resources].
+// [resources], [envs.<name>.resources] and, for one sandbox,
+// [sandboxes.<name>.resources].
 
 const envValuesHeader = `# Your own values for the args your envs' sbxenv files declare, kept here
 # and never in the team's repository: [args] for every env that declares
 # them, [envs.<env>.args] for one, which wins. unibox var set and unibox
 # var rm change them, and unibox passes them to sbx env create as an
-# --env-args-file. [resources] and [envs.<env>.resources] are the CPUs and
-# memory your sandboxes get, a size or a share of this machine such as 75%,
-# written here by hand. No secret belongs here - store tokens
-# with unibox secret set.
+# --env-args-file. [resources], [envs.<env>.resources] and
+# [sandboxes.<sandbox>.resources] are the CPUs and memory your sandboxes
+# get, a size or a share of this machine such as 75%, written here by hand
+# or by unibox sandbox create --cpus/--memory. No secret belongs here -
+# store tokens with unibox secret set.
 
 `
 
@@ -36,6 +38,8 @@ type EnvValues struct {
 	Envs         map[string]map[string]string
 	Resources    Resources
 	EnvResources map[string]Resources
+	// SandboxResources are one sandbox's, over its env's.
+	SandboxResources map[string]Resources
 	// other are tables of an older unibox, kept as they are.
 	other map[string]any
 }
@@ -44,7 +48,7 @@ type EnvValues struct {
 func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.toml") }
 
 func (p Paths) LoadEnvValues() (EnvValues, error) {
-	v := EnvValues{Args: map[string]string{}, Envs: map[string]map[string]string{}, EnvResources: map[string]Resources{}, other: map[string]any{}}
+	v := EnvValues{Args: map[string]string{}, Envs: map[string]map[string]string{}, EnvResources: map[string]Resources{}, SandboxResources: map[string]Resources{}, other: map[string]any{}}
 	b, err := os.ReadFile(p.VarsFile())
 	if os.IsNotExist(err) {
 		return v, nil
@@ -104,6 +108,26 @@ func (p Paths) LoadEnvValues() (EnvValues, error) {
 				return v, err
 			}
 			continue
+		case "sandboxes":
+			boxes, ok := body.(map[string]any)
+			if !ok {
+				return v, fmt.Errorf("%s: sandboxes is a table of [sandboxes.<sandbox>.resources]", p.VarsFile())
+			}
+			for name, t := range boxes {
+				table, ok := t.(map[string]any)
+				if !ok {
+					return v, fmt.Errorf("%s: sandboxes.%s is a table with resources in it", p.VarsFile(), name)
+				}
+				for k, body := range table {
+					if k != "resources" {
+						return v, fmt.Errorf("%s: sandboxes.%s takes resources, not %s", p.VarsFile(), name, k)
+					}
+					if v.SandboxResources[name], err = readResources("sandboxes."+name+".resources", body); err != nil {
+						return v, err
+					}
+				}
+			}
+			continue
 		case "envs":
 		default:
 			v.other[key] = body
@@ -150,10 +174,29 @@ func (v EnvValues) ArgsFor(env Env) map[string]string {
 	return out
 }
 
-// ResourcesFor are the person's resources for an env: its own, and those
-// for every env where it leaves one unset.
-func (v EnvValues) ResourcesFor(env string) Resources {
-	return v.EnvResources[env].Over(v.Resources)
+// ResourcesFor are the person's resources for a sandbox of an env: the
+// sandbox's own, then the env's, then those for every env, each taking
+// what the one before leaves unset.
+func (v EnvValues) ResourcesFor(env, sandbox string) Resources {
+	return v.SandboxResources[sandbox].Over(v.EnvResources[env].Over(v.Resources))
+}
+
+// SetSandboxResources makes r a sandbox's own resources; none forgets
+// them.
+func (p Paths) SetSandboxResources(sandbox string, r Resources) error {
+	v, err := p.LoadEnvValues()
+	if err != nil {
+		return err
+	}
+	if v.SandboxResources[sandbox] == r {
+		return nil
+	}
+	if r == (Resources{}) {
+		delete(v.SandboxResources, sandbox)
+	} else {
+		v.SandboxResources[sandbox] = r
+	}
+	return p.SaveEnvValues(v)
 }
 
 func (p Paths) SaveEnvValues(v EnvValues) error {
@@ -186,6 +229,15 @@ func (p Paths) SaveEnvValues(v EnvValues) error {
 	}
 	if len(envs) > 0 {
 		doc["envs"] = envs
+	}
+	boxes := map[string]any{}
+	for name, r := range v.SandboxResources {
+		if r != (Resources{}) {
+			boxes[name] = map[string]any{"resources": r}
+		}
+	}
+	if len(boxes) > 0 {
+		doc["sandboxes"] = boxes
 	}
 	var out bytes.Buffer
 	e := toml.NewEncoder(&out)

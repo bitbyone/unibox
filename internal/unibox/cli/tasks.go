@@ -261,15 +261,40 @@ func (o *options) addRepoCommand() *cobra.Command {
 func (o *options) createCommand() *cobra.Command {
 	var req unibox.Request
 	var adopt bool
+	var res unibox.Resources
 	c := &cobra.Command{Use: "create [name]", Args: cobra.MaximumNArgs(1), Short: "Create a sandbox from an env without a task in it", Long: `Create a sandbox from an env, named as the env names it unless a name is
 given. --adopt takes over a sandbox sbx has already, made from the env with
-sbx itself: unibox then adds tasks to it, and removes it only when forced.`, Example: "  unibox sandbox create -e dev\n  unibox sandbox create --adopt my2n-dev -e my2n-dev", RunE: func(cmd *cobra.Command, args []string) error {
+sbx itself: unibox then adds tasks to it, and removes it only when forced.
+--cpus and --memory give this sandbox alone its share of the machine,
+written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Example: "  unibox sandbox create -e dev\n  unibox sandbox create dev-big -e dev --cpus 8 --memory 50%\n  unibox sandbox create --adopt my2n-dev -e my2n-dev", RunE: func(cmd *cobra.Command, args []string) error {
 		req.Sandbox = first(args)
 		env, err := o.envName(req.Env)
 		if err != nil {
 			return err
 		}
 		req.Env = env
+		if res != (unibox.Resources{}) {
+			if adopt {
+				return fmt.Errorf("an adopted sandbox keeps what sbx gave it; leave out --cpus and --memory")
+			}
+			for _, name := range unibox.ResourceNames {
+				if v := res.Get(name); v != "" {
+					if err := unibox.ValidResource(name, v); err != nil {
+						return err
+					}
+				}
+			}
+			b, _, err := o.manager.Definition(req)
+			if err != nil {
+				return err
+			}
+			if b.State != "missing" && b.State != "creating" {
+				return fmt.Errorf("sandbox %s exists already; set its resources in vars.toml and unibox sandbox recreate %s applies them", b.Name, b.Name)
+			}
+			if err = o.manager.Paths.SetSandboxResources(b.Name, res); err != nil {
+				return err
+			}
+		}
 		if !adopt {
 			if _, e, err := o.manager.Definition(req); err == nil {
 				if _, err = o.askArgs(e); err != nil {
@@ -293,5 +318,7 @@ sbx itself: unibox then adds tasks to it, and removes it only when forced.`, Exa
 	}}
 	envFlag(c, &req.Env)
 	c.Flags().BoolVar(&adopt, "adopt", false, "Take over a sandbox sbx already has instead of creating one")
+	c.Flags().StringVar(&res.CPUs, "cpus", "", "CPUs for this sandbox alone: a count, 0 for all, or a share such as 50%")
+	c.Flags().StringVar(&res.Memory, "memory", "", "Memory for this sandbox alone: a size such as 16g, or a share such as 75%")
 	return c
 }

@@ -194,7 +194,7 @@ func (o *options) setVars(names, vars []string) error {
 		if !ok || key == "" {
 			return fmt.Errorf("--var %s is not name=value", v)
 		}
-		if err = unibox.ValidArg(key, value); err != nil {
+		if err = checkArg(key, value); err != nil {
 			return err
 		}
 		used := false

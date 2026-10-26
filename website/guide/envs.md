@@ -130,7 +130,8 @@ The args file is plain text, and so is `vars.toml`. A value starting with
 
 How much of your machine a sandbox gets is yours to say, not the team's:
 an env's `sandboxOptions` may set `cpus` and `memory`, and your
-`vars.toml` sets them over it, for every env or for one:
+`vars.toml` sets them over it, for every env, for one, or for one
+sandbox:
 
 ```toml
 [resources]
@@ -139,6 +140,9 @@ memory = '75%'
 
 [envs.dev.resources]
 memory = '16g'
+
+[sandboxes.dev-big.resources]
+cpus = '8'
 ```
 
 `cpus` is a count, `0` for all of them, or a share of this machine's;
@@ -148,6 +152,16 @@ works it out on the host - a share of the CPUs rounded and at least one,
 of its own, after the env's, so that they win. sbx gives a sandbox at
 most 75% of the host's memory; asking for more gets that, said in the
 output. What you leave unset stays the env's.
+
+A sandbox's own are set by unibox rather than by hand:
+`unibox sandbox create dev-big -e dev --cpus 8` writes them before it is
+created, `unibox sandbox resources dev-big --memory 50%` changes them
+(`-` gives back the env's), `r` in `unibox sandbox` asks for them and
+offers to recreate it, and removing the sandbox drops them.
+
+An env's args are sbx's and take what sbx takes - a count, a size - so
+`unibox var` refuses a share for an arg named `cpus` or `memory` and points
+here: the resources above win over the env's `sandboxOptions`.
 
 A change reaches a sandbox when it is recreated: the next start says the
 env changed and that `unibox sandbox recreate` applies it.

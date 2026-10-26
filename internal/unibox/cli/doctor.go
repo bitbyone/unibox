@@ -307,7 +307,7 @@ func changed(state unibox.State, env unibox.Env, values unibox.EnvValues) bool {
 	if !ok || b.Env != env.Name || b.Fingerprint == "" || b.Adopted || env.SBX.Missing(mine) != nil {
 		return false
 	}
-	r, err := values.ResourcesFor(env.Name).Resolve(unibox.HostResources(), io.Discard)
+	r, err := values.ResourcesFor(env.Name, env.SandboxName()).Resolve(unibox.HostResources(), io.Discard)
 	if err != nil {
 		return false
 	}

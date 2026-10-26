@@ -398,6 +398,45 @@ func TestAMissingArgIsAskedForBeforeTheSandboxIsCreated(t *testing.T) {
 	}
 }
 
+func TestASandboxCreatedWithResourcesKeepsThemInVarsToml(t *testing.T) {
+	log := fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	t.Setenv("ACCESSIBLE", "1")
+	if _, _, err := run(t, paths, "", "env", "add", "dev", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "sandbox", "create", "big", "-e", "dev", "--cpus", "lots"); err == nil || !strings.Contains(err.Error(), "cpus is a number") {
+		t.Fatalf("%v", err)
+	}
+	if values, _ := paths.LoadEnvValues(); len(values.SandboxResources) != 0 {
+		t.Fatalf("%+v", values)
+	}
+	// The stand-in creates nothing; what matters is what was written first.
+	runAt(t, paths, "person\n", "sandbox", "create", "big", "-e", "dev", "--cpus", "4", "--memory", "50%")
+	if values, _ := paths.LoadEnvValues(); values.SandboxResources["big"] != (unibox.Resources{CPUs: "4", Memory: "50%"}) {
+		t.Fatalf("%+v", values)
+	}
+	if !strings.Contains(calls(t, log), "--name big") {
+		t.Fatalf("%s", calls(t, log))
+	}
+	out, _, err := run(t, paths, "", "sandbox", "resources", "big", "--memory", "-", "--cpus", "25%")
+	if err != nil || !strings.Contains(out, "cpus    25% (its own)") || !strings.Contains(out, "memory  as the env's files say") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if values, _ := paths.LoadEnvValues(); values.SandboxResources["big"] != (unibox.Resources{CPUs: "25%"}) {
+		t.Fatalf("%+v", values)
+	}
+	if _, _, err := run(t, paths, "", "sandbox", "resources", "nope", "--cpus", "2"); err == nil || !strings.Contains(err.Error(), "no sandbox nope") {
+		t.Fatalf("%v", err)
+	}
+	if err := checkArg("cpus", "50%"); err == nil || !strings.Contains(err.Error(), "unibox sandbox resources --cpus 50%") {
+		t.Fatalf("%v", err)
+	}
+	if err := checkArg("cpus", "4"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNetworkRulesAreForTheSandboxUnlessGlobal(t *testing.T) {
 	log := fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}

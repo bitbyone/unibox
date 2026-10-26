@@ -89,7 +89,7 @@ func (o *options) envUI(cmd *cobra.Command, leave func() error) error {
 			{key: "enter", name: "show", help: "show"},
 			{key: " ", name: "default", help: "make default"},
 			{key: "u", name: "update", help: "update"},
-			{key: "c", name: "create", help: "create its sandbox"},
+			{key: "c", name: "create", help: "create a sandbox"},
 			{key: "d", name: "rm", help: "forget", confirm: "forget env %s? its files and sandbox stay"},
 		}}
 		for _, name := range sorted(cfg.Envs) {
@@ -115,7 +115,11 @@ func (o *options) envUI(cmd *cobra.Command, leave func() error) error {
 			// A pull may ask on the terminal.
 			return "", o.runStep(cmd, "env", "update", name)
 		case "create":
-			return errListDone, o.runStep(cmd, "sandbox", "create", "-e", name)
+			args, err := o.askCreate(name)
+			if err != nil {
+				return "", err
+			}
+			return errListDone, o.runStep(cmd, args...)
 		case "rm":
 			return o.quietStep(cmd, "env", "rm", name)
 		}
@@ -239,7 +243,7 @@ func (o *options) varUI(cmd *cobra.Command, envName string, global bool, leave f
 			}
 			fallthrough
 		case "set":
-			value, err := o.askText("Value of "+name, "Enter keeps what is there", values[name], func(s string) error { return unibox.ValidArg(name, s) })
+			value, err := o.askText("Value of "+name, "Enter keeps what is there", values[name], func(s string) error { return checkArg(name, s) })
 			if err != nil {
 				return "", err
 			}
@@ -250,4 +254,54 @@ func (o *options) varUI(cmd *cobra.Command, envName string, global bool, leave f
 		return "", nil
 	}
 	return o.actList(cmd, build, act, leave)
+}
+
+// askCreate asks what a new sandbox of an env is called and what of the
+// machine it gets beyond what the env's sandboxes get, as the arguments of
+// unibox sandbox create.
+func (o *options) askCreate(envName string) ([]string, error) {
+	e, err := o.manager.Config.LoadEnv(envName)
+	if err != nil {
+		return nil, err
+	}
+	values, err := o.manager.Paths.LoadEnvValues()
+	if err != nil {
+		return nil, err
+	}
+	taken := map[string]bool{}
+	if state, err := o.manager.Paths.ReadState(); err == nil {
+		for name := range state.Sandboxes {
+			taken[name] = true
+		}
+	}
+	preset := e.SandboxName()
+	for i := 2; taken[preset]; i++ {
+		preset = fmt.Sprintf("%s-%d", e.SandboxName(), i)
+	}
+	name, err := o.askText("Sandbox name", "", preset, func(s string) error {
+		if taken[s] {
+			return fmt.Errorf("sandbox %s exists already", s)
+		}
+		return unibox.ValidName(s)
+	})
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"sandbox", "create", name, "-e", envName}
+	env := values.ResourcesFor(envName, "")
+	for _, r := range unibox.ResourceNames {
+		v, err := o.askText(r, "empty keeps the env's: "+cmp.Or(env.Get(r), "as the env's files say"), "", func(s string) error {
+			if s == "" {
+				return nil
+			}
+			return unibox.ValidResource(r, s)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if v != "" {
+			args = append(args, "--"+r, v)
+		}
+	}
+	return args, nil
 }

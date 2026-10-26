@@ -77,6 +77,9 @@ user = 'john'
 
 [envs.dev.resources]
 memory = '16g'
+
+[sandboxes.dev-big.resources]   # one sandbox's own, over its env's
+cpus = '8'
 ```
 
 Kept with mode `0600`. Args are changed with `unibox var set` and
@@ -84,7 +87,9 @@ Kept with mode `0600`. Args are changed with `unibox var set` and
 beginning with `secret:` is refused: a token is a
 [secret](/guide/secrets).
 
-Resources are written by hand. `cpus` is a count, `0` for all of them, or
+Resources for every env or one env are written by hand; a sandbox's own by
+`unibox sandbox create --cpus/--memory` and `unibox sandbox resources`,
+and dropped with the sandbox. `cpus` is a count, `0` for all of them, or
 a share of this machine's from `1%` to `100%`; `memory` a size (`k`, `m`,
 `g`) or a share. They are read at each create, as described in
 [Envs](/guide/envs#resources).

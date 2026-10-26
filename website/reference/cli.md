@@ -127,7 +127,7 @@ elsewhere it is `env ls`:
 | `enter` | show it, as `env show` |
 | `space` | make it the default, as `config set default_env` |
 | `u` | update it, as `env update` |
-| `c` | create its sandbox, as `sandbox create -e` |
+| `c` | create a sandbox, asking its name and resources, as `sandbox create -e` |
 | `d` | forget it, after `y` |
 
 See [Envs](/guide/envs).
@@ -275,9 +275,10 @@ unpushed work. A mounted directory is unmounted first and never deleted.
 
 ```
 unibox sandbox
-unibox sandbox create [<name>] [-e <env>] [--adopt]
+unibox sandbox create [<name>] [-e <env>] [--cpus <n>] [--memory <size>] [--adopt]
 unibox sandbox ls
 unibox sandbox inspect [<sandbox>]
+unibox sandbox resources [<sandbox>] [--cpus <n>] [--memory <size>]
 unibox sandbox shell [<sandbox>]
 unibox sandbox stop [<sandbox>]
 unibox sandbox recreate [<sandbox>]
@@ -294,6 +295,7 @@ by a key; elsewhere it is `sandbox ls`:
 | `s` | a shell, as `sandbox shell` |
 | `p` | its ports, as `unibox port -s` |
 | `i` | what unibox keeps of it, as `sandbox inspect` |
+| `r` | its own CPUs and memory, as `sandbox resources`, then offers to recreate it |
 | `t` | stop it |
 | `c` | recreate it, after `y` |
 | `d` | remove it, after `y`; running sessions and unpushed work still stop it |
@@ -302,7 +304,13 @@ by a key; elsewhere it is `sandbox ls`:
 `create` creates a sandbox from an env, named as the env names it unless a
 name is given. `--adopt` takes over a sandbox sbx already has, made from the
 env with sbx itself: unibox then adds tasks to it, never recreates it, and
-removes it only when forced.
+removes it only when forced. `--cpus` and `--memory` give the new sandbox
+its own share of the machine, over its env's.
+
+`resources` shows a sandbox's CPUs and memory and where each comes from;
+`--cpus` and `--memory` set its own, `-` gives back the env's. They are
+kept in `vars.toml` as `[sandboxes.<name>.resources]`, reach sbx when it is
+recreated, and go when it is removed. See [Envs](/guide/envs#resources).
 
 `ls` lists unibox's sandboxes and their state in sbx; `inspect` shows what
 unibox keeps about one. `shell` opens an interactive shell, which counts as

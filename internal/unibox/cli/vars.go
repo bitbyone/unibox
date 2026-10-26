@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ belongs here; store tokens with unibox secret.`}
 	}
 	c.AddCommand(&cobra.Command{Use: "set name value", Args: cobra.ExactArgs(2), Short: "Set a value", RunE: func(cmd *cobra.Command, args []string) error {
 		if global {
-			if err := unibox.ValidArg(args[0], args[1]); err != nil {
+			if err := checkArg(args[0], args[1]); err != nil {
 				return err
 			}
 			v, err := o.paths.LoadEnvValues()
@@ -51,7 +52,7 @@ belongs here; store tokens with unibox secret.`}
 		if err != nil {
 			return err
 		}
-		if err = unibox.ValidArg(args[0], args[1]); err != nil {
+		if err = checkArg(args[0], args[1]); err != nil {
 			return err
 		}
 		if _, err = e.SBX.CheckArgs(map[string]string{args[0]: args[1]}); err != nil {
@@ -224,7 +225,7 @@ func (o *options) askArgs(env unibox.Env) (bool, error) {
 			if s == "" {
 				return fmt.Errorf("%s is required", name)
 			}
-			if err := unibox.ValidArg(name, s); err != nil {
+			if err := checkArg(name, s); err != nil {
 				return err
 			}
 			_, err := env.SBX.CheckArgs(map[string]string{name: s})
@@ -237,4 +238,16 @@ func (o *options) askArgs(env unibox.Env) (bool, error) {
 	}
 	values.Envs[env.Name] = mine
 	return true, o.paths.SaveEnvValues(values)
+}
+
+// checkArg is unibox.ValidArg, and a share of the machine refused for an
+// arg sbx reads as an amount: unibox's resources take one.
+func checkArg(name, value string) error {
+	if err := unibox.ValidArg(name, value); err != nil {
+		return err
+	}
+	if slices.Contains(unibox.ResourceNames, name) && strings.HasSuffix(value, "%") {
+		return fmt.Errorf("arg %s goes to sbx, which takes no share; a share is unibox's resources: unibox sandbox resources --%s %s for one sandbox, or [envs.<env>.resources] in vars.toml", name, name, value)
+	}
+	return nil
 }

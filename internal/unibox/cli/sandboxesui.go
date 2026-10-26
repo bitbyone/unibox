@@ -11,8 +11,9 @@ import (
 
 // sandboxAction is what a person chose to do with a sandbox.
 type sandboxAction struct {
-	kind    string // tasks, shell, ports, inspect, stop, recreate, remove
+	kind    string // tasks, shell, ports, inspect, resources, stop, recreate, remove
 	sandbox string
+	box     api.Sandbox
 }
 
 // sandboxesModel is unibox sandbox at a terminal: the sandboxes, one to a
@@ -37,7 +38,7 @@ func (m sandboxesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	choose := func(kind string) (tea.Model, tea.Cmd) {
-		m.chosen = &sandboxAction{kind: kind, sandbox: m.rows[m.cursor].Name}
+		m.chosen = &sandboxAction{kind: kind, sandbox: m.rows[m.cursor].Name, box: m.rows[m.cursor]}
 		return m, tea.Quit
 	}
 	if m.confirm != "" {
@@ -64,6 +65,8 @@ func (m sandboxesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return choose("ports")
 	case "i":
 		return choose("inspect")
+	case "r":
+		return choose("resources")
 	case "t":
 		return choose("stop")
 	case "c":
@@ -93,7 +96,7 @@ func (m sandboxesModel) View() string {
 	case "remove":
 		fmt.Fprintf(&b, "Remove sandbox %s? [y/N]\n", name)
 	default:
-		b.WriteString(portHelp.Render("↑/↓ j/k move · enter tasks · s shell · p ports · i inspect · t stop · c recreate · d remove · q quit") + "\n")
+		b.WriteString(portHelp.Render("↑/↓ j/k move · enter tasks · s shell · p ports · i inspect · r resources · t stop · c recreate · d remove · q quit") + "\n")
 	}
 	return b.String()
 }

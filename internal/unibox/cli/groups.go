@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
@@ -40,7 +42,7 @@ unibox keeps of it, or to stop, recreate or remove it, each by a key.`}
 		}
 		return o.sandboxesUI(cmd)
 	}
-	c.AddCommand(o.listCommand(), o.createCommand(), o.inspectCommand(), o.shellCommand(), o.stopCommand(), o.recreateCommand(), o.removeCommand(false))
+	c.AddCommand(o.listCommand(), o.createCommand(), o.inspectCommand(), o.resourcesCommand(), o.shellCommand(), o.stopCommand(), o.recreateCommand(), o.removeCommand(false))
 	return c
 }
 
@@ -83,6 +85,11 @@ func (o *options) sandboxesUI(cmd *cobra.Command) error {
 			return o.tasksUI(cmd, name)
 		case "ports":
 			return o.portsUI(cmd, name)
+		case "resources":
+			if err = o.askResources(cmd, chosen.box); err != nil {
+				fmt.Fprintln(o.log, err)
+			}
+			continue
 		case "shell", "inspect":
 			return o.runStep(cmd, "sandbox", chosen.kind, name)
 		case "stop", "recreate", "remove":
@@ -101,4 +108,51 @@ func (o *options) sandboxesUI(cmd *cobra.Command) error {
 			}
 		}
 	}
+}
+
+// askResources asks a sandbox's own CPUs and memory, sets them as unibox
+// sandbox resources does, and offers to recreate it to apply them.
+func (o *options) askResources(cmd *cobra.Command, b api.Sandbox) error {
+	values, err := o.manager.Paths.LoadEnvValues()
+	if err != nil {
+		return err
+	}
+	own := values.SandboxResources[b.Name]
+	args := []string{"sandbox", "resources", b.Name}
+	for _, r := range unibox.ResourceNames {
+		now := cmp.Or(values.ResourcesFor(b.Env, b.Name).Get(r), "as the env's files say") + resourceFrom(values, b, r)
+		hint := "now " + now + "; empty keeps it"
+		if own.Get(r) != "" {
+			hint += ", - gives back the env's"
+		}
+		v, err := o.askText(r+" for "+b.Name, hint, "", func(s string) error {
+			if s == "" || s == "-" {
+				return nil
+			}
+			return unibox.ValidResource(r, s)
+		})
+		if err != nil {
+			return err
+		}
+		if v != "" && v != own.Get(r) && (v != "-" || own.Get(r) != "") {
+			args = append(args, "--"+r, v)
+		}
+	}
+	if len(args) == 3 {
+		return nil
+	}
+	if err = o.runStep(cmd, args...); err != nil {
+		return err
+	}
+	if b.State == "missing" {
+		return nil
+	}
+	again, err := o.askYes("Recreate sandbox "+b.Name+" now, discarding what it holds outside its tasks?", false)
+	if err != nil || !again {
+		return err
+	}
+	yes := o.yes
+	o.yes = true
+	defer func() { o.yes = yes }()
+	return o.runStep(cmd, "sandbox", "recreate", b.Name)
 }
