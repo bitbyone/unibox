@@ -58,9 +58,10 @@ need no shell stand-in.
   are in `<name>.unibox.yaml`, which sbx never reads, so someone without
   unibox is limited by nothing. A person's choice in `config.yaml` wins
   over the team's default.
-- **unibox pulls only what it cloned.** `init` clones a git address into
-  the data directory and records its `source`; `env update` fast-forwards
-  those clones alone. A checkout of the person's own is never pulled, and
+- **unibox pulls what it cloned, and a clean checkout.** `init` clones a
+  git address into the data directory and records its `source`; `env
+  update` fast-forwards those clones, and a checkout of the person's own
+  only while it has nothing uncommitted and follows a remote branch.
   `destroy --all` leaves the clones.
 - **No hint names sbx's CLI.** Whatever doctor or an error suggests is a
   unibox command, so that nobody using unibox needs sbx's.

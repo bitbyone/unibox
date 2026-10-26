@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -195,6 +196,9 @@ func (o *options) actList(cmd *cobra.Command, build func() (listModel, error), a
 		}
 		at = id
 		note, err = act(a.name, id)
+		if errors.Is(err, errCancelled) {
+			note, err = "", nil
+		}
 		if err != nil {
 			note = portErr.Render(err.Error())
 		}

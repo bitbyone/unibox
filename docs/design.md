@@ -363,8 +363,10 @@ docs/sandboxes.md.
   keeps the address as `source`. `unibox env update` fast-forwards such
   clones alone and says what the change means: a new arg asked of the
   person, a sandbox to recreate, a new sbxenv file for init. A checkout of
-  the person's own has no `source` and is never pulled: their branch,
-  their uncommitted work, are not unibox's. doctor fetches a clone and
+  the person's own has no `source` and is pulled the same way only while
+  it has nothing uncommitted and its branch follows a remote one: their
+  uncommitted work, and a branch of theirs alone, are not unibox's to
+  touch. doctor fetches a clone and
   warns when it is behind. `destroy --all` leaves the clones; they are a
   repository, not unibox's state.
 - **Without a terminal, or with `--no-input`, init asks nothing**: it sets

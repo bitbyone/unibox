@@ -158,6 +158,24 @@ func Pull(ctx context.Context, dir string, ask bool, in io.Reader, out io.Writer
 	return before != after, err
 }
 
+// Untouched says why a checkout of the user's is not to be pulled, or ""
+// when it may be: changes of theirs not yet committed, or a branch with no
+// upstream to fast-forward to. Files git does not track are left to the
+// pull, which stops rather than overwrite one.
+func Untouched(ctx context.Context, dir string) string {
+	status, err := gitOutput(ctx, dir, "status", "--porcelain", "--untracked-files=no")
+	if err != nil {
+		return "git cannot read it"
+	}
+	if status != "" {
+		return "it has changes not committed; commit or stash them"
+	}
+	if _, err := gitOutput(ctx, dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"); err != nil {
+		return "its branch follows no remote branch"
+	}
+	return ""
+}
+
 // Behind fetches a clone's remote and says how many commits its branch is
 // behind it.
 func Behind(ctx context.Context, dir string) (int, error) {

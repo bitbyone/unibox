@@ -77,8 +77,9 @@ unibox env update dev      # the one dev's files are in
 brings each repository unibox init cloned from a git address up to its
 remote, by a fast-forward alone, and says what that changes: an arg the
 files now ask of you, a sandbox to recreate, a new sbxenv file for
-`unibox init` to add. A checkout of your own is never pulled; update it
-with git as you would. `unibox doctor` says when a clone is behind its
+`unibox init` to add. A checkout of your own is pulled the same way, but
+only while it has nothing uncommitted and its branch follows a remote
+one; otherwise `env update` leaves it and says why. `unibox doctor` says when a clone is behind its
 remote.
 
 ## Your values for its args

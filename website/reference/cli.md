@@ -116,7 +116,7 @@ file gives its sandbox. `--name` names its sandbox (default: the file's
 from. `show` prints what the files declare - args, kits, agent, the team's
 ports - and what you set. `update` brings the repositories unibox init cloned
 up to their remote, by a fast-forward alone, and says what that changes; a
-checkout of your own is never pulled. `rm` forgets an env; its files and
+checkout of your own only while it has nothing uncommitted and its branch follows a remote one. `rm` forgets an env; its files and
 sandbox stay.
 
 Alone at a terminal, `unibox env` lists the envs to act on one by a key;

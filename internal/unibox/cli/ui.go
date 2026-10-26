@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -24,6 +25,9 @@ func (o *options) accessible() bool { return os.Getenv("ACCESSIBLE") != "" }
 // canAsk says whether a form can be shown: a terminal, or accessible mode.
 func (o *options) canAsk() bool { return !o.json && (o.interactive || o.accessible()) }
 
+// errCancelled is a question left with esc or ctrl+c.
+var errCancelled = errors.New("cancelled; what was answered so far is not written")
+
 func (o *options) runField(field huh.Field) (err error) {
 	// huh's accessible mode indexes past a list when its input ends
 	// before an answer; the user hears that the answers ran out instead.
@@ -35,7 +39,10 @@ func (o *options) runField(field huh.Field) (err error) {
 	// The theme asks the terminal for its background; asked here, before
 	// the form reads keys, the answer is not taken for typing.
 	lipgloss.HasDarkBackground()
-	f := huh.NewForm(huh.NewGroup(field)).WithShowHelp(true).WithOutput(o.log)
+	// Esc leaves a question as ctrl+c does, back to a list it came from.
+	keys := huh.NewDefaultKeyMap()
+	keys.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc"), key.WithHelp("esc", "back"))
+	f := huh.NewForm(huh.NewGroup(field)).WithShowHelp(true).WithOutput(o.log).WithKeyMap(keys)
 	if o.accessible() {
 		// huh reads each answer with a scanner of its own; one byte at a
 		// time, none takes what the next question reads.
@@ -45,7 +52,7 @@ func (o *options) runField(field huh.Field) (err error) {
 	}
 	if err := f.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return fmt.Errorf("cancelled; what was answered so far is not written")
+			return errCancelled
 		}
 		return err
 	}

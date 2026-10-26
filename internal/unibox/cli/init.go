@@ -61,8 +61,8 @@ says what is in place.
 
 Given a git address instead, init clones the repository with your own git
 into ~/.local/share/unibox/repos/<host>/<path> and sets it up from there;
-unibox env update keeps such a clone current. A repository of your own is
-never pulled.
+unibox env update keeps such a clone current, and a repository of your own
+too, while it has nothing uncommitted and follows a remote branch.
 
 With --no-input, or without a terminal, it asks nothing: it sets up every
 file found, or those of --file, takes values from --var, and fails naming

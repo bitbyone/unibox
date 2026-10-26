@@ -346,12 +346,33 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "as its remote") {
 		t.Fatalf("%s", out)
 	}
-	// A repository of the user's own is not unibox's to pull.
+	// A repository of the user's own is pulled while it is clean and
+	// follows a remote branch, and left as it is otherwise.
 	if _, _, err = run(t, paths, "", "env", "add", "mine", filepath.Join(repo, "extra", "new.sbxenv.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = run(t, paths, "", "env", "update", "mine"); err == nil || !strings.Contains(err.Error(), "update it with git") {
-		t.Fatalf("%v", err)
+	if out, _, err = run(t, paths, "", "env", "update", "mine"); err != nil || !strings.Contains(out, repo+": not updated, its branch follows no remote branch") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	own := filepath.Join(t.TempDir(), "own")
+	if out, err := exec.Command("git", "clone", "-q", repo, own).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "env", "add", "own", filepath.Join(own, "extra", "new.sbxenv.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "extra", "new.sbxenv.yaml"), []byte("agent: shell\n# changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git("commit", "-qam", "changed")
+	if out, _, err = run(t, paths, "", "env", "update", "own"); err != nil || !strings.Contains(out, own+": updated") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(own, "extra", "new.sbxenv.yaml"), []byte("agent: shell\n# mine\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err = run(t, paths, "", "env", "update", "own"); err != nil || !strings.Contains(out, own+": not updated, it has changes not committed") {
+		t.Fatalf("%v\n%s", err, out)
 	}
 	// An address that cannot be cloned leaves nothing behind.
 	missing := "file://" + filepath.ToSlash(filepath.Join(t.TempDir(), "nothing"))

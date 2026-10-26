@@ -2,6 +2,7 @@ package cli
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -86,7 +87,7 @@ func (o *options) sandboxesUI(cmd *cobra.Command) error {
 		case "ports":
 			return o.portsUI(cmd, name)
 		case "resources":
-			if err = o.askResources(cmd, chosen.box); err != nil {
+			if err = o.askResources(cmd, chosen.box); err != nil && !errors.Is(err, errCancelled) {
 				fmt.Fprintln(o.log, err)
 			}
 			continue

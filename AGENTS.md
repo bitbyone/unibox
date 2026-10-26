@@ -124,11 +124,11 @@ about it. Keep command output short: pipe through `head`, `tail` or
   terminal or with `--no-input` it asks nothing and fails naming the flag
   (`--file`, `--var`) that gives what is missing. `unibox doctor` checks
   what the walk sets up.
-- **unibox pulls only what it cloned.** An env keeps the repository its
-  files are in (`repo`) and the address unibox cloned it from
-  (`source`); `env update` fast-forwards those with a `source` alone. The
-  user's own checkout is never pulled, and `destroy --all` leaves the
-  clones.
+- **unibox pulls what it cloned, and a clean checkout.** An env keeps the
+  repository its files are in (`repo`) and the address unibox cloned it
+  from (`source`); `env update` fast-forwards those, and the user's own
+  checkout only while nothing in it is uncommitted and its branch follows
+  a remote one (`Untouched`). `destroy --all` leaves the clones.
 - **What only unibox reads sits beside the sbxenv file.** The team's
   ports are in `<name>.unibox.yaml`, which sbx never reads, so a team
   member without unibox is limited by nothing. Ports are written by

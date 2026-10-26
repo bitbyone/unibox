@@ -15,7 +15,7 @@ type EnvConfig struct {
 	// Repo is the git repository the files are in, as init found them.
 	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
 	// Source is the address unibox cloned Repo from; a repository of the
-	// user's own has none, and unibox never pulls it.
+	// user's own has none, and is pulled only while it is clean.
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 }
 

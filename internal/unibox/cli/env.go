@@ -130,7 +130,9 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 	c.AddCommand(&cobra.Command{Use: "update [env]", Args: cobra.MaximumNArgs(1), Short: "Update the repositories unibox cloned, and say what that changes", Long: `Brings each repository unibox init cloned from an address up to its
 remote, by a fast-forward alone, and says what it changes for the envs of
 it: values they now ask for, sandboxes to recreate, new sbxenv files. A
-repository of your own is never pulled; update it with git.`, RunE: func(cmd *cobra.Command, args []string) error {
+repository of your own is pulled the same way only while it has nothing of
+yours uncommitted and its branch follows a remote one; otherwise it is
+left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		repos := map[string][]string{}
 		if len(args) == 1 {
@@ -138,17 +140,19 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 			if !ok {
 				return fmt.Errorf("there is no env %s; unibox env ls lists them", args[0])
 			}
-			if ec.Source == "" || ec.Repo == "" {
-				return unibox.Fail(4, "not_a_clone", "env %s is in a repository of yours, which unibox does not update; update it with git", args[0])
+			if ec.Repo == "" {
+				return unibox.Fail(4, "not_a_repository", "env %s is in no git repository, so there is nothing to update", args[0])
 			}
 		}
+		own := map[string]bool{}
 		for _, name := range sorted(cfg.Envs) {
-			if ec := cfg.Envs[name]; ec.Source != "" && ec.Repo != "" && (len(args) == 0 || cfg.Envs[args[0]].Repo == ec.Repo) {
+			if ec := cfg.Envs[name]; ec.Repo != "" && (len(args) == 0 || cfg.Envs[args[0]].Repo == ec.Repo) {
 				repos[ec.Repo] = append(repos[ec.Repo], name)
+				own[ec.Repo] = own[ec.Repo] || ec.Source == ""
 			}
 		}
 		if len(repos) == 0 {
-			return o.success("no env is in a repository unibox cloned; unibox init <git-address> clones one")
+			return o.success("no env is in a git repository; there is nothing to update")
 		}
 		values, err := o.paths.LoadEnvValues()
 		if err != nil {
@@ -160,7 +164,19 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		}
 		said, updated := []string{}, false
 		for _, repo := range sorted(repos) {
+			if own[repo] {
+				if why := unibox.Untouched(cmd.Context(), repo); why != "" {
+					said = append(said, repo+": not updated, "+why)
+					continue
+				}
+			}
 			moved, err := unibox.Pull(cmd.Context(), repo, o.canAsk(), o.input, o.log)
+			if err != nil && own[repo] {
+				// A checkout of the user's that does not fast-forward is
+				// theirs to settle; the others are still updated.
+				said = append(said, repo+": not updated, git could not fast-forward it")
+				continue
+			}
 			if err != nil {
 				return err
 			}
