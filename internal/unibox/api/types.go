@@ -86,14 +86,16 @@ type PublishedPort struct {
 // Team is whether the env's team named it, and Description the team's
 // word for what listens there.
 type Port struct {
-	Name        string          `json:"name"`
-	Port        string          `json:"port"`
-	Description string          `json:"description,omitempty"`
-	Team        bool            `json:"team,omitempty"`
-	Default     bool            `json:"default"`
-	Named       bool            `json:"named"`
-	On          bool            `json:"on"`
-	Published   []PublishedPort `json:"published"`
+	Name        string `json:"name"`
+	Port        string `json:"port"`
+	Description string `json:"description,omitempty"`
+	Team        bool   `json:"team,omitempty"`
+	// From is where the port is named: repo, env, yours-all or yours.
+	From      string          `json:"from,omitempty"`
+	Default   bool            `json:"default"`
+	Named     bool            `json:"named"`
+	On        bool            `json:"on"`
+	Published []PublishedPort `json:"published"`
 }
 
 // NetworkRule is a rule of the network policy, as unibox network ls lists

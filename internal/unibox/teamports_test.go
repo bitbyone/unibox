@@ -36,17 +36,17 @@ func TestTheTeamsPortsAreReadBesideTheSbxenvFilesAndThePersonsWin(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(team) != 2 || team["web"] != (TeamPort{Spec: "8000:3000", Description: "The dev server"}) || team["db"] != (TeamPort{Spec: "5432"}) {
+	if len(team) != 2 || team["web"] != (TeamPort{Spec: "8000:3000", Description: "The dev server", From: FromEnv}) || team["db"] != (TeamPort{Spec: "5432", From: FromEnv}) {
 		t.Fatalf("%+v", team)
 	}
-	ports, err := envPorts(EnvConfig{Files: []string{base, dev}, Ports: map[string]Port{"db": {Default: true}, "web": {Spec: "8001:3000"}, "mine": {Spec: "9000"}}})
+	ports, err := envPorts(EnvConfig{Files: []string{base, dev}, Ports: map[string]Port{"db": {Default: true}, "web": {Spec: "8001:3000"}, "mine": {Spec: "9000"}}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ports["db"] != (Port{Spec: "5432", Default: true, Team: true}) || ports["web"] != (Port{Spec: "8001:3000", Description: "The dev server", Team: true}) || ports["mine"] != (Port{Spec: "9000"}) {
+	if ports["db"] != (Port{Spec: "5432", Default: true, Team: true, From: FromEnv}) || ports["web"] != (Port{Spec: "8001:3000", Description: "The dev server", Team: true, From: FromEnv}) || ports["mine"] != (Port{Spec: "9000", From: FromYours}) {
 		t.Fatalf("%+v", ports)
 	}
-	if _, err := envPorts(EnvConfig{Files: []string{alone}, Ports: map[string]Port{"db": {Default: true}}}); err == nil || !strings.Contains(err.Error(), "name no such port") {
+	if _, err := envPorts(EnvConfig{Files: []string{alone}, Ports: map[string]Port{"db": {Default: true}}}, nil); err == nil || !strings.Contains(err.Error(), "names no such port") {
 		t.Fatalf("%v", err)
 	}
 	for text, want := range map[string]string{
@@ -68,5 +68,56 @@ func TestTheTeamsPortsAreReadBesideTheSbxenvFilesAndThePersonsWin(t *testing.T) 
 	b, err := Port{Default: false}.MarshalYAML()
 	if err != nil || b.(map[string]string)["default"] != "off" || len(b.(map[string]string)) != 1 {
 		t.Fatalf("%v %v", b, err)
+	}
+}
+
+func TestPortsAreLayeredFromTheRepositoryToThePersonsEnv(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, text string) string {
+		t.Helper()
+		path := filepath.Join(repo, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	dev := write("sandboxes/dev.sbxenv.yaml", "agent: shell\n")
+	ci := write("sandboxes/ci.sbxenv.yaml", "agent: shell\n")
+	if got := RepoFile(dev); got != filepath.Join(repo, "unibox.yaml") {
+		t.Fatalf("%s", got)
+	}
+	write("unibox.yaml", "ports:\n  spring: {port: 8080, description: Spring}\n  vite: {port: 5173}\n  devtools: {port: 9222}\n")
+	write("sandboxes/dev.unibox.yaml", "ports:\n  vite: {port: '5173:5173', default: on}\n")
+
+	team, err := ReadTeamPorts([]string{dev})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The env's file wins and keeps the repository's description and origin.
+	if team["spring"] != (TeamPort{Spec: "8080", Description: "Spring", From: FromRepo}) || team["vite"] != (TeamPort{Spec: "5173:5173", Default: true, From: FromRepo}) {
+		t.Fatalf("%+v", team)
+	}
+	global := map[string]Port{"spring": {Default: true}, "devtools": {Spec: "19222:9222", Default: true}, "absent": {Default: true}, "extra": {Spec: "7000", Default: true}}
+	ports, err := envPorts(EnvConfig{Files: []string{dev}, Ports: map[string]Port{"devtools": {Default: false}}}, global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ports["spring"].Default || ports["devtools"] != (Port{Spec: "19222:9222", Team: true, From: FromRepo}) || ports["extra"] != (Port{Spec: "7000", Default: true, From: FromYoursAll}) {
+		t.Fatalf("%+v", ports)
+	}
+	if _, ok := ports["absent"]; ok {
+		t.Fatal("a switch for every env named a port the env does not have")
+	}
+	// Another env of the repository has the repository's ports, off.
+	ports, err = envPorts(EnvConfig{Files: []string{ci}}, nil)
+	if err != nil || len(ports) != 3 || ports["vite"].Default || ports["vite"].Spec != "5173" {
+		t.Fatalf("%v %+v", err, ports)
 	}
 }

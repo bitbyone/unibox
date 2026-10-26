@@ -291,6 +291,38 @@ func TestNamedPortsAreTheEnvsInYourConfig(t *testing.T) {
 	if cfg, _ = paths.LoadConfig(); len(cfg.Envs["dev"].Ports) != 0 {
 		t.Fatalf("%+v", cfg.Envs["dev"])
 	}
+
+	// A port for every env is each env's, under the env's own.
+	if _, _, err := run(t, paths, "", "port", "set", "-g", "devtools", "--map", "9222:9222", "--off"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "port", "on", "devtools", "-e", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = paths.LoadConfig()
+	env, err := cfg.LoadEnv("dev")
+	if err != nil || cfg.Ports["devtools"] != (unibox.Port{Spec: "9222:9222"}) || env.Ports["devtools"] != (unibox.Port{Spec: "9222:9222", Default: true, From: unibox.FromYoursAll}) {
+		t.Fatalf("%v %+v %+v", err, cfg.Ports, env.Ports)
+	}
+	if _, _, err := run(t, paths, "", "port", "on", "-g", "absent"); err == nil {
+		t.Fatal("a port no env names was switched on for every env")
+	}
+	if _, _, err := run(t, paths, "", "port", "set", "-g", "-e", "dev", "x", "--map", "1"); err == nil {
+		t.Fatal("--global and -e were taken together")
+	}
+	// The env's switch would be left with nothing to switch.
+	if _, _, err := run(t, paths, "", "port", "unset", "-g", "devtools"); err == nil || !strings.Contains(err.Error(), "unibox port unset devtools") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "port", "unset", "devtools", "-e", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "port", "unset", "-g", "devtools"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ = paths.LoadConfig(); len(cfg.Ports) != 0 {
+		t.Fatalf("%+v", cfg.Ports)
+	}
 }
 
 func TestDoctorSaysWhatIsMissing(t *testing.T) {

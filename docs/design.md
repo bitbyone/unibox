@@ -520,6 +520,14 @@ are kept with the env in config.yaml, never in an sbxenv.
   of the sbxenv, which sbx would refuse or a newer sbx might mean
   otherwise. The file is read strictly, an unknown key an error. Of an
   env's several files, a later one's ports win, as its sbxenv does.
+  `unibox.yaml` at the root of the repository (the first directory up
+  with `.git`) names ports for every env in it, under the env's own file.
+- **Four layers, the person's last.** The repository's, the env's file's,
+  the person's for every env (`ports:` at the top of config.yaml, `port
+  ... -g`) and the person's for the env. A switch for every env that an
+  env does not name is skipped there, since another env may; one for a
+  single env is an error, as it can only be a mistake. Each port carries
+  where it was first named (`From`), which `port ls` shows.
 - **The person's choice wins.** `port on|off` writes an entry without a
   mapping (`{default: on}`) into config.yaml, switching the team's port
   alone; `port set` gives it another mapping; `unset` returns to the

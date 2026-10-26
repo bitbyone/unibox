@@ -17,9 +17,10 @@ paths below, under your home directory on Windows too.
 | `~/.local/share/unibox/repos/<host>/<path>` | the team repositories `unibox init` cloned from a git address, kept current by `unibox env update`; `destroy --all` leaves them |
 
 The team's sbxenv files and kits are wherever the team keeps them; unibox
-records their paths and never writes them. Beside an sbxenv file, the team
-may keep the [ports it names](/guide/ports#the-team-s-ports) in a file sbx
-does not read: `dev.sbxenv.yaml` has `dev.unibox.yaml`. Tokens are in none of these
+records their paths and never writes them. The team may keep the
+[ports it names](/guide/ports#the-team-s-ports) in files sbx does not read:
+`unibox.yaml` at the repository's root for every env, and beside an sbxenv
+file for one, `dev.sbxenv.yaml` having `dev.unibox.yaml`. Tokens are in none of these
 files: they are sbx's, in its own store (the keychain on macOS).
 
 ### `config.yaml`
@@ -38,6 +39,8 @@ envs:
       web: 3000:5173
       storybook: {port: '6006:6006', default: off}
       vite: {default: on}     # a port of the team's, switched on for you
+ports:                    # yours for every env, under each env's own
+  devtools: {port: '19222:9222', default: off}
 context:
   sandbox: dev-mine
 stop_idle: true

@@ -268,10 +268,10 @@ does; `rm` always names it.
 ### `unibox port`
 
 ```
-unibox port set <name> --map <mapping> [--off] [-e <env>]
-unibox port unset <name...> [-e <env>]
-unibox port on <name...> [-e <env>]
-unibox port off <name...> [-e <env>]
+unibox port set <name> --map <mapping> [--off] [-e <env> | -g]
+unibox port unset <name...> [-e <env> | -g]
+unibox port on <name...> [-e <env> | -g]
+unibox port off <name...> [-e <env> | -g]
 unibox port ls [-s <sandbox>]
 unibox port publish [name...] [--map <mapping>...] [-s <sandbox>]
 unibox port unpublish [name...] [--map <mapping>...] [-s <sandbox>]
@@ -280,9 +280,12 @@ unibox port unpublish [name...] [--map <mapping>...] [-s <sandbox>]
 A port is published on the host's loopback. `set` and `unset` change the
 env's named ports, for its sandbox, and apply at once while it runs; `--off`
 publishes one only when asked to, not at start. `on` and `off` switch
-whether a port - the team's, from the `.unibox.yaml` beside the env's
-sbxenv file, or yours - is published at start; your choice wins over the
-team's default, and `unset` takes back what you changed of a team's port.
+whether a port - the team's, from the repository's `unibox.yaml` or the
+`.unibox.yaml` beside the env's sbxenv file, or yours - is published at
+start; your choice wins over the team's default, and `unset` takes back
+what you changed of a team's port. With `-g` each changes your ports for
+every env, under each env's own; see
+[Ports](/guide/ports#which-wins) for the order.
 `publish` and `unpublish` switch a running sandbox's ports alone - the
 env's by name, others by `--map` - and its next start goes back to the
 env's. `ls` lists a sandbox's ports, where each comes from, and their URLs.

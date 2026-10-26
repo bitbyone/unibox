@@ -28,8 +28,11 @@ and its next start goes back to the env's.
 A mapping is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any
 free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  unibox port set actuator --map 9080:9080 --off -e dev\n  unibox port publish actuator -s dev\n  unibox port publish --map 9090:9090 -s dev"}
 	var envFlagValue, sandbox, mapping string
-	var off bool
+	var off, global bool
 	edit := func(cmd *cobra.Command, change func(ports map[string]unibox.Port, team map[string]unibox.TeamPort) error) (string, error) {
+		if global {
+			return "every env", o.editGlobalPorts(cmd, change)
+		}
 		name, err := o.envName(envFlagValue)
 		if err != nil {
 			return "", err
@@ -42,6 +45,19 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 		team, err := unibox.ReadTeamPorts(ec.Files)
 		if err != nil {
 			return name, err
+		}
+		// What the env's own ports change is the team's as the person's
+		// ports for every env left them.
+		for k, v := range cfg.Ports {
+			t, ok := team[k]
+			if !ok && v.Spec == "" {
+				continue
+			}
+			if v.Spec != "" {
+				t.Spec = v.Spec
+			}
+			t.Default = v.Default
+			team[k] = t
 		}
 		ports := map[string]unibox.Port{}
 		for k, v := range ec.Ports {
@@ -60,7 +76,7 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 		if len(ports) == 0 {
 			ec.Ports = nil
 		}
-		if err = unibox.ValidEnvConfig(name, ec); err != nil {
+		if err = unibox.ValidEnvConfig(name, ec, cfg.Ports); err != nil {
 			return name, err
 		}
 		cfg.Envs[name] = ec
@@ -69,6 +85,17 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 		}
 		o.manager.Config = cfg
 		return name, o.manager.ApplyPorts(cmd.Context(), name)
+	}
+	where := func(env string) string {
+		if global {
+			return env
+		}
+		return "env " + env
+	}
+	scope := func(c *cobra.Command) {
+		envFlag(c, &envFlagValue)
+		c.Flags().BoolVarP(&global, "global", "g", false, "For every env, under each env's own")
+		c.MarkFlagsMutuallyExclusive("env", "global")
 	}
 	set := &cobra.Command{Use: "set name --map mapping", Args: cobra.ExactArgs(1), Short: "Publish a sandbox port by name, at every start unless --off", RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := unibox.ParsePortSpec(mapping); err != nil {
@@ -85,18 +112,24 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 		if off {
 			when = "when published (unibox port publish " + args[0] + ")"
 		}
+		if global {
+			return o.success(fmt.Sprintf("every env publishes port %s (%s) %s, unless an env of yours says otherwise", args[0], mapping, when))
+		}
 		return o.success(fmt.Sprintf("env %s publishes port %s (%s) %s", env, args[0], mapping, when))
 	}}
 	set.Flags().StringVar(&mapping, "map", "", "The mapping, [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]")
 	set.Flags().BoolVar(&off, "off", false, "Publish it only when asked to, not at start")
 	_ = set.MarkFlagRequired("map")
-	envFlag(set, &envFlagValue)
+	scope(set)
 	unset := &cobra.Command{Use: "unset name...", Args: cobra.MinimumNArgs(1), Short: "Take your ports out of the env, or go back to the team's", RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := edit(cmd, func(ports map[string]unibox.Port, team map[string]unibox.TeamPort) error {
 			for _, port := range args {
 				if _, ok := ports[port]; !ok {
 					if _, ok := team[port]; ok {
 						return fmt.Errorf("port %s is the team's and you have not changed it; unibox port off %s keeps it from being published", port, port)
+					}
+					if global {
+						return fmt.Errorf("you have no port %s for every env; an env's own is taken out with -e", port)
 					}
 					return fmt.Errorf("the env has no port %s; unibox port ls lists them", port)
 				}
@@ -107,9 +140,9 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 		if err != nil {
 			return err
 		}
-		return o.success(fmt.Sprintf("took your port %s out of env %s", strings.Join(args, ", "), env))
+		return o.success(fmt.Sprintf("took your port %s out of %s", strings.Join(args, ", "), where(env)))
 	}}
-	envFlag(unset, &envFlagValue)
+	scope(unset)
 	turn := func(on bool) *cobra.Command {
 		use, short := "on", "Publish ports at every start of the env's sandbox, and now while it runs"
 		if !on {
@@ -120,6 +153,9 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 				for _, port := range args {
 					p, mine := ports[port]
 					if _, theirs := team[port]; !mine && !theirs {
+						if global {
+							return fmt.Errorf("no env names port %s; unibox port set -g %s --map <mapping> adds one", port, port)
+						}
 						return fmt.Errorf("the env has no port %s; unibox port ls lists them, unibox port set adds one", port)
 					}
 					p.Default = on
@@ -130,9 +166,9 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port on vite\n  u
 			if err != nil {
 				return err
 			}
-			return o.success(fmt.Sprintf("env %s publishes port %s %s", env, strings.Join(args, ", "), map[bool]string{true: "at every start", false: "only when asked to (unibox port publish)"}[on]))
+			return o.success(fmt.Sprintf("%s publishes port %s %s", where(env), strings.Join(args, ", "), map[bool]string{true: "at every start", false: "only when asked to (unibox port publish)"}[on]))
 		}}
-		envFlag(cmd, &envFlagValue)
+		scope(cmd)
 		return cmd
 	}
 	var maps []string
@@ -187,7 +223,7 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 			if published == nil {
 				published = []api.PublishedPort{}
 			}
-			out = append(out, api.Port{Name: p.Name, Port: p.Spec, Description: p.Description, Team: p.Team, Default: p.Default, Named: p.Named, On: p.On, Published: published})
+			out = append(out, api.Port{Name: p.Name, Port: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, Named: p.Named, On: p.On, Published: published})
 		}
 		return o.write(map[string]any{"api_version": api.Version, "sandbox": name, "running": running, "ports": out})
 	}
@@ -222,14 +258,54 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 				urls = append(urls, fmt.Sprintf("http://%s:%d", host, q.HostPort))
 			}
 		}
-		from := "you"
-		if p.Team {
-			from = "team"
-		}
+		from := cmp.Or(p.From, "you")
 		if !p.Named {
 			from = "-"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Spec, from, at, now, cmp.Or(strings.Join(urls, " "), "-"), p.Description)
 	}
 	return w.Flush()
+}
+
+// editGlobalPorts changes the person's ports for every env, which name the
+// ports of every env's team, and applies them to each env's running
+// sandboxes.
+func (o *options) editGlobalPorts(cmd *cobra.Command, change func(ports map[string]unibox.Port, team map[string]unibox.TeamPort) error) error {
+	cfg := o.manager.Config
+	team := map[string]unibox.TeamPort{}
+	for _, name := range sorted(cfg.Envs) {
+		t, err := unibox.ReadTeamPorts(cfg.Envs[name].Files)
+		if err != nil {
+			return fmt.Errorf("env %s: %w", name, err)
+		}
+		for k, v := range t {
+			team[k] = v
+		}
+	}
+	ports := map[string]unibox.Port{}
+	for k, v := range cfg.Ports {
+		ports[k] = v
+	}
+	if err := change(ports, team); err != nil {
+		return err
+	}
+	cfg.Ports = ports
+	if len(ports) == 0 {
+		cfg.Ports = nil
+	}
+	for _, name := range sorted(cfg.Envs) {
+		if _, err := cfg.LoadEnv(name); err != nil {
+			return err
+		}
+	}
+	if err := o.paths.SaveConfig(cfg); err != nil {
+		return err
+	}
+	o.manager.Config = cfg
+	for _, name := range sorted(cfg.Envs) {
+		if err := o.manager.ApplyPorts(cmd.Context(), name); err != nil {
+			return err
+		}
+	}
+	return nil
 }

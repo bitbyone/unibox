@@ -51,7 +51,7 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
-	ports, err := envPorts(ec)
+	ports, err := envPorts(ec, c.Ports)
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
@@ -59,8 +59,8 @@ func (c Config) LoadEnv(name string) (Env, error) {
 }
 
 // ValidEnvConfig checks what an env says before it is kept: a name, files
-// that read and ports that parse.
-func ValidEnvConfig(name string, ec EnvConfig) error {
+// that read and ports that parse over the person's for every env.
+func ValidEnvConfig(name string, ec EnvConfig, global map[string]Port) error {
 	if err := ValidName(name); err != nil {
 		return err
 	}
@@ -78,6 +78,6 @@ func ValidEnvConfig(name string, ec EnvConfig) error {
 	if _, err := ReadSBXEnv(ec.Files); err != nil {
 		return err
 	}
-	_, err := envPorts(ec)
+	_, err := envPorts(ec, global)
 	return err
 }

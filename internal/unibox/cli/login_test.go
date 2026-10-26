@@ -497,7 +497,7 @@ func TestTheTeamsPortsAreOfferedAndEachPersonSwitchesThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _, err := run(t, paths, "", "env", "show", "team")
-	if err != nil || !strings.Contains(out, "port vite 9173:5173, the team's, on at start: Vite dev server") || !strings.Contains(out, "port api 8080:8080, the team's, on at start: The API") {
+	if err != nil || !strings.Contains(out, "port vite 9173:5173, the env's, on at start: Vite dev server") || !strings.Contains(out, "port api 8080:8080, the env's, on at start: The API") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	// Two ports asking for one host port are refused before they are kept.

@@ -276,9 +276,9 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		}
 		for _, p := range sorted(e.Ports) {
 			port := e.Ports[p]
-			from := "yours"
-			if port.Team {
-				from = "the team's"
+			from := map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours for every env"}[port.From]
+			if from == "" {
+				from = "yours"
 			}
 			at := map[bool]string{true: "on", false: "off"}[port.Default]
 			about := ""
@@ -304,7 +304,7 @@ func (o *options) addEnv(ctx context.Context, name string, files []string, renam
 	if rename != nil {
 		ec.Name = *rename
 	}
-	if err := unibox.ValidEnvConfig(name, ec); err != nil {
+	if err := unibox.ValidEnvConfig(name, ec, cfg.Ports); err != nil {
 		return unibox.Env{}, err
 	}
 	cfg.Envs = maps.Clone(cfg.Envs)

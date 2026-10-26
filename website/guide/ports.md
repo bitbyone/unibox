@@ -35,7 +35,8 @@ where it is now. Give a host port for a page you keep open.
 ## The team's ports
 
 The ports a whole team uses - the dev server, Storybook, a debugger - can be
-named once, beside the sbxenv file, in a file sbx does not read:
+named once, in files sbx does not read: `unibox.yaml` at the root of the
+repository for every env in it, and beside an sbxenv file for one env -
 `dev.sbxenv.yaml` has its ports in `dev.unibox.yaml`.
 
 ```yaml
@@ -66,17 +67,41 @@ unibox port unset vite -e dev                   # back to the team's mapping
 ```
 
 `unibox init` offers the team's ports in its Ports step. `unibox port ls`
-says of each where it comes from - the team, you, or neither, for one
-published by hand - and whether it is on at start:
+says of each where it is named - `repo`, `env`, `yours-all`, `yours`, or
+`-` for one published by hand - and whether it is on at start:
 
 ```
 PORT       MAPPING    FROM  AT START  NOW  URL                    DESCRIPTION
-storybook  6006       team  off       off  -                      Storybook, when you work on components
-vite       5173:5173  team  on        on   http://127.0.0.1:5173  the dev server
+storybook  6006       repo  off       off  -                      Storybook, when you work on components
+vite       5173:5173  env   on        on   http://127.0.0.1:5173  the dev server
 ```
 
-When an env has several files, a later file's `.unibox.yaml` wins for a port
-both name, as its sbxenv file does.
+## Which wins
+
+A port named in more than one place is taken from each in turn, the later
+over the earlier:
+
+1. `unibox.yaml` at the root of the team's repository, for every env in it;
+2. `<env>.unibox.yaml` beside the env's sbxenv file - of an env's several
+   files, a later one's, as its sbxenv does;
+3. yours for every env, `ports:` at the top of `config.yaml`
+   (`unibox port set|on|off|unset -g`);
+4. yours for the env, under it in `config.yaml` (`-e`).
+
+A later place may give a port only another mapping or switch it on or off;
+its description stays the team's. A switch of yours for every env that an
+env does not name is left out of that env.
+
+```yaml
+# config.yaml
+ports:
+  devtools: {port: '19222:9222', default: off}   # every env, on another host port
+  vite: {default: on}                            # the team's vite, on wherever it is named
+envs:
+  dev:
+    ports:
+      vite: {default: off}                       # but not in dev
+```
 
 ## Switching ports on a running sandbox
 

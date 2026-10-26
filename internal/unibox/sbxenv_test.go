@@ -243,7 +243,7 @@ func TestEnvConfigIsValidatedAndNamesItsSandbox(t *testing.T) {
 		t.Fatal("an absent env loaded")
 	}
 	for _, bad := range []EnvConfig{{}, {Files: []string{file}, Name: "Bad Name"}, {Files: []string{file}, Ports: map[string]Port{"web": {Spec: "nope"}}}} {
-		if ValidEnvConfig("dev", bad) == nil {
+		if ValidEnvConfig("dev", bad, nil) == nil {
 			t.Fatal("accepted", bad)
 		}
 	}

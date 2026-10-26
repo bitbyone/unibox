@@ -47,6 +47,9 @@ type Config struct {
 	// over SSH needs no token then, but the agent signs with every key the
 	// user has. Unset, sbx's forwarding is refused.
 	SSHAgentOn *bool `yaml:"ssh_agent,omitempty" json:"ssh_agent,omitempty"`
+	// Ports are the person's for every env: their own, or another mapping
+	// or switch of a port the teams name, under each env's own.
+	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
 
 	// What unibox 1 kept here is read so an old file still loads, and
 	// dropped when the file is next written.
@@ -127,6 +130,9 @@ func (p Paths) LoadConfig() (Config, error) {
 	}
 	if err = DecodeYAML(b, &c); err != nil {
 		return c, fmt.Errorf("invalid unibox configuration: %w", err)
+	}
+	if err = validatePorts(c.Ports); err != nil {
+		return c, fmt.Errorf("invalid unibox configuration: ports: %w", err)
 	}
 	if r, ok := c.Runtimes["sbx"]; ok {
 		if c.StopIdleSandbox == nil {

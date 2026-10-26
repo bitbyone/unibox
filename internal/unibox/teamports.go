@@ -27,14 +27,45 @@ func TeamFile(sbxenv string) string {
 	return filepath.Join(dir, base+".unibox.yaml")
 }
 
+// RepoFile is the file of unibox's own at the root of the repository an
+// sbxenv file is in, unibox.yaml, which names ports for every env of the
+// repository; empty when the file is in none.
+func RepoFile(sbxenv string) string {
+	dir, err := filepath.Abs(filepath.Dir(sbxenv))
+	if err != nil {
+		return ""
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return filepath.Join(dir, "unibox.yaml")
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
 // TeamPort is a port a team names: Spec as a person's port says it, a
 // description of what listens there, and whether a sandbox starts with
-// it published, off unless the team says on.
+// it published, off unless the team says on. From is where it is named:
+// FromRepo for the repository's unibox.yaml, FromEnv for the env's own
+// file.
 type TeamPort struct {
 	Spec        string
 	Description string
 	Default     bool
+	From        string
 }
+
+// Where a port is named, from the team's repository to the person's env.
+const (
+	FromRepo     = "repo"
+	FromEnv      = "env"
+	FromYoursAll = "yours-all"
+	FromYours    = "yours"
+)
 
 func (p *TeamPort) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
@@ -67,19 +98,19 @@ func (p *TeamPort) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-// ReadTeamPorts reads the team files beside an env's sbxenv files, a later
-// file's port over an earlier one's as sbx merges the files themselves.
-// A file that is not there names no ports.
+// ReadTeamPorts reads the ports the team names for an env: those of the
+// repository's unibox.yaml, then the files beside the env's sbxenv files
+// over them, a later file's over an earlier one's as sbx merges the files
+// themselves. A file that is not there names no ports.
 func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
 	out := map[string]TeamPort{}
-	for _, f := range sbxenvFiles {
-		name := TeamFile(f)
+	read := func(name, from string) error {
 		b, err := os.ReadFile(name)
 		if errors.Is(err, fs.ErrNotExist) {
-			continue
+			return nil
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 		var doc struct {
 			Ports map[string]TeamPort `yaml:"ports"`
@@ -87,43 +118,79 @@ func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
 		d := yaml.NewDecoder(bytes.NewReader(b))
 		d.KnownFields(true)
 		if err := d.Decode(&doc); err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%s: %w", name, err)
+			return fmt.Errorf("%s: %w", name, err)
 		}
 		for k, v := range doc.Ports {
 			if !portName.MatchString(k) {
-				return nil, fmt.Errorf("%s: port name %q must be lower case letters, digits and dashes, starting with a letter", name, k)
+				return fmt.Errorf("%s: port name %q must be lower case letters, digits and dashes, starting with a letter", name, k)
 			}
 			if _, err := ParsePortSpec(v.Spec); err != nil {
-				return nil, fmt.Errorf("%s: port %s: %w", name, k, err)
+				return fmt.Errorf("%s: port %s: %w", name, k, err)
+			}
+			if t, ok := out[k]; ok {
+				v.From = t.From
+				if v.Description == "" {
+					v.Description = t.Description
+				}
+			} else {
+				v.From = from
 			}
 			out[k] = v
+		}
+		return nil
+	}
+	repos := map[string]bool{}
+	for _, f := range sbxenvFiles {
+		if r := RepoFile(f); r != "" && !repos[r] {
+			repos[r] = true
+			if err := read(r, FromRepo); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, f := range sbxenvFiles {
+		if err := read(TeamFile(f), FromEnv); err != nil {
+			return nil, err
 		}
 	}
 	return out, nil
 }
 
-// envPorts are an env's ports as a sandbox gets them: the team's, each
-// as the person changed it, and the person's own. A person's port with
-// no spec only switches the team's port of its name on or off.
-func envPorts(ec EnvConfig) (map[string]Port, error) {
+// envPorts are an env's ports as a sandbox gets them, each layer over the
+// one before: the repository's, the env's file's, the person's for every
+// env and the person's for this one. A person's port with no spec only
+// switches a port of its name on or off; one for every env that this env
+// does not have is left out, as other envs may.
+func envPorts(ec EnvConfig, global map[string]Port) (map[string]Port, error) {
 	team, err := ReadTeamPorts(ec.Files)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]Port{}
 	for k, v := range team {
-		out[k] = Port{Spec: v.Spec, Default: v.Default, Description: v.Description, Team: true}
+		out[k] = Port{Spec: v.Spec, Default: v.Default, Description: v.Description, Team: true, From: v.From}
 	}
-	for k, v := range ec.Ports {
-		p, isTeam := out[k]
-		if v.Spec == "" && !isTeam {
-			return nil, fmt.Errorf("port %s says only whether it is on, and the env's files name no such port; unibox port unset %s takes it away", k, k)
+	for _, layer := range []struct {
+		ports map[string]Port
+		from  string
+	}{{global, FromYoursAll}, {ec.Ports, FromYours}} {
+		for k, v := range layer.ports {
+			p, known := out[k]
+			if v.Spec == "" && !known {
+				if layer.from == FromYoursAll {
+					continue
+				}
+				return nil, fmt.Errorf("port %s says only whether it is on, and the env names no such port; unibox port unset %s takes it away", k, k)
+			}
+			if !known {
+				p.From = layer.from
+			}
+			if v.Spec != "" {
+				p.Spec = v.Spec
+			}
+			p.Default = v.Default
+			out[k] = p
 		}
-		if v.Spec != "" {
-			p.Spec = v.Spec
-		}
-		p.Default = v.Default
-		out[k] = p
 	}
 	if err := validatePorts(out); err != nil {
 		return nil, err

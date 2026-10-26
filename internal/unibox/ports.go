@@ -25,6 +25,8 @@ type Port struct {
 	Default     bool   `yaml:"default" json:"default"`
 	Description string `yaml:"-" json:"-"`
 	Team        bool   `yaml:"-" json:"-"`
+	// From is the layer that names it, FromRepo to FromYours.
+	From string `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML takes a port as its spec alone, on by default, or as
@@ -262,6 +264,7 @@ type PortState struct {
 	Name, Spec, Description string
 	// Team is whether the team named it, in its unibox file.
 	Team    bool
+	From    string
 	Default bool
 	// Named is false for a port switched on for the sandbox alone.
 	Named     bool
@@ -297,7 +300,7 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	}
 	out := []PortState{}
 	add := func(name string, p Port, named bool) {
-		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, Default: p.Default, Named: named}
+		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, Named: named}
 		spec := p.Spec
 		if _, s.On = want[name]; s.On {
 			parsed, _ := ParsePortSpec(spec)
