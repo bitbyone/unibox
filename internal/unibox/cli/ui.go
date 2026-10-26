@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // unibox asks its questions as a small form at a terminal: a choice among
@@ -49,6 +50,13 @@ func (o *options) runField(field huh.Field) (err error) {
 		f = f.WithAccessible(true).WithInput(byteReader{o.input})
 	} else {
 		f = f.WithInput(o.input)
+		// Until the terminal says its size, an input field is narrower than
+		// nothing, and drawing a placeholder then panics in bubbles.
+		width := 80
+		if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+			width = w
+		}
+		f = f.WithWidth(width)
 	}
 	if err := f.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {

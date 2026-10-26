@@ -155,5 +155,5 @@ the protocol is tcp unless `--protocol` says udp or `tcp,udp`. A rule the
 whole team needs belongs in a kit, where it is reviewed with the env.
 
 At a terminal, `unibox network` is a list of the same: `a` allows a host,
-`n` denies one - the refused host under the cursor, or one you type, with
-its protocol - and `d` takes a rule away.
+`n` denies one - any host you type, the refused one under the cursor
+offered, with its protocol - and `d` takes a rule away.

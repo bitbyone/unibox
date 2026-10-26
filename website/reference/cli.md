@@ -372,8 +372,8 @@ and the defaults stay. `--json` lists everything, each host with where it
 comes from (`yours`, `sbx`, `env`, `default`), and the refused hosts.
 
 Alone at a terminal, `unibox network` lists your rules and the refused
-hosts: `a` allows the refused host under the cursor, or hosts you type
-with their protocol, `n` denies likewise, `d` removes the rule under the
+hosts: `a` asks for hosts to allow and their protocol, the refused host
+under the cursor offered, `n` likewise to deny, `d` removes the rule under the
 cursor after `y`. Elsewhere it is `network ls`. See
 [Ports](/guide/ports#what-a-sandbox-may-reach).
 

@@ -11,7 +11,8 @@ import (
 )
 
 // networkUI is unibox network at a terminal: a sandbox's own rules and the
-// hosts it was refused lately, to allow or deny by a key.
+// hosts it was refused lately, to allow or deny by a key: any host typed,
+// the refused one under the cursor offered.
 func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 	ctx := cmd.Context()
 	var rules []api.NetworkRule
@@ -49,11 +50,13 @@ func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 	act := func(action, id string) (string, error) {
 		switch action {
 		case "allow", "deny":
+			// A refused host under the cursor is offered; typing replaces it.
+			preset := ""
 			if blocked[id] {
-				return o.quietStep(cmd, "network", action, id, "-s", sandbox)
+				preset = id
 			}
 			hosts, err := o.askText("Hosts sandbox "+sandbox+" may "+map[string]string{"allow": "reach", "deny": "not reach"}[action],
-				"Names, *.name for subdomains or name:port, separated by spaces", "", func(s string) error { return unibox.ValidHosts(strings.Fields(s)) })
+				"Names, *.name for subdomains or name:port, separated by spaces", preset, func(s string) error { return unibox.ValidHosts(strings.Fields(s)) })
 			if err != nil || strings.TrimSpace(hosts) == "" {
 				return "", err
 			}
