@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { withBase } from 'vitepress'
+import ArchDiagram from './ArchDiagram.vue'
+import Terminal, { type TermLine } from './Terminal.vue'
 
 const installs = {
   Homebrew: 'brew tap bitbyone/unibox https://github.com/bitbyone/unibox\nbrew trust bitbyone/unibox\nbrew install unibox',
@@ -21,81 +23,158 @@ async function copy() {
   }
 }
 
-const flow = [
+const reasons = [
+  {
+    title: 'A machine of its own',
+    text: 'The sandbox is a micro-VM with its own kernel, disk and Docker. The agent has root there and nothing anywhere else: it sees the repositories you give it, at /work/<task>/<repo>, not your home directory.',
+  },
+  {
+    title: 'Tokens it never holds',
+    text: 'Your GitHub, Anthropic or registry tokens stay in sbx\'s store on your machine. The agent gets placeholders. sbx\'s proxy puts the real token into each request, and only for the hosts the env allows.',
+  },
+  {
+    title: 'A network with a list',
+    text: 'The sandbox reaches only the hosts the env names. unibox shows you what was refused and lets you allow a host for one sandbox. The ports you choose appear on localhost, nowhere else.',
+  },
+]
+
+const steps = [
   {
     who: 'Your team',
     when: 'once, in git',
     title: 'Describes the sandbox',
-    text: 'An env repository of sbxenv files and kits: the image, the tools, the agent, the hosts it may reach and the tokens it needs.',
-    code: 'sandboxes/dev.sbxenv.yaml\nkits/agent/',
+    text: 'A repository of sbxenv files and kits, in Docker Sandboxes\' own format: which image, which tools, which agent, which hosts it may reach and which tokens it needs. Nothing in it is specific to unibox.',
+    code: ['sandboxes/dev.sbxenv.yaml', 'kits/agent/', 'kits/toolchain/'],
   },
   {
     who: 'You',
     when: 'once',
     title: 'Set it up',
-    text: 'unibox clones the env repository, asks for your own values and tokens, and has sbx create the sandbox.',
-    code: '$ unibox init git@github.com:acme/agent-envs.git',
+    text: 'unibox init clones that repository, asks for the values and tokens that are yours alone, and has sbx create the sandbox. Five steps; each one checks itself and can be run again.',
+    code: ['$ unibox init git@github.com:acme/agent-envs.git'],
   },
   {
     who: 'You',
-    when: 'for each piece of work',
+    when: 'every day',
     title: 'Run the agent',
-    text: 'unibox puts the repository into the sandbox and starts the agent on it. The task stays, to resume later.',
-    code: '$ cd ~/code/api\n$ unibox run',
+    text: 'unibox run in a repository mounts it into the sandbox and starts the agent in your terminal. The work is a task: it stays, and unibox resume picks it up later.',
+    code: ['$ cd ~/code/api', '$ unibox run'],
   },
 ]
 
+const session: TermLine[] = [
+  { kind: 'cmd', text: 'unibox init git@github.com:acme/agent-envs.git' },
+  { kind: 'dim', text: 'cloned github.com/acme/agent-envs into ~/.local/share/unibox/repos' },
+  { kind: 'out', text: '1/5 sbx         installed and signed in' },
+  { kind: 'out', text: '2/5 Envs        env dev, sandboxes/dev.sbxenv.yaml: added' },
+  { kind: 'out', text: '3/5 Values      registryUser? tobola' },
+  { kind: 'out', text: '4/5 Secrets     sbx has no token for anthropic of env dev' },
+  { kind: 'dim', text: '                sbx asks for each on this terminal, and the value goes to it alone' },
+  { kind: 'out', text: '5/5 Sandboxes   sandbox dev created' },
+  { kind: 'ok', text: 'set up; start a task with unibox run <directory>' },
+  { kind: 'blank' },
+  { kind: 'cmd', text: 'cd ~/code/api && unibox run --task login --branch feat/login' },
+  { kind: 'out', text: 'mounted ~/code/api at /work/login/api in sandbox dev' },
+  { kind: 'dim', text: 'starting claude in /work/login ...' },
+  { kind: 'blank' },
+  { kind: 'cmd', text: 'unibox port on vite' },
+  { kind: 'ok', text: 'vite  http://127.0.0.1:5173  on' },
+  { kind: 'blank' },
+  { kind: 'cmd', text: 'unibox resume login' },
+]
+
 const compare = [
-  { what: 'Getting the env', sbx: "Clone the team's repository, pick the sbxenv file, run sbx env create.", unibox: 'unibox init clones it, lets you pick the envs and creates the sandbox.' },
-  { what: 'Your own values', sbx: '--env-arg and --kit-arg on every create.', unibox: 'Asked once, kept in vars.toml, given to every create.' },
-  { what: 'Tokens', sbx: 'sbx secret set for each name the kits need, found in their files.', unibox: 'unibox secret lists what the env needs and which are missing.' },
-  { what: 'Working on a repository', sbx: 'Mount it at create, sbx exec into the sandbox, start the agent.', unibox: 'unibox run mounts or clones it and starts the agent, as a task to resume.' },
-  { what: 'Ports', sbx: 'sbx ports --publish with numbers.', unibox: 'Ports by name from the env, switched with unibox port on vite.' },
-  { what: 'Network', sbx: 'sbx policy over the whole policy; a rule needs the sandbox to exist.', unibox: "The sandbox's own rules, kept and applied after each recreate, beside the hosts it was refused." },
-  { what: 'Resources', sbx: "What the sbxenv file says.", unibox: 'Your CPUs and memory per env or sandbox, also as a share of the host.' },
-  { what: 'Env changes', sbx: 'git pull, then recreate by hand.', unibox: 'unibox env update; the next start says what changed, recreate keeps your tasks.' },
-  { what: 'Checks', sbx: 'sbx diagnose.', unibox: 'unibox doctor adds the envs, your values, the tokens and the sandboxes.' },
+  {
+    what: 'Setting up',
+    sbx: 'Clone the team\'s repository, find the right sbxenv file, run sbx env create with every arg.',
+    unibox: 'unibox init clones it, lists the envs, asks for your values and creates the sandbox.',
+  },
+  {
+    what: 'Your own values',
+    sbx: '--env-arg and --kit-arg on every create.',
+    unibox: 'Asked once, kept in vars.toml, passed on every create.',
+  },
+  {
+    what: 'Tokens',
+    sbx: 'Read the kits to learn which secrets they need, then sbx secret set for each.',
+    unibox: 'unibox secret ls shows what the env needs and what is missing; unibox secret set stores the rest, through sbx.',
+  },
+  {
+    what: 'Working on a repository',
+    sbx: 'Mount it at create time, sbx exec into the sandbox, start the agent yourself.',
+    unibox: 'unibox run mounts or clones it and starts the agent. It is a task: resume it, add a repository, remove it cleanly.',
+  },
+  {
+    what: 'Ports',
+    sbx: 'sbx ports --publish 5173:5173.',
+    unibox: 'Named in the env by the team: unibox port on vite.',
+  },
+  {
+    what: 'Network',
+    sbx: 'sbx policy, one policy for every sandbox, and the sandbox has to exist first.',
+    unibox: 'Rules per sandbox, kept across recreates, with the hosts that were refused listed next to them.',
+  },
+  {
+    what: 'CPUs and memory',
+    sbx: 'Fixed in the sbxenv file.',
+    unibox: 'Yours, per env or sandbox, as numbers or as a share of the host.',
+  },
+  {
+    what: 'When the env changes',
+    sbx: 'git pull, notice the change, recreate by hand.',
+    unibox: 'unibox env update; the next start says what changed; sandbox recreate applies it and brings your tasks back.',
+  },
+  {
+    what: 'Checks',
+    sbx: 'sbx diagnose.',
+    unibox: 'unibox doctor: sbx, the envs, your values, the tokens and the sandboxes, each with the command that fixes it.',
+  },
 ]
 
 const features = [
   {
     title: 'One command to set up',
-    text: 'unibox init clones the env repository, asks for your values and tokens, and creates the sandbox.',
+    text: 'unibox init clones the env repository, asks for your values and tokens, and creates the sandbox. Run it again any time: it adds what is new and skips what is done.',
     link: '/guide/',
   },
   {
     title: 'Tokens stay on your machine',
-    text: 'sbx stores them and its proxy adds them to requests. The sandbox sees only placeholders.',
+    text: 'sbx stores them; its proxy adds them to requests. The sandbox sees only placeholders, and unibox itself never reads a value.',
     link: '/guide/secrets',
   },
   {
     title: 'Tasks you can resume',
-    text: 'unibox run starts an agent on a repository; unibox resume picks the task up again later.',
+    text: 'unibox run starts an agent on a repository. unibox resume picks the task up again, with the same agent or another the sandbox has.',
     link: '/guide/tasks',
   },
   {
     title: 'Mount or clone',
-    text: 'Work on your checkout directly, or on a clone from the forge that never touches your .git.',
+    text: 'Work on your checkout and see each change at once, or on a clone from GitHub or GitLab that never touches your .git.',
     link: '/guide/tasks#mount-or-clone',
   },
   {
     title: 'Ports by name',
-    text: 'unibox port on vite publishes the dev server on localhost.',
+    text: 'The team names the ports beside the env. unibox port on vite publishes the dev server on localhost.',
     link: '/guide/ports',
   },
   {
     title: 'Network rules per sandbox',
-    text: 'See which hosts were refused and allow them with unibox network allow.',
+    text: 'See which hosts were refused and allow one with unibox network allow. The rules survive a recreate.',
     link: '/guide/network',
   },
   {
     title: 'Env changes, on your terms',
-    text: 'When the team changes the env, unibox says so; sandbox recreate applies it and restores your tasks.',
+    text: 'When the team changes the env, unibox says so at the next start. sandbox recreate applies it and restores your tasks.',
     link: '/guide/updating',
   },
   {
+    title: 'A doctor that names the fix',
+    text: 'unibox doctor checks sbx, the envs, your values, the tokens and the sandboxes, and prints the unibox command for each problem.',
+    link: '/guide/troubleshooting',
+  },
+  {
     title: 'Scriptable',
-    text: 'Every command takes --json and --yes.',
+    text: 'Every command takes --json and --yes. Linux, macOS and Windows, one binary, no dependencies.',
     link: '/reference/cli',
   },
 ]
@@ -104,12 +183,12 @@ const features = [
 <template>
   <div class="home">
     <section class="hero">
-      <p class="kicker">A CLI for Docker Sandboxes</p>
-      <h1>Coding agents in a sandbox,<br /><span>set up from your team's env repository.</span></h1>
+      <p class="kicker">Open source · a CLI for Docker Sandboxes</p>
+      <h1>Let coding agents work in a sandbox,<br /><span>not on your laptop.</span></h1>
       <p class="lead">
-        unibox runs claude, codex, copilot or opencode on your repositories inside a Docker
-        Sandbox, a micro-VM on your machine. Point it at your team's env repository, answer its
-        questions, and run <code>unibox run</code> in a repository.
+        unibox runs Claude Code, Codex, Copilot or OpenCode inside a Docker Sandbox: a small VM on
+        your machine that gets your repository and nothing else. Your team describes the sandbox
+        once, in git. You install unibox and type one command.
       </p>
 
       <div class="install">
@@ -130,39 +209,148 @@ const features = [
       </div>
 
       <div class="actions">
-        <a class="btn brand" :href="withBase('/guide/')">Get Started</a>
-        <a class="btn alt" :href="withBase('/guide/how-it-works')">How it works</a>
+        <a class="btn brand" :href="withBase('/guide/')">Get started</a>
+        <a class="btn alt" href="#how">How it works</a>
         <a class="btn alt" href="https://github.com/bitbyone/unibox">GitHub</a>
+      </div>
+      <p class="needs">
+        Needs <a href="https://docs.docker.com/ai/sandboxes/">Docker Sandboxes</a> 0.49.2 or newer
+        and git · Linux, macOS and Windows · one binary · MIT
+      </p>
+    </section>
+
+    <section class="audience" aria-label="Where to start">
+      <div class="aud">
+        <p class="aud-kicker">New to Docker Sandboxes?</p>
+        <h2>You will not have to learn them.</h2>
+        <p>
+          Docker Sandboxes (<code>sbx</code>) is Docker's way of running an agent in a VM of its
+          own, with a proxy that keeps your tokens out of it. unibox sets it up for you from your
+          team's repository and gives you the few commands you need. You never type an
+          <code>sbx</code> command.
+        </p>
+        <a href="#why">Why a sandbox at all →</a>
+      </div>
+      <div class="aud">
+        <p class="aud-kicker">Already using sbx?</p>
+        <h2>Keep your files. Lose the chores.</h2>
+        <p>
+          unibox takes your sbxenv files and kits exactly as they are and adds what sbx leaves to
+          each person: their values for the env's args, a check of which tokens are missing, tasks
+          you can resume, ports by name, and a doctor. Remove unibox and the files still work with
+          <code>sbx env create</code>.
+        </p>
+        <a href="#compare">What unibox adds to sbx →</a>
       </div>
     </section>
 
-    <section class="how" aria-label="How unibox works">
-      <h2>How it works</h2>
+    <section id="why" class="why">
+      <h2>An agent on your machine has your machine.</h2>
       <p class="sub">
-        Three steps, and only the last one is daily work.
+        A coding agent runs whatever commands it decides to. Run it directly and it has your SSH
+        keys, every token in your shell and every file in your home. A sandbox gives it a machine
+        of its own, and gives you a way to say what it may reach.
       </p>
+      <div class="reasons">
+        <div v-for="(r, i) in reasons" :key="r.title" class="reason">
+          <span class="num">{{ i + 1 }}</span>
+          <h3>{{ r.title }}</h3>
+          <p>{{ r.text }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="picture" aria-label="What unibox run does">
+      <h2>What <code>unibox run</code> does</h2>
+      <p class="sub">
+        Your repository goes in. Requests come out through the proxy on your machine, where the
+        token is added. The token itself never goes in.
+      </p>
+      <ArchDiagram />
+    </section>
+
+    <section id="how" class="how" aria-label="How unibox works">
+      <h2>How it works</h2>
+      <p class="sub">Three steps. Only the last one is daily work.</p>
       <ol class="flow">
-        <li v-for="(step, i) in flow" :key="step.title" class="step">
+        <li v-for="(step, i) in steps" :key="step.title" class="step">
           <div class="step-head">
             <span class="num">{{ i + 1 }}</span>
             <p class="who">{{ step.who }} <span>· {{ step.when }}</span></p>
           </div>
           <h3>{{ step.title }}</h3>
           <p class="text">{{ step.text }}</p>
-          <pre><span v-for="l in step.code.split('\n')" :key="l" class="line">{{ l }}</span></pre>
+          <pre><span v-for="l in step.code" :key="l" class="line">{{ l }}</span></pre>
         </li>
       </ol>
-      <p class="note">
-        Your tokens never enter the sandbox. It sees placeholders, and sbx's proxy on your
-        machine puts the real value into requests to the hosts the env allows.
-      </p>
     </section>
 
-    <section class="compare" aria-label="unibox beside sbx">
+    <section class="screen" aria-label="unibox in a terminal">
+      <div class="screen-inner">
+        <div class="screen-copy">
+          <h2>The whole thing, in one terminal</h2>
+          <p>
+            Set up once, then a task per piece of work. Each command says what it did; what it could
+            not do comes with the command that fixes it.
+          </p>
+          <ul>
+            <li><code>unibox init</code> walks five steps and can be run again</li>
+            <li><code>unibox run</code> mounts the repository and starts the agent</li>
+            <li><code>unibox port on</code> opens a port on localhost</li>
+            <li><code>unibox resume</code> picks a task up later</li>
+          </ul>
+          <a :href="withBase('/guide/')">Getting started →</a>
+        </div>
+        <Terminal :lines="session" title="~/code/api" />
+      </div>
+    </section>
+
+    <section class="arrangement">
+      <div class="copy-col">
+        <h2>Mount or clone: you choose how close the agent gets</h2>
+        <p>
+          By default a task <strong>mounts</strong> your checkout: the agent edits your files, and
+          you see every change in your editor at once. The agent can also write into your
+          <code>.git</code>, such as a hook your machine will run later. Mount repositories you
+          would let it configure.
+        </p>
+        <p>
+          With <code>--clone</code> the agent works on its own clone from GitHub or GitLab, on a
+          branch of the task's. Your checkout is never touched; you fetch its commits when you want
+          them.
+        </p>
+        <a :href="withBase('/guide/tasks#mount-or-clone')">Mount or clone, in detail →</a>
+      </div>
+      <div class="modes">
+        <div class="mode">
+          <div class="mode-head"><span class="tag">default</span><h3>Mount</h3></div>
+          <div class="mode-row">
+            <span class="node">your checkout</span>
+            <span class="link both">live, both ways</span>
+            <span class="node vm">/work/login/api</span>
+          </div>
+          <p>Changes appear on your disk as they are made. Your <code>.git</code> is in reach.</p>
+        </div>
+        <div class="mode">
+          <div class="mode-head"><span class="tag alt">--clone</span><h3>Clone</h3></div>
+          <div class="mode-row">
+            <span class="node">your checkout</span>
+            <span class="link fetch">git fetch</span>
+            <span class="node">GitHub / GitLab</span>
+            <span class="link push">git push</span>
+            <span class="node vm">/work/login/api</span>
+          </div>
+          <p>The agent has its own clone. Your checkout stays yours.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="compare" class="compare" aria-label="unibox beside sbx">
       <h2>What unibox adds to sbx</h2>
       <p class="sub">
-        unibox is optional. The env files are plain sbx: anyone can use them with
-        <code>sbx env create</code> alone, and removing unibox takes nothing away from the team.
+        unibox is a layer, not a replacement. The isolation, the proxy and the network policy are
+        sbx's. The env files are plain sbx, and anyone on the team can use them with
+        <code>sbx env create</code> alone.
       </p>
       <div class="table">
         <table>
@@ -180,46 +368,8 @@ const features = [
       </div>
     </section>
 
-    <section class="screen" aria-label="unibox in a terminal">
-      <div class="window">
-        <div class="bar"><i /><i /><i /><span>~/code/api</span></div>
-        <pre class="term"><span class="dim"># once: the team's env repository, your values and tokens, the sandbox</span>
-<span class="dim">$</span> <b>unibox init git@github.com:acme/agent-envs.git</b>
-
-<span class="dim"># mount this repository into the sandbox and start the agent</span>
-<span class="dim">$</span> <b>unibox run --task login --branch feat/login</b>
-
-<span class="dim"># later</span>
-<span class="dim">$</span> <b>unibox task ls</b>
-<span class="dim">$</span> <b>unibox resume login</b>
-
-<span class="dim"># open the dev server on localhost</span>
-<span class="dim">$</span> <b>unibox port on vite</b></pre>
-      </div>
-    </section>
-
-    <section class="arrangement">
-      <div class="copy-col">
-        <h2>Mount or clone</h2>
-        <p>
-          By default a task mounts your checkout: you see each change at once, but the agent can
-          also write hooks into your <code>.git</code> that your machine runs later. With
-          <code>--clone</code> it works on its own clone from the forge, and you get its work with
-          <code>git fetch</code>.
-        </p>
-        <a :href="withBase('/guide/tasks#mount-or-clone')">Mount or clone →</a>
-      </div>
-      <pre class="formula"><span>mount</span>     your checkout  <span class="dim">◄─── the agent writes here</span>
-
-<span>clone</span>     your checkout  <span class="dim">◄─ git fetch ─┐</span>
-                                         <span class="dim">│</span>
-          forge, the branch <span class="dim">◄──────┤</span>
-                                         <span class="dim">│</span>
-          /work/&lt;task&gt;/&lt;repo&gt; <span class="dim">─ git push</span></pre>
-    </section>
-
     <section class="features">
-      <h2>What unibox does</h2>
+      <h2>What you get</h2>
       <div class="grid">
         <a v-for="f in features" :key="f.title" class="card" :href="withBase(f.link)">
           <h3>{{ f.title }}</h3>
@@ -229,12 +379,16 @@ const features = [
     </section>
 
     <section class="closing">
-      <h2>Getting started</h2>
+      <h2>Start in ten minutes</h2>
       <p>
         Install unibox, run <code>unibox init</code> with your team's env repository, then
-        <code>unibox run</code> in a repository.
+        <code>unibox run</code> in a repository. If your team has no env repository yet,
+        <a :href="withBase('/guide/env-authors')">For Env Authors</a> says how to write one.
       </p>
-      <a class="btn brand" :href="withBase('/guide/')">Getting Started</a>
+      <div class="actions">
+        <a class="btn brand" :href="withBase('/guide/')">Getting started</a>
+        <a class="btn alt" :href="withBase('/guide/how-it-works')">How it works, in detail</a>
+      </div>
     </section>
   </div>
 </template>
@@ -251,7 +405,47 @@ section {
 @media (min-width: 768px) {
   section { padding: 96px 64px; }
 }
+h2 {
+  font-size: clamp(26px, 3.4vw, 36px);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+h2 code,
+.sub code,
+.aud code,
+.arrangement code,
+.screen-copy code,
+.closing code,
+.modes code {
+  font-size: 0.86em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--ub-brand-soft);
+  color: var(--ub-brand);
+}
+.sub {
+  max-width: 680px;
+  margin: 16px auto 48px;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--vp-c-text-2);
+}
+.num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--ub-brand-soft);
+  color: var(--ub-brand);
+}
 
+/* hero */
 .hero {
   text-align: center;
   padding-top: 96px;
@@ -276,13 +470,12 @@ section {
 }
 .hero h1 span { color: var(--ub-brand); }
 .lead {
-  max-width: 700px;
+  max-width: 720px;
   margin: 24px auto 0;
   font-size: 18px;
   line-height: 1.7;
   color: var(--vp-c-text-2);
 }
-
 .install {
   max-width: 600px;
   margin: 40px auto 0;
@@ -329,7 +522,6 @@ section {
   color: var(--vp-c-text-2);
 }
 .copy:hover { color: var(--ub-brand); }
-
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -351,23 +543,64 @@ section {
 .btn.brand:hover { background: var(--ub-brand-hover); }
 .btn.alt { border-color: var(--ub-frame); color: var(--vp-c-text-1); }
 .btn.alt:hover { border-color: var(--vp-c-text-3); }
+.needs {
+  margin-top: 28px;
+  font-size: 13.5px;
+  color: var(--vp-c-text-3);
+}
+.needs a { color: var(--vp-c-text-2); text-decoration: underline; text-underline-offset: 3px; }
 
-h2 {
-  font-size: clamp(26px, 3.4vw, 36px);
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+/* two audiences */
+.audience {
+  display: grid;
+  gap: 24px;
+}
+@media (min-width: 900px) {
+  .audience { grid-template-columns: 1fr 1fr; gap: 32px; }
+}
+.aud {
+  border: 1px solid var(--ub-frame);
+  border-radius: 16px;
+  padding: 32px;
+  background: var(--vp-c-bg);
+}
+.aud-kicker {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--vp-c-text-1);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ub-brand);
 }
+.aud h2 { margin-top: 10px; font-size: clamp(22px, 2.4vw, 28px); }
+.aud p:not(.aud-kicker) { margin-top: 14px; font-size: 16px; line-height: 1.75; color: var(--vp-c-text-2); }
+.aud a,
+.arrangement a,
+.screen-copy a { display: inline-block; margin-top: 18px; color: var(--ub-brand); font-weight: 500; }
 
-.how { text-align: center; }
-.how .sub {
-  max-width: 680px;
-  margin: 16px auto 48px;
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--vp-c-text-2);
+/* why a sandbox */
+.why { text-align: center; }
+.reasons {
+  display: grid;
+  gap: 16px;
+  text-align: left;
 }
+@media (min-width: 900px) { .reasons { grid-template-columns: repeat(3, 1fr); gap: 24px; } }
+.reason {
+  border: 1px solid var(--ub-frame);
+  border-radius: 14px;
+  padding: 24px;
+  background: var(--ub-code-bg);
+}
+.reason h3 { margin-top: 16px; font-size: 18px; font-weight: 600; color: var(--vp-c-text-1); }
+.reason p { margin-top: 8px; font-size: 15px; line-height: 1.65; color: var(--vp-c-text-2); }
+
+/* the picture */
+.picture { text-align: center; }
+.picture .sub { margin-bottom: 40px; }
+.picture figure { max-width: 980px; margin: 0 auto; }
+
+/* how it works */
+.how { text-align: center; }
 .flow {
   list-style: none;
   margin: 0;
@@ -400,18 +633,6 @@ h2 {
 .step-head { display: flex; gap: 10px; align-items: center; }
 .who { font-size: 13px; font-weight: 600; color: var(--ub-brand); }
 .who span { font-weight: 400; color: var(--vp-c-text-3); }
-.num {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--ub-brand-soft);
-  color: var(--ub-brand);
-}
 .step h3 { margin-top: 14px; font-size: 18px; font-weight: 600; color: var(--vp-c-text-1); line-height: 1.4; }
 .step .text { margin-top: 6px; font-size: 15px; line-height: 1.6; color: var(--vp-c-text-2); flex: 1; }
 .step pre {
@@ -426,104 +647,129 @@ h2 {
   overflow-x: auto;
 }
 .step pre .line { display: block; white-space: pre; }
-.how .note {
-  max-width: 640px;
-  margin: 36px auto 0;
+
+/* the terminal */
+.screen { background: var(--ub-code-bg); }
+.screen-inner {
+  display: grid;
+  gap: 36px;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+@media (min-width: 1024px) {
+  .screen-inner { grid-template-columns: 2fr 3fr; gap: 56px; }
+}
+.screen-copy p { margin-top: 16px; font-size: 17px; line-height: 1.75; color: var(--vp-c-text-2); }
+.screen-copy ul { margin: 20px 0 0; padding: 0; list-style: none; }
+.screen-copy li {
+  position: relative;
+  padding-left: 22px;
+  margin-top: 8px;
   font-size: 15px;
+  line-height: 1.6;
   color: var(--vp-c-text-2);
 }
+.screen-copy li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.65em;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ub-brand-soft);
+  border: 1.5px solid var(--ub-brand);
+}
 
-.screen { display: flex; justify-content: center; background: var(--ub-code-bg); }
-.window {
-  width: 100%;
-  max-width: 860px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #121614;
-  box-shadow: 0 24px 60px -24px rgba(10, 30, 24, 0.35);
-  border: 1px solid #232a27;
-}
-.bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: #1a201d;
-  font-size: 12px;
-  color: #86928d;
-}
-.bar i { width: 11px; height: 11px; border-radius: 50%; background: #36403c; }
-.bar span { margin-left: 8px; }
-.term {
-  margin: 0;
-  padding: 18px 20px;
-  overflow-x: auto;
-  font-family: var(--vp-font-family-mono);
-  font-size: 13px;
-  line-height: 1.65;
-  color: #c6d0cb;
-}
-.term b { color: #eef3f0; font-weight: 600; }
-.term em { font-style: normal; color: #7ddfbc; }
-.term .dim { color: #6b7772; }
-.term .ok { color: #7fd49a; }
-.term .run { color: #e0a15c; }
-
+/* mount or clone */
 .arrangement {
   display: grid;
   gap: 40px;
   align-items: center;
 }
 @media (min-width: 960px) {
-  .arrangement { grid-template-columns: 1fr 1fr; gap: 64px; }
+  .arrangement { grid-template-columns: 5fr 6fr; gap: 64px; }
 }
-.arrangement p { margin: 16px 0; font-size: 17px; line-height: 1.75; color: var(--vp-c-text-2); }
-.arrangement code,
-.closing code {
-  font-size: 0.88em;
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: var(--ub-brand-soft);
-  color: var(--ub-brand);
-}
-.arrangement a { color: var(--ub-brand); font-weight: 500; }
-.formula {
-  margin: 0;
-  padding: 28px;
-  border-radius: 12px;
-  background: var(--ub-code-bg);
+.arrangement p { margin: 16px 0 0; font-size: 17px; line-height: 1.75; color: var(--vp-c-text-2); }
+.arrangement strong { color: var(--vp-c-text-1); font-weight: 600; }
+.modes { display: grid; gap: 16px; }
+.mode {
   border: 1px solid var(--ub-frame);
+  border-radius: 14px;
+  padding: 20px 22px;
+  background: var(--ub-code-bg);
+}
+.mode-head { display: flex; align-items: center; gap: 10px; }
+.mode-head h3 { font-size: 17px; font-weight: 600; color: var(--vp-c-text-1); }
+.tag {
   font-family: var(--vp-font-family-mono);
-  font-size: 14px;
-  line-height: 1.9;
-  overflow-x: auto;
-  color: var(--vp-c-text-1);
-}
-.formula span { color: var(--ub-brand); }
-.formula .dim { color: var(--vp-c-text-3); }
-
-.compare h2 { text-align: center; }
-.compare .sub {
-  margin: 16px auto 40px;
-  max-width: 640px;
-  text-align: center;
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--vp-c-text-2);
-}
-.compare .sub code {
-  font-size: 0.88em;
-  padding: 2px 6px;
-  border-radius: 5px;
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
   background: var(--ub-brand-soft);
   color: var(--ub-brand);
 }
+.tag.alt { background: rgba(194, 122, 44, 0.12); color: var(--ub-accent); }
+.mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.node {
+  font-family: var(--vp-font-family-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ub-frame);
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  white-space: nowrap;
+}
+.node.vm { border-color: var(--ub-brand); border-style: dashed; }
+.link {
+  position: relative;
+  flex: 1 1 60px;
+  min-width: 60px;
+  height: 31px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--vp-c-text-3);
+  background: linear-gradient(currentColor, currentColor) center / 100% 1.5px no-repeat;
+}
+.link.both { color: var(--ub-brand); }
+.link::before,
+.link::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -4px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+}
+.link::after { right: 0; transform: rotate(45deg); }
+.link::before { left: 0; transform: rotate(-135deg); }
+.link.fetch::after,
+.link.push::after { display: none; }
+.mode p { margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--vp-c-text-2); }
+
+/* beside sbx */
+.compare h2 { text-align: center; }
+.compare .sub { text-align: center; margin-bottom: 40px; }
 .compare .table {
   overflow-x: auto;
   border: 1px solid var(--ub-frame);
   border-radius: 14px;
 }
-.compare table { width: 100%; border-collapse: collapse; margin: 0; display: table; }
+.compare table { width: 100%; min-width: 640px; border-collapse: collapse; margin: 0; display: table; }
 .compare th,
 .compare td {
   padding: 14px 20px;
@@ -542,6 +788,7 @@ h2 {
 .compare td { color: var(--vp-c-text-2); }
 .compare td:last-child { color: var(--vp-c-text-1); }
 
+/* features */
 .features h2 { text-align: center; margin-bottom: 48px; }
 .grid {
   display: grid;
@@ -563,6 +810,8 @@ h2 {
 .card h3 { font-size: 17px; font-weight: 600; color: var(--vp-c-text-1); }
 .card p { margin-top: 8px; font-size: 15px; line-height: 1.65; color: var(--vp-c-text-2); }
 
+/* closing */
 .closing { text-align: center; border-bottom: none; }
-.closing p { margin: 16px auto 28px; max-width: 560px; font-size: 17px; color: var(--vp-c-text-2); }
+.closing p { margin: 16px auto 0; max-width: 600px; font-size: 17px; line-height: 1.7; color: var(--vp-c-text-2); }
+.closing p a { color: var(--ub-brand); text-decoration: underline; text-underline-offset: 3px; }
 </style>

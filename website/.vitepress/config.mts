@@ -55,7 +55,7 @@ export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'Run coding agents on your repositories in Docker Sandboxes, set up from your team\'s env repository.',
+  description: 'Run Claude Code, Codex, Copilot or OpenCode in a Docker Sandbox, a VM on your machine that gets your repository and nothing else, set up from your team\'s env repository with one command.',
   cleanUrls: true,
   lastUpdated: true,
   head: [
@@ -63,6 +63,8 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0b7a5c' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'unibox' }],
+    ['meta', { property: 'og:title', content: 'unibox: coding agents in a sandbox, not on your laptop' }],
+    ['meta', { property: 'og:description', content: 'A CLI over Docker Sandboxes. Your team describes the sandbox once; you run unibox run.' }],
   ],
   markdown: {
     theme: { light: 'github-light', dark: 'github-dark-dimmed' },
