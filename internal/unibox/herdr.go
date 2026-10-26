@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -155,7 +154,7 @@ func (m *Manager) EnsureObserver() error {
 	}
 	cmd.Stdout = log
 	cmd.Stderr = log
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	detach(cmd)
 	if err = cmd.Start(); err != nil {
 		return err
 	}

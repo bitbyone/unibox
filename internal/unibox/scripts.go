@@ -1,12 +1,9 @@
 package unibox
 
 import (
-	"bytes"
 	"encoding/base64"
 	"fmt"
 	"path"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -16,65 +13,27 @@ func writeGuest(file string, data []byte, mode string) string {
 	return "mkdir -p " + Quote(path.Dir(file)) + "\nprintf %s " + Quote(base64.StdEncoding.EncodeToString(data)) + " | base64 -d > " + Quote(file) + "\nchmod " + mode + " " + Quote(file) + "\n"
 }
 
-func initializeScript(p Profile, instructions string) string {
-	s := "set -eu\n" + gitServicesScript(p)
-	// Every clone's co-author hook is rewritten before each session, so one
-	// prepared by an older unibox - with an agent fixed in it - follows the
-	// session's agent too.
-	s += "for d in /work/*/*/.git/unibox-hooks; do\n  [ -d \"$d\" ] || continue\n  printf %s " + Quote(base64.StdEncoding.EncodeToString([]byte(coAuthorHook()))) + " | base64 -d > \"$d/commit-msg\"\n  chmod 700 \"$d/commit-msg\"\ndone\n"
-	for _, id := range p.Agents {
-		a, _ := FindAgent(id)
-		s += "mkdir -p \"$HOME/" + path.Dir(a.Instructions) + "\"\nprintf %s " + Quote(base64.StdEncoding.EncodeToString([]byte(instructions))) + " | base64 -d > \"$HOME/" + a.Instructions + "\"\n"
-	}
-	if p.Start != "" {
-		s += writeGuest("/var/lib/unibox/start.sh", p.Files[p.Start].Data, "700")
-	}
-	s += "boot=$(cat /proc/sys/kernel/random/boot_id)\nprevious=$(cat /var/lib/unibox/started 2>/dev/null || true)\nif [ \"$boot\" != \"$previous\" ]; then\n"
-	if p.Start != "" {
-		s += "  " + strings.Join(withEnv(quoteAll(p.SessionEnv()), []string{"/bin/sh", "/var/lib/unibox/start.sh"}), " ") + "\n"
-	}
-	s += "  printf '%s\\n' \"$boot\" > /var/lib/unibox/started\nfi\n"
-	return s
-}
-
-// gitServicesScript wires the sandbox's git to its git services, for every
-// clone in it - prepared by unibox or made by the agent - so it is part of
-// the sandbox's setup, not a task's.
-func gitServicesScript(p Profile) string {
-	var b strings.Builder
-	// A git service sends its placeholder as the Authorization header; the
-	// proxy swaps the host's whole credential in. git's own helper cannot
-	// carry it - git base64-encodes user:password, hiding the placeholder -
-	// so it goes in verbatim through http.extraHeader. git sends every
-	// extraHeader whose URL matches, from the least specific URL to the
-	// most, so each list starts with an empty value, which resets it: a
-	// path's header replaces its host's instead of joining it.
-	for name, s := range p.Services {
-		if !s.Git {
-			continue
-		}
-		header := "Authorization: " + ServicePlaceholder(name, s)
-		for _, u := range s.GitURLs() {
-			key := Quote("http." + u + ".extraHeader")
-			fmt.Fprintf(&b, "git config --global --unset-all %s || true\ngit config --global --add %s ''\ngit config --global --add %s %s\n", key, key, key, Quote(header))
-		}
-	}
-	b.WriteString(identityScript(p))
-	return b.String()
-}
-
-func prepareScript(t api.Task, p Profile, a Agent) string {
+func prepareScript(t api.Task) string {
 	var b strings.Builder
 	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\nmkdir -p " + Quote(t.Directory) + "\n")
 	for _, r := range t.Repositories {
 		dir := path.Join(t.Directory, r.Name)
 		if r.Mounted {
-			b.WriteString(mountedScript(t, r, p))
+			b.WriteString(mountedScript(t, r))
 			continue
 		}
 		name, email, _ := AuthorParts(r.Author)
 		fmt.Fprintf(&b, "url=%s\nbranch=%s\ndir=%s\n", Quote(r.URL), Quote(r.Branch), Quote(dir))
-		b.WriteString(`refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch")
+		// A forge that redirects the URL - GitLab's without .git - has git
+		// warn on every request; the first one finds where it leads, and
+		// the rest go there.
+		b.WriteString(`given=$url
+errs="$dir.unibox-ls-remote"
+refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch" 2>"$errs") || true
+grep -v '^warning: redirecting to ' "$errs" >&2 || true
+moved=$(sed -n 's/^warning: redirecting to //p' "$errs" | head -n 1)
+rm -f "$errs"
+[ -z "$moved" ] || url=${moved%/}
 tip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$branch" '$2 == ref {print $1}')
 [ -n "$tip" ] || { echo 'branch does not exist on the forge; push it first' >&2; exit 4; }
 if [ ! -d "$dir" ]; then
@@ -84,7 +43,8 @@ if [ ! -d "$dir" ]; then
   mv "$tmp" "$dir"
 else
   [ -d "$dir/.git" ] || { echo 'task directory is not a clone; inspect it in unibox sandbox shell' >&2; exit 4; }
-  [ "$(git -C "$dir" remote get-url origin)" = "$url" ] || { echo 'task origin changed; inspect it in unibox sandbox shell' >&2; exit 4; }
+  origin=$(git -C "$dir" remote get-url origin)
+  [ "$origin" = "$url" ] || [ "$origin" = "$given" ] || { echo 'task origin changed; inspect it in unibox sandbox shell' >&2; exit 4; }
   [ "$(git -C "$dir" symbolic-ref --short HEAD)" = "$branch" ] || { echo 'task branch changed; restore it in unibox sandbox shell' >&2; exit 4; }
   [ -z "$(git -C "$dir" status --porcelain --untracked-files=all)" ] || { echo 'task has local edits; finish them in unibox sandbox shell before preparing again' >&2; exit 4; }
   git -C "$dir" fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
@@ -94,14 +54,10 @@ fi
 `)
 		fmt.Fprintf(&b, "git -C \"$dir\" config user.name %s\ngit -C \"$dir\" config user.email %s\n", Quote(name), Quote(email))
 		b.WriteString("git -C \"$dir\" config push.default simple\n")
-		coAuthor := p.Git.CoAuthor
-		if r.CoAuthor != nil {
-			coAuthor = r.CoAuthor
-		}
 		// The hook is there either way: with crediting off it still takes
 		// out the trailer an agent adds of itself, so off means none.
 		credit := "on\n"
-		if coAuthor != nil && !*coAuthor {
+		if r.CoAuthor != nil && !*r.CoAuthor {
 			credit = "off\n"
 		}
 		hooks := path.Join(dir, ".git", "unibox-hooks")
@@ -112,60 +68,12 @@ fi
 	return b.String()
 }
 
-// identityScript gives a clone the agent makes itself the author its git
-// service names, as the clones unibox prepares have. Each service's identity
-// is a file of its own, included when a repository's remote is under the
-// service's URL; git applies the includes in order, so they are listed from
-// the least specific URL to the most and the most specific wins. A clone
-// unibox prepared keeps its own user.name and user.email, which outrank
-// anything global. The index is rewritten every time, so a service that
-// left the profile leaves the sandbox's identities too.
-func identityScript(p Profile) string {
-	type entry struct{ url, file string }
-	entries := []entry{}
-	var b strings.Builder
-	// Without identities only the old files go; an include of a missing
-	// file is ignored by git, and the global config is left alone.
-	b.WriteString("ids=\"$HOME/.config/unibox/identities\"\nrm -rf \"$ids\"\n")
-	names := []string{}
-	for name, s := range p.Services {
-		if s.Git && s.Author != "" {
-			names = append(names, name)
-		}
-	}
-	if len(names) == 0 {
-		return b.String()
-	}
-	slices.Sort(names)
-	b.WriteString("mkdir -p \"$ids\"\n: > \"$ids/index.gitconfig\"\n")
-	for _, name := range names {
-		s := p.Services[name]
-		who, email, _ := AuthorParts(s.Author)
-		file := "\"$ids/" + name + ".gitconfig\""
-		fmt.Fprintf(&b, "git config -f %s user.name %s\ngit config -f %s user.email %s\n", file, Quote(who), file, Quote(email))
-		for _, u := range s.GitURLs() {
-			entries = append(entries, entry{u, file})
-		}
-	}
-	slices.SortStableFunc(entries, func(a, b entry) int {
-		if len(a.url) != len(b.url) {
-			return len(a.url) - len(b.url)
-		}
-		return strings.Compare(a.url, b.url)
-	})
-	for _, e := range entries {
-		fmt.Fprintf(&b, "git config -f \"$ids/index.gitconfig\" --add %s %s\n", Quote("includeIf.hasconfig:remote.*.url:"+e.url+"**.path"), e.file)
-	}
-	b.WriteString("git config --global --replace-all include.path \"$ids/index.gitconfig\" 'unibox/identities/index'\n")
-	return b.String()
-}
-
 // coAuthorHook makes a commit's co-author unibox's to say. The session
-// names its agent (UNIBOX_AGENT, as unibox's table calls it) and how the
-// profile credits it (UNIBOX_CO_AUTHOR); the hook takes out any co-author
+// names its agent (UNIBOX_AGENT, as unibox's table calls it) and its
+// co-author (UNIBOX_CO_AUTHOR); the hook takes out any co-author
 // trailer of either name - agents add their own, copilot always, in their
 // own case and address - and, unless the clone's credit file says off,
-// adds the profile's. A commit made by hand in unibox sandbox shell, with no agent
+// adds the agent's. A commit made by hand in unibox sandbox shell, with no agent
 // running, is left as it is.
 func coAuthorHook() string {
 	return `#!/bin/sh
@@ -243,54 +151,29 @@ fi
 	return b.String()
 }
 
-// codexSetup does for a generated kit what sbx's own codex kit does: codex
-// signs in only through a file of its own, so the proxy's login has to be
-// written there. SBX_CRED_OPENAI_MODE says which login sbx wired: oauth
-// (ChatGPT, through a provider that sends the proxy's placeholder to
-// chatgpt.com), apikey, or none. In none a placeholder would reach OpenAI
-// as it is, so it is taken away and codex asks. What unibox writes into
-// config.toml sits between markers, rewritten each time; the rest is the
-// user's. Top-level keys go before the first table, or TOML would read
-// them as the table's. How codex works - unasked, by default - is the
-// profile's config.toml seed, merged before this. Every task directory and
-// repository under /work is
-// trusted, so codex does not ask whether to trust what unibox prepared; a
-// directory the user's own part already names is left to it.
+// codexSetup trusts every task directory and repository under /work in
+// codex's config.toml, so codex does not ask whether to trust what unibox
+// prepared. What unibox writes sits between markers, rewritten each time;
+// the rest - the kit's and the user's - stays, and a directory it names
+// already is left to it.
 const codexSetup = `home="${CODEX_HOME:-$HOME/.codex}"
 work="${UNIBOX_WORK:-/work}"
-mode="${SBX_CRED_OPENAI_MODE:-none}"
 mkdir -p "$home"
 cfg="$home/config.toml"
 touch "$cfg"
-awk -v mode="$mode" '
+awk '
 /^# unibox:begin/ { skip = 1; next }
 /^# unibox:end/ { skip = 0; next }
 skip { next }
-/^[ \t]*\[/ { table = 1 }
-!table && (mode == "oauth" || mode == "apikey") && /^[ \t]*forced_login_method[ \t]*=/ { next }
-!table && mode == "oauth" && /^[ \t]*model_provider[ \t]*=/ { next }
 { print }' "$cfg" > "$cfg.unibox"
 {
-  case "$mode" in
-    oauth|apikey)
-      echo '# unibox:begin - the sandbox proxy signs codex in; rewritten before every session'
-      echo 'forced_login_method = "api"'
-      [ "$mode" = oauth ] && echo 'model_provider = "sandboxd"'
-      echo '# unibox:end'
-      ;;
-  esac
   cat "$cfg.unibox"
-  {
-    if [ "$mode" = oauth ]; then
-      printf '%s\n' '[model_providers.sandboxd]' 'name = "Sandbox Proxy"' 'base_url = "https://chatgpt.com/backend-api/codex"' 'experimental_bearer_token = "oai-oat01-proxy-managed"' 'requires_openai_auth = false'
-    fi
-    for d in "$work"/* "$work"/*/*; do
-      [ -d "$d" ] || continue
-      case "$d" in *.unibox-clone) continue ;; esac
-      grep -qxF "[projects.\"$d\"]" "$cfg.unibox" && continue
-      printf '[projects."%s"]\ntrust_level = "trusted"\n' "$d"
-    done
-  } > "$cfg.tail"
+  for d in "$work"/* "$work"/*/*; do
+    [ -d "$d" ] || continue
+    case "$d" in *.unibox-clone) continue ;; esac
+    grep -qxF "[projects.\"$d\"]" "$cfg.unibox" && continue
+    printf '[projects."%s"]\ntrust_level = "trusted"\n' "$d"
+  done > "$cfg.tail"
   if [ -s "$cfg.tail" ]; then
     echo '# unibox:begin'
     cat "$cfg.tail"
@@ -299,14 +182,6 @@ skip { next }
 } > "$cfg.new"
 cat "$cfg.new" > "$cfg"
 rm -f "$cfg.new" "$cfg.unibox" "$cfg.tail"
-case "$mode" in
-  oauth|apikey)
-    (umask 077; printf '{\n  "OPENAI_API_KEY": "proxy-managed"\n}\n' > "$home/auth.json")
-    ;;
-  *)
-    if grep -q '"proxy-managed"' "$home/auth.json" 2>/dev/null; then rm -f "$home/auth.json"; fi
-    ;;
-esac
 `
 
 func sessionScript(id string, args []string) string {
@@ -315,28 +190,6 @@ func sessionScript(id string, args []string) string {
 		s += Quote(arg) + " "
 	}
 	return s + "\nexit $?\n"
-}
-
-// scriptsScript runs a profile's scripts one after another, each from a
-// file of its own so its #! line is honoured (sh when it has none), with
-// UNIBOX_SCRIPT and env set; the first to fail stops the rest.
-func scriptsScript(p Profile, names []string, env []string) string {
-	s := "set -e\n"
-	for _, name := range names {
-		file := "/var/lib/unibox/scripts/" + name
-		data := p.Files[filepath.ToSlash(p.Scripts[name])].Data
-		s += writeGuest(file, data, "700")
-		run := Quote(file)
-		if !bytes.HasPrefix(data, []byte("#!")) {
-			run = "/bin/sh " + run
-		}
-		vars := ""
-		for _, kv := range append(slices.Clone(env), "UNIBOX_SCRIPT="+name) {
-			vars += Quote(kv) + " "
-		}
-		s += fmt.Sprintf("echo %s >&2\nif ! env %s%s; then echo %s >&2; exit 1; fi\n", Quote("unibox: running script "+name), vars, run, Quote("unibox: script "+name+" failed"))
-	}
-	return s
 }
 
 // mountedDir is where unibox keeps, in the guest, what a mounted repository
@@ -351,7 +204,7 @@ func mountedDir(t api.Task, r api.Repository) string {
 // co-author hook for it through an includeIf of the guest's global
 // configuration - so commits made in the sandbox are the task's, and the
 // host's .git/config is left as it is.
-func mountedScript(t api.Task, r api.Repository, p Profile) string {
+func mountedScript(t api.Task, r api.Repository) string {
 	var b strings.Builder
 	dir := path.Join(t.Directory, r.Name)
 	fmt.Fprintf(&b, "dir=%s\n", Quote(dir))
@@ -364,12 +217,8 @@ func mountedScript(t api.Task, r api.Repository, p Profile) string {
 	config := "[gc]\n\tworktreePruneExpire = never\n"
 	if r.Author != "" {
 		name, email, _ := AuthorParts(r.Author)
-		coAuthor := p.Git.CoAuthor
-		if r.CoAuthor != nil {
-			coAuthor = r.CoAuthor
-		}
 		credit := "on\n"
-		if coAuthor != nil && !*coAuthor {
+		if r.CoAuthor != nil && !*r.CoAuthor {
 			credit = "off\n"
 		}
 		config += fmt.Sprintf("[user]\n\tname = %s\n\temail = %s\n[core]\n\thooksPath = %s\n", name, email, own+"/hooks")
@@ -405,3 +254,11 @@ func unmountedScript(t api.Task) string {
 	}
 	return b.String()
 }
+
+// setupScript readies a sandbox for unibox's tasks, as root: the kit's
+// image need not have the directories unibox keeps tasks and runs in. Not
+// recursive, as what is mounted under /work is the host's.
+const setupScript = `set -eu
+mkdir -p /work /var/lib/unibox/runs /var/lib/unibox/mounted
+chown agent:agent /work /var/lib/unibox /var/lib/unibox/runs /var/lib/unibox/mounted
+`

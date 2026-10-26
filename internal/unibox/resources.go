@@ -1,76 +1,37 @@
 package unibox
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
-// Resources is what a sandbox gets of the host: each a fixed amount or a
-// share of the host's, as "50%", worked out when the sandbox is created.
-// In JSON they read as the two fields they were before resources grouped
-// them, so a sandbox's recorded settings stay comparable.
+// Resources are what a person gives their sandboxes of their machine: CPUs
+// and memory, absolute or as a share of the host. A team's env cannot know
+// either, so they are the person's, in vars.toml - for every env, or for
+// one. sbx takes no share, so unibox works it out on the host at each
+// create and hands sbx the amount, in an sbxenv file of its own given last.
 type Resources struct {
-	CPUs   Amount `yaml:"cpus" json:"cpus"`
-	Memory string `yaml:"memory" json:"memory"`
+	CPUs   string `toml:"cpus,omitempty" json:"cpus,omitempty"`
+	Memory string `toml:"memory,omitempty" json:"memory,omitempty"`
 }
 
-// Amount is a resource as a profile says it: a number, a size such as 8g,
-// or a share of the host's such as 50%.
-type Amount string
-
-func (a *Amount) UnmarshalYAML(n *yaml.Node) error {
-	if n.Kind != yaml.ScalarNode {
-		return fmt.Errorf("line %d: a resource is a number, a size or a share such as 50%%", n.Line)
-	}
-	*a = Amount(n.Value)
-	return nil
-}
-
-// MarshalJSON writes a whole number as a number, as cpus always was.
-func (a Amount) MarshalJSON() ([]byte, error) {
-	if a == "" {
-		return []byte("0"), nil
-	}
-	if n, err := strconv.Atoi(string(a)); err == nil {
-		return json.Marshal(n)
-	}
-	return json.Marshal(string(a))
-}
-
-func (a *Amount) UnmarshalJSON(b []byte) error {
-	var n int
-	if json.Unmarshal(b, &n) == nil {
-		*a = ""
-		if n != 0 {
-			*a = Amount(strconv.Itoa(n))
-		}
-		return nil
-	}
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	*a = Amount(s)
-	return nil
-}
+// ResourceNames are the resources a person may set.
+var ResourceNames = []string{"cpus", "memory"}
 
 var (
-	cpuPattern    = regexp.MustCompile(`^[1-9][0-9]*$`)
+	cpuPattern    = regexp.MustCompile(`^[0-9]+$`)
 	memoryPattern = regexp.MustCompile(`^[1-9][0-9]*[kKmMgG]?$`)
 	sharePattern  = regexp.MustCompile(`^([1-9][0-9]*)%$`)
 )
 
-// share is the percentage an amount says, or 0 when it is not one.
-func (a Amount) share() int {
-	m := sharePattern.FindStringSubmatch(string(a))
+// share is the percentage a value says, or 0 when it is not one.
+func share(v string) int {
+	m := sharePattern.FindStringSubmatch(v)
 	if m == nil {
 		return 0
 	}
@@ -78,68 +39,94 @@ func (a Amount) share() int {
 	return n
 }
 
-// Validate says whether the resources are of a form unibox takes.
-func (r Resources) Validate() error { return r.validate() }
-
-func (r Resources) validate() error {
-	if r.CPUs != "" && !cpuPattern.MatchString(string(r.CPUs)) && !validShare(r.CPUs) {
-		return fmt.Errorf("resources.cpus is a number of CPUs or a share of the host's from 1%% to 100%%, e.g. 4 or 50%%")
+// Get and Set name a resource as vars.toml does.
+func (r Resources) Get(name string) string {
+	if name == "cpus" {
+		return r.CPUs
 	}
-	if r.Memory != "" && !memoryPattern.MatchString(r.Memory) && !validShare(Amount(r.Memory)) {
-		return fmt.Errorf("resources.memory is a size or a share of the host's from 1%% to 100%%, e.g. 8g or 50%%")
-	}
-	return nil
+	return r.Memory
 }
 
-func validShare(a Amount) bool {
-	n := a.share()
-	return n >= 1 && n <= 100
+func (r *Resources) Set(name, value string) {
+	if name == "cpus" {
+		r.CPUs = value
+	} else {
+		r.Memory = value
+	}
+}
+
+// Over is r, with what it leaves unset taken from base.
+func (r Resources) Over(base Resources) Resources {
+	if r.CPUs == "" {
+		r.CPUs = base.CPUs
+	}
+	if r.Memory == "" {
+		r.Memory = base.Memory
+	}
+	return r
+}
+
+// ValidResource says whether a value can be kept for a resource.
+func ValidResource(name, value string) error {
+	n := share(value)
+	switch name {
+	case "cpus":
+		if !cpuPattern.MatchString(value) && (n < 1 || n > 100) {
+			return fmt.Errorf("cpus is a number of CPUs, 0 for all of them, or a share of the host's from 1%% to 100%%, e.g. 4 or 50%%")
+		}
+	case "memory":
+		if !memoryPattern.MatchString(value) && (n < 1 || n > 100) {
+			return fmt.Errorf("memory is a size or a share of the host's from 1%% to 100%%, e.g. 16g or 75%%")
+		}
+	default:
+		return fmt.Errorf("%q is no resource; set %s", name, strings.Join(ResourceNames, " or "))
+	}
+	return nil
 }
 
 // Host is what the host has, for resolving shares.
 type Host struct {
 	CPUs   int
-	Memory int64 // bytes
+	Memory int64 // bytes, 0 when it could not be read
 }
 
-// HostResources reads the host's CPUs and memory; memory is 0 when it
-// cannot be read.
+// HostResources reads the host's CPUs and memory.
 func HostResources() Host {
 	h := Host{CPUs: runtime.NumCPU()}
-	switch runtime.GOOS {
-	case "darwin":
-		if out, err := exec.Command("sysctl", "-n", "hw.memsize").Output(); err == nil {
-			h.Memory, _ = strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
-		}
-	case "linux":
-		if data, err := os.ReadFile("/proc/meminfo"); err == nil {
-			for _, line := range strings.Split(string(data), "\n") {
-				if f := strings.Fields(line); len(f) >= 2 && f[0] == "MemTotal:" {
-					kb, _ := strconv.ParseInt(f[1], 10, 64)
-					h.Memory = kb * 1024
-				}
-			}
-		}
+	if m, err := hostMemory(); err == nil {
+		h.Memory = int64(m)
 	}
 	return h
 }
 
-// Resolve turns shares into amounts of this host: CPUs rounded, at least
-// one; memory in whole MiB.
-func (r Resources) Resolve(h Host) (cpus int, memory string, err error) {
-	if n := r.CPUs.share(); n > 0 {
-		cpus = max(1, (h.CPUs*n+50)/100)
-	} else if r.CPUs != "" {
-		cpus, _ = strconv.Atoi(string(r.CPUs))
+// Resolve gives the amounts sbx takes on this host: a share of the CPUs as
+// a count, rounded and at least one, and all of them as 0, which sbx reads
+// as every CPU; memory in MiB, kept within the 75% of the host's sbx gives
+// a sandbox (sbx create --help), so asking for all of it still starts one.
+// What it caps it says to log.
+func (r Resources) Resolve(h Host, log io.Writer) (Resources, error) {
+	out := r
+	if n := share(r.CPUs); n == 100 {
+		out.CPUs = "0"
+	} else if n > 0 {
+		out.CPUs = strconv.Itoa(max(1, (h.CPUs*n+50)/100))
 	}
-	memory = r.Memory
-	if n := Amount(r.Memory).share(); n > 0 {
+	if r.Memory == "" {
+		return out, nil
+	}
+	if n := share(r.Memory); n > 0 {
 		if h.Memory <= 0 {
-			return 0, "", fmt.Errorf("the host's memory could not be read for resources.memory %s; give a size such as 8g", r.Memory)
+			return out, fmt.Errorf("the host's memory could not be read for memory %s; give a size such as 16g", r.Memory)
 		}
-		memory = fmt.Sprintf("%dm", h.Memory*int64(n)/100>>20)
+		out.Memory = fmt.Sprintf("%dm", h.Memory*int64(n)/100>>20)
 	}
-	return cpus, memory, nil
+	limit := max(h.Memory*3/4, 512<<20)
+	if h.Memory > 0 && memoryBytes(out.Memory) > limit {
+		capped := fmt.Sprintf("%dm", limit>>20)
+		fmt.Fprintf(log, "memory %s is more than sbx gives a sandbox, 75%% of the host's; using %s\n", r.Memory, capped)
+		out.Memory = capped
+	}
+	return out, nil
 }
 
 // memoryBytes reads a size as sbx takes it, in binary units.
@@ -158,4 +145,50 @@ func memoryBytes(s string) int64 {
 	}
 	n, _ := strconv.ParseInt(strings.TrimRight(s, "kKmMgG"), 10, 64)
 	return n * unit
+}
+
+// fingerprint is what the resources add to a sandbox's fingerprint;
+// nothing when none is set, so a sandbox made before keeps its own.
+func (r Resources) fingerprint() []string {
+	out := []string{}
+	for _, name := range ResourceNames {
+		if v := r.Get(name); v != "" {
+			out = append(out, name, v)
+		}
+	}
+	return out
+}
+
+// WriteResourcesFile writes the sbxenv file that gives sbx the resolved
+// resources, read after the env's own so that it wins, and returns it with
+// what removes it; with none set there is no file.
+func WriteResourcesFile(dir string, r Resources) (string, func(), error) {
+	if r.CPUs == "" && r.Memory == "" {
+		return "", func() {}, nil
+	}
+	var b strings.Builder
+	b.WriteString("# Written by unibox from your resources in vars.toml.\nschemaVersion: \"1\"\nsandboxOptions:\n")
+	if r.CPUs != "" {
+		fmt.Fprintf(&b, "  cpus: %s\n", r.CPUs)
+	}
+	if r.Memory != "" {
+		fmt.Fprintf(&b, "  memory: %q\n", r.Memory)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", nil, err
+	}
+	f, err := os.CreateTemp(dir, "resources-*.sbxenv.yaml")
+	if err != nil {
+		return "", nil, err
+	}
+	remove := func() { os.Remove(f.Name()) }
+	_, err = f.WriteString(b.String())
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		remove()
+		return "", nil, err
+	}
+	return f.Name(), remove, nil
 }

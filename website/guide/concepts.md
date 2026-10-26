@@ -1,64 +1,75 @@
 # Concepts
 
-A handful of words carry the whole of unibox. Most are a page of their own later; this
-one says how they fit.
+A handful of words carry the whole of unibox. Most are a page of their own
+later; this one says how they fit.
 
 ```
- environments repo (git)            host                         sandbox (VM)
- ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────────┐
- │ sandboxes/<profile>/ │   │ unibox               │   │ /work/<task>/<repo>      │
- │   sandbox.yaml       │──▶│  profile → adapter   │──▶│   fresh clone, own branch│
- │   sandbox.dockerfile │   │                      │   │                          │
- │ _shared/  .shared/   │   │ runtime (sbx / msb)  │   │ claude / codex / copilot │
- │   @install @instr.   │   │  logins, proxy,      │◀──│   commits + pushes       │
- └──────────────────────┘   │  network policy      │   └──────────────────────────┘
-                            └──────────────────────┘             │
-                                      │ real tokens added        ▼
-                                      └──────────────────────▶ forge, model APIs
+ team's repository (git)        host                          sandbox (VM)
+ ┌──────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+ │ sandboxes/           │   │ unibox                │   │ /work/<task>/<repo>   │
+ │   dev.sbxenv.yaml    │──▶│  env, your args,      │──▶│   mounted or cloned   │
+ │ kits/                │   │  tasks, ports         │   │                       │
+ │   ...                │   │ sbx                   │   │ the kit's agent       │
+ └──────────────────────┘   │  the VM, your secrets, │◀──│                       │
+                            │  proxy, policy        │   └───────────────────────┘
+                            └───────────────────────┘             │
+                                      │ real tokens added         ▼
+                                      └───────────────────────▶ forge, model APIs
 ```
 
-## Environments repository
+## sbxenv file and kit
 
-A git repository of yours that holds the profiles, along with installation
-scripts and instruction texts they share. unibox knows it by its path
-(`environments` in its configuration) and reads its working tree.
-`unibox init --dir <path>` lays it out.
-[More](./environments-repository).
+sbx's own words. An **sbxenv file** (`*.sbxenv.yaml`) describes a sandbox:
+the kits it is made of, the args a person supplies, the bindings that say
+which hosts each token may reach, and its name. A **kit** is a package laid
+over a sandbox - an image, files, hooks, network rules, credentials; one of
+them, the workload, runs the agent. They live in your team's repository, and
+unibox never writes them.
 
-## Profile
+## Env
 
-A directory `sandboxes/<name>/` with a `sandbox.yaml`. It describes an
-environment: the image (`sandbox.dockerfile` beside it, or `image:`), the
-resources, the agents and how each signs in, the forges and services the
-sandbox reaches, the network rules and ports, scripts and instructions.
-**A profile names no runtime**; the runtime's adapter turns it into the
-runtime's own means. [More](./profiles).
+A name for one or more sbxenv files, kept in unibox's `config.yaml`:
+`unibox env add dev dev.sbxenv.yaml`. sbx merges the files in their order,
+so a local overlay after the team's file changes what it needs to. An env
+can give its sandbox a name of your own, and holds your
+[named ports](./ports). [More](./envs).
+
+## Args and your values
+
+An sbxenv file declares args, some required: a user name, a mirror, an
+amount of memory. Your values for them are yours, in
+`~/.config/unibox/vars.toml`, set with `unibox var set` and passed to sbx at
+every create. A sandbox is not created while a required one is missing.
+
+## Secret
+
+A token a sandbox uses - for a model provider, a forge, a registry. The kits
+declare which they take; sbx keeps them, in its own store on the host, and
+its proxy puts them into requests. `unibox secret ls` says which are stored,
+`unibox secret set` has sbx ask for the missing ones. [More](./secrets).
 
 ## Sandbox
 
-A VM made from a profile, with a name you choose. It persists until you
-remove it: its disk, its Docker images, its caches and its tasks stay when an
-agent ends. A sandbox in which the last agent unibox started has ended is
-stopped, so idle sandboxes hold no memory; the next start boots it again.
+A VM sbx made from an env, with a name: the env's own, the one its file
+gives, or one you choose. It persists until you remove it: its disk, its
+Docker images and its tasks stay when an agent ends. A sandbox whose last
+session ended is stopped, so idle sandboxes hold no memory; the next start
+boots it again.
 
-A sandbox can be **shared** by several tasks - memory, caches and images are
+unibox remembers what the env's files, local kits and your args were when
+the sandbox was made. When they change, the next start says so, and
+`unibox sandbox recreate` makes it again, putting its tasks back.
+
+A sandbox can be shared by several tasks - memory, caches and images are
 paid once, but between the agents there is no isolation at all: one user
-with sudo, one filesystem, one Docker, one set of ports. Or it can be **its
-own** for one task, and nothing it does reaches another.
-
-```sh
-unibox run -p web                # sandbox "web", named for the profile
-unibox run -p web -s web-login   # a sandbox of its own
-unibox run -s web-login          # an existing one
-unibox run                       # the default: UNIBOX_SANDBOX, the context's, or the only one
-```
+with sudo, one filesystem, one Docker, one set of ports.
 
 ## Task
 
-One piece of work in a sandbox: fresh clones of one or more repositories at
-`/work/<task>/<repo>`, on a branch, with an agent running in your terminal. A
-task's name is unique across all sandboxes, so the task alone finds its
-sandbox:
+One piece of work in a sandbox: one or more repositories at
+`/work/<task>/<repo>`, mounted from the host or cloned from the forge, with
+the agent running in your terminal. A task's name is unique across all
+sandboxes, so the task alone finds its sandbox:
 
 ```sh
 unibox resume <task>
@@ -69,43 +80,10 @@ unibox task rm <task>
 By default a task is named after its first repository and a digest; `--task`
 names it. [More](./tasks).
 
-## Runtime
-
-What actually makes and runs the VM. unibox has one adapter per runtime,
-behind one Go interface (create, exec, stop, build, and optionally store
-logins):
-
-| Runtime | Status | Isolation |
-| --- | --- | --- |
-| `sbx` (Docker Sandboxes) | supported, the default | micro-VM, egress proxy, credentials kept on the host |
-| `msb` (microsandbox) | experimental, used only when asked for | micro-VM, egress proxy, credentials kept on the host |
-| Podman / Docker | planned | container |
-
-A new sandbox goes to the default runtime, sbx unless
-`unibox config set default_runtime <name>` says otherwise;
-`--runtime <name>` asks for one sandbox, and a sandbox keeps the runtime it
-was made in. msb shows that a profile runs unchanged on another runtime; it is not
-meant for daily use yet. `unibox runtime ls` shows what is
-there; [The sbx Runtime](/reference/sbx) and
-[The msb Runtime](/reference/msb) what was verified about each.
-
 ## Agent
 
-A coding agent the image installs and the profile declares: `claude`,
-`codex`, `copilot` or `opencode`. Each is started with its permission prompts
-off, signs in through the runtime, and is credited as a co-author in the
-commits it makes. One image can hold several. [More](./agents).
-
-## Service
-
-A forge or another host service the sandbox authenticates to - GitHub,
-GitLab, an Artifactory - with a token kept on the host and a placeholder in
-the sandbox. [More](./services-and-secrets).
-
-## Host access
-
-Everything a profile asks of the host: environment variables, mounted caches,
-logins, services and network rules. unibox remembers what each profile asked
-for last; when it changes, the next start says what changed and what it leads
-to - an image built, a sandbox recreated, or rules applied live. Nothing asks
-you to approve your own profile.
+The coding agent the env's workload kit runs - `claude`, `codex`, `copilot`
+or `opencode`, or another the kit starts. The kit says how it is started and
+signed in; unibox runs it with `sbx exec` in the task's directory, has it
+trust that directory first, and credits it in the commits it makes.
+[More](./agents).

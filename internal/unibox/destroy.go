@@ -2,48 +2,25 @@ package unibox
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/tobola/unibox/internal/unibox/api"
-	"gopkg.in/yaml.v3"
 )
 
 // DestroyOptions say how far unibox destroy goes. Without All it removes
-// every sandbox and so every task; All removes what unibox ever made on
-// the host besides; Secrets the tokens it keeps in the platform's store;
-// MSB the microsandbox runtime. Force removes sandboxes with running
-// sessions or unpushed work.
+// every sandbox unibox created and so every task; All removes what unibox
+// keeps on the host besides. Force removes sandboxes with running sessions
+// or unpushed work. The env files, the kits and the secrets in sbx are
+// the team's and the user's, and stay.
 type DestroyOptions struct {
-	All, Secrets, MSB, Force bool
-}
-
-// RuntimeCleaner is a runtime that keeps, outside its sandboxes, what
-// unibox made in it - secrets, approvals - and can take it away.
-type RuntimeCleaner interface {
-	Clean(ctx context.Context, log io.Writer) error
+	All, Force bool
 }
 
 // Destroy takes unibox back to where it was before it was used. Unless
 // forced, it checks every sandbox before removing any, so work is never
 // half lost: one with a running session or unpushed work stops it all.
 func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
-	removeRepo := false
-	if o.All && m.Config.Environments != "" {
-		removeRepo, _ = EnvironmentsFate(ctx, m.Config.Environments)
-	}
-	if o.All && m.Config.Environments != "" && !removeRepo {
-		for _, dir := range []string{m.Paths.Config, m.Paths.Cache} {
-			if rel, err := filepath.Rel(dir, m.Config.Environments); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
-				return fmt.Errorf("the environments repository %s lies in %s, which --all removes; move it elsewhere first (unibox config set environments <path>)", m.Config.Environments, dir)
-			}
-		}
-	}
 	s, err := m.Paths.ReadState()
 	if err != nil {
 		return err
@@ -57,13 +34,13 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 		}
 	}
 	for _, name := range names {
-		b := s.Sandboxes[name]
-		if _, err := m.Runtime(b.Runtime); err != nil {
-			// The runtime is gone, and its sandboxes with it.
-			fmt.Fprintf(m.Log, "sandbox %s: %v; forgetting it\n", name, err)
+		if s.Sandboxes[name].Adopted {
+			// An adopted sandbox was the user's before unibox knew it, and
+			// stays theirs.
 			if err := m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil }); err != nil {
 				return err
 			}
+			fmt.Fprintf(m.Log, "forgot sandbox %s, which unibox adopted; sbx rm %s removes it\n", name, name)
 			continue
 		}
 		if err := m.remove(ctx, name, "", true); err != nil {
@@ -71,90 +48,14 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 		}
 		fmt.Fprintf(m.Log, "removed sandbox %s\n", name)
 	}
-	// Sandboxes of unibox's the state no longer knows.
-	for _, rt := range sortedKeys(m.Runtimes) {
-		r := m.Runtimes[rt]
-		if !InUse(ctx, r) {
-			continue
-		}
-		boxes, err := r.List(ctx)
-		if err != nil {
-			return err
-		}
-		for _, box := range boxes {
-			if strings.HasPrefix(box.Name, "unibox-") {
-				if err := r.Remove(ctx, box.Name); err != nil {
-					return fmt.Errorf("%s sandbox %s: %w", rt, box.Name, err)
-				}
-				fmt.Fprintf(m.Log, "removed %s sandbox %s, which unibox no longer knew\n", rt, box.Name)
-			}
-		}
-	}
 	if o.All {
-		for _, rt := range sortedKeys(m.Runtimes) {
-			r := m.Runtimes[rt]
-			if !InUse(ctx, r) {
-				continue
-			}
-			if pruner, ok := r.(ImagePruner); ok {
-				images, err := pruner.UniboxImages(ctx)
-				if err != nil {
-					return err
-				}
-				for _, im := range images {
-					m.removeImage(ctx, pruner, im.Ref)
-				}
-			}
-			if c, ok := r.(RuntimeCleaner); ok {
-				if err := c.Clean(ctx, m.Log); err != nil {
-					return fmt.Errorf("%s: %w", rt, err)
-				}
-			}
-		}
 		if _, err := os.Stat(m.pluginPath()); err == nil {
 			if err := m.UninstallPlugin(ctx); err != nil {
 				fmt.Fprintf(m.Log, "the herdr plugin stays linked (%v); herdr plugin unlink %s removes it\n", err, pluginID)
 			}
 		}
-	}
-	if o.Secrets {
-		store, err := PlatformSecrets()
-		if err != nil {
-			return err
-		}
-		names, err := store.List(ctx)
-		if err != nil {
-			return err
-		}
-		for _, name := range names {
-			if err := store.Remove(ctx, name); err != nil {
-				return fmt.Errorf("secret %s: %w", name, err)
-			}
-			fmt.Fprintf(m.Log, "removed secret %s from %s\n", name, store.Name())
-		}
-	}
-	if o.MSB {
-		if home, err := os.UserHomeDir(); err == nil {
-			dir := filepath.Join(home, ".microsandbox")
-			if _, err := os.Stat(dir); err == nil {
-				if err := os.RemoveAll(dir); err != nil {
-					return err
-				}
-				fmt.Fprintf(m.Log, "removed %s\n", dir)
-			}
-		}
-	}
-	if o.All {
-		// The environments repository goes with the rest unless it is in
-		// git, where it is the user's work kept apart from unibox.
-		if removeRepo {
-			if err := os.RemoveAll(m.Config.Environments); err != nil {
-				return err
-			}
-			fmt.Fprintf(m.Log, "removed %s\n", m.Config.Environments)
-		}
 		// Last, as the locks live there: unibox's state, configuration and
-		// the person's vars.toml, and what it cached.
+		// the person's args, and what it cached.
 		for _, dir := range []string{m.Paths.Cache, m.Paths.Config} {
 			if err := os.RemoveAll(dir); err != nil {
 				return err
@@ -173,163 +74,75 @@ func (m *Manager) checkRemovable(ctx context.Context, b api.Sandbox) error {
 		return fmt.Errorf("sandbox %s has a running session", b.Name)
 	}
 	defer u.Close()
-	r, err := m.Runtime(b.Runtime)
-	if err != nil {
-		return nil
-	}
-	if _, exists, err := m.findBox(ctx, r, b); err != nil || !exists {
+	if _, exists, err := m.findBox(ctx, b); err != nil || !exists {
 		return err
 	}
-	return m.safeBox(ctx, b, r)
+	return m.safeBox(ctx, b)
 }
 
-// Clean takes away what unibox made in sbx outside its sandboxes: the
-// custom secrets carrying unibox's placeholders, a service's secret read
-// by unibox's lookup, the approvals unibox added to credentials.yaml, and
-// its generated kits. What the user made with sbx stays.
-func (r *SBX) Clean(ctx context.Context, log io.Writer) error {
-	b, err := commandOutput(hostCommand(ctx, "sbx", "secret", "ls", "--json"))
+// PruneMounts unmounts what a running sandbox has mounted under /work
+// that no task of it has any longer, as a task removed outside unibox
+// leaves behind, each as "sandbox: host at target". A sandbox another
+// command is busy with is left for the next prune and named in busy.
+func (m *Manager) PruneMounts(ctx context.Context) (unmounted, busy []string, err error) {
+	boxes, err := m.List(ctx)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	var list struct {
-		Secrets []struct {
-			Scope, Name, Type, Secret string
-		} `json:"secrets"`
-		Custom []struct {
-			Scope       string `json:"scope"`
-			Env         string `json:"env"`
-			Placeholder string `json:"placeholder"`
-		} `json:"custom_secrets"`
-	}
-	if err = json.Unmarshal(b, &list); err != nil {
-		return fmt.Errorf("could not read sbx secret ls --json: %w", err)
-	}
-	for _, c := range list.Custom {
-		if !strings.Contains(c.Placeholder, "unibox") {
+	for _, b := range boxes {
+		if b.State != "running" {
 			continue
 		}
-		args := []string{"secret", "rm", "--placeholder", c.Placeholder, "-f"}
-		if c.Scope != "global" {
-			args = append(args, "--sandbox", c.Scope)
-		}
-		if err := runQuiet(hostCommand(ctx, "sbx", args...)); err != nil {
-			return fmt.Errorf("custom secret %s: %w", c.Env, err)
-		}
-		fmt.Fprintf(log, "removed sbx secret %s (%s)\n", c.Env, c.Scope)
-	}
-	for _, s := range list.Secrets {
-		// Only a secret read by unibox's own lookup is known to be unibox's;
-		// a login made with sbx is the user's.
-		if !strings.HasPrefix(s.Secret, "command:") || !strings.Contains(s.Secret, "unibox") {
+		guard, err := m.guard(b.Name)
+		if err != nil {
+			busy = append(busy, b.Name)
 			continue
 		}
-		args := []string{"secret", "rm", s.Name, "-f"}
-		if s.Scope != "global" {
-			args = append(args, "--sandbox", s.Scope)
-		}
-		if err := runQuiet(hostCommand(ctx, "sbx", args...)); err != nil {
-			return fmt.Errorf("sbx secret %s: %w", s.Name, err)
-		}
-		fmt.Fprintf(log, "removed sbx secret %s (%s)\n", s.Name, s.Scope)
-	}
-	if err := removeBindings(r.Bindings, log); err != nil {
-		return err
-	}
-	return nil
-}
-
-// removeBindings takes out of sbx's credentials.yaml the domains unibox's
-// kits approve, and what that leaves empty; others stay.
-func removeBindings(file string, log io.Writer) error {
-	if file == "" {
-		return nil
-	}
-	data, err := os.ReadFile(file)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	doc := map[string]any{}
-	if err = yaml.Unmarshal(data, &doc); err != nil {
-		return fmt.Errorf("sbx credential bindings in %s are not valid YAML; repair the file: %w", file, err)
-	}
-	bindings, _ := doc["bindings"].(map[string]any)
-	removed := 0
-	for _, want := range sbxKitBindings {
-		service, _ := bindings[want.Service].(map[string]any)
-		if service == nil {
-			continue
-		}
-		for mechanism, domains := range map[string][]string{"apiKey": want.APIKey, "oauth": want.OAuth} {
-			entry, _ := service[mechanism].(map[string]any)
-			list, _ := entry["domains"].([]any)
-			kept := slices.DeleteFunc(slices.Clone(list), func(d any) bool { s, _ := d.(string); return slices.Contains(domains, s) })
-			removed += len(list) - len(kept)
-			if len(kept) == 0 && entry != nil {
-				delete(entry, "domains")
-			} else if entry != nil {
-				entry["domains"] = kept
+		err = func() error {
+			defer guard.Close()
+			current, err := m.sandbox(b.Name)
+			if err != nil {
+				return err
 			}
-			if entry != nil && len(entry) == 0 {
-				delete(service, mechanism)
+			_, stray, err := m.MountDrift(ctx, current)
+			if err != nil {
+				return err
+			}
+			for _, mt := range stray {
+				if err := m.SBX.Unmount(ctx, b.Name, mt[0], mt[1]); err != nil {
+					return err
+				}
+				unmounted = append(unmounted, fmt.Sprintf("%s: %s at %s", b.Name, mt[0], mt[1]))
+			}
+			return nil
+		}()
+		if err != nil {
+			return unmounted, busy, err
+		}
+	}
+	return unmounted, busy, nil
+}
+
+// Prune forgets the sandboxes sbx no longer has, removed with sbx itself,
+// and says which.
+func (m *Manager) Prune(ctx context.Context) ([]string, error) {
+	boxes, err := m.SBX.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	gone := []string{}
+	err = m.Paths.State(func(s *State) error {
+		for _, name := range sortedKeys(s.Sandboxes) {
+			found := false
+			for _, v := range boxes {
+				found = found || v.Name == name
+			}
+			if !found && len(s.Sandboxes[name].Runs) == 0 {
+				delete(s.Sandboxes, name)
+				gone = append(gone, name)
 			}
 		}
-		if len(service) == 0 {
-			delete(bindings, want.Service)
-		}
-	}
-	if removed == 0 {
 		return nil
-	}
-	if len(bindings) == 0 {
-		delete(doc, "bindings")
-	}
-	out, err := yaml.Marshal(doc)
-	if err != nil {
-		return err
-	}
-	if len(doc) == 0 {
-		out = nil
-	}
-	if err = AtomicWrite(file, out, 0o600); err != nil {
-		return err
-	}
-	fmt.Fprintf(log, "removed %d domain approvals unibox added from %s\n", removed, file)
-	return nil
-}
-
-// EnvironmentsFate says whether destroy --all removes the environments
-// repository, and why or why not. One in git - its own repository or
-// inside another - is the user's work and stays; one that is not goes
-// with unibox's state, as init laid it out. A directory that does not look
-// like one, or a home or root, is never removed.
-func EnvironmentsFate(ctx context.Context, root string) (bool, string) {
-	info, err := os.Stat(root)
-	if err != nil || !info.IsDir() {
-		return false, "it is not there"
-	}
-	home, _ := os.UserHomeDir()
-	if abs, _ := filepath.Abs(root); abs == "/" || abs == home {
-		return false, "it is your home or the root"
-	}
-	if hostCommand(ctx, "git", "-C", root, "rev-parse", "--is-inside-work-tree").Run() == nil {
-		return false, "it is in git"
-	}
-	if info, err := os.Stat(filepath.Join(root, "sandboxes")); err != nil || !info.IsDir() || CheckLayout(root) != nil {
-		return false, "it does not look like an environments repository"
-	}
-	// Only what unibox lays out; anything else there is the user's.
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return false, err.Error()
-	}
-	for _, e := range entries {
-		if !slices.Contains([]string{"sandboxes", "_shared", ".shared", ".templates", ".DS_Store"}, e.Name()) {
-			return false, "it holds " + e.Name() + ", which unibox did not lay out"
-		}
-	}
-	return true, "it is not in git"
+	})
+	return gone, err
 }

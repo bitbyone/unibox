@@ -1,20 +1,15 @@
 package unibox
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/tobola/unibox/internal/testenv"
-	"github.com/tobola/unibox/internal/unibox/api"
-	"gopkg.in/yaml.v3"
 )
 
 func mustWriteExecutable(t *testing.T, path string, content []byte) {
@@ -24,18 +19,23 @@ func mustWriteExecutable(t *testing.T, path string, content []byte) {
 	}
 }
 
-func TestSBXUsesOnlyApprovedMountsAndEnvironment(t *testing.T) {
+func TestSBXCreatesFromTheEnvAndPassesNoHostSecret(t *testing.T) {
 	bin := t.TempDir()
 	log := filepath.Join(t.TempDir(), "argv")
 	env := filepath.Join(t.TempDir(), "env")
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+Quote(log)+"\nenv > "+Quote(env)+"\n"))
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" >> "+Quote(log)+"\nenv > "+Quote(env)+"\n"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GITHUB_TOKEN", "fake-secret-for-test")
 	t.Setenv("SSH_AUTH_SOCK", "fake-ssh-socket")
-	t.Setenv("BUILD_MODE", "test")
 	r := &SBX{}
-	err := r.Create(context.Background(), Spec{Name: "unibox-dev", Image: "unibox/node:abc", Resources: Resources{CPUs: "2", Memory: "1g"}, Access: HostAccess{Env: []string{"BUILD_MODE"}, Caches: []Cache{{Host: "/approved/cache", Env: "CACHE_HOME"}}, Network: Network{DenyNetwork: []string{"private.example"}}}}, io.Discard)
-	if err != nil {
+	ctx := context.Background()
+	if err := r.EnvCreate(ctx, "dev", "/tmp/args", []string{"a.sbxenv.yaml", "b.sbxenv.yaml"}, nil, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.EnvRemove(ctx, "dev", "", []string{"a.sbxenv.yaml"}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Mount(ctx, "dev", "/host/x", "/work/t/x"); err != nil {
 		t.Fatal(err)
 	}
 	argv, _ := os.ReadFile(log)
@@ -45,475 +45,65 @@ func TestSBXUsesOnlyApprovedMountsAndEnvironment(t *testing.T) {
 			t.Errorf("leaked %s", bad)
 		}
 	}
-	for _, want := range []string{"--skills\noff\n", "--pull\nnever\n", "shell\n/approved/cache:ro\n", "-e\nBUILD_MODE\n", "--deny-network\nprivate.example\n"} {
-		if !strings.Contains(string(argv), want) {
-			t.Errorf("missing %q in %s", want, argv)
-		}
-	}
-	if !strings.Contains(string(environment), "BUILD_MODE=test") {
-		t.Fatal("approved value missing")
+	want := "env\ncreate\n--name\ndev\n--env-args-file\n/tmp/args\na.sbxenv.yaml\nb.sbxenv.yaml\n" +
+		"env\nrm\n--name\ndev\na.sbxenv.yaml\n--force\n" +
+		"mount\ndev\n/host/x:/work/t/x\n"
+	if string(argv) != want {
+		t.Fatalf("%s", argv)
 	}
 }
 
-func TestSBXChecksSSHForwardingAndParsesRuntimeInventory(t *testing.T) {
+func TestSBXChecksSSHForwardingAndReadsWhatItLists(t *testing.T) {
 	bin := t.TempDir()
 	settings := filepath.Join(t.TempDir(), "settings")
 	write(t, settings, `{"value":true}`)
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\ncase \"$1\" in\nsettings) cat "+Quote(settings)+" ;;\nls) printf '%s\\n' '{\"sandboxes\":[{\"name\":\"unibox-dev\",\"id\":\"vm-id\",\"status\":\"stopped\",\"memory\":\"1g\"}]}' ;;\ntemplate) printf '%s\\n' '{\"images\":[{\"repository\":\"docker.io/unibox/node\",\"tag\":\"abc\",\"id\":\"image-id\"}]}' ;;\nesac\n"))
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
+case "$1 $2" in
+settings*) cat `+Quote(settings)+` ;;
+ls*) echo '[{"name":"dev","id":"vm-id","status":"stopped","agent":"copilot"}]' ;;
+"kit inspect") echo "Cached kit ./kits/agent"; echo '{"kind":"sandbox","name":"agent","sandbox":{"entrypoint":["copilot"],"command":{"default":["--yolo"]}},"credentials":[{"service":"copilot","optional":false}]}' ;;
+"secret ls") echo '[{"scope":"global","type":"service","name":"github"}]' ;;
+esac
+`))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	r := &SBX{}
-	if err := r.Available(context.Background()); err == nil {
+	ctx := context.Background()
+	if err := r.Available(ctx); err == nil {
 		t.Fatal("forwarding was accepted")
 	}
-	write(t, settings, `{"value":false}`)
-	if err := r.Available(context.Background()); err != nil {
+	r.AllowSSHAgent(true)
+	if err := r.Available(ctx); err != nil {
 		t.Fatal(err)
 	}
-	boxes, err := r.List(context.Background())
+	r.AllowSSHAgent(false)
+	write(t, settings, `{"value":false}`)
+	if err := r.Available(ctx); err != nil {
+		t.Fatal(err)
+	}
+	boxes, err := r.List(ctx)
 	if err != nil || len(boxes) != 1 || boxes[0].ID != "vm-id" || boxes[0].State != "stopped" {
 		t.Fatalf("%+v %v", boxes, err)
 	}
-	images, err := r.Images(context.Background())
-	if err != nil || len(images) != 1 || images[0].Reference != "unibox/node:abc" {
-		t.Fatalf("%+v %v", images, err)
+	kit, err := r.KitInspect(ctx, "./kits/agent", nil)
+	if err != nil || kit.Kind != "sandbox" || !slices.Equal(kit.Sandbox.Entrypoint, []string{"copilot"}) || kit.Sandbox.Command.Default[0] != "--yolo" || kit.Credentials[0].Service != "copilot" {
+		t.Fatalf("%+v %v", kit, err)
+	}
+	secrets, err := r.Secrets(ctx)
+	if err != nil || len(secrets) != 1 || secrets[0].Name != "github" || secrets[0].Scope != "global" {
+		t.Fatalf("%+v %v", secrets, err)
 	}
 }
 
-func TestMissingAgentFailsBeforeLoadingImage(t *testing.T) {
-	bin := t.TempDir()
-	log := filepath.Join(t.TempDir(), "log")
-	mustWriteExecutable(t, filepath.Join(bin, "docker"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> "+Quote(log)+"\n[ \"$1\" != run ]\n"))
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\necho loaded >> "+Quote(log)+"\n"))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	p, _ := LoadProfile(profileFixture(t), "node")
-	r := &SBX{Cache: t.TempDir()}
-	if _, err := r.Build(context.Background(), p, "unibox/node:test", io.Discard); err == nil || !strings.Contains(err.Error(), "declares claude") {
-		t.Fatal(err)
-	}
-	b, _ := os.ReadFile(log)
-	if strings.Contains(string(b), "loaded") {
-		t.Fatal("loaded invalid image")
-	}
-}
-
-func TestSavedStateContainsNoEnvironmentValues(t *testing.T) {
+func TestASessionUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)
-	b, err := json.Marshal(m.Config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(b), "TOKEN") {
-		t.Fatal("configuration stores credentials")
-	}
-}
-
-func TestSeveralAgentsCreateFromAGeneratedKit(t *testing.T) {
-	bin := t.TempDir()
-	log := filepath.Join(t.TempDir(), "argv")
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+Quote(log)+"\n"))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	r := &SBX{Cache: t.TempDir()}
-	spec := Spec{Name: "unibox-home", Image: "unibox/personal:abc", Resources: Resources{CPUs: "2"}, Agents: []string{"claude", "codex", "copilot"}}
-	if err := r.Create(context.Background(), spec, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	argv, _ := os.ReadFile(log)
-	dir := r.KitDir("unibox-home")
-	if dir == "" {
-		t.Fatal("no kit was kept for inspection")
-	}
-	if !strings.Contains(string(argv), dir) || strings.Contains(string(argv), "--template") {
-		t.Fatalf("create did not use the kit alone: %s", argv)
-	}
-	descriptor, err := os.ReadFile(filepath.Join(dir, "unibox-home.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"service: anthropic", "service: openai", "service: github", "api.anthropic.com:443", "chatgpt.com:443", "api.githubcopilot.com:443", "domain: api.individual.githubcopilot.com", "kind: workload"} {
-		if !strings.Contains(string(descriptor), want) {
-			t.Fatalf("descriptor lacks %q:\n%s", want, descriptor)
-		}
-	}
-	from, err := os.ReadFile(filepath.Join(dir, "unibox-home.dockerfile"))
-	if err != nil || strings.TrimSpace(string(from)) != "FROM unibox/personal:abc" {
-		t.Fatalf("%q %v", from, err)
-	}
-	// One agent keeps the template and its kind; no kit remains.
-	single := Spec{Name: "unibox-solo", Image: "unibox/my2n:abc", Agent: "copilot", Agents: []string{"copilot"}}
-	if err := r.Create(context.Background(), single, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	argv, _ = os.ReadFile(log)
-	if !strings.Contains(string(argv), "--template\nunibox/my2n:abc") || !strings.Contains(string(argv), "copilot") {
-		t.Fatalf("single agent lost its kind: %s", argv)
-	}
-	if r.KitDir("unibox-solo") != "" {
-		t.Fatal("a kit was made for a single agent")
-	}
-}
-
-func TestAGeneratedKitsCredentialsAreApprovedAndOnlyAdded(t *testing.T) {
-	t.Parallel()
-	file := filepath.Join(t.TempDir(), "sbx", "credentials.yaml")
-	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(file, []byte("bindings:\n  openai:\n    apiKey:\n      domains: [api.openai.com, mine.example]\n  other:\n    apiKey:\n      domains: [x.example]\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var log bytes.Buffer
-	if err := writeBindings(file, []string{"claude", "codex"}, &log); err != nil {
-		t.Fatal(err)
-	}
-	var doc struct {
-		Bindings map[string]map[string]struct{ Domains []string }
-	}
-	data, _ := os.ReadFile(file)
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		t.Fatal(err)
-	}
-	b := doc.Bindings
-	if !slices.Equal(b["openai"]["apiKey"].Domains, []string{"api.openai.com", "mine.example"}) ||
-		!slices.Equal(b["openai"]["oauth"].Domains, []string{"auth.openai.com", "chatgpt.com"}) ||
-		!slices.Equal(b["anthropic"]["oauth"].Domains, []string{"platform.claude.com"}) ||
-		!slices.Equal(b["other"]["apiKey"].Domains, []string{"x.example"}) || b["github"] != nil {
-		t.Fatalf("%s", data)
-	}
-	if !strings.Contains(log.String(), "openai oauth chatgpt.com") || strings.Contains(log.String(), "apiKey api.openai.com") {
-		t.Fatal(log.String())
-	}
-	log.Reset()
-	if err := writeBindings(file, []string{"claude", "codex"}, &log); err != nil || log.Len() != 0 {
-		t.Fatalf("approved twice: %v %s", err, log.String())
-	}
-	// Every approved domain is one the kit declares, and nothing beyond.
-	for id, want := range sbxKitBindings {
-		for _, d := range append(slices.Clone(want.APIKey), want.OAuth...) {
-			if !strings.Contains(sbxKitCredentials[id], d) {
-				t.Fatalf("%s approves %s, which its declaration does not name", id, d)
-			}
-		}
-	}
-}
-
-func TestCodexIsSignedInByTheSandboxProxy(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	codex := filepath.Join(home, ".codex")
-	if err := os.MkdirAll(codex, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	cfg := filepath.Join(codex, "config.toml")
-	user := "model = \"gpt-5\"\nmodel_provider = \"mine\"\napproval_policy = \"on-request\"\n\n[tui]\nmodel_provider = \"kept\"\n"
-	if err := os.WriteFile(cfg, []byte(user), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	run := func(mode string) (string, string) {
-		cmd := exec.Command("sh", "-c", codexSetup)
-		cmd.Env = append(os.Environ(), "HOME="+home, "CODEX_HOME=", "SBX_CRED_OPENAI_MODE="+mode)
-		if out, err := cmd.CombinedOutput(); err != nil || len(out) > 0 {
-			t.Fatalf("%s: %v %s", mode, err, out)
-		}
-		c, _ := os.ReadFile(cfg)
-		a, _ := os.ReadFile(filepath.Join(codex, "auth.json"))
-		return string(c), string(a)
-	}
-	c, a := run("oauth")
-	if again, _ := run("oauth"); again != c {
-		t.Fatalf("not idempotent:\n%s\n---\n%s", c, again)
-	}
-	table := strings.Index(c, "[tui]")
-	for _, want := range []string{"forced_login_method = \"api\"", "model_provider = \"sandboxd\""} {
-		if i := strings.Index(c, want); i < 0 || i > table {
-			t.Fatalf("%q not a top-level key:\n%s", want, c)
-		}
-	}
-	if strings.Contains(c, "\"mine\"") || !strings.Contains(c, "model_provider = \"kept\"") || !strings.Contains(c, "[model_providers.sandboxd]") || strings.Index(c, "[model_providers.sandboxd]") < table {
-		t.Fatalf("%s", c)
-	}
-	if !strings.Contains(a, "\"proxy-managed\"") {
-		t.Fatal(a)
-	}
-	c, a = run("apikey")
-	if strings.Contains(c, "sandboxd") || !strings.Contains(c, "forced_login_method") || a == "" {
-		t.Fatalf("%s %s", c, a)
-	}
-	c, a = run("none")
-	if strings.Contains(c, "sandboxd") || strings.Contains(c, "forced_login_method") || a != "" {
-		t.Fatalf("none kept the proxy's login:\n%s %s", c, a)
-	}
-	// How codex works is the profile's config.toml seed, merged before
-	// this; the setup leaves it alone.
-	if strings.Count(c, "approval_policy = \"on-request\"") != 1 || strings.Contains(c, "sandbox_mode") {
-		t.Fatalf("%s", c)
-	}
-	// A login the user made in the sandbox is not the proxy's to take away.
-	if err := os.WriteFile(filepath.Join(codex, "auth.json"), []byte(`{"tokens":{}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, a = run("none"); a == "" {
-		t.Fatal("removed the user's own login")
-	}
-}
-
-func TestCodexTrustsWhatUnboxPrepared(t *testing.T) {
-	t.Parallel()
-	home, work := t.TempDir(), t.TempDir()
-	for _, d := range []string{"task/api", "task/web", "task/web.unibox-clone", "mine/repo"} {
-		if err := os.MkdirAll(filepath.Join(work, d), 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg := filepath.Join(home, ".codex", "config.toml")
-	mine := filepath.Join(work, "mine")
-	write(t, cfg, "[projects.\""+mine+"\"]\ntrust_level = \"untrusted\"\n")
-	run := func() string {
-		cmd := exec.Command("sh", "-c", codexSetup)
-		cmd.Env = append(os.Environ(), "HOME="+home, "CODEX_HOME=", "UNIBOX_WORK="+work, "SBX_CRED_OPENAI_MODE=none")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v %s", err, out)
-		}
-		c, _ := os.ReadFile(cfg)
-		return string(c)
-	}
-	c := run()
-	if again := run(); again != c {
-		t.Fatalf("not idempotent:\n%s\n---\n%s", c, again)
-	}
-	for _, d := range []string{"task", "task/api", "task/web", "mine/repo"} {
-		if !strings.Contains(c, "[projects.\""+filepath.Join(work, d)+"\"]\ntrust_level = \"trusted\"") {
-			t.Fatalf("%s not trusted:\n%s", d, c)
-		}
-	}
-	if strings.Contains(c, "unibox-clone") || strings.Count(c, "[projects.\""+mine+"\"]") != 1 || !strings.Contains(c, "\"untrusted\"") {
-		t.Fatalf("%s", c)
-	}
-}
-
-func TestTheStoredOAuthLoginIsDeclaredFirst(t *testing.T) {
-	t.Parallel()
-	agents := []string{"claude", "codex", "copilot"}
-	if got := credentialOrder(agents, nil); !slices.Equal(got, agents) {
-		t.Fatal(got)
-	}
-	if got := credentialOrder(agents, map[string]bool{"openai": true}); !slices.Equal(got, []string{"codex", "claude", "copilot"}) {
-		t.Fatal(got)
-	}
-	r := &SBX{Cache: t.TempDir()}
-	dir, err := r.writeKit(Spec{Name: "unibox-home", Image: "x", Agents: agents}, map[string]bool{"openai": true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	kit, _ := os.ReadFile(filepath.Join(dir, "unibox-home.yaml"))
-	if o, a := strings.Index(string(kit), "service: openai"), strings.Index(string(kit), "service: anthropic"); o < 0 || a < 0 || o > a {
-		t.Fatalf("sbx would wire Anthropic's OAuth, not the stored one:\n%s", kit)
-	}
-}
-
-func TestProfilesSayHowEachAgentSignsIn(t *testing.T) {
-	t.Parallel()
-	root := profileFixture(t)
-	write(t, filepath.Join(root, "sandboxes", "node", "sandbox.yaml"), "version: 6\nstart: start.sh\nagents:\n  claude: {auth: {token: security find-generic-password -s claude -w}}\n  codex: {auth: oauth}\n  copilot: {auth: {command: gh auth token}}\n")
-	p, err := LoadProfile(root, "node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Auth["codex"].Method != AuthOAuth || p.Auth["copilot"] != (AgentAuth{Method: AuthCommand, Command: "gh auth token"}) || p.Auth["claude"] != (AgentAuth{Method: AuthToken, Command: "security find-generic-password -s claude -w"}) || p.OAuthAgent() != "codex" {
-		t.Fatal(p.Auth)
-	}
-	// A command runs on the host, so the sign-ins are approved like the rest.
-	if !p.HostFacing() {
-		t.Fatal("auth needs no approval")
-	}
-	plain := p
-	plain.Auth = nil
-	if plain.AccessHash() == p.AccessHash() {
-		t.Fatal("auth does not change the approval")
-	}
-	if digest(HostAccess{}) != digest(HostAccess{Auth: map[string]AgentAuth{}}) {
-		t.Fatal("a profile without auth must keep its approval")
-	}
-}
-
-func TestSBXFindsWhatALoginLacksAndStoresItThroughSbx(t *testing.T) {
-	bin := t.TempDir()
-	argv := filepath.Join(t.TempDir(), "argv")
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
-if [ "$1 $2" = "secret ls" ]; then
-  custom='[]'
-  [ -f `+Quote(argv+".custom")+` ] && custom='[{"scope":"global","env":"CLAUDE_CODE_OAUTH_TOKEN","hosts":["api.anthropic.com"]}]'
-  echo '{"secrets":[{"scope":"global","type":"service","name":"openai","secret":"(oauth configured)"},{"scope":"other","type":"service","name":"anthropic","secret":"sk-ant****"}],"custom_secrets":'"$custom"'}'
-  exit 0
-fi
-[ "$2" = set-custom ] && : > `+Quote(argv+".custom")+`
-printf '%s\n' "$@" > `+Quote(argv)+`
-`))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	r := &SBX{}
-	ctx := context.Background()
-	p := Profile{Name: "home", Agents: []string{"claude", "codex", "copilot"}, HostAccess: HostAccess{Auth: map[string]AgentAuth{
-		"codex": {Method: AuthOAuth}, "claude": {Method: AuthAPIKey}, "copilot": {Method: AuthCommand, Command: "gh auth token"},
-	}}}
-	needs := r.AuthNeeds(ctx, "unibox-home", p)
-	got := map[string]string{}
-	for _, n := range needs {
-		got[n.Agent] = n.Code
-	}
-	// codex's login is stored; the anthropic key belongs to another sandbox.
-	if len(needs) != 2 || got["claude"] != "login_required" || got["copilot"] != "login_required" {
-		t.Fatalf("%+v", needs)
-	}
-	p.Auth["claude"] = AgentAuth{Method: AuthOAuth}
-	needs = r.AuthNeeds(ctx, "unibox-home", p)
-	if len(needs) == 0 || needs[0].Code != "auth_conflict" {
-		t.Fatalf("%+v", needs)
-	}
-	p.Auth = map[string]AgentAuth{"copilot": {Method: AuthOAuth}}
-	if needs = r.AuthNeeds(ctx, "unibox-home", p); len(needs) != 1 || needs[0].Code != "auth_unsupported" {
-		t.Fatalf("%+v", needs)
-	}
-	p.Auth = map[string]AgentAuth{"claude": {Method: AuthToken, Command: "security find-generic-password -s claude -w"}}
-	if needs = r.AuthNeeds(ctx, "unibox-home", p); len(needs) != 1 || needs[0].Code != "login_required" || !strings.Contains(needs[0].Message, "CLAUDE_CODE_OAUTH_TOKEN") {
-		t.Fatalf("%+v", needs)
-	}
-	if err := r.Login(ctx, "claude", p.Auth["claude"], strings.NewReader(""), io.Discard, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(argv); string(data) != "secret\nset-custom\n--env\nCLAUDE_CODE_OAUTH_TOKEN\n--placeholder\nsk-ant-oat01-unibox0claude0proxy0managed\n--host\napi.anthropic.com\n--command\nsecurity find-generic-password -s claude -w\n" {
-		t.Fatalf("%q", data)
-	}
-	if needs = r.AuthNeeds(ctx, "unibox-home", p); len(needs) != 0 {
-		t.Fatalf("a stored token is not seen: %+v", needs)
-	}
-	if err := r.Login(ctx, "copilot", AgentAuth{Method: AuthCommand, Command: "gh auth token"}, strings.NewReader(""), io.Discard, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(argv); string(data) != "secret\nset\ngithub\n--command\ngh auth token\n" {
-		t.Fatalf("%q", data)
-	}
-	if got := oauthFirst(ctx, Spec{Name: "unibox-home", OAuth: "claude"}); !got["anthropic"] || got["openai"] {
-		t.Fatal(got)
-	}
-	if got := oauthFirst(ctx, Spec{Name: "unibox-home"}); !got["openai"] {
-		t.Fatal(got)
-	}
-}
-
-func TestAllowedHostsJoinTheSandboxesPolicy(t *testing.T) {
-	bin := t.TempDir()
-	calls := filepath.Join(t.TempDir(), "calls")
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\necho \"$*\" >> "+Quote(calls)+"\n"))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	r := &SBX{Cache: t.TempDir()}
-	acc := HostAccess{Network: Network{AllowNetwork: []string{"jitpack.io", "*.jetbrains.team"}, DenyNetwork: []string{"gist.github.com"}}}
-	if err := r.Create(context.Background(), Spec{Name: "unibox-home", Image: "x", Agent: "codex", Agents: []string{"codex"}, Access: acc}, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(calls)
-	if !strings.Contains(string(data), "--deny-network gist.github.com") || !strings.Contains(string(data), "policy allow network --sandbox unibox-home jitpack.io,*.jetbrains.team") {
-		t.Fatalf("%s", data)
-	}
-	// A profile allowing nothing more adds no rule.
-	os.Remove(calls)
-	if err := r.Create(context.Background(), Spec{Name: "unibox-solo", Image: "x", Agent: "codex", Agents: []string{"codex"}}, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ = os.ReadFile(calls); strings.Contains(string(data), "policy") {
-		t.Fatalf("%s", data)
-	}
-}
-
-func TestCopilotSignsInByATokenOfItsOwnAndLeavesGitHubToTheServices(t *testing.T) {
-	bin := t.TempDir()
-	argv := filepath.Join(t.TempDir(), "argv")
-	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
-if [ "$1 $2" = "secret ls" ]; then
-  echo '{"secrets":[{"scope":"global","type":"service","name":"github","secret":"gho_****"}],"custom_secrets":[]}'
-  exit 0
-fi
-printf '%s\n' "$@" > `+Quote(argv)+`
-`))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	r := &SBX{Cache: t.TempDir()}
-	ctx := context.Background()
-	p := Profile{Name: "home", Agents: []string{"claude", "copilot"}, HostAccess: HostAccess{
-		Auth:     map[string]AgentAuth{"copilot": {Method: AuthToken, Command: "security find-generic-password -s copilot -w"}},
-		Services: map[string]Service{"github": {Git: true, Host: HostList{"github.com"}, User: "x-access-token", Command: "c"}},
-	}}
-	needs := r.AuthNeeds(ctx, "unibox-home", p)
-	codes := map[string]api.Need{}
-	for _, n := range needs {
-		codes[n.Code] = n
-	}
-	// The built-in github secret would sign github.com in over the service.
-	if w := codes["service_overridden"]; !w.Warning || w.Service != "github" || !strings.Contains(w.Message, "sbx secret rm github") {
-		t.Fatalf("%+v", needs)
-	}
-	if n := codes["login_required"]; n.Agent != "copilot" || !strings.Contains(n.Message, "COPILOT_GITHUB_TOKEN") {
-		t.Fatalf("%+v", needs)
-	}
-	if err := r.Login(ctx, "copilot", p.Auth["copilot"], strings.NewReader(""), io.Discard, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(argv)
-	for _, want := range []string{"set-custom\n--env\nCOPILOT_GITHUB_TOKEN\n--placeholder\ngho_unibox0copilot0proxy0managed0000\n", "--host\napi.individual.githubcopilot.com\n", "--command\nsecurity find-generic-password -s copilot -w\n"} {
-		if !strings.Contains(string(data), want) {
-			t.Fatalf("login lacks %q:\n%s", want, data)
-		}
-	}
-	if strings.Contains(string(data), "--host\ngithub.com\n") {
-		t.Fatal("copilot's token must not reach github.com")
-	}
-	// The session gets the placeholder, being unibox's own - claude's too.
-	if env := r.SessionEnv(p, "copilot"); len(env) != 1 || env[0] != "COPILOT_GITHUB_TOKEN=gho_unibox0copilot0proxy0managed0000" {
+	if env := m.sshEnv(); len(env) != 0 {
 		t.Fatalf("%v", env)
 	}
-	claude := p
-	claude.Auth = map[string]AgentAuth{"claude": {Method: AuthToken, Command: "c"}}
-	if env := r.SessionEnv(claude, "claude"); len(env) != 1 || env[0] != "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-unibox0claude0proxy0managed" {
+	on := true
+	m.Config.SSHAgentOn = &on
+	if env := m.sshEnv(); !slices.Contains(env, "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new") {
 		t.Fatalf("%v", env)
-	}
-	// The generated kit declares no github credential and approves none.
-	bindings := filepath.Join(t.TempDir(), "credentials.yaml")
-	r.Bindings = bindings
-	spec := Spec{Name: "unibox-home", Image: "x", Agents: []string{"claude", "copilot"}, Access: p.HostAccess}
-	if err := r.Create(ctx, spec, io.Discard); err != nil {
-		t.Fatal(err)
-	}
-	descriptor, _ := os.ReadFile(filepath.Join(r.KitDir("unibox-home"), "unibox-home.yaml"))
-	if strings.Contains(string(descriptor), "service: github") || !strings.Contains(string(descriptor), "api.githubcopilot.com:443") {
-		t.Fatalf("the kit still wires github, or lost copilot's hosts:\n%s", descriptor)
-	}
-	approved, _ := os.ReadFile(bindings)
-	if strings.Contains(string(approved), "github") {
-		t.Fatalf("github was approved:\n%s", approved)
-	}
-}
-
-func TestSbxGetsResourcesAsItTakesThem(t *testing.T) {
-	t.Parallel()
-	host := Host{CPUs: 10, Memory: 32 << 30}
-	for _, c := range []struct {
-		in           Resources
-		cpus, memory string
-		capped       bool
-	}{
-		{Resources{}, "", "", false},
-		{Resources{CPUs: "4", Memory: "8g"}, "4", "8g", false},
-		{Resources{CPUs: "50%", Memory: "50%"}, "5", "16384m", false},
-		// All the host's CPUs is sbx's 0; all its memory more than sbx gives.
-		{Resources{CPUs: "100%", Memory: "100%"}, "0", "24576m", true},
-		{Resources{CPUs: "1%", Memory: "64g"}, "1", "24576m", true},
-	} {
-		var log strings.Builder
-		cpus, memory, err := sbxResources(c.in, host, &log)
-		if err != nil || cpus != c.cpus || memory != c.memory || (log.Len() > 0) != c.capped {
-			t.Errorf("%+v: %q %q %v %q", c.in, cpus, memory, err, log.String())
-		}
-	}
-	if _, _, err := sbxResources(Resources{Memory: "50%"}, Host{CPUs: 4}, io.Discard); err == nil {
-		t.Error("a share of memory the host's size of is unknown was taken")
 	}
 }
 
@@ -544,33 +134,6 @@ func TestSbxForwardingReadsPastWhatSbxSaysFirst(t *testing.T) {
 	}
 }
 
-func TestTheInstallContextLeavesTheImagesDirectoriesOpen(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp(t.TempDir(), "install-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = writeInstallContext(dir, map[string]SnapshotFile{"usr/local/bin/@install": {[]byte("#!/bin/sh\n"), 0o755}, "usr/local/lib/unibox/install/base.sh": {[]byte("x"), 0o644}}); err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range []string{"", "usr", "usr/local", "usr/local/bin", "usr/local/lib/unibox/install"} {
-		if info, err := os.Stat(filepath.Join(dir, d)); err != nil || info.Mode().Perm() != 0o755 {
-			t.Errorf("%q: %v %v", d, err, info.Mode())
-		}
-	}
-}
-
-func TestASandboxUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
-	t.Parallel()
-	p := Profile{}
-	if env := (&SBX{}).SessionEnv(p, "claude"); len(env) != 0 {
-		t.Fatalf("%v", env)
-	}
-	if env := (&SBX{SSHAgent: true}).SessionEnv(p, "claude"); !slices.Contains(env, "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new") {
-		t.Fatalf("%v", env)
-	}
-}
-
 func TestSbxListsReadInTheFormOfEitherVersion(t *testing.T) {
 	t.Parallel()
 	type box struct{ Name, Status string }
@@ -586,5 +149,24 @@ func TestSbxListsReadInTheFormOfEitherVersion(t *testing.T) {
 	}
 	if got, err := sbxList[box]([]byte(`[]`), "sandboxes"); err != nil || len(got) != 0 {
 		t.Fatalf("%v %+v", err, got)
+	}
+}
+
+func TestVersionsAreComparedByNumberNotText(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		version, min string
+		ok           bool
+	}{
+		{"0.49.2", "0.49.2", true},
+		{"0.49.10", "0.49.2", true},
+		{"v1.0.0", "0.49.2", true},
+		{"0.48.9", "0.49.2", false},
+		{"0.49.1", "0.49.2", false},
+		{"nightly", "0.49.2", false},
+	} {
+		if got := VersionAtLeast(c.version, c.min); got != c.ok {
+			t.Errorf("%s >= %s: %v", c.version, c.min, got)
+		}
 	}
 }

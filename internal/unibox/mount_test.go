@@ -1,87 +1,47 @@
 package unibox
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
-	"sync"
 	"testing"
 )
-
-// liveMounts is the fake runtime with sbx's mounts. Its guest runs on the
-// host's files under the sandbox's root, so a mount is a link there to the
-// host directory, and an unmount leaves the empty mount point sbx leaves.
-type liveMounts struct {
-	*fakeRuntime
-	mu                       sync.Mutex
-	calls                    []string
-	failUnmount, keepMounted bool
-}
-
-func (l *liveMounts) guest(sandbox, target string) string {
-	return filepath.Join(l.root, sandbox, "work", strings.TrimPrefix(target, "/work/"))
-}
-
-func (l *liveMounts) Mount(_ context.Context, sandbox, host, target string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.calls = append(l.calls, "mount "+host+":"+target)
-	at := l.guest(sandbox, target)
-	if err := os.MkdirAll(filepath.Dir(at), 0o755); err != nil {
-		return err
-	}
-	_ = os.Remove(at)
-	return os.Symlink(host, at)
-}
-
-func (l *liveMounts) Unmount(_ context.Context, sandbox, host, target string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.calls = append(l.calls, "unmount "+host+":"+target)
-	if l.failUnmount {
-		return errors.New("sbx is away")
-	}
-	if l.keepMounted {
-		return nil
-	}
-	at := l.guest(sandbox, target)
-	if err := os.Remove(at); err != nil {
-		return err
-	}
-	return os.Mkdir(at, 0o755)
-}
 
 func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing.T) {
 	t.Parallel()
 	_, host := remoteFixture(t)
 	host, _ = filepath.EvalSymlinks(host)
 	m, f := managerFixture(t)
-	live := &liveMounts{fakeRuntime: f}
-	m.Runtimes = map[string]Runtime{"fake": live}
+	live := f
 	ctx := context.Background()
-	if _, err := m.Create(ctx, Request{NewSandbox: "dev", Profile: "node", Runtime: "fake"}); err != nil {
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
 		t.Fatal(err)
 	}
 	config, _ := os.ReadFile(filepath.Join(host, ".git", "config"))
 	// unibox does not push a mounted directory.
-	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "x", Agent: "claude", Mount: true, Push: true, Repositories: []RepoInput{{Source: host}}}); err == nil || !strings.Contains(err.Error(), "leave out --push") {
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "x", Mount: true, Push: true, Repositories: []RepoInput{{Source: host}}}); err == nil || !strings.Contains(err.Error(), "leave out --push") {
 		t.Fatalf("%v", err)
 	}
-	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "local", Agent: "claude", Author: "Person <person@example.com>", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "local", Author: "Person <person@example.com>", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
 		t.Fatal(err)
 	}
 	target := "/work/local/" + filepath.Base(host)
-	if len(live.calls) != 1 || live.calls[0] != "mount "+host+":"+target {
-		t.Fatalf("%v", live.calls)
+	if calls := live.called("mount "); len(calls) != 1 || calls[0] != "mount "+host+":"+target {
+		t.Fatalf("%v", calls)
+	}
+	// What a mount lets the agent do is told once for a directory.
+	if log := m.Log.(*bytes.Buffer).String(); strings.Count(log, "note: the agent can write to "+host) != 1 {
+		t.Fatalf("%s", log)
 	}
 	// The host's .git/config is left as it was; git in the guest gets the
 	// task's author and hook by an include of its own configuration.
 	if now, _ := os.ReadFile(filepath.Join(host, ".git", "config")); string(now) != string(config) {
 		t.Fatalf("the host's git configuration changed:\n%s", now)
 	}
-	box := filepath.Join(f.root, "unibox-dev")
+	box := filepath.Join(f.root, "dev")
 	global, _ := os.ReadFile(filepath.Join(box, "home", ".gitconfig"))
 	if !strings.Contains(string(global), `[includeIf "gitdir:`+filepath.Join(box, "work", "local", filepath.Base(host))+`/.git/"]`) {
 		t.Fatalf("%s", global)
@@ -100,17 +60,17 @@ func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing
 	// An unmount that fails, or one that leaves the directory mounted,
 	// keeps the task: deleting it would go into the host's files.
 	live.failUnmount = true
-	if err := m.Remove(ctx, "dev", "local"); err == nil || !strings.Contains(err.Error(), "nothing of the host is deleted") {
+	if err := m.Remove(ctx, "dev", "local", false); err == nil || !strings.Contains(err.Error(), "nothing of the host is deleted") {
 		t.Fatalf("%v", err)
 	}
 	live.failUnmount, live.keepMounted = false, true
-	if err := m.Remove(ctx, "dev", "local"); err == nil {
+	if err := m.Remove(ctx, "dev", "local", false); err == nil {
 		t.Fatal("a task was removed with its directory still mounted")
 	}
 	hostKept()
 	// Unmounted, the task goes, and only it.
 	live.keepMounted = false
-	if err := m.Remove(ctx, "dev", "local"); err != nil {
+	if err := m.Remove(ctx, "dev", "local", false); err != nil {
 		t.Fatal(err)
 	}
 	hostKept()
@@ -119,6 +79,12 @@ func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing
 	}
 	if global, _ = os.ReadFile(filepath.Join(box, "home", ".gitconfig")); strings.Contains(string(global), "local") {
 		t.Fatalf("%s", global)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "again", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
+		t.Fatal(err)
+	}
+	if log := m.Log.(*bytes.Buffer).String(); strings.Count(log, "note: the agent can write to") != 1 {
+		t.Fatalf("told again:\n%s", log)
 	}
 }
 
@@ -164,5 +130,115 @@ func TestAMountedDirectoryIsSwitchedToTheBranchAskedForAndMadeLocally(t *testing
 	}
 	if got := gitTest(t, host, "branch", "--show-current"); got != "feat/local" {
 		t.Fatal(got)
+	}
+}
+
+func TestATaskMountsDirectoriesAndClonesTheRestUnlessTold(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for _, c := range []struct {
+		req   Request
+		mount bool
+	}{
+		{Request{Repositories: []RepoInput{{Source: dir}}}, true},
+		{Request{Repositories: []RepoInput{{Source: dir}}, Clone: true}, false},
+		{Request{Repositories: []RepoInput{{Source: dir}, {Source: "https://forge.invalid/x.git"}}}, false},
+		{Request{Repositories: []RepoInput{{Source: filepath.Join(dir, "absent")}}}, false},
+		{Request{}, false},
+	} {
+		req := c.req
+		req.decide()
+		if req.Mount != c.mount {
+			t.Errorf("%+v: mount %v", c.req, req.Mount)
+		}
+	}
+}
+
+func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testing.T) {
+	t.Parallel()
+	_, host := remoteFixture(t)
+	host, _ = filepath.EvalSymlinks(host)
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "local", Author: "Person <person@example.com>", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
+		t.Fatal(err)
+	}
+	target := "/work/local/" + filepath.Base(host)
+	drift := func() (missing, stray [][2]string) {
+		t.Helper()
+		b, err := m.sandbox("dev")
+		if err != nil {
+			t.Fatal(err)
+		}
+		missing, stray, err = m.MountDrift(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return missing, stray
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	odd := filepath.Join(t.TempDir(), "with space")
+	if err := f.Mount(ctx, "dev", odd, "/work/gone/x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Unmount(ctx, "dev", host, target); err != nil {
+		t.Fatal(err)
+	}
+	missing, stray := drift()
+	if len(missing) != 1 || missing[0] != [2]string{host, target} {
+		t.Fatalf("%v", missing)
+	}
+	if len(stray) != 1 || stray[0] != [2]string{odd, "/work/gone/x"} {
+		t.Fatalf("%v", stray)
+	}
+	// Resuming the ready task mounts what it lost, and nothing else.
+	_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: "local"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage.Close()
+	taskLock.Close()
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 1 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	// Prune unmounts what no task has, but not while the sandbox is busy.
+	guard, err := m.guard("dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unmounted, busy, err := m.PruneMounts(ctx); err != nil || len(unmounted) != 0 || !slices.Equal(busy, []string{"dev"}) {
+		t.Fatalf("%v %v %v", unmounted, busy, err)
+	}
+	guard.Close()
+	if unmounted, busy, err := m.PruneMounts(ctx); err != nil || len(busy) != 0 || !slices.Equal(unmounted, []string{"dev: " + odd + " at /work/gone/x"}) {
+		t.Fatalf("%v %v %v", unmounted, busy, err)
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	// A recreated sandbox has no mounts; its tasks wait to be prepared
+	// again, which mounts them.
+	if err := m.Recreate(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
+	}
+	_, _, usage, taskLock, err = m.prepare(ctx, Request{Sandbox: "dev", Task: "local"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage.Close()
+	taskLock.Close()
+	if calls := f.called("mount "); len(calls) != 4 || calls[3] != "mount "+host+":"+target {
+		t.Fatalf("%v", calls)
+	}
+	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v", missing, stray)
 	}
 }

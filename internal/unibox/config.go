@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -24,28 +25,51 @@ func ValidName(s string) error {
 	return nil
 }
 
-type RuntimeConfig struct {
-	On       *bool `yaml:"on,omitempty" json:"on,omitempty"`
-	StopIdle *bool `yaml:"stop_idle,omitempty" json:"stop_idle,omitempty"`
-	// SSHAgent says the user lets sandboxes use their SSH agent: git over
-	// SSH needs no token then, but an agent signs with every key the user
-	// has. Unset, a forwarding runtime is refused.
-	SSHAgent *bool `yaml:"ssh_agent,omitempty" json:"ssh_agent,omitempty"`
+// legacyRuntime is how unibox 1 kept a runtime's settings; only sbx's
+// carry over.
+type legacyRuntime struct {
+	On       *bool `yaml:"on,omitempty"`
+	StopIdle *bool `yaml:"stop_idle,omitempty"`
+	SSHAgent *bool `yaml:"ssh_agent,omitempty"`
 }
+
 type Config struct {
-	Environments   string                   `yaml:"environments" json:"environments"`
-	DefaultRuntime string                   `yaml:"default_runtime,omitempty" json:"default_runtime,omitempty"`
-	Runtimes       map[string]RuntimeConfig `yaml:"runtimes,omitempty" json:"runtimes,omitempty"`
-	// Context is the sandbox and profile a command works on when it is
-	// not told, set by unibox context use.
+	// DefaultEnv is the env a sandbox is created from when none is named.
+	DefaultEnv string               `yaml:"default_env,omitempty" json:"default_env,omitempty"`
+	Envs       map[string]EnvConfig `yaml:"envs,omitempty" json:"envs,omitempty"`
+	// Context is the sandbox and env a command works on when it is not
+	// told, set by unibox context use.
 	Context Context `yaml:"context,omitempty" json:"context,omitempty"`
+	// StopIdleSandbox stops a sandbox when its last session ends; unset
+	// means yes.
+	StopIdleSandbox *bool `yaml:"stop_idle,omitempty" json:"stop_idle,omitempty"`
+	// SSHAgentOn says the user lets sandboxes use their SSH agent: git
+	// over SSH needs no token then, but the agent signs with every key the
+	// user has. Unset, sbx's forwarding is refused.
+	SSHAgentOn *bool `yaml:"ssh_agent,omitempty" json:"ssh_agent,omitempty"`
+	// Ports are the person's for every env: their own, or another mapping
+	// or switch of a port the teams name, under each env's own.
+	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
+	// Sandboxes are what the person keeps for one sandbox, by its name.
+	Sandboxes map[string]SandboxConfig `yaml:"sandboxes,omitempty" json:"sandboxes,omitempty"`
+
+	// What unibox 1 kept here is read so an old file still loads, and
+	// dropped when the file is next written.
+	Environments   string                   `yaml:"environments,omitempty" json:"-"`
+	DefaultRuntime string                   `yaml:"default_runtime,omitempty" json:"-"`
+	Runtimes       map[string]legacyRuntime `yaml:"runtimes,omitempty" json:"-"`
 }
 
 type Context struct {
 	Sandbox string `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
-	Profile string `yaml:"profile,omitempty" json:"profile,omitempty"`
+	Env     string `yaml:"env,omitempty" json:"env,omitempty"`
+	// Profile is unibox 1's, read and dropped.
+	Profile string `yaml:"profile,omitempty" json:"-"`
 }
-type Paths struct{ Config, Cache string }
+
+// Paths are where unibox keeps its files: configuration and state, a
+// cache, and data - the repositories it clones.
+type Paths struct{ Config, Cache, Data string }
 
 func DefaultPaths() (Paths, error) {
 	home, err := os.UserHomeDir()
@@ -60,7 +84,11 @@ func DefaultPaths() (Paths, error) {
 	if cache == "" {
 		cache = filepath.Join(home, ".cache")
 	}
-	return Paths{filepath.Join(config, "unibox"), filepath.Join(cache, "unibox")}, nil
+	data := os.Getenv("XDG_DATA_HOME")
+	if data == "" {
+		data = filepath.Join(home, ".local", "share")
+	}
+	return Paths{filepath.Join(config, "unibox"), filepath.Join(cache, "unibox"), filepath.Join(data, "unibox")}, nil
 }
 
 func ExpandPath(path string) (string, error) {
@@ -94,7 +122,7 @@ func DecodeYAML(data []byte, v any) error {
 }
 
 func (p Paths) LoadConfig() (Config, error) {
-	c := Config{Runtimes: map[string]RuntimeConfig{}}
+	c := Config{}
 	b, err := os.ReadFile(filepath.Join(p.Config, "config.yaml"))
 	if os.IsNotExist(err) {
 		return c, nil
@@ -105,9 +133,25 @@ func (p Paths) LoadConfig() (Config, error) {
 	if err = DecodeYAML(b, &c); err != nil {
 		return c, fmt.Errorf("invalid unibox configuration: %w", err)
 	}
-	if c.Runtimes == nil {
-		c.Runtimes = map[string]RuntimeConfig{}
+	if err = validatePorts(c.Ports); err != nil {
+		return c, fmt.Errorf("invalid unibox configuration: ports: %w", err)
 	}
+	for name, s := range c.Sandboxes {
+		for _, r := range s.Network {
+			if err = r.Validate(); err != nil {
+				return c, fmt.Errorf("invalid unibox configuration: sandboxes.%s.network: %w", name, err)
+			}
+		}
+	}
+	if r, ok := c.Runtimes["sbx"]; ok {
+		if c.StopIdleSandbox == nil {
+			c.StopIdleSandbox = r.StopIdle
+		}
+		if c.SSHAgentOn == nil {
+			c.SSHAgentOn = r.SSHAgent
+		}
+	}
+	c.Environments, c.DefaultRuntime, c.Runtimes, c.Context.Profile = "", "", nil, ""
 	return c, nil
 }
 
@@ -145,21 +189,58 @@ func (p Paths) SaveConfig(c Config) error {
 	return AtomicWrite(filepath.Join(p.Config, "config.yaml"), b, 0o600)
 }
 
-type BuildRecord struct {
-	Revision string                  `json:"revision"`
-	Image    string                  `json:"image"`
-	Snapshot map[string]SnapshotFile `json:"snapshot"`
-}
+// StateVersion is the format of state.json; unibox 1 wrote version 1,
+// whose sandboxes were made from profiles and are no longer unibox's.
+const StateVersion = 2
+
 type State struct {
-	Version        int                    `json:"version"`
-	Approvals      map[string]string      `json:"approvals"`
-	ApprovedFields map[string]HostAccess  `json:"approved_fields"`
-	Builds         map[string]BuildRecord `json:"builds"`
-	Sandboxes      map[string]api.Sandbox `json:"sandboxes"`
+	Version   int                    `json:"version"`
+	Sandboxes map[string]api.Sandbox `json:"sandboxes"`
+	// Mounted are the host directories unibox has mounted into a sandbox,
+	// each told once what that lets the agent do.
+	Mounted []string `json:"mounted,omitempty"`
 }
 
 func freshState() State {
-	return State{Version: 1, Approvals: map[string]string{}, ApprovedFields: map[string]HostAccess{}, Builds: map[string]BuildRecord{}, Sandboxes: map[string]api.Sandbox{}}
+	return State{Version: StateVersion, Sandboxes: map[string]api.Sandbox{}}
+}
+
+func (p Paths) statePath() string { return filepath.Join(p.Config, "state.json") }
+
+// retireState puts aside a state of unibox 1, whose sandboxes the new
+// format cannot describe, and says which sandboxes it leaves to the user.
+func (p Paths) retireState(log io.Writer) error {
+	b, err := os.ReadFile(p.statePath())
+	if err != nil {
+		return nil
+	}
+	var old struct {
+		Version   int `json:"version"`
+		Sandboxes map[string]struct {
+			RuntimeName string `json:"runtime_name"`
+		} `json:"sandboxes"`
+	}
+	if json.Unmarshal(b, &old) != nil || old.Version != 1 {
+		return nil
+	}
+	l, err := LockFile(filepath.Join(p.Config, "state.lock"), false, true)
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+	kept := filepath.Join(p.Config, "state.v1.json")
+	if err := os.Rename(p.statePath(), kept); err != nil {
+		return err
+	}
+	names := []string{}
+	for _, b := range old.Sandboxes {
+		names = append(names, b.RuntimeName)
+	}
+	sort.Strings(names)
+	if len(names) > 0 {
+		fmt.Fprintf(log, "unibox 2 no longer manages the sandboxes of unibox 1 (%s); remove them with sbx rm when their work is safe. The old state is kept in %s\n", strings.Join(names, ", "), kept)
+	}
+	return nil
 }
 
 func (p Paths) State(fn func(*State) error) error {
@@ -169,7 +250,7 @@ func (p Paths) State(fn func(*State) error) error {
 	}
 	defer l.Close()
 	s := freshState()
-	path := filepath.Join(p.Config, "state.json")
+	path := p.statePath()
 	b, err := os.ReadFile(path)
 	if err == nil {
 		err = json.Unmarshal(b, &s)
@@ -177,7 +258,10 @@ func (p Paths) State(fn func(*State) error) error {
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("cannot read unibox state; preserve %s and repair it: %w", path, err)
 	}
-	if s.Version != 1 {
+	if s.Sandboxes == nil {
+		s.Sandboxes = map[string]api.Sandbox{}
+	}
+	if s.Version != StateVersion {
 		return fmt.Errorf("unsupported unibox state version %d; upgrade unibox", s.Version)
 	}
 	if err = fn(&s); err != nil {
@@ -196,25 +280,16 @@ func (p Paths) ReadState() (State, error) {
 	return out, err
 }
 
-func (c Config) Enabled(name string) bool {
-	r, ok := c.Runtimes[name]
-	return !ok || r.On == nil || *r.On
-}
-
-// SSHAgent says whether the user lets a runtime's sandboxes use their SSH
-// agent, and whether they said so at all.
-func (c Config) SSHAgent(name string) (on, said bool) {
-	r, ok := c.Runtimes[name]
-	if !ok || r.SSHAgent == nil {
+// SSHAgent says whether the user lets sandboxes use their SSH agent, and
+// whether they said so at all.
+func (c Config) SSHAgent() (on, said bool) {
+	if c.SSHAgentOn == nil {
 		return false, false
 	}
-	return *r.SSHAgent, true
+	return *c.SSHAgentOn, true
 }
 
-func (c Config) StopIdle(name string) bool {
-	r, ok := c.Runtimes[name]
-	return !ok || r.StopIdle == nil || *r.StopIdle
-}
+func (c Config) StopIdle() bool { return c.StopIdleSandbox == nil || *c.StopIdleSandbox }
 
 type Failure struct {
 	Status        int

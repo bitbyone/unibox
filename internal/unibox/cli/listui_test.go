@@ -1,0 +1,136 @@
+package cli
+
+import (
+	"bytes"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+func listKeys(m listModel, ks ...string) listModel {
+	var tm tea.Model = m
+	for _, k := range ks {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
+		switch k {
+		case "enter":
+			msg = tea.KeyMsg{Type: tea.KeyEnter}
+		case " ":
+			msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
+		}
+		tm, _ = tm.Update(msg)
+	}
+	return tm.(listModel)
+}
+
+func TestAListActsOnTheRowUnderTheCursor(t *testing.T) {
+	t.Parallel()
+	m := listModel{title: "things", header: []string{"NAME"}, rows: [][]string{{"a"}, {"b"}}, ids: []string{"a", "b"}, actions: []listAction{
+		{key: "enter", name: "open", help: "open"},
+		{key: " ", name: "pick", help: "pick"},
+		{key: "n", name: "new", help: "new", any: true},
+		{key: "d", name: "rm", help: "remove", confirm: "remove %s?"},
+	}}
+	for _, c := range []struct {
+		keys     []string
+		name, id string
+	}{
+		{[]string{"enter"}, "open", "a"},
+		{[]string{"j", " "}, "pick", "b"},
+		{[]string{"j", "j", "k", "n"}, "new", "a"},
+		{[]string{"d", "n", "j", "d", "y"}, "rm", "b"},
+	} {
+		got := listKeys(m, c.keys...)
+		if got.chosen == nil || got.chosen.name != c.name || got.id() != c.id {
+			t.Fatalf("%q: %+v %s", c.keys, got.chosen, got.id())
+		}
+		if got.View() != "" {
+			t.Fatalf("%q left the list drawn", c.keys)
+		}
+	}
+	if got := listKeys(m, "j", "d"); got.chosen != nil || !strings.Contains(got.View(), "remove b? [y/N]") {
+		t.Fatalf("%q", got.View())
+	}
+	if got := listKeys(m, "q"); got.chosen != nil || !got.done || got.View() != "" {
+		t.Fatal("q chose something or left the list drawn")
+	}
+	empty := m
+	empty.rows, empty.ids = nil, nil
+	if got := listKeys(empty, "enter"); got.chosen != nil {
+		t.Fatal("an action needing a row was chosen without one")
+	}
+	if got := listKeys(empty, "n"); got.chosen == nil {
+		t.Fatal("an action needing no row was not chosen")
+	}
+	long := m
+	long.rows, long.ids = nil, nil
+	for i := range 40 {
+		long.rows = append(long.rows, []string{fmt.Sprintf("row%02d %s", i, strings.Repeat("x", 200))})
+		long.ids = append(long.ids, fmt.Sprint(i))
+	}
+	var tm tea.Model = long
+	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 60, Height: 15})
+	long = listKeys(tm.(listModel), slices.Repeat([]string{"j"}, 30)...)
+	v := long.View()
+	if n := strings.Count(v, "\n"); n > 15 || !strings.Contains(v, "row30") || strings.Contains(v, "row00") {
+		t.Fatalf("%d lines: %q", n, v)
+	}
+	for _, l := range strings.Split(v, "\n") {
+		if lipgloss.Width(l) >= 60 {
+			t.Fatalf("a line of %d: %q", lipgloss.Width(l), l)
+		}
+	}
+	m.note = "first\nsecond"
+	if v := m.View(); !strings.Contains(v, "second") || !strings.Contains(v, "space pick") {
+		t.Fatalf("%q", v)
+	}
+}
+
+// A list's action runs a command as given now, not with the flags an
+// earlier one had, and keeps what it says out of the list.
+func TestAListsStepsKeepTheirFlagsApart(t *testing.T) {
+	t.Parallel()
+	paths := cliFixture(t)
+	var out, log bytes.Buffer
+	o := &options{paths: paths, input: strings.NewReader(""), output: &out, log: &log}
+	root := o.root()
+	root.SetArgs([]string{"var", "ls"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if said, err := o.quietStep(root, "var", "set", "region", "us", "-g"); err != nil || !strings.Contains(said, "region") {
+		t.Fatalf("%v %q", err, said)
+	}
+	if _, err := o.quietStep(root, "var", "set", "user", "toby", "-e", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 || log.Len() != 0 {
+		t.Fatalf("a step said %q %q", out.String(), log.String())
+	}
+	v, err := paths.LoadEnvValues()
+	if err != nil || v.Args["region"] != "us" || v.Args["user"] != "" || v.Envs["dev"]["user"] != "toby" {
+		t.Fatalf("%v %+v", err, v)
+	}
+}
+
+func TestNounsAloneListWithoutATerminal(t *testing.T) {
+	t.Parallel()
+	paths := cliFixture(t)
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"env"}, "dev (default)"},
+		{[]string{"var"}, "Your user name"},
+		{[]string{"var", "-g"}, "NAME"},
+		{[]string{"context"}, "env      dev"},
+	} {
+		if out, _, err := run(t, paths, "", c.args...); err != nil || !strings.Contains(out, c.want) {
+			t.Fatalf("%v: %v %q", c.args, err, out)
+		}
+	}
+}

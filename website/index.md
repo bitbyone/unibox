@@ -1,7 +1,7 @@
 ---
 layout: page
 title: unibox
-titleTemplate: A wrapper for Docker Sandboxes
+titleTemplate: A thin extension of Docker Sandboxes
 sidebar: false
 aside: false
 ---

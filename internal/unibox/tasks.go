@@ -1,16 +1,19 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -48,32 +51,10 @@ func checkNeeds(needs []api.Need) error {
 	return nil
 }
 
-func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profile, resume bool) (api.Task, error) {
-	// A task resumed by name already knows its agent; asking again would
-	// make the record pointless.
-	if req.Agent == "" && req.Task != "" && len(req.Repositories) == 0 {
-		for _, t := range b.Tasks {
-			if t.ID == req.Task {
-				req.Agent = t.Agent
-			}
-		}
-	}
-	if req.Agent == "" {
-		// A task opened in a shell still names the agent a later resume
-		// runs: the profile's first.
-		if len(p.Agents) == 1 || req.Shell && len(p.Agents) > 0 {
-			req.Agent = p.Agents[0]
-		} else {
-			return api.Task{}, fmt.Errorf("profile %s offers %s; pass --agent", p.Name, strings.Join(p.Agents, ", "))
-		}
-	}
-	if !slices.Contains(p.Agents, req.Agent) {
-		return api.Task{}, fmt.Errorf("profile %s does not offer agent %s", p.Name, req.Agent)
-	}
+func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume bool) (api.Task, error) {
 	if len(req.Repositories) == 0 && req.Task != "" {
 		for _, t := range b.Tasks {
 			if t.ID == req.Task {
-				t.Agent = req.Agent
 				return t, nil
 			}
 		}
@@ -82,7 +63,6 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 	if len(req.Repositories) == 0 {
 		return api.Task{}, fmt.Errorf("no repository selected; pass --repo <path-or-url>, or unibox resume <task> for a prepared one")
 	}
-	req.services = p.Services
 	repos, err := resolveForTask(ctx, req)
 	if err != nil {
 		return api.Task{}, err
@@ -106,7 +86,7 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 	if other := taskOwner(state, id); other != "" && other != b.Name {
 		return api.Task{}, fmt.Errorf("task %s already exists in sandbox %s; choose another --task name", id, other)
 	}
-	t := api.Task{ID: id, Sandbox: b.Name, Directory: "/work/" + id, Repositories: repos, Agent: req.Agent, State: "pending"}
+	t := api.Task{ID: id, Sandbox: b.Name, Directory: "/work/" + id, Repositories: repos, State: "pending"}
 	for _, old := range b.Tasks {
 		if old.ID == id {
 			// A task grown by add-repo is still the task its first
@@ -118,7 +98,6 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, p Profi
 				t.Repositories = old.Repositories
 			}
 			if resume && old.State == "ready" {
-				old.Agent = req.Agent
 				return old, nil
 			}
 		}
@@ -225,7 +204,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 		return api.Task{}, nil, err
 	}
 	req.Sandbox = name
-	_, r, p, err := m.Definition(req)
+	_, env, err := m.Definition(req)
 	if err != nil {
 		return api.Task{}, nil, err
 	}
@@ -247,7 +226,9 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	if t.ID == "" {
 		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox task ls lists them", req.Task)
 	}
-	req.services = p.Services
+	// A task's repositories are all mounted or all cloned.
+	req.Mount = slices.ContainsFunc(t.Repositories, func(r api.Repository) bool { return r.Mounted })
+	req.Clone = !req.Mount
 	repos, err := resolveForTask(ctx, req)
 	if err != nil {
 		return t, nil, err
@@ -265,7 +246,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	if len(added) == 0 {
 		return t, added, nil
 	}
-	if err = m.ensure(ctx, &b, r, p, false, false); err != nil {
+	if err = m.ensure(ctx, &b, env, false); err != nil {
 		return t, nil, err
 	}
 	usage, err := m.usage(b.Name, true)
@@ -273,14 +254,13 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 		return t, nil, err
 	}
 	defer usage.Close()
-	a, _ := FindAgent(t.Agent)
 	part := t
 	part.Repositories = added
 	fmt.Fprintf(m.Log, "adding %d repositories to task %s\n", len(added), t.ID)
-	if err = m.mountTask(ctx, b, r, part); err != nil {
+	if err = m.mountTask(ctx, b, part); err != nil {
 		return t, nil, err
 	}
-	if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(prepareScript(part, p, a))}), m.Log); err != nil {
+	if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(prepareScript(part))}), m.Log); err != nil {
 		return t, nil, err
 	}
 	t.Repositories = append(t.Repositories, added...)
@@ -303,40 +283,31 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 
 // The guard serializes preparation and lifecycle changes. Usage locks survive
 // the guard while sessions run, allowing other tasks to prepare beside them.
-func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sandbox, api.Task, Runtime, *FileLock, *FileLock, error) {
+func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sandbox, api.Task, *FileLock, *FileLock, error) {
 	req.Task = m.taskID(req.Task)
-	b, r, p, err := m.Definition(req)
+	b, env, err := m.Definition(req)
 	if err != nil {
-		return b, api.Task{}, r, nil, nil, err
+		return b, api.Task{}, nil, nil, err
 	}
 	guard, err := m.guard(b.Name)
 	if err != nil {
-		return b, api.Task{}, r, nil, nil, err
+		return b, api.Task{}, nil, nil, err
 	}
 	defer guard.Close()
-	state, err := m.Paths.ReadState()
-	if err != nil {
-		return b, api.Task{}, r, nil, nil, err
-	}
-	if old, ok := state.Sandboxes[b.Name]; ok {
+	if old, err := m.sandbox(b.Name); err == nil {
 		b = old
-	} else {
-		if _, exists, err := m.findBox(ctx, r, b); err != nil {
-			return b, api.Task{}, r, nil, nil, err
-		} else if exists {
-			return b, api.Task{}, r, nil, nil, fmt.Errorf("runtime sandbox %s is not owned by unibox; choose another name", b.RuntimeName)
-		}
 	}
-	t, err := m.task(ctx, req, &b, p, resume)
+	req.decide()
+	t, err := m.task(ctx, req, &b, resume)
 	if err != nil {
-		return b, t, r, nil, nil, err
+		return b, t, nil, nil, err
 	}
 	taskLock, err := LockFile(filepath.Join(m.Paths.Config, "locks", b.Name+"-task-"+t.ID+".lock"), false, false)
 	if err != nil {
 		// A shell joins a task whose agent works in it: the task is ready,
 		// so nothing is prepared that the agent could be in the middle of.
 		if !(resume && req.Shell && t.State == "ready") {
-			return b, t, r, nil, nil, fmt.Errorf("task %s already has an active session; wait for it to finish, or join it with unibox resume %s --shell", t.ID, t.ID)
+			return b, t, nil, nil, fmt.Errorf("task %s already has an active session; wait for it to finish, or join it with unibox resume %s --shell", t.ID, t.ID)
 		}
 		fmt.Fprintf(m.Log, "joining task %s beside its running session\n", t.ID)
 		taskLock = nil
@@ -351,12 +322,12 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 			}
 		}
 	}()
-	if err = m.ensure(ctx, &b, r, p, false, false); err != nil {
-		return b, t, r, nil, nil, err
+	if err = m.ensure(ctx, &b, env, false); err != nil {
+		return b, t, nil, nil, err
 	}
 	usage, err = m.usage(b.Name, true)
 	if err != nil {
-		return b, t, r, nil, nil, err
+		return b, t, nil, nil, err
 	}
 	// A recreation made every task pending, including a previously ready one.
 	for _, saved := range b.Tasks {
@@ -364,38 +335,41 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 			t.State = "pending"
 		}
 	}
+	// The agent asked for, else the one the task ran last, else the env's.
+	t.Agent = cmp.Or(req.Agent, t.Agent, b.Agent)
 	if !resume || t.State != "ready" {
 		t.State = "preparing"
 		replaceTask(&b, t)
 		if err = m.claimTask(b, t.ID); err != nil {
-			return b, t, r, nil, nil, err
+			return b, t, nil, nil, err
 		}
-		a, _ := FindAgent(t.Agent)
 		fmt.Fprintf(m.Log, "preparing task %s\n", t.ID)
-		if err = m.mountTask(ctx, b, r, t); err != nil {
-			return b, t, r, nil, nil, err
+		if err = m.mountTask(ctx, b, t); err != nil {
+			return b, t, nil, nil, err
 		}
-		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-s"}, Input: strings.NewReader(prepareScript(t, p, a))}), m.Log); err != nil {
-			return b, t, r, nil, nil, err
+		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(prepareScript(t))}), m.Log); err != nil {
+			return b, t, nil, nil, err
 		}
 		t.State = "ready"
+	} else if err = m.remount(ctx, b, t); err != nil {
+		return b, t, nil, nil, err
 	}
 	replaceTask(&b, t)
 	if err = m.saveBox(b); err != nil {
-		return b, t, r, nil, nil, err
+		return b, t, nil, nil, err
 	}
 	success = true
-	return b, t, r, usage, taskLock, nil
+	return b, t, usage, taskLock, nil
 }
 
 func (m *Manager) Prepare(ctx context.Context, req Request) (api.Prepared, error) {
-	b, t, _, usage, taskLock, err := m.prepare(ctx, req, false)
+	b, t, usage, taskLock, err := m.prepare(ctx, req, false)
 	if err != nil {
 		return api.Prepared{}, err
 	}
 	defer usage.Close()
 	defer taskLock.Close()
-	return api.Prepared{APIVersion: api.Version, Sandbox: b.Name, Runtime: b.Runtime, RuntimeName: b.RuntimeName, Task: t.ID, Directory: t.Directory, State: "ready"}, nil
+	return api.Prepared{APIVersion: api.Version, Sandbox: b.Name, Task: t.ID, Directory: t.Directory, State: "ready"}, nil
 }
 
 func (m *Manager) recordRun(b api.Sandbox, t api.Task, agent string) (api.Run, *FileLock, error) {
@@ -423,7 +397,7 @@ func (m *Manager) recordRun(b api.Sandbox, t api.Task, agent string) (api.Run, *
 	return run, l, nil
 }
 
-func (m *Manager) finishRun(b api.Sandbox, r Runtime, run api.Run, lease, usage, taskLock *FileLock) {
+func (m *Manager) finishRun(b api.Sandbox, run api.Run, lease, usage, taskLock *FileLock) {
 	lease.Close()
 	usage.Close()
 	if taskLock != nil {
@@ -440,7 +414,7 @@ func (m *Manager) finishRun(b api.Sandbox, r Runtime, run api.Run, lease, usage,
 	}); err != nil {
 		fmt.Fprintln(m.Log, "cannot update session record:", err)
 	}
-	if !m.Config.StopIdle(r.Name()) {
+	if !m.Config.StopIdle() {
 		return
 	}
 	guard, err := m.guard(b.Name)
@@ -455,15 +429,24 @@ func (m *Manager) finishRun(b api.Sandbox, r Runtime, run api.Run, lease, usage,
 	defer exclusive.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if _, err := runtimeOutput(ctx, r, b.RuntimeName, "sh", "-c", guestIdleScript); err != nil {
+	if _, err := guestOutput(ctx, m.SBX, b.Name, "bash", "-c", guestIdleScript); err != nil {
 		fmt.Fprintln(m.Log, "sandbox kept running: a guest session may still be active")
 		return
 	}
-	if err = r.Stop(ctx, b.RuntimeName); err != nil {
+	if err = m.SBX.Stop(ctx, b.Name); err != nil {
 		fmt.Fprintln(m.Log, "cannot stop idle sandbox:", err)
 	} else {
 		fmt.Fprintf(m.Log, "sandbox %s stopped: no active sessions\n", b.Name)
 	}
+}
+
+// sshEnv is what a session needs to use the host's SSH agent sbx forwards:
+// a host key it has not seen is taken, as the guest has no known_hosts.
+func (m *Manager) sshEnv() []string {
+	if on, _ := m.Config.SSHAgent(); !on {
+		return nil
+	}
+	return []string{"GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new"}
 }
 
 func RunChild(cmd *exec.Cmd) error {
@@ -491,22 +474,19 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if req.Shell && len(extra) > 0 {
 		return fmt.Errorf("a shell takes no agent arguments; leave out what follows --")
 	}
-	if len(req.Scripts) > 0 {
-		_, _, p, err := m.Definition(req)
-		if err != nil {
-			return err
-		}
-		if err = p.knownScripts(req.Scripts); err != nil {
-			return err
-		}
-	}
-	b, t, r, usage, taskLock, err := m.prepare(ctx, req, true)
+	b, t, usage, taskLock, err := m.prepare(ctx, req, true)
 	if err != nil {
 		return err
 	}
-	agent := t.Agent
-	if req.Shell {
-		agent = ""
+	var command []string
+	agent := ""
+	if !req.Shell {
+		agent = t.Agent
+		if command, err = m.agentCommand(ctx, b, agent); err != nil {
+			usage.Close()
+			taskLock.Close()
+			return err
+		}
 	}
 	run, lease, err := m.recordRun(b, t, agent)
 	if err != nil {
@@ -514,56 +494,39 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		taskLock.Close()
 		return err
 	}
-	defer m.finishRun(b, r, run, lease, usage, taskLock)
-	p, err := m.profile(b.Profile)
-	if err != nil {
-		return err
-	}
+	defer m.finishRun(b, run, lease, usage, taskLock)
 	dir := t.Directory
 	if len(t.Repositories) == 1 {
 		dir = path.Join(dir, t.Repositories[0].Name)
 	}
-	if len(req.Scripts) > 0 {
-		env := append([]string{"UNIBOX_SANDBOX=" + b.Name, "UNIBOX_TASK=" + t.ID, "UNIBOX_TASK_DIR=" + t.Directory}, p.SessionEnv()...)
-		if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", scriptsScript(p, req.Scripts, env)}, Directory: dir}), errout); err != nil {
-			what := t.Agent
-			if req.Shell {
-				what = "the shell"
-			}
-			return fmt.Errorf("a script failed, so %s was not started: %w", what, err)
-		}
-	}
 	if req.Shell {
 		// A shell is the user's own session: no agent is credited in its
 		// commits.
-		return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(append(p.SessionEnv(), sshEnv(r)...), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
+		return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
-	a, _ := FindAgent(t.Agent)
-	args, agentEnv := p.AgentCommand(a)
-	args = append(args, extra...)
-	// The commit hook credits the agent of this session, not the one the
-	// task was prepared with, as the profile names it.
-	name, _, _ := strings.Cut(a.CoAuthor, " <")
-	env := append(agentEnv, "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+p.CoAuthor(a.ID))
-	env = append(env, p.SessionEnv()...)
-	if s, ok := r.(SessionEnver); ok {
-		env = append(env, s.SessionEnv(p, a.ID)...)
+	a := FindAgent(agent)
+	args := append(command, extra...)
+	env := slices.Clone(a.Env)
+	if a.CoAuthor != "" {
+		name, _, _ := strings.Cut(a.CoAuthor, " <")
+		env = append(env, "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+a.CoAuthor)
 	}
+	env = append(env, m.sshEnv()...)
 	args = withEnv(env, args)
 	if a.Trust != nil && a.Config != "" {
 		dirs := []string{"/work", t.Directory}
 		for _, repo := range t.Repositories {
 			dirs = append(dirs, path.Join(t.Directory, repo.Name))
 		}
-		if err := m.mergeAgentConfig(ctx, b, r, a, a.Trust(dirs)); err != nil {
+		if err := m.mergeAgentConfig(ctx, b, a, a.Trust(dirs)); err != nil {
 			fmt.Fprintf(errout, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
 		}
 	}
 	script := sessionScript(run.ID, args)
 	if a.Setup != "" {
-		script = "(\n" + a.Setup + ") || echo 'unibox: preparing " + a.ID + " failed; it may ask for a login' >&2\n" + script
+		script = "(\n" + a.Setup + ") || echo 'unibox: preparing " + a.ID + " failed; it may ask whether to trust the directory' >&2\n" + script
 	}
-	cmd := r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", script}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout})
+	cmd := m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", script}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout})
 	err = RunChild(cmd)
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
@@ -574,6 +537,33 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		return &Failure{code, "agent_exit", fmt.Sprintf("agent exited with status %d", code)}
 	}
 	return err
+}
+
+// agentCommand is how a sandbox starts an agent: as the env's kit for it
+// says, else as sbx's own kit would, when the sandbox has the agent's
+// command - an image with several agents, say.
+func (m *Manager) agentCommand(ctx context.Context, b api.Sandbox, id string) ([]string, error) {
+	if id == "" {
+		return nil, Fail(4, "agent_missing", "no kit of sandbox %s's env runs an agent; open a shell with --shell", b.Name)
+	}
+	if id == b.Agent && len(b.AgentCommand) > 0 {
+		return slices.Clone(b.AgentCommand), nil
+	}
+	if c, ok := b.Agents[id]; ok {
+		return slices.Clone(c), nil
+	}
+	a := FindAgent(id)
+	if err := ValidName(a.Command); err != nil {
+		return nil, fmt.Errorf("agent %q: %w", id, err)
+	}
+	if m.SBX.Exec(ctx, b.Name, Command{Args: []string{"sh", "-c", "command -v " + a.Command}}).Run() != nil {
+		known := slices.Sorted(maps.Keys(b.Agents))
+		if len(known) == 0 && b.Agent != "" {
+			known = []string{b.Agent}
+		}
+		return nil, Fail(4, "agent_missing", "sandbox %s has no %s; its env runs %s - pick one with --agent, or have the team add a kit for %s", b.Name, id, strings.Join(known, ", "), id)
+	}
+	return append([]string{a.Command}, a.Args...), nil
 }
 
 // withEnv runs a command with the variables set, through env(1).
@@ -594,26 +584,17 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		guard.Close()
 		return err
 	}
-	r, err := m.Runtime(b.Runtime)
-	if err != nil {
+	if err = m.SBX.Available(ctx); err != nil {
 		guard.Close()
 		return err
 	}
-	if err = r.Available(ctx); err != nil {
-		guard.Close()
-		return err
-	}
-	box, exists, err := m.findBox(ctx, r, b)
+	_, exists, err := m.findBox(ctx, b)
 	if err != nil || !exists {
 		guard.Close()
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("sandbox is missing; run unibox sandbox recreate %s", name)
-	}
-	if err = m.startBox(ctx, r, b, box); err != nil {
-		guard.Close()
-		return err
+		return fmt.Errorf("sbx has no sandbox %s; unibox sandbox recreate %s creates it again", name, name)
 	}
 	usage, err := m.usage(name, true)
 	guard.Close()
@@ -625,81 +606,8 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		usage.Close()
 		return err
 	}
-	defer m.finishRun(b, r, run, lease, usage, nil)
-	env := sshEnv(r)
-	if p, err := m.profile(b.Profile); err == nil {
-		env = append(p.SessionEnv(), env...)
-	}
-	return RunChild(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, withEnv(env, []string{"bash", "-l"}))}, Interactive: true, Input: in, Output: out, Error: errout}))
-}
-
-// RunScripts runs a profile's scripts in its sandbox at once, in /work,
-// counted as a session as a shell is, so an idle sandbox is stopped after.
-func (m *Manager) RunScripts(ctx context.Context, name string, scripts []string, out io.Writer) error {
-	guard, err := m.guard(name)
-	if err != nil {
-		return err
-	}
-	b, err := m.sandbox(name)
-	if err != nil {
-		guard.Close()
-		return err
-	}
-	p, err := m.profile(b.Profile)
-	if err == nil {
-		err = p.knownScripts(scripts)
-	}
-	if err != nil {
-		guard.Close()
-		return err
-	}
-	r, err := m.Runtime(b.Runtime)
-	if err != nil {
-		guard.Close()
-		return err
-	}
-	if err = r.Available(ctx); err != nil {
-		guard.Close()
-		return err
-	}
-	box, exists, err := m.findBox(ctx, r, b)
-	if err != nil || !exists {
-		guard.Close()
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("sandbox is missing; run unibox sandbox recreate %s", name)
-	}
-	if err = m.startBox(ctx, r, b, box); err != nil {
-		guard.Close()
-		return err
-	}
-	usage, err := m.usage(name, true)
-	guard.Close()
-	if err != nil {
-		return err
-	}
-	run, lease, err := m.recordRun(b, api.Task{}, "")
-	if err != nil {
-		usage.Close()
-		return err
-	}
-	defer m.finishRun(b, r, run, lease, usage, nil)
-	env := append([]string{"UNIBOX_SANDBOX=" + b.Name}, p.SessionEnv()...)
-	return runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", sessionScript(run.ID, []string{"sh", "-c", scriptsScript(p, scripts, env)})}, Directory: "/work"}), out)
-}
-
-// SandboxScripts are the scripts of a sandbox's profile, by name.
-func (m *Manager) SandboxScripts(name string) (string, map[string]string, error) {
-	b, err := m.sandbox(name)
-	if err != nil {
-		return "", nil, err
-	}
-	p, err := m.profile(b.Profile)
-	if err != nil {
-		return "", nil, err
-	}
-	return p.Name, p.Scripts, nil
+	defer m.finishRun(b, run, lease, usage, nil)
+	return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Interactive: true, Input: in, Output: out, Error: errout}))
 }
 
 func (m *Manager) Stop(ctx context.Context, name string) error {
@@ -717,24 +625,20 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	r, err := m.Runtime(b.Runtime)
-	if err != nil {
-		return err
-	}
-	box, exists, err := m.findBox(ctx, r, b)
+	box, exists, err := m.findBox(ctx, b)
 	if err != nil {
 		return err
 	}
 	if !exists || box.State == "stopped" {
 		return nil
 	}
-	if _, err = runtimeOutput(ctx, r, b.RuntimeName, "sh", "-c", guestIdleScript); err != nil {
+	if _, err = guestOutput(ctx, m.SBX, b.Name, "bash", "-c", guestIdleScript); err != nil {
 		return Fail(4, "guest_busy", "a guest session may still be active; inspect it with unibox sandbox shell")
 	}
-	return r.Stop(ctx, b.RuntimeName)
+	return m.SBX.Stop(ctx, b.Name)
 }
-func (m *Manager) Remove(ctx context.Context, name, task string) error {
-	return m.remove(ctx, name, task, false)
+func (m *Manager) Remove(ctx context.Context, name, task string, force bool) error {
+	return m.remove(ctx, name, task, force)
 }
 
 // remove takes a task or a sandbox away. Forced, it neither waits for the
@@ -758,16 +662,15 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 	if err != nil {
 		return err
 	}
-	r, err := m.Runtime(b.Runtime)
-	if err != nil {
-		return err
+	if task == "" && b.Adopted && !force {
+		return fmt.Errorf("sandbox %s was adopted, made outside unibox; unibox sandbox rm --force %s removes it", name, name)
 	}
-	_, exists, err := m.findBox(ctx, r, b)
-	if err != nil {
+	_, exists, err := m.findBox(ctx, b)
+	if err != nil && !force {
 		return err
 	}
 	if exists && !force {
-		if err = m.safeBox(ctx, b, r); err != nil {
+		if err = m.safeBox(ctx, b); err != nil {
 			return err
 		}
 	}
@@ -784,15 +687,24 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 			// Mounted directories come out before anything is deleted, and
 			// the guest checks they did: rm -rf would go into a mount and
 			// delete the host's files.
-			if err = m.unmountTask(ctx, b, r, removed); err != nil {
+			if err = m.unmountTask(ctx, b, removed); err != nil {
 				return err
 			}
 			if s := unmountedScript(removed); s != "" {
-				if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"sh", "-c", s}}), m.Log); err != nil {
+				if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", s}}), m.Log); err != nil {
+					return err
+				}
+				// sbx made the mount points as root; rmdir takes only
+				// empty ones.
+				points := []string{"bash", "-c", `for d; do [ ! -d "$d" ] || rmdir -- "$d"; done`, "bash"}
+				for _, mt := range mounts(removed) {
+					points = append(points, mt[1])
+				}
+				if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: points}), m.Log); err != nil {
 					return err
 				}
 			}
-			if err = runLogged(r.Exec(ctx, b.RuntimeName, Command{Args: []string{"rm", "-rf", "--", removed.Directory}}), m.Log); err != nil {
+			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"rm", "-rf", "--", removed.Directory}}), m.Log); err != nil {
 				return err
 			}
 		}
@@ -800,11 +712,21 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 		return m.saveBox(b)
 	}
 	if exists {
-		if err = r.Remove(ctx, b.RuntimeName); err != nil {
+		if err = m.removeBox(ctx, b); err != nil {
 			return err
 		}
 	}
-	return m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil })
+	if err = m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil }); err != nil {
+		return err
+	}
+	// Resources and network rules given to this sandbox alone go with it.
+	if err = m.forgetNetwork(name); err != nil {
+		return err
+	}
+	if v, err := m.Paths.LoadEnvValues(); err == nil && v.SandboxResources[name] != (Resources{}) {
+		return m.Paths.SetSandboxResources(name, Resources{})
+	}
+	return nil
 }
 
 // mounts are a task's mounted repositories: each host directory and the
@@ -819,38 +741,127 @@ func mounts(t api.Task) [][2]string {
 	return out
 }
 
-// mountTask mounts a task's host directories into its sandbox, at their
-// places in the task, before the task is prepared there.
-func (m *Manager) mountTask(ctx context.Context, b api.Sandbox, r Runtime, t api.Task) error {
-	list := mounts(t)
-	if len(list) == 0 {
+// MountDrift compares what a running sandbox has mounted under /work
+// with its ready tasks' mounts: missing are a task's mounts the sandbox
+// lacks, which the task's next start makes again, and stray the mount
+// points no task has, each as host path and target.
+func (m *Manager) MountDrift(ctx context.Context, b api.Sandbox) (missing, stray [][2]string, err error) {
+	info, err := guestOutput(ctx, m.SBX, b.Name, "cat", "/proc/self/mountinfo")
+	if err != nil {
+		return nil, nil, err
+	}
+	found := guestMounts(info)
+	mounted := map[string]bool{}
+	for _, mt := range found {
+		mounted[mt[1]] = true
+	}
+	known := map[string]bool{}
+	for _, t := range b.Tasks {
+		for _, mt := range mounts(t) {
+			known[mt[1]] = true
+			if t.State == "ready" && !mounted[mt[1]] {
+				missing = append(missing, mt)
+			}
+		}
+	}
+	for _, mt := range found {
+		if !known[mt[1]] {
+			stray = append(stray, mt)
+		}
+	}
+	return missing, stray, nil
+}
+
+// remount mounts again what a ready task has lost of its mounts, as
+// after sbx umount by hand, so its agent never starts on an empty
+// directory.
+func (m *Manager) remount(ctx context.Context, b api.Sandbox, t api.Task) error {
+	if len(mounts(t)) == 0 {
 		return nil
 	}
-	mounter, ok := r.(Mounter)
-	if !ok {
-		return fmt.Errorf("runtime %s cannot mount host directories; leave out --mount", r.Name())
+	missing, _, err := m.MountDrift(ctx, b)
+	if err != nil {
+		return err
 	}
-	for _, mt := range list {
-		if err := mounter.Mount(ctx, b.RuntimeName, mt[0], mt[1]); err != nil {
+	for _, mt := range missing {
+		if !slices.Contains(mounts(t), mt) {
+			continue
+		}
+		if err := m.SBX.Mount(ctx, b.Name, mt[0], mt[1]); err != nil {
 			return err
 		}
-		fmt.Fprintf(m.Log, "mounted %s at %s in sandbox %s\n", mt[0], mt[1], b.Name)
+		fmt.Fprintf(m.Log, "mounted %s at %s in sandbox %s again\n", mt[0], mt[1], b.Name)
 	}
 	return nil
 }
 
-// unmountTask takes a task's host directories out of its sandbox.
-func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, r Runtime, t api.Task) error {
-	list := mounts(t)
-	if len(list) == 0 {
+// guestMounts are the mounts under /work in a mountinfo, where unibox
+// mounts tasks' directories, as host path and target: sbx shares a host
+// directory with its path as the mount's root. mountinfo escapes a space
+// and the like as an octal \NNN.
+func guestMounts(info string) [][2]string {
+	out := [][2]string{}
+	for _, line := range strings.Split(info, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 5 {
+			continue
+		}
+		mt := [2]string{unescapeMountinfo(f[3]), unescapeMountinfo(f[4])}
+		if strings.HasPrefix(mt[1], "/work/") && !slices.Contains(out, mt) {
+			out = append(out, mt)
+		}
+	}
+	return out
+}
+
+func unescapeMountinfo(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+3 < len(s) {
+			if n, err := strconv.ParseUint(s[i+1:i+4], 8, 8); err == nil {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// mountTask mounts a task's host directories into its sandbox, at their
+// places in the task, before the task is prepared there.
+func (m *Manager) mountTask(ctx context.Context, b api.Sandbox, t api.Task) error {
+	for _, mt := range mounts(t) {
+		if err := m.SBX.Mount(ctx, b.Name, mt[0], mt[1]); err != nil {
+			return err
+		}
+		fmt.Fprintf(m.Log, "mounted %s at %s in sandbox %s\n", mt[0], mt[1], b.Name)
+		if err := m.tellMount(mt[0]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// tellMount says, the first time a directory is mounted, that the agent
+// writes into its .git: a hook or a setting there runs on the host by the
+// next git command in it. --clone keeps the host's checkout out of reach.
+func (m *Manager) tellMount(dir string) error {
+	return m.Paths.State(func(s *State) error {
+		if slices.Contains(s.Mounted, dir) {
+			return nil
+		}
+		s.Mounted = append(s.Mounted, dir)
+		fmt.Fprintf(m.Log, "note: the agent can write to %s, its .git included; a hook or setting it leaves there runs on this host with your next git command in it. Look at what it changed, or use --clone to keep it out of the checkout.\n", dir)
 		return nil
-	}
-	mounter, ok := r.(Mounter)
-	if !ok {
-		return fmt.Errorf("runtime %s cannot unmount host directories; the task is kept so nothing of the host is deleted", r.Name())
-	}
-	for _, mt := range list {
-		if err := mounter.Unmount(ctx, b.RuntimeName, mt[0], mt[1]); err != nil {
+	})
+}
+
+// unmountTask takes a task's host directories out of its sandbox.
+func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, t api.Task) error {
+	for _, mt := range mounts(t) {
+		if err := m.SBX.Unmount(ctx, b.Name, mt[0], mt[1]); err != nil {
 			return fmt.Errorf("%w; the task is kept so nothing of the host is deleted", err)
 		}
 		fmt.Fprintf(m.Log, "unmounted %s from sandbox %s\n", mt[0], b.Name)

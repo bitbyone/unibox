@@ -6,12 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,11 +15,8 @@ import (
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
+// SBX runs the sbx command line, the one runtime unibox works with.
 type SBX struct {
-	Cache string
-	// Bindings is sbx's credentials.yaml, where a generated kit's
-	// credentials are approved; empty leaves it alone.
-	Bindings string
 	// SSHAgent is the user's leave for sandboxes to use their SSH agent,
 	// which sbx forwards when its setting says so.
 	SSHAgent bool
@@ -31,6 +24,19 @@ type SBX struct {
 
 // SSHForwarding says whether sbx forwards the host's SSH agent now.
 func (r *SBX) SSHForwarding(ctx context.Context) (bool, error) { return sbxForwarding(ctx) }
+
+// SetSetting overrides one of sbx's settings, or with value "" takes the
+// override away, back to sbx's default.
+func (r *SBX) SetSetting(ctx context.Context, key, value string) error {
+	args := []string{"settings", "set", key, value}
+	if value == "" {
+		args = []string{"settings", "unset", key}
+	}
+	if err := runQuiet(hostCommand(ctx, "sbx", args...)); err != nil {
+		return fmt.Errorf("sbx did not change %s: %w", key, err)
+	}
+	return nil
+}
 
 // SetSSHForwarding turns sbx's forwarding of the host's SSH agent on or
 // off, and restarts its daemon, which a change takes effect with; running
@@ -44,9 +50,6 @@ func (r *SBX) SetSSHForwarding(ctx context.Context, on bool) error {
 	}
 	return nil
 }
-
-func (r *SBX) Name() string               { return "sbx" }
-func (r *SBX) Capabilities() Capabilities { return Capabilities{"vm", true, true, true} }
 
 // sbxForwarding reads whether sbx forwards the host's SSH agent. It takes
 // the JSON from its first brace, past any line sbx says before it, and asks
@@ -77,6 +80,8 @@ func sbxForwarding(ctx context.Context) (bool, error) {
 	return false, fmt.Errorf("cannot determine sbx SSH forwarding from sbx settings get ssh.agentForwardingEnabled --json, which answered %q; update sbx or retry", said)
 }
 
+func (r *SBX) AllowSSHAgent(on bool) { r.SSHAgent = on }
+
 func (r *SBX) Present() bool {
 	_, err := exec.LookPath("sbx")
 	return err == nil
@@ -84,14 +89,14 @@ func (r *SBX) Present() bool {
 
 func (r *SBX) Available(ctx context.Context) error {
 	if _, err := exec.LookPath("sbx"); err != nil {
-		return fmt.Errorf("sbx is not installed; install Docker Sandboxes and run sbx login")
+		return fmt.Errorf("sbx is not installed; install Docker Sandboxes, then unibox init signs you in")
 	}
 	forwarding, err := sbxForwarding(ctx)
 	if err != nil {
 		return err
 	}
 	if forwarding && !r.SSHAgent {
-		return Fail(4, "host_access", "sbx forwards your SSH agent, which lets agents sign with every SSH key you have; unibox config set runtimes.sbx.ssh_agent false turns it off, or true allows it")
+		return Fail(4, "host_access", "sbx forwards your SSH agent, which lets agents sign with every SSH key you have; unibox config set ssh_agent false turns it off, or true allows it")
 	}
 	_, err = r.List(ctx)
 	return err
@@ -110,130 +115,6 @@ func (r *SBX) List(ctx context.Context) ([]Box, error) {
 		boxes = append(boxes, Box{v.Name, v.Status, v.Memory, v.ID})
 	}
 	return boxes, nil
-}
-func (r *SBX) Images(ctx context.Context) ([]Image, error) {
-	b, err := commandOutput(hostCommand(ctx, "sbx", "template", "ls", "--json"))
-	if err != nil {
-		return nil, err
-	}
-	listed, err := sbxList[struct{ ID, Repository, Tag string }](b, "images")
-	if err != nil {
-		return nil, err
-	}
-	images := []Image{}
-	for _, v := range listed {
-		ref := strings.TrimPrefix(v.Repository, "docker.io/") + ":" + v.Tag
-		images = append(images, Image{ref, v.ID})
-	}
-	return images, nil
-}
-func (r *SBX) Create(ctx context.Context, s Spec, log io.Writer) error {
-	args := []string{"create", "--name", s.Name, "--pull", "never", "--skills", "off"}
-	if len(s.Agents) <= 1 {
-		args = append(args, "--template", s.Image)
-	}
-	cpus, memory, err := sbxResources(s.Resources, HostResources(), log)
-	if err != nil {
-		return err
-	}
-	if cpus != "" {
-		args = append(args, "--cpus", cpus)
-	}
-	if memory != "" {
-		args = append(args, "--memory", memory)
-	}
-	for _, h := range s.Access.DenyNetwork {
-		args = append(args, "--deny-network", h)
-	}
-	for _, k := range s.Access.Env {
-		args = append(args, "-e", k)
-	}
-	for _, c := range s.Access.Caches {
-		args = append(args, "-e", c.Env+"="+c.Host)
-	}
-	if len(s.Agents) > 1 {
-		// Several agents: a generated v3 workload kit carries their
-		// credential declarations; built-in v2 kinds cannot be combined.
-		dir, err := r.writeKit(s, oauthFirst(ctx, s))
-		if err != nil {
-			return err
-		}
-		bound := slices.DeleteFunc(slices.Clone(s.Agents), func(id string) bool { return sbxKitToken(s, id) })
-		if err = writeBindings(r.Bindings, bound, log); err != nil {
-			return err
-		}
-		args = append(args, dir)
-	} else {
-		kind := s.Agent
-		if kind == "" {
-			kind = "shell"
-		}
-		args = append(args, kind)
-	}
-	for _, c := range s.Access.Caches {
-		args = append(args, c.Host+":ro")
-	}
-	cmd := hostCommand(ctx, "sbx", args...)
-	for _, k := range s.Access.Env {
-		v, ok := os.LookupEnv(k)
-		if !ok {
-			return fmt.Errorf("profile requires environment variable %s; set it before creating the sandbox", k)
-		}
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-	if err := runLogged(cmd, log); err != nil {
-		return err
-	}
-	// Service hosts must be reachable, so they widen the allow policy with
-	// any the profile already set.
-	allow := append([]string{}, s.Access.AllowNetwork...)
-	for _, svc := range s.Access.Services {
-		for _, h := range svc.ProxyHosts() {
-			if !slices.Contains(allow, h) {
-				allow = append(allow, h)
-			}
-		}
-	}
-	if len(allow) > 0 {
-		// sbx create takes deny rules only; an allow rule is added to the
-		// sandbox's own policy, which a deny rule still overrides.
-		if err := runLogged(hostCommand(ctx, "sbx", "policy", "allow", "network", "--sandbox", s.Name, strings.Join(allow, ",")), log); err != nil {
-			return err
-		}
-	}
-	// A service's token is fetched and stored on the host; the sandbox gets
-	// a placeholder the proxy swaps. unibox never sees the value - the
-	// command runs on the host and sbx keeps the result.
-	for name, svc := range s.Access.Services {
-		args := []string{"secret", "set-custom", "--sandbox", s.Name, "--env", ServiceEnv(name, svc), "--placeholder", ServicePlaceholder(name, svc)}
-		// Two services may share a host, told apart by path; sbx keeps a
-		// secret for each and swaps each placeholder for its own value.
-		for _, h := range svc.ProxyHosts() {
-			args = append(args, "--host", h)
-		}
-		if svc.Refresh != "" {
-			args = append(args, "--refresh", svc.Refresh)
-		}
-		resolved := svc
-		var err error
-		if resolved.Command, err = ResolveCommand(svc.Command, svc.Via); err != nil {
-			return fmt.Errorf("service %s: %w", name, err)
-		}
-		args = append(args, "--command", serviceSecretCommand(resolved))
-		// sbx explains each stored secret at length - a note on commands, a
-		// reminder about variables in running sandboxes that git services
-		// do not read - so its words are kept for a failure, and the
-		// service is told in one line.
-		if err := runQuiet(hostCommand(ctx, "sbx", args...)); err != nil {
-			return fmt.Errorf("sbx could not store the %s service login: %w", name, err)
-		}
-		if svc.Git {
-			fmt.Fprintf(log, "service %s: git signs in at %s through the proxy\n", name, strings.Join(svc.GitURLs(), ", "))
-		} else {
-			fmt.Fprintf(log, "service %s: its placeholder, ${services.%s} in env, is swapped on requests to %s\n", name, name, strings.Join(svc.ProxyHosts(), ", "))
-		}
-	}
-	return nil
 }
 func (r *SBX) Exec(ctx context.Context, name string, c Command) *exec.Cmd {
 	args := []string{"exec"}
@@ -260,96 +141,179 @@ func (r *SBX) Stop(ctx context.Context, name string) error {
 	_, err := commandOutput(hostCommand(ctx, "sbx", "stop", name))
 	return err
 }
+
+// EnvCreate creates a sandbox from sbxenv files with sbx env create, on the
+// user's terminal: sbx asks there what it needs to, and runs the files'
+// host commands. args is the file of the person's args, or empty.
+func (r *SBX) EnvCreate(ctx context.Context, name, args string, files []string, in io.Reader, out, errout io.Writer) error {
+	cmd := hostCommand(ctx, "sbx", envArgs("create", name, args, files)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sbx env create did not create sandbox %s; see what it said above, then retry: %w", name, err)
+	}
+	return nil
+}
+
+// EnvRemove removes a sandbox made from sbxenv files, with what sbx made
+// for it alone: its sandbox-scoped secrets and the files' host-side work.
+func (r *SBX) EnvRemove(ctx context.Context, name, args string, files []string, log io.Writer) error {
+	return runLogged(hostCommand(ctx, "sbx", append(envArgs("rm", name, args, files), "--force")...), log)
+}
+
+func envArgs(verb, name, args string, files []string) []string {
+	out := []string{"env", verb, "--name", name}
+	if args != "" {
+		out = append(out, "--env-args-file", args)
+	}
+	return append(out, files...)
+}
+
+// MinSBXVersion is the oldest sbx unibox was checked against: sbxenv
+// files, args files, kit args and mounts as unibox uses them.
+const MinSBXVersion = "0.49.2"
+
+var semver = regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
+
+// Version is the release of sbx, as sbx version prints it.
+func (r *SBX) Version(ctx context.Context) (string, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "version"))
+	if err != nil {
+		return "", err
+	}
+	m := semver.FindStringSubmatch(string(b))
+	if m == nil {
+		return "", fmt.Errorf("sbx version printed no version unibox can read; update unibox")
+	}
+	return strings.Join(m[1:], "."), nil
+}
+
+// VersionAtLeast compares two releases given as major.minor.patch.
+func VersionAtLeast(version, min string) bool {
+	a, b := semver.FindStringSubmatch(version), semver.FindStringSubmatch(min)
+	if a == nil || b == nil {
+		return false
+	}
+	for i := 1; i <= 3; i++ {
+		x, _ := strconv.Atoi(a[i])
+		y, _ := strconv.Atoi(b[i])
+		if x != y {
+			return x > y
+		}
+	}
+	return true
+}
+
+// EnvPlan is sbx env plan: it checks an env's files and args and prints
+// what creating or updating the sandbox would do, changing nothing.
+func (r *SBX) EnvPlan(ctx context.Context, name, args string, files []string) (string, error) {
+	b, err := hostCommand(ctx, "sbx", envArgs("plan", name, args, files)...).CombinedOutput()
+	if err != nil {
+		return string(b), fmt.Errorf("sbx env plan failed: %w", err)
+	}
+	return string(b), nil
+}
+
+// Setting is the value of one of sbx's settings, as JSON.
+func (r *SBX) Setting(ctx context.Context, key string) (string, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "settings", "get", key, "--json"))
+	if err != nil {
+		return "", err
+	}
+	var setting struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if i := bytes.IndexByte(b, '{'); i < 0 || json.Unmarshal(b[i:], &setting) != nil {
+		return "", fmt.Errorf("sbx settings get %s answered in a form unibox does not know; update unibox", key)
+	}
+	return string(setting.Value), nil
+}
+
+// Kit is what sbx kit inspect says of a kit that unibox reads.
+type Kit struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Sandbox struct {
+		Entrypoint []string `json:"entrypoint"`
+		Command    struct {
+			Default []string `json:"default"`
+		} `json:"command"`
+	} `json:"sandbox"`
+	Credentials []KitCredential `json:"credentials"`
+}
+
+// KitCredential is a service a kit takes a token for, which the person
+// stores with sbx secret set.
+type KitCredential struct {
+	Service     string `json:"service"`
+	Description string `json:"description"`
+	Optional    bool   `json:"optional"`
+}
+
+// KitInspect reads a kit as sbx resolves it: a registry reference or a
+// local directory. sbx says what it cached before the JSON.
+func (r *SBX) KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error) {
+	var k Kit
+	argv := []string{"kit", "inspect", "--json"}
+	for _, name := range sortedKeys(args) {
+		argv = append(argv, "--kit-arg", name+"="+args[name])
+	}
+	b, err := commandOutput(hostCommand(ctx, "sbx", append(argv, ref)...))
+	if err != nil {
+		return k, fmt.Errorf("cannot read kit %s: %w", ref, err)
+	}
+	if i := bytes.IndexByte(b, '{'); i > 0 {
+		b = b[i:]
+	}
+	if err := json.Unmarshal(b, &k); err != nil {
+		return k, fmt.Errorf("sbx kit inspect answered for %s in a form unibox does not know; update unibox: %w", ref, err)
+	}
+	return k, nil
+}
+
+// Secret is one of sbx's stored secrets, as sbx secret ls lists it: its
+// name and scope, never its value.
+type Secret struct {
+	Scope string `json:"scope"`
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+}
+
+func (r *SBX) Secrets(ctx context.Context) ([]Secret, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "secret", "ls", "--json"))
+	if err != nil {
+		return nil, err
+	}
+	list, err := sbxList[Secret](b, "secrets")
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse sbx secret list; update sbx: %w", err)
+	}
+	return list, nil
+}
+
+// SecretSet has sbx ask the person for a service's token on their own
+// terminal, which unibox only hands over: the value goes from the
+// keyboard, or a pipe, to sbx's store and never through unibox. With a
+// command, sbx stores the command instead and runs it on the host when it
+// needs the token - a keychain read, say. Either is global: sbx env rm
+// deletes a sandbox's own.
+func (r *SBX) SecretSet(ctx context.Context, service, command string, in io.Reader, out, errout io.Writer) error {
+	args := []string{"secret", "set", service}
+	if command != "" {
+		args = append(args, "--command", command)
+	}
+	cmd := hostCommand(ctx, "sbx", args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sbx did not store the %s token; run sbx secret set %s yourself: %w", service, service, err)
+	}
+	return nil
+}
+
 func (r *SBX) Remove(ctx context.Context, name string) error {
 	// Confirmation is unibox's: unpushed work and active sessions are
 	// checked before any removal, so sbx must not prompt a stdin it lacks.
 	_, err := commandOutput(hostCommand(ctx, "sbx", "rm", "--force", name))
 	return err
-}
-
-func (r *SBX) Build(ctx context.Context, p Profile, tag string, log io.Writer) (string, error) {
-	return buildImage(ctx, r.Cache, r.Name(), p, tag, log, func(archive string) error {
-		return runLogged(hostCommand(ctx, "sbx", "template", "load", archive), log)
-	})
-}
-
-// UpdateNetwork changes a running sandbox's rules in place: sbx applies a
-// sandbox's policy live (checked: an allow, a deny and their removal took
-// effect without a restart). Removals go first, since sbx refuses a deny
-// for a host an allow of the sandbox names exactly. Only the rules named
-// are touched; one the user added with sbx stays.
-func (r *SBX) UpdateNetwork(ctx context.Context, sandbox string, change NetworkChange, log io.Writer) error {
-	if len(change.RemoveAllow)+len(change.RemoveDeny) > 0 {
-		b, err := commandOutput(hostCommand(ctx, "sbx", "policy", "ls", "--json"))
-		if err != nil {
-			return err
-		}
-		var list struct {
-			Rules []struct {
-				ID           string   `json:"id"`
-				SandboxID    string   `json:"sandbox_id"`
-				ResourceType string   `json:"resource_type"`
-				Decision     string   `json:"decision"`
-				Resources    []string `json:"resources"`
-			} `json:"rules"`
-		}
-		if err = json.Unmarshal(b, &list); err != nil {
-			return fmt.Errorf("sbx policy ls answered in a form unibox does not know; upgrade unibox: %w", err)
-		}
-		for decision, hosts := range map[string][]string{"allow": change.RemoveAllow, "deny": change.RemoveDeny} {
-			for _, h := range hosts {
-				for _, rule := range list.Rules {
-					if rule.SandboxID == sandbox && rule.ResourceType == "network" && rule.Decision == decision && len(rule.Resources) == 1 && rule.Resources[0] == h {
-						if err := runQuiet(hostCommand(ctx, "sbx", "policy", "rm", "network", "--id", rule.ID, "--sandbox", sandbox, "--force")); err != nil {
-							return fmt.Errorf("sbx did not remove the %s rule for %s: %w", decision, h, err)
-						}
-					}
-				}
-			}
-		}
-	}
-	if len(change.AddDeny) > 0 {
-		if err := runQuiet(hostCommand(ctx, "sbx", "policy", "deny", "network", "--sandbox", sandbox, strings.Join(change.AddDeny, ","))); err != nil {
-			return fmt.Errorf("sbx did not add the deny rules: %w", err)
-		}
-	}
-	if len(change.AddAllow) > 0 {
-		if err := runQuiet(hostCommand(ctx, "sbx", "policy", "allow", "network", "--sandbox", sandbox, strings.Join(change.AddAllow, ","))); err != nil {
-			return fmt.Errorf("sbx did not add the allow rules: %w", err)
-		}
-	}
-	return nil
-}
-
-// sbxResources turns a profile's resources into sbx create's flags: a
-// share of the host's CPUs into a count, all of them into 0, which sbx reads
-// as every host CPU; memory into MiB, kept within the 75% of the host's sbx
-// gives a sandbox (sbx create --help), so asking for all of it still starts
-// one.
-func sbxResources(r Resources, h Host, log io.Writer) (cpus, memory string, err error) {
-	if r.CPUs.share() == 100 {
-		cpus = "0"
-	} else if r.CPUs != "" {
-		n, _, err := (Resources{CPUs: r.CPUs}).Resolve(h)
-		if err != nil {
-			return "", "", err
-		}
-		cpus = fmt.Sprint(n)
-	}
-	if r.Memory == "" {
-		return cpus, "", nil
-	}
-	_, memory, err = (Resources{Memory: r.Memory}).Resolve(h)
-	if err != nil {
-		return "", "", err
-	}
-	limit := max(h.Memory*3/4, 512<<20)
-	if h.Memory > 0 && memoryBytes(memory) > limit {
-		capped := fmt.Sprintf("%dm", limit>>20)
-		fmt.Fprintf(log, "memory %s is more than sbx gives a sandbox, 75%% of the host's; using %s\n", r.Memory, capped)
-		memory = capped
-	}
-	return cpus, memory, nil
 }
 
 func (r *SBX) PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error) {
@@ -386,86 +350,6 @@ func (r *SBX) UnpublishPort(ctx context.Context, sandbox string, p api.Published
 	return nil
 }
 
-// writeInstallContext lays the install context out for COPY --from=unibox
-// / /, which gives each directory it copies the mode it has here: /usr and
-// /usr/local among them, so every directory is 0755 - a 0700 one, as a
-// temporary directory is made, shut apt's sandbox user out of /usr and
-// failed every later apt-get on its signatures.
-func writeInstallContext(dir string, files map[string]SnapshotFile) error {
-	for name, file := range files {
-		if err := AtomicWrite(filepath.Join(dir, filepath.FromSlash(name)), file.Data, os.FileMode(file.Mode)); err != nil {
-			return err
-		}
-	}
-	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || !d.IsDir() {
-			return err
-		}
-		return os.Chmod(path, 0o755)
-	})
-}
-
-// sbxKitTag is the tag sbx gives the image it makes of a sandbox's kit:
-// the kit directory's name, which unibox names after the sandbox, and a
-// digest of the kit.
-var sbxKitTag = regexp.MustCompile(`^(unibox-.+)-[0-9a-f]{12}$`)
-
-// UniboxImages lists unibox's images in sbx's store - each profile's
-// builds and each sandbox's kit images - and the builds left in Docker,
-// where a build makes them first.
-func (r *SBX) UniboxImages(ctx context.Context) ([]RuntimeImage, error) {
-	b, err := commandOutput(hostCommand(ctx, "sbx", "template", "ls", "--json"))
-	if err != nil {
-		return nil, err
-	}
-	listed, err := sbxList[struct {
-		Repository string    `json:"repository"`
-		Tag        string    `json:"tag"`
-		Created    time.Time `json:"created_at"`
-	}](b, "images")
-	if err != nil {
-		return nil, fmt.Errorf("sbx template ls answered in a form unibox does not know; upgrade unibox: %w", err)
-	}
-	seen := map[string]bool{}
-	out := []RuntimeImage{}
-	for _, im := range listed {
-		repo := strings.TrimPrefix(strings.TrimPrefix(im.Repository, "docker.io/"), "library/")
-		ref := repo + ":" + im.Tag
-		switch {
-		case strings.HasPrefix(repo, "unibox/"):
-			out = append(out, RuntimeImage{Ref: ref, Profile: strings.TrimPrefix(repo, "unibox/"), Created: im.Created})
-		case repo == "sbx-kit-src":
-			if m := sbxKitTag.FindStringSubmatch(im.Tag); m != nil {
-				out = append(out, RuntimeImage{Ref: ref, Sandbox: m[1], Created: im.Created})
-			}
-		default:
-			continue
-		}
-		seen[ref] = true
-	}
-	// Docker keeps a build's image too; one already gone from sbx's store
-	// is listed for removal all the same.
-	if d, err := commandOutput(hostCommand(ctx, "docker", "image", "ls", "--filter", "reference=unibox/*", "--format", "{{.Repository}}:{{.Tag}}")); err == nil {
-		for _, ref := range strings.Fields(string(d)) {
-			if repo, _, ok := strings.Cut(ref, ":"); ok && !seen[ref] {
-				out = append(out, RuntimeImage{Ref: ref, Profile: strings.TrimPrefix(repo, "unibox/")})
-				seen[ref] = true
-			}
-		}
-	}
-	return out, nil
-}
-
-// RemoveImage removes an image from sbx's store and from Docker. A sandbox
-// made from it is not affected: checked, it keeps working without it.
-func (r *SBX) RemoveImage(ctx context.Context, ref string) error {
-	errSbx := runQuiet(hostCommand(ctx, "sbx", "template", "rm", "--force", ref))
-	if strings.HasPrefix(ref, "unibox/") && runQuiet(hostCommand(ctx, "docker", "image", "rm", ref)) == nil {
-		return nil
-	}
-	return errSbx
-}
-
 // Mount bind-mounts a host directory at a path of the running sandbox
 // (sbx mount HOST:TARGET, checked: live, writable, kept across a stop). It
 // is idempotent in sbx, so a task prepared again mounts again harmlessly.
@@ -477,9 +361,10 @@ func (r *SBX) Mount(ctx context.Context, sandbox, host, target string) error {
 }
 
 // Unmount names the mount as it was made: sbx takes one with a target back
-// only by both.
+// only by both. A mount that is not there is taken out already: a removal
+// that stopped after it goes on.
 func (r *SBX) Unmount(ctx context.Context, sandbox, host, target string) error {
-	if err := runQuiet(hostCommand(ctx, "sbx", "umount", sandbox, host+":"+target)); err != nil {
+	if err := runQuiet(hostCommand(ctx, "sbx", "umount", sandbox, host+":"+target)); err != nil && !strings.Contains(err.Error(), "nothing to unmount") {
 		return fmt.Errorf("sbx did not unmount %s from %s: %w", host, target, err)
 	}
 	return nil
@@ -497,9 +382,31 @@ type RuntimeCheck struct {
 	Link string `json:"link,omitempty"`
 }
 
-// Diagnoser is a runtime that checks itself.
-type Diagnoser interface {
-	Diagnose(ctx context.Context) ([]RuntimeCheck, error)
+// SignedIn says whether sbx is signed in to Docker, as sbx diagnose sees
+// it. A release without the check is taken as signed in; listing its
+// sandboxes says otherwise.
+func (r *SBX) SignedIn(ctx context.Context) (bool, error) {
+	checks, err := r.Diagnose(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range checks {
+		if c.Name == "Authentication" {
+			return c.Status == "pass", nil
+		}
+	}
+	return true, nil
+}
+
+// Login runs sbx login on the user's terminal, where sbx asks for what it
+// needs; nothing of it passes through unibox.
+func (r *SBX) Login(ctx context.Context, in io.Reader, out, errout io.Writer) error {
+	c := hostCommand(ctx, "sbx", "login")
+	c.Stdin, c.Stdout, c.Stderr = in, out, errout
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("sbx login did not finish; run unibox init again to sign in: %w", err)
+	}
+	return nil
 }
 
 // Diagnose is sbx diagnose: its installation, the daemon, the sign-in.

@@ -2,33 +2,29 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tobola/unibox/internal/unibox"
+	"golang.org/x/term"
 )
 
-const sshAgentRisk = "An agent then signs with every key in your SSH agent: it can push to every repository and reach every server your keys reach, as you, beyond the services the profile names. It never sees the keys, and cannot add or remove them."
+const sshAgentRisk = "An agent then signs with every key in your SSH agent: it can push to every repository and reach every server your keys reach, as you, beyond the services the env names. It never sees the keys, and cannot add or remove them."
 
 // setSSHAgent records whether sandboxes may use the user's SSH agent, and
 // has sbx forward it or not to match, restarting its daemon if it must.
 func (o *options) setSSHAgent(cmd *cobra.Command, on bool) error {
 	cfg := o.manager.Config
-	r := cfg.Runtimes["sbx"]
-	r.SSHAgent = &on
-	if cfg.Runtimes == nil {
-		cfg.Runtimes = map[string]unibox.RuntimeConfig{}
-	}
-	cfg.Runtimes["sbx"] = r
+	cfg.SSHAgentOn = &on
 	if err := o.paths.SaveConfig(cfg); err != nil {
 		return err
 	}
 	o.manager.Config = cfg
-	sbx, ok := o.manager.Runtimes["sbx"].(*unibox.SBX)
-	if !ok || !sbx.Present() {
+	sbx := o.manager.SBX
+	if !sbx.Present() {
 		return nil
 	}
-	sbx.SSHAgent = on
+	sbx.AllowSSHAgent(on)
 	now, err := sbx.SSHForwarding(cmd.Context())
 	if err != nil || now == on {
 		return err
@@ -68,10 +64,9 @@ func (o *options) working(what string, do func() error) error {
 	}
 }
 
-// askSSHAgent is the question init asks once, where sbx is the runtime:
-// whether sandboxes may use the user's SSH agent.
+// askSSHAgent is the question init asks once: whether sandboxes may use the user's SSH agent.
 func (o *options) askSSHAgent(cmd *cobra.Command) error {
-	if _, said := o.manager.Config.SSHAgent("sbx"); said || o.manager.DefaultRuntime() != "sbx" {
+	if _, said := o.manager.Config.SSHAgent(); said {
 		return nil
 	}
 	choice, err := o.askPick("SSH agent in sandboxes", "With it, git over SSH works in a sandbox with no token - a mounted checkout pushes as you do. "+sshAgentRisk, []pick{
@@ -82,4 +77,34 @@ func (o *options) askSSHAgent(cmd *cobra.Command) error {
 		return err
 	}
 	return o.setSSHAgent(cmd, choice == "yes")
+}
+
+// waiting shows a spinner while do runs, as long as it takes more than a
+// moment, and takes it away after: what follows, a list or a table, is
+// what stays. Only on a terminal; anywhere else it would be noise in what
+// a program reads.
+func (o *options) waiting(what string, do func() error) error {
+	f, ok := o.log.(*os.File)
+	if !ok || o.json || !term.IsTerminal(int(f.Fd())) {
+		return do()
+	}
+	done := make(chan error, 1)
+	go func() { done <- do() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(150 * time.Millisecond):
+	}
+	frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for i := 0; ; i++ {
+		fmt.Fprintf(f, "\r%c %s", frames[i%len(frames)], what)
+		select {
+		case err := <-done:
+			fmt.Fprint(f, "\r\x1b[K")
+			return err
+		case <-tick.C:
+		}
+	}
 }

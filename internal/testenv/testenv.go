@@ -27,7 +27,7 @@ import (
 var Tools = []string{
 	"git", "go",
 	"sh", "cat", "printf", "echo", "sleep", "true", "false", "env",
-	"mkdir", "rm", "mv", "cp", "ln", "touch", "chmod", "ls", "pwd",
+	"mkdir", "rm", "rmdir", "mv", "cp", "ln", "touch", "chmod", "ls", "pwd",
 	"head", "tail", "grep", "sed", "tr", "cut", "wc", "sort", "tee",
 	"dirname", "basename", "readlink", "date", "kill", "du", "find",
 }

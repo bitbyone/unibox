@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"cmp"
+	"context"
 	"fmt"
+	"io"
 	"os"
-	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/unibox"
@@ -21,141 +24,211 @@ type doctorCheck struct {
 	Hint    string `json:"hint,omitempty"`
 }
 
-// doctorCommand checks what a run needs, before a run fails on it: the
-// runtime, the environments repository, the user's values and each
-// profile's tokens, logins and image.
+// doctorCommand checks what a run needs, before a run fails on it: sbx,
+// each env's files, the person's args and secrets, and the sandboxes unibox
+// keeps.
 func (o *options) doctorCommand() *cobra.Command {
-	var profile string
-	c := &cobra.Command{Use: "doctor", Args: cobra.NoArgs, Short: "Check the runtime, the environments repository and the profiles, and say what to fix", RunE: func(cmd *cobra.Command, args []string) error {
+	var only string
+	c := &cobra.Command{Use: "doctor", Args: cobra.NoArgs, Short: "Check sbx, the envs, your args and secrets, and the sandboxes, and say what to fix", RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		checks := []doctorCheck{}
 		add := func(area, name, status, message, hint string) {
 			checks = append(checks, doctorCheck{area, name, status, message, hint})
 		}
-		rt := o.manager.DefaultRuntime()
-		runtime := "Runtime " + rt
-		if missing := o.runtimeMissing(); missing != "" {
-			add("Runtime", "installed", "fail", missing, "")
+		sbx := o.manager.SBX
+		sbxOK := false
+		if !sbx.Present() {
+			add("sbx", "installed", "fail", "sbx is not on PATH", "install Docker Sandboxes: https://docs.docker.com/ai/sandboxes/")
 		} else {
-			r := o.manager.Runtimes[rt]
-			add(runtime, "installed", "pass", "found", "")
-			if d, ok := r.(unibox.Diagnoser); ok {
-				var found []unibox.RuntimeCheck
-				err := o.working("checking "+rt, func() error {
+			add("sbx", "installed", "pass", "found", "")
+			var found []unibox.RuntimeCheck
+			err := o.working("checking sbx", func() error {
+				var err error
+				found, err = sbx.Diagnose(ctx)
+				return err
+			})
+			if err != nil {
+				add("sbx", "diagnose", "warn", err.Error(), "")
+			}
+			sbxOK = err == nil
+			for _, c := range found {
+				if c.Status == "skip" {
+					continue
+				}
+				if c.Status == "fail" {
+					sbxOK = false
+				}
+				hint := c.Hint
+				if c.Link != "" {
+					hint = strings.TrimSpace(strings.Replace(hint, " from the link above", "", 1)) + ": " + c.Link
+				}
+				add("sbx", c.Name, c.Status, c.Message, hint)
+			}
+			if version, err := sbx.Version(ctx); err != nil {
+				add("sbx", "for unibox", "warn", err.Error(), "")
+			} else if !unibox.VersionAtLeast(version, unibox.MinSBXVersion) {
+				sbxOK = false
+				add("sbx", "for unibox", "fail", version+", older than the "+unibox.MinSBXVersion+" unibox needs", "update Docker Sandboxes")
+			} else {
+				add("sbx", "for unibox", "pass", version+", new enough", "")
+			}
+			if remember, err := sbx.Setting(ctx, "env.rememberHostCommands"); err == nil {
+				if remember == "true" {
+					add("sbx", "host commands", "warn", "sbx runs an env's host commands again without asking", "unibox config set remember_host_commands false has it ask each time")
+				} else {
+					add("sbx", "host commands", "pass", "sbx asks before an env's host commands run", "")
+				}
+			}
+			allowed, said := o.manager.Config.SSHAgent()
+			forwarding, err := sbx.SSHForwarding(ctx)
+			switch {
+			case err != nil:
+				add("sbx", "SSH agent", "warn", err.Error(), "")
+			case forwarding && !allowed:
+				add("sbx", "SSH agent", "fail", "sbx forwards your SSH agent, which you have not allowed", "unibox config set ssh_agent false turns it off, or true allows it")
+			case !forwarding && allowed:
+				add("sbx", "SSH agent", "warn", "you allowed the SSH agent, but sbx does not forward it", "unibox config set ssh_agent true sets sbx to match")
+			case forwarding:
+				add("sbx", "SSH agent", "pass", "forwarded, as you allowed", "")
+			case said:
+				add("sbx", "SSH agent", "pass", "not forwarded, as you chose", "")
+			default:
+				add("sbx", "SSH agent", "pass", "not forwarded", "")
+			}
+		}
+		if _, err := o.paths.LoadEnvValues(); err != nil {
+			add("Your args", "vars.toml", "fail", err.Error(), "")
+		}
+		names := sorted(o.manager.Config.Envs)
+		if only != "" {
+			names = []string{only}
+		}
+		if len(names) == 0 {
+			add("Envs", "configured", "fail", "no env yet", "unibox env add <name> <file.sbxenv.yaml>")
+		}
+		state, _ := o.paths.ReadState()
+		behind := map[string]int{}
+		for _, name := range names {
+			area := "Env " + name
+			env, err := o.manager.Config.LoadEnv(name)
+			if err != nil {
+				add(area, "files", "fail", err.Error(), "")
+				continue
+			}
+			add(area, "files", "pass", strings.Join(env.SBX.Files, ", "), "")
+			values, _ := o.paths.LoadEnvValues()
+			mine := values.ArgsFor(env)
+			if missing := env.SBX.Missing(mine); len(missing) > 0 {
+				for _, a := range missing {
+					add(area, "arg "+a, "fail", cmp.Or(env.SBX.Args[a].Description, "required, and not set"), "unibox var set -e "+name+" "+a+" <value>")
+				}
+			} else if unknown, err := env.SBX.CheckArgs(mine); err != nil {
+				add(area, "args", "fail", err.Error(), "")
+			} else {
+				add(area, "args", "pass", "given", "")
+				for _, u := range unknown {
+					add(area, "arg "+u, "warn", "set, but the env declares no such arg", "unibox var rm -e "+name+" "+u)
+				}
+				if sbxOK {
+					var plan string
+					err := o.working("planning env "+name, func() error {
+						var err error
+						plan, err = o.manager.Plan(ctx, env)
+						return err
+					})
+					if err != nil {
+						add(area, "plan", "fail", err.Error(), "fix the env's files; unibox env show "+name+" shows what they declare")
+					} else {
+						add(area, "plan", "pass", plan, "")
+					}
+				}
+			}
+			sandbox := env.SandboxName()
+			if !sbxOK {
+				add(area, "secrets", "warn", "not checked: sbx is not ready", "")
+			} else {
+				var secrets []unibox.NeededSecret
+				err := o.working("reading the kits of env "+name, func() error {
 					var err error
-					found, err = d.Diagnose(ctx)
+					secrets, err = o.manager.NeededSecrets(ctx, env, sandbox)
 					return err
 				})
 				if err != nil {
-					add(runtime, "diagnose", "warn", err.Error(), "")
+					add(area, "secrets", "warn", err.Error(), "")
 				}
-				for _, c := range found {
-					if c.Status == "skip" {
-						continue
+				for _, l := range secrets {
+					switch {
+					case l.Stored:
+						add(area, "secret "+l.Service, "pass", "stored ("+l.Scope+")", "")
+					case l.Optional:
+						add(area, "secret "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "unibox secret set -e "+name+" "+l.Service)
+					default:
+						add(area, "secret "+l.Service, "fail", cmp.Or(l.Description, "not stored"), "unibox secret set -e "+name+" "+l.Service)
 					}
-					hint := c.Hint
-					if c.Link != "" {
-						hint = strings.TrimSpace(strings.Replace(hint, " from the link above", "", 1)) + ": " + c.Link
+				}
+			}
+			if changed(state, env, values) {
+				add(area, "sandbox "+sandbox, "warn", "the env changed since the sandbox was created", "unibox sandbox recreate "+sandbox)
+			}
+			if repo := env.Config.Repo; env.Config.Source != "" && repo != "" {
+				if _, done := behind[repo]; !done {
+					var n int
+					err := o.working("asking the remote of "+repo, func() (err error) {
+						ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+						defer cancel()
+						n, err = unibox.Behind(ctx, repo)
+						return err
+					})
+					behind[repo] = n
+					switch {
+					case err != nil:
+						add(area, "clone", "warn", err.Error(), "")
+					case n > 0:
+						add(area, "clone", "warn", fmt.Sprintf("%d commit(s) behind its remote", n), "unibox env update")
+					default:
+						add(area, "clone", "pass", "as its remote", "")
 					}
-					add(runtime, c.Name, c.Status, c.Message, hint)
-				}
-			}
-			if s, ok := r.(*unibox.SBX); ok {
-				allowed, said := o.manager.Config.SSHAgent("sbx")
-				forwarding, err := s.SSHForwarding(ctx)
-				switch {
-				case err != nil:
-					add(runtime, "SSH agent", "warn", err.Error(), "")
-				case forwarding && !allowed:
-					add(runtime, "SSH agent", "fail", "sbx forwards your SSH agent, which you have not allowed", "unibox config set runtimes.sbx.ssh_agent false turns it off, or true allows it")
-				case !forwarding && allowed:
-					add(runtime, "SSH agent", "warn", "you allowed the SSH agent, but sbx does not forward it", "unibox config set runtimes.sbx.ssh_agent true sets sbx to match")
-				case forwarding:
-					add(runtime, "SSH agent", "pass", "forwarded, as you allowed", "")
-				case said:
-					add(runtime, "SSH agent", "pass", "not forwarded, as you chose", "")
-				default:
-					add(runtime, "SSH agent", "pass", "not forwarded", "")
 				}
 			}
 		}
-		root, err := o.manager.Environments()
-		if err != nil {
-			add("Environments", "repository", "fail", err.Error(), "")
-		} else {
-			add("Environments", "repository", "pass", root, "")
-			problems, err := unibox.Validate(root)
+		if sbxOK {
+			boxes, err := o.manager.List(ctx)
 			if err != nil {
-				add("Environments", "valid", "fail", err.Error(), "")
+				add("Sandboxes", "state", "fail", err.Error(), "")
 			}
-			for _, p := range problems {
-				add("Environments", p.Subject, "fail", p.Message, "")
-			}
-		}
-		if _, err := o.paths.LoadVars(); err != nil {
-			add("Your values", "vars.toml", "fail", err.Error(), "")
-		} else {
-			add("Your values", "vars.toml", "pass", o.paths.VarsFile(), "")
-		}
-		names := []string{}
-		if profile != "" {
-			names = []string{profile}
-		} else if root != "" {
-			if rows, err := o.manager.Profiles(ctx); err == nil {
-				for _, r := range rows {
-					names = append(names, r.Name)
+			for _, b := range boxes {
+				if b.State == "missing" {
+					add("Sandboxes", b.Name, "warn", "sbx no longer has it", "unibox prune forgets it, or unibox sandbox recreate "+b.Name+" makes it again")
+					continue
 				}
-			}
-		}
-		store, storeErr := o.secretStore()
-		for _, name := range names {
-			area := "Profile " + name
-			p, err := o.manager.Profile(name)
-			if err != nil {
-				add(area, "loads", "fail", err.Error(), "")
-				continue
-			}
-			ok := true
-			for _, v := range p.MissingVars() {
-				ok = false
-				add(area, "var "+v, "fail", "no value: "+p.Vars[v], "unibox var set "+v+" <value>")
-			}
-			for _, ref := range slices.DeleteFunc(p.SecretRefs(), func(n string) bool { return p.ReadBy(n) != "" }) {
-				if storeErr != nil {
-					add(area, "secret "+ref, "fail", storeErr.Error(), "")
-					ok = false
-				} else if has, _ := store.Has(ctx, ref); !has {
-					ok = false
-					add(area, "secret "+ref, "fail", "not in "+store.Name(), "unibox agent login -i -p "+name+", unibox secret set "+ref+", or unibox secret source")
+				if b.State == "running" {
+					var missing [][2]string
+					var stray [][2]string
+					err := o.working("reading the mounts of sandbox "+b.Name, func() error {
+						var err error
+						missing, stray, err = o.manager.MountDrift(ctx, b)
+						return err
+					})
+					if err != nil {
+						add("Sandboxes", b.Name, "warn", "mounts not checked: "+err.Error(), "")
+					}
+					for _, mt := range missing {
+						add("Sandboxes", b.Name, "warn", mt[0]+" is not mounted at "+mt[1], "unibox resume of its task mounts it again")
+					}
+					for _, mt := range stray {
+						add("Sandboxes", b.Name, "warn", mt[0]+" is mounted at "+mt[1]+", but no task has it", "unibox prune unmounts it")
+					}
 				}
-			}
-			if ok {
-				add(area, "values and tokens", "pass", "given", "")
-			}
-			r, rOK := o.manager.Runtimes[rt]
-			if !rOK {
-				continue
-			}
-			if err := r.Available(ctx); err != nil {
-				add(area, "logins and image", "warn", "not checked: "+err.Error(), "")
-				continue
-			}
-			if !unibox.InUse(ctx, r) {
-				// Looking would install it; the first run does that.
-				add(area, "logins and image", "warn", "not checked: "+rt+" installs itself on the first run", "")
-				continue
-			}
-			if a, isAuth := r.(unibox.Authenticator); isAuth {
-				// A missing login is asked for by the first run, so it is
-				// told, not failed.
-				for _, n := range a.AuthNeeds(ctx, "unibox-"+name, p) {
-					add(area, "agent "+n.Agent, "warn", n.Message, "unibox agent login -i -p "+name+" (or the first run asks)")
+				for _, t := range b.Tasks {
+					for _, r := range t.Repositories {
+						if !r.Mounted {
+							continue
+						}
+						if _, err := os.Stat(r.HostPath); err != nil {
+							add("Sandboxes", b.Name, "fail", "task "+t.ID+" mounts "+r.HostPath+", which is gone, so the sandbox cannot start", "unibox task rm "+t.ID)
+						}
+					}
 				}
-			}
-			if _, err := o.manager.Built(ctx, p, r); err != nil {
-				add(area, "image", "warn", "not built for "+rt, "unibox profile build "+name+" (or the first run builds it)")
-			} else {
-				add(area, "image", "pass", "built", "")
 			}
 		}
 		failed := 0
@@ -176,7 +249,7 @@ func (o *options) doctorCommand() *cobra.Command {
 		}
 		return nil
 	}}
-	c.Flags().StringVarP(&profile, "profile", "p", "", "Check this profile alone (default: every profile)")
+	c.Flags().StringVarP(&only, "env", "e", "", "Check this env alone (default: every env)")
 	return c
 }
 
@@ -224,4 +297,20 @@ func (o *options) painter() func(style, text string) string {
 	}
 	codes := map[string]string{"bold": "1", "dim": "2", "green": "32", "yellow": "33", "red": "31"}
 	return func(style, text string) string { return "\x1b[" + codes[style] + "m" + text + "\x1b[0m" }
+}
+
+// changed says whether the env is no longer what its sandbox was created
+// from, as far as unibox made it and the person's values let it be told.
+func changed(state unibox.State, env unibox.Env, values unibox.EnvValues) bool {
+	mine := values.ArgsFor(env)
+	b, ok := state.Sandboxes[env.SandboxName()]
+	if !ok || b.Env != env.Name || b.Fingerprint == "" || b.Adopted || env.SBX.Missing(mine) != nil {
+		return false
+	}
+	r, err := values.ResourcesFor(env.Name, env.SandboxName()).Resolve(unibox.HostResources(), io.Discard)
+	if err != nil {
+		return false
+	}
+	fp, err := env.SBX.Fingerprint(env.SBX.Declared(mine), r)
+	return err == nil && fp != b.Fingerprint
 }
