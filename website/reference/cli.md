@@ -251,6 +251,7 @@ unpushed work. A mounted directory is unmounted first and never deleted.
 ### `unibox sandbox`
 
 ```
+unibox sandbox
 unibox sandbox create [<name>] [-e <env>] [--adopt]
 unibox sandbox ls
 unibox sandbox inspect [<sandbox>]
@@ -259,6 +260,21 @@ unibox sandbox stop [<sandbox>]
 unibox sandbox recreate [<sandbox>]
 unibox sandbox rm <sandbox> [--force]
 ```
+
+Alone at a terminal, `unibox sandbox` lists the sandboxes to act on one
+by a key; elsewhere it is `sandbox ls`:
+
+| Key | What it does |
+| --- | --- |
+| `↑` `↓`, `j` `k` | move |
+| `enter` | its tasks, as `unibox task -s` |
+| `s` | a shell, as `sandbox shell` |
+| `p` | its ports, as `unibox port -s` |
+| `i` | what unibox keeps of it, as `sandbox inspect` |
+| `t` | stop it |
+| `c` | recreate it, after `y` |
+| `d` | remove it, after `y`; running sessions and unpushed work still stop it |
+| `q`, `esc` | leave |
 
 `create` creates a sandbox from an env, named as the env names it unless a
 name is given. `--adopt` takes over a sandbox sbx already has, made from the

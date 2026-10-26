@@ -132,28 +132,7 @@ func (m tasksModel) View() string {
 		}
 		cols = append(cols, []string{name, r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, ", ")})
 	}
-	widths := make([]int, len(cols[0]))
-	for _, c := range cols {
-		for i, v := range c {
-			widths[i] = max(widths[i], len(v))
-		}
-	}
-	for n, c := range cols {
-		cells := []string{}
-		for i, v := range c {
-			cells = append(cells, fmt.Sprintf("%-*s", widths[i], v))
-		}
-		line := strings.TrimRight(strings.Join(cells, "  "), " ")
-		switch {
-		case n == 0:
-			line = "  " + portHelp.Render(line)
-		case n-1 == m.cursor:
-			line = "> " + portCursor.Render(line)
-		default:
-			line = "  " + line
-		}
-		b.WriteString(line + "\n")
-	}
+	b.WriteString(drawTable(cols, m.cursor))
 	b.WriteString("\n")
 	row := m.rows[m.cursor]
 	switch m.mode {
@@ -173,6 +152,35 @@ func (m tasksModel) View() string {
 		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
 	default:
 		b.WriteString(portHelp.Render("↑/↓ j/k move · enter/r resume · a another agent · s shell · n rename · d remove · q quit") + "\n")
+	}
+	return b.String()
+}
+
+// drawTable draws a list's columns, its first row the header, the row
+// under the cursor marked.
+func drawTable(cols [][]string, cursor int) string {
+	widths := make([]int, len(cols[0]))
+	for _, c := range cols {
+		for i, v := range c {
+			widths[i] = max(widths[i], len(v))
+		}
+	}
+	var b strings.Builder
+	for n, c := range cols {
+		cells := []string{}
+		for i, v := range c {
+			cells = append(cells, fmt.Sprintf("%-*s", widths[i], v))
+		}
+		line := strings.TrimRight(strings.Join(cells, "  "), " ")
+		switch {
+		case n == 0:
+			line = "  " + portHelp.Render(line)
+		case n-1 == cursor:
+			line = "> " + portCursor.Render(line)
+		default:
+			line = "  " + line
+		}
+		b.WriteString(line + "\n")
 	}
 	return b.String()
 }

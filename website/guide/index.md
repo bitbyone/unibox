@@ -158,6 +158,7 @@ unibox task                    # pick a task and act on it by a key
 unibox task ls                 # every task, in every sandbox
 unibox resume <task>           # continue it later
 unibox resume <task> --shell   # a shell in the task's directory
+unibox sandbox                 # pick a sandbox: tasks, shell, ports, stop, recreate
 unibox sandbox ls              # every sandbox
 ```
 
