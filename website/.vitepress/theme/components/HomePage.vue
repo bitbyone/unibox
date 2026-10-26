@@ -44,6 +44,18 @@ const flow = [
   },
 ]
 
+const compare = [
+  { what: 'Getting the env', sbx: "Clone the team's repository, pick the sbxenv file, run sbx env create.", unibox: 'unibox init clones it, lets you pick the envs and creates the sandbox.' },
+  { what: 'Your own values', sbx: '--env-arg and --kit-arg on every create.', unibox: 'Asked once, kept in vars.toml, given to every create.' },
+  { what: 'Tokens', sbx: 'sbx secret set for each name the kits need, found in their files.', unibox: 'unibox secret lists what the env needs and which are missing.' },
+  { what: 'Working on a repository', sbx: 'Mount it at create, sbx exec into the sandbox, start the agent.', unibox: 'unibox run mounts or clones it and starts the agent, as a task to resume.' },
+  { what: 'Ports', sbx: 'sbx ports --publish with numbers.', unibox: 'Ports by name from the env, switched with unibox port on vite.' },
+  { what: 'Network', sbx: 'sbx policy over the whole policy; a rule needs the sandbox to exist.', unibox: "The sandbox's own rules, kept and applied after each recreate, beside the hosts it was refused." },
+  { what: 'Resources', sbx: "What the sbxenv file says.", unibox: 'Your CPUs and memory per env or sandbox, also as a share of the host.' },
+  { what: 'Env changes', sbx: 'git pull, then recreate by hand.', unibox: 'unibox env update; the next start says what changed, recreate keeps your tasks.' },
+  { what: 'Checks', sbx: 'sbx diagnose.', unibox: 'unibox doctor adds the envs, your values, the tokens and the sandboxes.' },
+]
+
 const features = [
   {
     title: 'One command to set up',
@@ -145,6 +157,28 @@ const features = [
         Inside the sandbox every token is a placeholder. sbx's proxy on your machine swaps in the
         real value, only for the hosts the env allows.
       </p>
+    </section>
+
+    <section class="compare" aria-label="unibox beside sbx">
+      <h2>What unibox adds to sbx</h2>
+      <p class="sub">
+        unibox is optional. The env files are plain sbx: anyone can use them with
+        <code>sbx env create</code> alone, and removing unibox takes nothing away from the team.
+      </p>
+      <div class="table">
+        <table>
+          <thead>
+            <tr><th></th><th>sbx alone</th><th>with unibox</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in compare" :key="row.what">
+              <th scope="row">{{ row.what }}</th>
+              <td>{{ row.sbx }}</td>
+              <td>{{ row.unibox }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="screen" aria-label="unibox in a terminal">
@@ -465,6 +499,46 @@ h2 {
 }
 .formula span { color: var(--ub-brand); }
 .formula .dim { color: var(--vp-c-text-3); }
+
+.compare h2 { text-align: center; }
+.compare .sub {
+  margin: 16px auto 40px;
+  max-width: 640px;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--vp-c-text-2);
+}
+.compare .sub code {
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--ub-brand-soft);
+  color: var(--ub-brand);
+}
+.compare .table {
+  overflow-x: auto;
+  border: 1px solid var(--ub-frame);
+  border-radius: 14px;
+}
+.compare table { width: 100%; border-collapse: collapse; margin: 0; display: table; }
+.compare th,
+.compare td {
+  padding: 14px 20px;
+  border: none;
+  border-bottom: 1px solid var(--ub-frame);
+  text-align: left;
+  vertical-align: top;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.compare tbody tr:last-child th,
+.compare tbody tr:last-child td { border-bottom: none; }
+.compare tr { background: none; border: none; }
+.compare thead th { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--vp-c-text-3); background: var(--ub-code-bg); }
+.compare tbody th { font-weight: 600; color: var(--vp-c-text-1); white-space: nowrap; }
+.compare td { color: var(--vp-c-text-2); }
+.compare td:last-child { color: var(--vp-c-text-1); }
 
 .features h2 { text-align: center; margin-bottom: 48px; }
 .grid {
