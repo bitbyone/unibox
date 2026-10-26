@@ -180,12 +180,12 @@ Arguments after `--` go to it.
 
 ## Ports
 
-`unibox port set fe --map 3000:3000 -e dev` publishes a sandbox port on
-the host's loopback by name, at every start unless `--off`; the mapping
-is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. Ports are yours, kept
-with the env in `config.yaml`. `unibox port ls -s <sandbox>` lists them
-with their URLs, `port publish` and `port unpublish` switch them while it
-runs.
+Ports are named in files, by hand, and published on the host's loopback
+at every start unless they say `default: off`; yours go under `ports:` in
+`config.yaml`, the mapping `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`.
+`unibox port ls -s <sandbox>` lists them with their URLs; `port on` and
+`port off` switch them while it runs, `port on vite=15173` on another host
+port.
 
 A team names the ports everyone uses beside its sbxenv file, in a file sbx
 never reads - `dev.unibox.yaml` for `dev.sbxenv.yaml` - so nobody without
@@ -197,8 +197,8 @@ ports:
   storybook: {port: '6006', description: Storybook}
 ```
 
-Each person switches them with `unibox port on|off <name>`; their choice
-wins over the team's default.
+Each person changes them for themselves in `config.yaml`, which wins over
+the team's file.
 
 ## Network
 

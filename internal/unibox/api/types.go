@@ -68,9 +68,11 @@ type Sandbox struct {
 	Runs    []Run  `json:"runs"`
 	// Ports are what unibox published of the sandbox, by name - an env's
 	// port, or a spec switched on for the sandbox alone - and PortSwitches
-	// what was switched for it until it next starts.
+	// what was switched for it until it next starts; PortMaps the mapping
+	// a named port was switched on with in place of its own, as long.
 	Ports        map[string]string `json:"ports,omitempty"`
 	PortSwitches map[string]bool   `json:"port_switches,omitempty"`
+	PortMaps     map[string]string `json:"port_maps,omitempty"`
 }
 
 // PublishedPort is a sandbox port published on the host, as the runtime

@@ -82,7 +82,7 @@ unibox init
 
 init finds every `*.sbxenv.yaml` in the repository and offers them to
 pick, several at once; each becomes an env, named as the file names its
-sandbox. It then walks you through six steps at the terminal. Each runs the
+sandbox. It then walks you through five steps at the terminal. Each runs the
 command it stands for, so what the walk does and what the commands do never
 differ, and a step already done is only said. Running it again adds what is
 new - a file the team added, an arg it now asks for - and skips the rest.
@@ -93,7 +93,6 @@ new - a file the team added, an arg it now asks for - and skips the rest.
 | Envs | names each sbxenv file you picked as an env, as `unibox env add`, and which is the default when there are several |
 | Values | asks for the args the files require and you have not set, as `unibox var set` |
 | Logins | lists the tokens the envs' kits need and has sbx ask for the missing ones, as `unibox login set` |
-| Ports | offers the [ports the team named](./ports#the-team-s-ports) to switch on or off, as `unibox port on` |
 | Sandboxes | creates the envs' sandboxes, as `unibox sandbox create`; sbx shows what it makes and asks you to approve it |
 
 You need no checkout of the repository first: given its git address, init

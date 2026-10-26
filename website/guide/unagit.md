@@ -20,7 +20,7 @@ Agent - is unagit's to build, and not there yet.
   Zellij: `--json` for what it reads, `--yes` where a question would come.
 - **unagit configures unibox only through its commands** - an env with
   `unibox env add`, a person's values with `unibox var set`, logins with
-  `unibox login set`, ports with `unibox port`. unagit writes no YAML, and
+  `unibox login set`, a running sandbox's ports with `unibox port on`. unagit writes no YAML, and
   reads the team's sbxenv files only through `unibox env show --json`.
 
 `api_version` versions the JSON contract, and changes only when a field a

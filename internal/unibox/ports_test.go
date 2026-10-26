@@ -50,6 +50,31 @@ func TestPortsArePublishedByTheEnvAndSwitchedWhileASandboxRuns(t *testing.T) {
 	if err := m.SwitchPorts(ctx, "dev", map[string]bool{"nope": true}); err == nil || !strings.Contains(err.Error(), "has no port nope") {
 		t.Fatalf("%v", err)
 	}
+	// A named port on another host port, its sandbox port kept, until it
+	// is switched again.
+	if err := m.SwitchPorts(ctx, "dev", map[string]bool{"fe=13000": true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.hostPorts("dev"); !slices.Equal(got, []int{7000, 9333, 13000, 49152}) {
+		t.Fatalf("moved: %v", got)
+	}
+	if ports, _, _ = m.SandboxPorts(ctx, "dev"); ports[1].Name != "fe" || ports[1].Spec != "13000:3000" || len(ports[1].Published) != 1 {
+		t.Fatalf("%+v", ports)
+	}
+	for _, bad := range []string{"fe=x", "fe=0", "fe=070000", "nope=1", "3002=1"} {
+		if err := m.SwitchPorts(ctx, "dev", map[string]bool{bad: true}); err == nil {
+			t.Fatalf("%s was taken", bad)
+		}
+	}
+	if err := m.SwitchPorts(ctx, "dev", map[string]bool{"fe=13000": false}); err == nil {
+		t.Fatal("a host port was taken to switch a port off")
+	}
+	if err := m.SwitchPorts(ctx, "dev", map[string]bool{"fe": false}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := m.sandbox("dev"); b.PortMaps != nil || f.hostPorts("dev")[1] != 9333 || len(f.hostPorts("dev")) != 3 {
+		t.Fatalf("%+v %v", b.PortMaps, f.hostPorts("dev"))
+	}
 
 	// sbx keeps ports across a stop, with an ephemeral one moved; the next
 	// start goes back to the env's defaults.
@@ -76,9 +101,11 @@ func TestPortsArePublishedByTheEnvAndSwitchedWhileASandboxRuns(t *testing.T) {
 	}
 	f.setState("dev", "running")
 
-	// A change of the env's ports is applied live to a running sandbox.
+	// A change of the env's ports reaches a running sandbox at its next
+	// session.
 	setPorts(map[string]Port{"fe": {Spec: "3100:3000", Default: true}})
-	if err := m.ApplyPorts(ctx, "dev"); err != nil {
+	b, _ = m.sandbox("dev")
+	if err := m.ensure(ctx, &b, mustEnv(t, m), false); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.hostPorts("dev"); !slices.Equal(got, []int{3100, 7000}) {

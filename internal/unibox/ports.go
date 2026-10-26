@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -183,7 +184,7 @@ func wantedPorts(ports map[string]Port, b api.Sandbox) map[string]string {
 			on = v
 		}
 		if on {
-			want[name] = port.Spec
+			want[name] = cmp.Or(b.PortMaps[name], port.Spec)
 		}
 	}
 	for key, on := range b.PortSwitches {
@@ -302,7 +303,8 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	add := func(name string, p Port, named bool) {
 		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, Named: named}
 		spec := p.Spec
-		if _, s.On = want[name]; s.On {
+		if w, on := want[name]; on {
+			spec, s.Spec, s.On = w, w, true
 			parsed, _ := ParsePortSpec(spec)
 			for _, q := range actual {
 				if parsed.matches(q) {
@@ -323,9 +325,27 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	return out, running, nil
 }
 
+// withHost is the spec with another host port, its host address and
+// protocol kept.
+func (p PortSpec) withHost(port int) string {
+	s := strconv.Itoa(port) + ":" + strconv.Itoa(p.SandboxPort)
+	if p.HostIP != "" {
+		ip := p.HostIP
+		if strings.Contains(ip, ":") {
+			ip = "[" + ip + "]"
+		}
+		s = ip + ":" + s
+	}
+	if p.Protocol != "" {
+		s += "/" + p.Protocol
+	}
+	return s
+}
+
 // SwitchPorts turns a running sandbox's ports on or off for as long as it
-// runs, by the env's name or, for a port the env does not name, by its
-// spec; the next start of the sandbox goes back to the env's defaults.
+// runs: by the env's name, by name=HOST_PORT for one of them on another
+// host port, or, for a port the env does not name, by its spec. The next
+// start of the sandbox goes back to the env's defaults.
 func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[string]bool) error {
 	guard, err := m.guard(name)
 	if err != nil {
@@ -341,49 +361,35 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 		return err
 	}
 	if b.State == "missing" || !exists || box.State != "running" {
-		return fmt.Errorf("sandbox %s is not running; a port switched now lasts while it runs - start it with unibox resume or unibox sandbox shell, or change the env's default with unibox port set", name)
+		return fmt.Errorf("sandbox %s is not running; a port switched now lasts while it runs - start it with unibox resume or unibox sandbox shell, or say default: on for the port in your config.yaml", name)
 	}
 	if b.PortSwitches == nil {
 		b.PortSwitches = map[string]bool{}
 	}
+	if b.PortMaps == nil {
+		b.PortMaps = map[string]string{}
+	}
 	for key, on := range switches {
-		if _, named := env.Ports[key]; !named {
-			if _, err := ParsePortSpec(key); err != nil {
+		key, host, moved := strings.Cut(key, "=")
+		port, named := env.Ports[key]
+		if !named {
+			if _, err := ParsePortSpec(key); moved || err != nil {
 				return fmt.Errorf("env %s has no port %s, and it is not a mapping either; unibox port ls -s %s lists them", env.Name, key, name)
 			}
 		}
+		delete(b.PortMaps, key)
+		if moved {
+			n, err := strconv.Atoi(host)
+			if !on || err != nil || n < 1 || n > 65535 || host != strconv.Itoa(n) {
+				return fmt.Errorf("%s=%s: give a host port from 1 to 65535 to switch the port on at, e.g. %s=15173", key, host, key)
+			}
+			spec, _ := ParsePortSpec(port.Spec)
+			b.PortMaps[key] = spec.withHost(n)
+		}
 		b.PortSwitches[key] = on
 	}
+	if len(b.PortMaps) == 0 {
+		b.PortMaps = nil
+	}
 	return m.syncPorts(ctx, &b, env)
-}
-
-// ApplyPorts brings every running sandbox of an env to its ports.
-func (m *Manager) ApplyPorts(ctx context.Context, envName string) error {
-	s, err := m.Paths.ReadState()
-	if err != nil {
-		return err
-	}
-	for _, name := range sortedKeys(s.Sandboxes) {
-		if s.Sandboxes[name].Env != envName {
-			continue
-		}
-		b, env, err := m.Definition(Request{Sandbox: name})
-		if err != nil {
-			return err
-		}
-		box, exists, err := m.findBox(ctx, b)
-		if err != nil || !exists || box.State != "running" {
-			continue
-		}
-		guard, err := m.guard(name)
-		if err != nil {
-			return err
-		}
-		err = m.syncPorts(ctx, &b, env)
-		guard.Close()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

@@ -446,8 +446,8 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 		}
 		// Ports switched for a sandbox last while it runs; it starts with
 		// the env's.
-		if box.State != "running" && len(b.PortSwitches) > 0 {
-			b.PortSwitches = nil
+		if box.State != "running" && (len(b.PortSwitches) > 0 || len(b.PortMaps) > 0) {
+			b.PortSwitches, b.PortMaps = nil, nil
 		}
 	}
 	if err = m.syncPorts(ctx, b, env); err != nil {
@@ -495,7 +495,7 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 		b.Tasks[i].State = "pending"
 	}
 	b.Fingerprint = fingerprint
-	b.Ports, b.PortSwitches = nil, nil
+	b.Ports, b.PortSwitches, b.PortMaps = nil, nil, nil
 	b.State = "running"
 	return m.saveBox(*b)
 }

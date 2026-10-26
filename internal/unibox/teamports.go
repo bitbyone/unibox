@@ -180,7 +180,7 @@ func envPorts(ec EnvConfig, global map[string]Port) (map[string]Port, error) {
 				if layer.from == FromYoursAll {
 					continue
 				}
-				return nil, fmt.Errorf("port %s says only whether it is on, and the env names no such port; unibox port unset %s takes it away", k, k)
+				return nil, fmt.Errorf("port %s says only whether it is on, and the env names no such port; take it out of the env's ports: in your config.yaml", k)
 			}
 			if !known {
 				p.From = layer.from

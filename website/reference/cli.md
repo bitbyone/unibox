@@ -8,7 +8,7 @@ unibox [command] [flags]
 
 **Nouns, then verbs.** Commands come in groups named for what they work on -
 `env`, `var`, `login`, `task`, `sandbox`, `port`, `herdr` - and the verb
-follows: `unibox sandbox stop`, `unibox port publish`. Only the everyday
+follows: `unibox sandbox stop`, `unibox port on`. Only the everyday
 commands stand alone: `run`, `resume`, `init`, `doctor`, `context`, `config`,
 `prune`, `destroy` and `version`.
 
@@ -268,27 +268,20 @@ does; `rm` always names it.
 ### `unibox port`
 
 ```
-unibox port set <name> --map <mapping> [--off] [-e <env> | -g]
-unibox port unset <name...> [-e <env> | -g]
-unibox port on <name...> [-e <env> | -g]
-unibox port off <name...> [-e <env> | -g]
+unibox port on [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
+unibox port off [name...] [--map <mapping>...] [-s <sandbox>]
 unibox port ls [-s <sandbox>]
-unibox port publish [name...] [--map <mapping>...] [-s <sandbox>]
-unibox port unpublish [name...] [--map <mapping>...] [-s <sandbox>]
 ```
 
-A port is published on the host's loopback. `set` and `unset` change the
-env's named ports, for its sandbox, and apply at once while it runs; `--off`
-publishes one only when asked to, not at start. `on` and `off` switch
-whether a port - the team's, from the repository's `unibox.yaml` or the
-`.unibox.yaml` beside the env's sbxenv file, or yours - is published at
-start; your choice wins over the team's default, and `unset` takes back
-what you changed of a team's port. With `-g` each changes your ports for
-every env, under each env's own; see
-[Ports](/guide/ports#which-wins) for the order.
-`publish` and `unpublish` switch a running sandbox's ports alone - the
-env's by name, others by `--map` - and its next start goes back to the
-env's. `ls` lists a sandbox's ports, where each comes from, and their URLs.
+A port is published on the host's loopback. The ports are named in files,
+by hand - the repository's `unibox.yaml`, the `.unibox.yaml` beside the
+env's sbxenv file, and your `config.yaml` - each saying whether a sandbox
+starts with it published; see [Ports](/guide/ports#which-wins) for the
+order. `on` and `off` switch a running sandbox's ports for as long as it
+runs - by name, `name=HOST_PORT` for a named port on another host port, or
+`--map` for one no file names - and its next start goes back to the
+files. They are refused on a stopped sandbox. `ls` lists a sandbox's
+ports, where each comes from, and their URLs.
 
 A mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`: `3000` takes
 any free host port, `8080:3000` host port 8080. See [Ports](/guide/ports).

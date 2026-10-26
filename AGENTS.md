@@ -119,9 +119,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **init starts from the team's repository** (`cli/init.go`): the
   current one, a path, or a git address, which it clones with the user's
   own git into `$XDG_DATA_HOME/unibox/repos/<host>/<path>`. It offers every
-  sbxenv file found and walks six steps: sbx, Envs, Values, Logins,
-  Ports, Sandboxes. A step runs its command (`login set`, `port on`,
-  `sandbox create`), so the walk and the commands never differ. Without a
+  sbxenv file found and walks five steps: sbx, Envs, Values, Logins,
+  Sandboxes. A step runs its command (`login set`, `sandbox create`), so the walk and the commands never differ. Without a
   terminal or with `--no-input` it asks nothing and fails naming the flag
   (`--file`, `--var`) that gives what is missing. `unibox doctor` checks
   what the walk sets up.
@@ -132,9 +131,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
   clones.
 - **What only unibox reads sits beside the sbxenv file.** The team's
   ports are in `<name>.unibox.yaml`, which sbx never reads, so a team
-  member without unibox is limited by nothing. The user's choice in
-  config.yaml (`port on|off`, an entry without a mapping) wins over the
-  team's default.
+  member without unibox is limited by nothing. Ports are written by
+  hand; the user's in config.yaml win over the team's, and `port on|off`
+  only switches a running sandbox's.
 - **Nobody using unibox needs sbx's CLI.** The network policy
   (`unibox network`), `env.rememberHostCommands` (`unibox config`) and
   stray mounts (`unibox prune`) have commands, and every hint doctor or

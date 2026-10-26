@@ -497,15 +497,19 @@ replaces.
 
 ## Ports
 
-Ports are the person's, not the team's: a host port is the machine's
-business - what already runs there, what number a browser knows - so they
-are kept with the env in config.yaml, never in an sbxenv.
+A host port is the machine's business - what already runs there, what
+number a browser knows - so a person's last word on it is in config.yaml,
+never in an sbxenv.
 
-- `unibox port set <name> --map [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]
-  [--off]` names one, published on the host's loopback at every start
-  unless `--off`. `port publish|unpublish [name...] [--map]` switch them
-  on a running sandbox, for as long as it runs; the next start goes back
-  to the env's defaults.
+- **Ports are written by hand.** The team's files and config.yaml's
+  `ports:` say each port's mapping and whether it is published at start;
+  no command writes them, as a command per field only stood between a
+  person and a short file. `port on|off [name[=HOST_PORT]...] [--map]`
+  publish and unpublish on a running sandbox alone, for as long as it
+  runs (`PortSwitches`, `PortMaps` in the state); the next start goes
+  back to the files. `name=HOST_PORT` keeps the named port's sandbox
+  port, host address and protocol. A stopped sandbox is refused, since
+  publishing would start it.
 - unibox records what it published, by name and mapping, finds sbx's
   entries by the mapping (any host port for an ephemeral one), unpublishes
   them by what sbx lists, and **leaves a port it did not publish alone** -
@@ -523,18 +527,14 @@ are kept with the env in config.yaml, never in an sbxenv.
   `unibox.yaml` at the root of the repository (the first directory up
   with `.git`) names ports for every env in it, under the env's own file.
 - **Four layers, the person's last.** The repository's, the env's file's,
-  the person's for every env (`ports:` at the top of config.yaml, `port
-  ... -g`) and the person's for the env. A switch for every env that an
+  the person's for every env (`ports:` at the top of config.yaml) and the
+  person's for the env. A switch for every env that an
   env does not name is skipped there, since another env may; one for a
   single env is an error, as it can only be a mistake. Each port carries
   where it was first named (`From`), which `port ls` shows.
-- **The person's choice wins.** `port on|off` writes an entry without a
-  mapping (`{default: on}`) into config.yaml, switching the team's port
-  alone; `port set` gives it another mapping; `unset` returns to the
-  team's, and refuses for a port the person never changed (`port off` is
-  what they meant). An entry equal to the team's is dropped, so
-  config.yaml holds only what differs. init's Ports step offers the team's
-  ports per env.
+- **The person's choice wins.** An entry without a mapping
+  (`{default: on}`) in config.yaml switches the team's port alone; one
+  with `port` gives it another mapping, its description kept.
 
 ## Network
 
@@ -576,10 +576,10 @@ Every fix doctor or an error names is a unibox command - `unibox prune`,
 `unibox config set remember_host_commands false`, `unibox login set` -
 never sbx's, so that nobody using unibox needs its CLI.
 
-`init` sets up what doctor checks, as a walk of six steps (`cli/init.go`):
+`init` sets up what doctor checks, as a walk of five steps (`cli/init.go`):
 sbx (installed, `sbx login` run for the person, the SSH agent), Envs,
-Values, Logins, Ports, Sandboxes. Each step runs the command it stands for
-(`env add`, `var set`, `login set`, `port on|off`, `sandbox create`), so the
+Values, Logins, Sandboxes. Each step runs the command it stands for
+(`env add`, `var set`, `login set`, `sandbox create`), so the
 walk and the commands never differ; what is in place already is only said.
 
 ## The SSH agent
@@ -679,7 +679,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox task check\|prepare …` | what stands in the way, as `needs` with a `code` each; the task ready, JSON at the end |
 | `unibox task ls [-s S]`, `task add-repo`, `task rename`, `task rm` | tasks across sandboxes; one more repository; an alias; removal |
 | `unibox sandbox create [--adopt]\|ls\|inspect\|shell\|stop\|recreate\|rm` | as named; removal checks for sessions and unpushed work |
-| `unibox port set\|unset\|ls\|publish\|unpublish` | named ports |
+| `unibox port on\|off\|ls` | a running sandbox's ports |
 | `unibox context [use -s S -e E \| clear]` | the sandbox and env commands work in when not told |
 | `unibox config get\|set\|unset` | `default_env`, `stop_idle`, `ssh_agent` |
 | `unibox prune` | forgets the sandboxes sbx no longer has |

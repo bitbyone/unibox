@@ -272,56 +272,28 @@ func TestArgsAreKeptByEnvAndCheckedAgainstIt(t *testing.T) {
 	}
 }
 
-func TestNamedPortsAreTheEnvsInYourConfig(t *testing.T) {
+func TestPortsAreSwitchedOnlyInARunningSandbox(t *testing.T) {
 	t.Parallel()
 	paths := cliFixture(t)
-	if _, _, err := run(t, paths, "", "port", "set", "fe", "--map", "3000:3000", "-e", "dev"); err != nil {
-		t.Fatal(err)
-	}
 	cfg, _ := paths.LoadConfig()
-	if cfg.Envs["dev"].Ports["fe"] != (unibox.Port{Spec: "3000:3000", Default: true}) {
-		t.Fatalf("%+v", cfg.Envs["dev"])
-	}
-	if _, _, err := run(t, paths, "", "port", "set", "be", "--map", "nope", "-e", "dev"); err == nil {
-		t.Fatal("a bad mapping was taken")
-	}
-	if _, _, err := run(t, paths, "", "port", "unset", "fe", "-e", "dev"); err != nil {
+	ec := cfg.Envs["dev"]
+	ec.Ports = map[string]unibox.Port{"fe": {Spec: "3000:3000"}}
+	cfg.Envs["dev"] = ec
+	if err := paths.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
-	if cfg, _ = paths.LoadConfig(); len(cfg.Envs["dev"].Ports) != 0 {
-		t.Fatalf("%+v", cfg.Envs["dev"])
-	}
-
-	// A port for every env is each env's, under the env's own.
-	if _, _, err := run(t, paths, "", "port", "set", "-g", "devtools", "--map", "9222:9222", "--off"); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := run(t, paths, "", "port", "on", "devtools", "-e", "dev"); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _ = paths.LoadConfig()
-	env, err := cfg.LoadEnv("dev")
-	if err != nil || cfg.Ports["devtools"] != (unibox.Port{Spec: "9222:9222"}) || env.Ports["devtools"] != (unibox.Port{Spec: "9222:9222", Default: true, From: unibox.FromYoursAll}) {
-		t.Fatalf("%v %+v %+v", err, cfg.Ports, env.Ports)
-	}
-	if _, _, err := run(t, paths, "", "port", "on", "-g", "absent"); err == nil {
-		t.Fatal("a port no env names was switched on for every env")
-	}
-	if _, _, err := run(t, paths, "", "port", "set", "-g", "-e", "dev", "x", "--map", "1"); err == nil {
-		t.Fatal("--global and -e were taken together")
-	}
-	// The env's switch would be left with nothing to switch.
-	if _, _, err := run(t, paths, "", "port", "unset", "-g", "devtools"); err == nil || !strings.Contains(err.Error(), "unibox port unset devtools") {
+	if _, _, err := run(t, paths, "", "port", "on", "-s", "dev"); err == nil || !strings.Contains(err.Error(), "name a port") {
 		t.Fatalf("%v", err)
 	}
-	if _, _, err := run(t, paths, "", "port", "unset", "devtools", "-e", "dev"); err != nil {
-		t.Fatal(err)
+	// The ports are written by hand; no command writes them.
+	if _, _, err := run(t, paths, "", "port", "set", "be", "--map", "1"); err == nil {
+		t.Fatal("port set is still there")
 	}
-	if _, _, err := run(t, paths, "", "port", "unset", "-g", "devtools"); err != nil {
-		t.Fatal(err)
+	if _, _, err := run(t, paths, "", "port", "on", "fe=13000", "-s", "dev"); err == nil {
+		t.Fatal("a port was switched in a sandbox that is not running")
 	}
-	if cfg, _ = paths.LoadConfig(); len(cfg.Ports) != 0 {
-		t.Fatalf("%+v", cfg.Ports)
+	if cfg, _ = paths.LoadConfig(); cfg.Envs["dev"].Ports["fe"] != (unibox.Port{Spec: "3000:3000"}) {
+		t.Fatalf("%+v", cfg.Envs["dev"].Ports)
 	}
 }
 

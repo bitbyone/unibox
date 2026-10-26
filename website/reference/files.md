@@ -49,11 +49,12 @@ ssh_agent: false
 
 `repo` is the repository init found the files in, and `source` the
 address it cloned it from; only a repository with a `source` is pulled by
-`unibox env update`. A port with no mapping of its own is one of the team's,
-switched by `unibox port on` or `off`.
+`unibox env update`. `ports:` are written by hand, at the top for every env
+or under one; a port with no mapping of its own is one of the team's,
+given another default here ([Ports](/guide/ports#which-wins)).
 
 Change it with unibox's commands rather than by hand - `unibox env`,
-`unibox port`, `unibox context`, `unibox config`:
+`unibox context`, `unibox config` - all but `ports:`:
 
 ```sh
 unibox config set default_env dev

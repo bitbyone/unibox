@@ -1,20 +1,15 @@
 # Ports
 
 A sandbox's ports reach your machine only where they are published, on the
-host's loopback. Which host port a person uses is theirs, not the team's,
-so unibox keeps named ports per env in its own `config.yaml`, out of the
-sbxenv files.
+host's loopback. Ports are named in files, by hand - the team's beside its
+sbxenv files, yours in `config.yaml` - and each says whether a sandbox
+starts with it published. `unibox port on` and `off` only publish and
+unpublish them in a running sandbox.
 
-## Named ports
-
-```sh
-unibox port set fe --map 3000:3000 -e dev              # at every start
-unibox port set api --map 8080 -e dev                  # any free host port
-unibox port set devtools --map 9333:9222 --off -e dev  # only when published by hand
-unibox port unset devtools -e dev                      # take it out
-```
+## Your ports
 
 ```yaml
+# ~/.config/unibox/config.yaml
 envs:
   dev:
     files: [/home/me/team/sandboxes/dev.sbxenv.yaml]
@@ -25,8 +20,9 @@ envs:
 ```
 
 The mapping is `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`, as Docker
-says it. A port is published whenever the env's sandbox starts unless
-`--off`, and a running sandbox gets a change at once. A port without a host
+says it. A port is published whenever the env's sandbox starts unless it
+says `default: off`, and a running sandbox gets a change of the
+files at the next `unibox run`, `resume`, `sandbox shell` or `port on|off`. A port without a host
 port gets a free one, and another one at each start: `unibox port ls` shows
 where it is now. Give a host port for a page you keep open.
 
@@ -56,17 +52,18 @@ whether it is published at every start; left out, it is off. Someone using
 sbx without unibox is not limited by the file in any way: sbx never reads
 it.
 
-Each person switches the team's ports for themselves; the choice is kept
-in their `config.yaml`, and wins over the team's default:
+Each person changes the team's ports for themselves in their
+`config.yaml`, which wins over the team's file:
 
-```sh
-unibox port on storybook -e dev
-unibox port off vite -e dev
-unibox port set vite --map 15173:5173 -e dev    # another host port, for you alone
-unibox port unset vite -e dev                   # back to the team's mapping
+```yaml
+envs:
+  dev:
+    ports:
+      storybook: {default: on}               # on at every start
+      vite: {port: '15173:5173'}             # on another host port, for you alone
 ```
 
-`unibox init` offers the team's ports in its Ports step. `unibox port ls`
+`unibox port ls`
 says of each where it is named - `repo`, `env`, `yours-all`, `yours`, or
 `-` for one published by hand - and whether it is on at start:
 
@@ -85,8 +82,7 @@ over the earlier:
 2. `<env>.unibox.yaml` beside the env's sbxenv file - of an env's several
    files, a later one's, as its sbxenv does;
 3. yours for every env, `ports:` at the top of `config.yaml`
-   (`unibox port set|on|off|unset -g`);
-4. yours for the env, under it in `config.yaml` (`-e`).
+4. yours for the env, under it in `config.yaml`.
 
 A later place may give a port only another mapping or switch it on or off;
 its description stays the team's. A switch of yours for every env that an
@@ -106,15 +102,17 @@ envs:
 ## Switching ports on a running sandbox
 
 ```sh
-unibox port ls -s dev                          # its ports, with their URLs
-unibox port publish devtools -s dev            # by the env's names
-unibox port unpublish fe -s dev
-unibox port publish --map 8080:5173 -s dev     # a mapping the env does not name
+unibox port ls -s dev                     # its ports, with their URLs
+unibox port on devtools -s dev            # by name
+unibox port on vite=15173 -s dev          # a named port on another host port
+unibox port off fe -s dev
+unibox port on --map 8080:5173 -s dev     # a mapping no file names
 ```
 
-`publish` and `unpublish` change the running sandbox and leave the env as it
-is; the sandbox's next start goes back to the env's ports. A switch on a
-stopped sandbox is refused, as publishing would start it.
+`on` and `off` change the running sandbox and no file; the sandbox's next
+start goes back to what the files say. `name=HOST_PORT` keeps the port's
+sandbox port, host address and protocol. A switch on a stopped sandbox is
+refused, as publishing would start it.
 
 A port unibox did not publish is left alone: one published with
 `sbx ports`, and one a kit declares, which sbx publishes itself, on a new
