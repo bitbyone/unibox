@@ -141,7 +141,7 @@ func TestHelpListsHowATaskIsMade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--repo", "repeatable", "--branch", "shared branch", "--mount", "--clone", "--task", "--push", "--env"} {
+	for _, want := range []string{"--repo", "repeat for several", "--branch", "shared branch", "--mount", "--clone", "--task", "--push", "--env"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help lacks %s", want)
 		}
@@ -312,6 +312,25 @@ func TestRunTakesEitherAShellOrAnAgent(t *testing.T) {
 		_, _, err := run(t, paths, "", command, "refunds", "--shell", "--agent", "codex")
 		if err == nil || !strings.Contains(err.Error(), "[agent shell] were all set") {
 			t.Fatalf("%s: %v", command, err)
+		}
+	}
+}
+
+func TestSeveralRepositoriesAreNamedWithRepo(t *testing.T) {
+	t.Parallel()
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"run", "../web", "../api"}, "name several with --repo"},
+		{[]string{"task", "prepare", "../web", "--repo", "../api"}, "do not mix"},
+		{[]string{"task", "add-repo", "login", "../web", "../api"}, "accepts between 1 and 2 arg(s)"},
+		{[]string{"task", "add-repo", "login", "../web", "--repo", "../api"}, "do not mix"},
+	} {
+		_, _, err := run(t, paths, "", c.args...)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%v: %v", c.args, err)
 		}
 	}
 }

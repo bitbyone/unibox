@@ -7,13 +7,14 @@ from the forge - with the env's agent running in your terminal.
 ## Running one
 
 `run`, `task check` and `task prepare` take the same arguments: the task's
-directories as positional arguments (the current directory when none is
-named), and flags for where and how.
+repository - a directory or a URL - as the one positional argument (the
+current directory when none is named), several with `--repo` each, and
+flags for where and how.
 
 ```sh
 unibox run                                       # this repository, the default env's sandbox
 unibox run -e dev -s dev-2 --task login          # a second sandbox of env dev
-unibox run ../web ../api --branch feat/login     # two repositories, one branch
+unibox run --branch feat/login --repo ../web --repo ../api   # two repositories, one branch
 unibox run --clone --branch feat/login           # a clone from the forge, not your checkout
 unibox run --shell                               # a shell in the task, no agent
 unibox run -- --model gpt-5                      # arguments for the agent
@@ -67,17 +68,24 @@ changes are handled. [Mount or Clone](./mount) has the trade.
 
 ## Repositories and their URLs
 
-unibox takes the repositories from the directories named. For a clone, each
+unibox takes the repositories from the directories and URLs named. For a clone, each
 one's URL comes from its `origin` - credentials stripped, an ssh URL turned
 into https where the host is plain. The sandbox clones over https, signed in
 by the token the env's kits give it ([Logins](./logins)).
 
-`--repo` adds a repository by path or https URL, optionally as
-`name=source`, and may be repeated:
+A task of several repositories names each with `--repo`, a directory or an
+https URL; a positional argument and `--repo` do not mix. Each repository
+is at `/work/<task>/<directory>`, the directory named after the path or URL
+(`../api` is `api`, `.../web.git` is `web`). `--repo dirname=source` names
+it otherwise - for two repositories that would share one, or a name the
+agent should see:
 
 ```sh
-unibox run --clone --repo https://github.com/acme/web --repo docs=https://github.com/acme/docs
+unibox run --repo https://github.com/acme/web --repo docs=https://github.com/acme/docs
 ```
+
+Directories alone are mounted; once a URL is among them, every repository
+of the task is cloned.
 
 ## Branches
 
@@ -87,7 +95,7 @@ before every repository sets a shared branch; after a repository it
 overrides that one alone:
 
 ```sh
-unibox run --branch feat/login ../web ../api --branch main
+unibox run --branch feat/login --repo ../web --repo ../api --branch main
 ```
 
 With a mount, `--branch` switches your own checkout to that branch, making it

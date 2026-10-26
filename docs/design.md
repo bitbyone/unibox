@@ -654,7 +654,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox env add\|ls\|rm\|show` | the envs: sbxenv files, the sandbox's name |
 | `unibox var ls\|set\|rm -e E` | the person's values for an env's args |
 | `unibox login ls\|set -e E [--command C] [--all]` | the tokens an env needs, and having sbx store them |
-| `unibox run [dir...] [--clone] [-- args]` | prepares a task, runs the kit's agent (or `--shell`) here |
+| `unibox run [dir\|url] [--repo ...] [--clone] [-- args]` | prepares a task, runs the kit's agent (or `--shell`) here |
 | `unibox resume <task> [--shell \| --agent]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox task check\|prepare …` | what stands in the way, as `needs` with a `code` each; the task ready, JSON at the end |
 | `unibox task ls [-s S]`, `task add-repo`, `task rename`, `task rm` | tasks across sandboxes; one more repository; an alias; removal |

@@ -53,7 +53,7 @@ func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f.BoolVar(&r.Push, "push", false, "Push selected local branches; create one nobody has from the local HEAD, or a URL's default tip (never force)")
 	f.BoolVar(&r.IgnoreLocal, "ignore-local", false, "Use the forge version despite uncommitted or unpushed local changes")
 	mountFlags(c, r)
-	f.Var(&orderedValue{req: r}, "repo", "Repository path or HTTPS URL, optionally name=source (repeatable)")
+	f.Var(&orderedValue{req: r}, "repo", "A repository, directory or HTTPS URL, optionally dirname=source; repeat for several, a --branch after one is its alone")
 	f.Var(&orderedValue{req: r, branch: true}, "branch", "Before all repos: shared branch; after a repo: override only that repo")
 }
 
@@ -136,9 +136,24 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 	return fmt.Errorf("preparation inputs keep changing; retry once the repositories are settled")
 }
 
+// oneSource takes the one repository an argument may name. Several are
+// named with --repo, which also gives each its own branch and directory
+// name; mixing the two would leave unclear which a --branch belongs to.
+func oneSource(req *unibox.Request, args []string) error {
+	switch {
+	case len(args) > 1:
+		return fmt.Errorf("one repository as an argument; name several with --repo <directory|url> each")
+	case len(args) == 1 && len(req.Repositories) > 0:
+		return fmt.Errorf("a repository as an argument and --repo do not mix; name them all with --repo")
+	case len(args) == 1:
+		req.Repositories = []unibox.RepoInput{{Source: args[0]}}
+	}
+	return nil
+}
+
 func (o *options) taskCommand(name string) *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: name + " [directory...] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare a task in a sandbox: its directories mounted, or cloned from the forge", "run": "Prepare a task and run its agent, or a shell, in this terminal (unibox resume runs it again)"}[name]}
+	c := &cobra.Command{Use: name + " [directory|url] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare a task in a sandbox: its directories mounted, or cloned from the forge", "run": "Prepare a task and run its agent, or a shell, in this terminal (unibox resume runs it again)"}[name]}
 	taskFlags(c, &req)
 	if name == "run" {
 		shellFlag(c, &req)
@@ -152,8 +167,8 @@ func (o *options) taskCommand(name string) *cobra.Command {
 		if name != "run" && len(extra) > 0 {
 			return fmt.Errorf("only run accepts agent arguments after --")
 		}
-		for _, dir := range args {
-			req.Repositories = append(req.Repositories, unibox.RepoInput{Source: dir})
+		if err := oneSource(&req, args); err != nil {
+			return err
 		}
 		if len(req.Repositories) == 0 {
 			req.Repositories = []unibox.RepoInput{{Source: "."}}
@@ -207,13 +222,13 @@ func (o *options) taskCommand(name string) *cobra.Command {
 // running session sees them at once in its task directory.
 func (o *options) addRepoCommand() *cobra.Command {
 	var req unibox.Request
-	c := &cobra.Command{Use: "add-repo task [directory...]", Args: cobra.MinimumNArgs(1), Short: "Add more repositories to a prepared task, also while its agent runs", Long: "Add more repositories to a prepared task, also while its agent runs: directories as run takes them, or --repo for a URL or name=source. They are mounted or cloned as the task's first ones were.", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "add-repo task [directory|url]", Args: cobra.RangeArgs(1, 2), Short: "Add more repositories to a prepared task, also while its agent runs", Long: "Add more repositories to a prepared task, also while its agent runs: one directory or URL as run takes it, or several with --repo. They are mounted or cloned as the task's first ones were.", RunE: func(cmd *cobra.Command, args []string) error {
 		req.Task = args[0]
-		for _, dir := range args[1:] {
-			req.Repositories = append(req.Repositories, unibox.RepoInput{Source: dir})
+		if err := oneSource(&req, args[1:]); err != nil {
+			return err
 		}
 		if len(req.Repositories) == 0 {
-			return fmt.Errorf("no repository selected; name a directory, or pass --repo <path-or-url>")
+			return fmt.Errorf("no repository selected; name a directory or URL, or pass --repo for several")
 		}
 		if err := o.preflight(cmd, &req); err != nil {
 			return err
@@ -238,7 +253,7 @@ func (o *options) addRepoCommand() *cobra.Command {
 	f.StringVar(&req.Author, "author", "", "Commit author, as Name <email>")
 	f.BoolVar(&req.Push, "push", false, "Push selected local branches; create one nobody has from the local HEAD, or a URL's default tip (never force)")
 	f.BoolVar(&req.IgnoreLocal, "ignore-local", false, "Use the forge version despite uncommitted or unpushed local changes")
-	f.Var(&orderedValue{req: &req}, "repo", "Repository path or HTTPS URL, optionally name=source (repeatable)")
+	f.Var(&orderedValue{req: &req}, "repo", "A repository, directory or HTTPS URL, optionally dirname=source; repeat for several, a --branch after one is its alone")
 	f.Var(&orderedValue{req: &req, branch: true}, "branch", "Before all repos: shared branch; after a repo: override only that repo")
 	return c
 }

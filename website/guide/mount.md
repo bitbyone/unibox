@@ -34,7 +34,7 @@ is the answer when you would not.
 
 ```sh
 unibox run
-unibox run ../web ../api
+unibox run --repo ../web --repo ../api
 ```
 
 mounts each repository into the sandbox at `/work/<task>/<repo>`. The agent

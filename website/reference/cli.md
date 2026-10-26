@@ -158,12 +158,13 @@ See [Logins](/guide/logins).
 ### `unibox run`
 
 ```
-unibox run [directory...] [-- agent-args...] [flags]
+unibox run [directory|url] [-- agent-args...] [flags]
 ```
 
 Prepares a task and runs its agent in this terminal, or with `--shell` a
-shell in the task's directory. The directories are the task's repositories;
-the current directory when none is named. Arguments after `--` go to the
+shell in the task's directory. The argument is the task's repository, a
+directory or a URL - the current directory when none is named; several are
+named with `--repo` each, which does not mix with the argument. Arguments after `--` go to the
 agent. With neither `-s` nor `-e`, the task goes into the default sandbox -
 `UNIBOX_SANDBOX`, the context's, or the only one - and when there is none,
 into the sandbox of the default env.
@@ -178,7 +179,7 @@ into the sandbox of the default env.
 | `--mount` | mount the host's directories: the agent works on your files and `.git` as they are (the default for directories) |
 | `--clone` | clone the repositories from the forge inside the sandbox instead |
 | `--branch <name>` | before all repositories, a shared branch; after one, that repository's alone (default: a directory's current branch, a URL's default branch on the forge) |
-| `--repo <[name=]source>` | a repository path or https URL, optionally `name=source` (repeatable) |
+| `--repo <[dirname=]source>` | a repository, directory or https URL, repeated for several; `dirname=` names its directory in `/work/<task>/` (default: the path's or URL's last part) |
 | `--author "Name <email>"` | the commit author |
 | `--push` | push the selected local branches; create one nobody has from the local HEAD, or a URL's default tip; never forces |
 | `--ignore-local` | use the forge's version despite uncommitted or unpushed local changes |
@@ -196,10 +197,10 @@ sandbox has, and the task keeps it.
 ### `unibox task`
 
 ```
-unibox task check [directory...] [-- agent-args...] [flags]
-unibox task prepare [directory...] [-- agent-args...] [flags]
+unibox task check [directory|url] [-- agent-args...] [flags]
+unibox task prepare [directory|url] [-- agent-args...] [flags]
 unibox task ls [-s <sandbox>]
-unibox task add-repo <task> [directory...] [flags]
+unibox task add-repo <task> [directory|url] [flags]
 unibox task rename <task> [<name>] [--reset]
 unibox task rm <task>
 ```
@@ -207,14 +208,14 @@ unibox task rm <task>
 `check` explains what a task needs before it can start, each with a code
 (see [Tasks](/guide/tasks#what-task-check-reports)), and changes nothing.
 `prepare` makes the sandbox and the task ready - its directories mounted, or
-cloned from the forge - and prints both. Both take the directories and flags
+cloned from the forge - and prints both. Both take the repository and flags
 `run` does, except `--shell`, and choose the sandbox as it does.
 
 `ls` lists prepared tasks, in every sandbox or with `-s` in one; it does not
 take the sandbox from the context, so a forgotten context hides nothing.
 
 `add-repo` adds repositories to a prepared task, also while its agent runs:
-directories as `run` takes them, or `--repo` for a URL or `name=source`.
+one directory or URL as `run` takes it, or several with `--repo`.
 They are mounted or cloned as the task's first ones were. It takes
 `--branch`, `--repo`, `--author`, `--push` and `--ignore-local` as `run`
 does.
