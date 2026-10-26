@@ -253,7 +253,7 @@ func (o *options) initQuietly(cmd *cobra.Command, root string, named, vars []str
 		if err != nil {
 			return err
 		}
-		for _, arg := range e.SBX.Missing(values.Envs[name]) {
+		for _, arg := range e.SBX.Missing(values.ArgsFor(e)) {
 			lacking = append(lacking, fmt.Sprintf("--var %s=<value> (env %s)", arg, name))
 		}
 	}

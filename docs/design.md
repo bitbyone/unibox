@@ -135,7 +135,8 @@ What crosses the line between the machine and the VM:
 ### Envs, sandboxes, tasks
 
 - An **env** names a team's sbxenv files; the person's values for its
-  args are theirs, in `~/.config/unibox/vars.toml` under `[envs.<env>]`.
+  args are theirs, in `~/.config/unibox/vars.toml`: `[args]` for every
+  env that declares them, `[envs.<env>.args]` for one, which wins.
 - A **sandbox** is the VM sbx creates from an env, named by `--name` in
   the env's configuration, else the file's `name:`, else the env's own
   name.
@@ -380,6 +381,17 @@ docs/sandboxes.md.
   go to sbx only through the args file, which exists only while sbx runs.
   A value for an arg the env does not declare is left out (sbx refuses
   one) and doctor names it.
+- **Resources are the person's too.** How much of a machine a sandbox
+  gets depends on the machine, which a team's env cannot know.
+  `[resources]` and `[envs.<env>.resources]` in vars.toml give `cpus` and
+  `memory`, absolute or as a share of the host, written by hand - no
+  command, as two values a person sets once need none. sbx takes no
+  share, so unibox resolves it at each create (as unibox 1 did: CPUs
+  rounded, at least one, 100% as 0; memory in MiB, capped at the 75% sbx
+  allows, with a line saying so) and gives sbx the amounts in a temporary
+  sbxenv file of `sandboxOptions` alone, last, which sbx's merge lets
+  win. They are part of the fingerprint only when set, so a sandbox made
+  before keeps its own.
 - **A kit's own required arg** (`2n-artifactory` has one) is read with
   `--kit-arg` from the env's values, or `sbx kit inspect` could not read
   the kit; one neither the person nor the env gives is a placeholder, as
@@ -952,6 +964,11 @@ to the team's kits and bindings; what sbx does stays true.
   refused, as publishing would start it.
 - `sbx create --help`: sbx refuses more than 75% of the host's memory, and
   `--cpus 0` means all host CPUs.
+- `sbx env create` (0.49) has no `--memory` or `--cpus`; it merges its
+  files in order, later ones winning, so a last file with nothing but
+  `schemaVersion` and `sandboxOptions` sets them for any env (checked: 12g
+  and 3 CPUs over an env's own). On a 64 GiB host 49152m was accepted and
+  49153m refused.
 
 ### Images and templates (unibox 1, sbx 0.47)
 

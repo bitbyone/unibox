@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -116,7 +117,7 @@ func (o *options) doctorCommand() *cobra.Command {
 			}
 			add(area, "files", "pass", strings.Join(env.SBX.Files, ", "), "")
 			values, _ := o.paths.LoadEnvValues()
-			mine := values.Envs[name]
+			mine := values.ArgsFor(env)
 			if missing := env.SBX.Missing(mine); len(missing) > 0 {
 				for _, a := range missing {
 					add(area, "arg "+a, "fail", cmp.Or(env.SBX.Args[a].Description, "required, and not set"), "unibox var set -e "+name+" "+a+" <value>")
@@ -166,7 +167,7 @@ func (o *options) doctorCommand() *cobra.Command {
 					}
 				}
 			}
-			if changed(state, env, mine) {
+			if changed(state, env, values) {
 				add(area, "sandbox "+sandbox, "warn", "the env changed since the sandbox was created", "unibox sandbox recreate "+sandbox)
 			}
 			if repo := env.Config.Repo; env.Config.Source != "" && repo != "" {
@@ -300,11 +301,16 @@ func (o *options) painter() func(style, text string) string {
 
 // changed says whether the env is no longer what its sandbox was created
 // from, as far as unibox made it and the person's values let it be told.
-func changed(state unibox.State, env unibox.Env, mine map[string]string) bool {
+func changed(state unibox.State, env unibox.Env, values unibox.EnvValues) bool {
+	mine := values.ArgsFor(env)
 	b, ok := state.Sandboxes[env.SandboxName()]
 	if !ok || b.Env != env.Name || b.Fingerprint == "" || b.Adopted || env.SBX.Missing(mine) != nil {
 		return false
 	}
-	fp, err := env.SBX.Fingerprint(env.SBX.Declared(mine))
+	r, err := values.ResourcesFor(env.Name).Resolve(unibox.HostResources(), io.Discard)
+	if err != nil {
+		return false
+	}
+	fp, err := env.SBX.Fingerprint(env.SBX.Declared(mine), r)
 	return err == nil && fp != b.Fingerprint
 }

@@ -9,7 +9,7 @@ paths below, under your home directory on Windows too.
 | Path | What it holds |
 | --- | --- |
 | `~/.config/unibox/config.yaml` | your choices: the envs, their sandbox names and named ports, the default env, the context, `stop_idle`, `ssh_agent` |
-| `~/.config/unibox/vars.toml` | your own values for the args each env declares, under `[envs.<env>.args]` |
+| `~/.config/unibox/vars.toml` | your own values for the args envs declare, and the CPUs and memory your sandboxes get |
 | `~/.config/unibox/state.json` | what use taught: sandboxes and what each was created from, tasks, runs, the directories you were told about mounting |
 | `~/.config/unibox/state.lock`, `locks/` | locks that keep two unibox commands from changing the same thing at once |
 | `~/.config/unibox/herdr-plugin/` | the herdr plugin's manifest, when installed |
@@ -61,14 +61,29 @@ unibox config get
 ### `vars.toml`
 
 ```toml
-[envs.dev.args]
+[args]                 # for every env that declares them
 user = 'jdoe'
+
+[resources]            # for every env
+cpus = '100%'
+memory = '75%'
+
+[envs.dev.args]        # one env's own, over the ones above
+user = 'john'
+
+[envs.dev.resources]
 memory = '16g'
 ```
 
-Kept with mode `0600`, and changed with `unibox var set` and `unibox var rm`.
-Values are one line each, and one beginning with `secret:` is refused: a
-token is a [login](/guide/logins).
+Kept with mode `0600`. Args are changed with `unibox var set` and
+`unibox var rm` (`-g` for `[args]`); values are one line each, and one
+beginning with `secret:` is refused: a token is a
+[login](/guide/logins).
+
+Resources are written by hand. `cpus` is a count, `0` for all of them, or
+a share of this machine's from `1%` to `100%`; `memory` a size (`k`, `m`,
+`g`) or a share. They are read at each create, as described in
+[Envs](/guide/envs#resources).
 
 ### Coming from unibox 1
 

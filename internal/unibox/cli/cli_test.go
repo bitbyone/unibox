@@ -250,6 +250,26 @@ func TestArgsAreKeptByEnvAndCheckedAgainstIt(t *testing.T) {
 	if values, _ = paths.LoadEnvValues(); len(values.Envs["dev"]) != 0 {
 		t.Fatalf("%+v", values)
 	}
+
+	// A value for every env is the env's while it has none of its own.
+	if _, _, err = run(t, paths, "", "var", "set", "-g", "user", "everyone"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err = run(t, paths, "", "var", "ls", "-e", "dev"); err != nil || !strings.Contains(out, "everyone") || !strings.Contains(out, "global") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "var", "ls", "-g"); err != nil || !strings.Contains(out, "everyone") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "var", "set", "-g", "-e", "dev", "user", "x"); err == nil {
+		t.Fatal("--global and -e were taken together")
+	}
+	if _, _, err = run(t, paths, "", "var", "rm", "-g", "user"); err != nil {
+		t.Fatal(err)
+	}
+	if values, _ = paths.LoadEnvValues(); len(values.Args) != 0 {
+		t.Fatalf("%+v", values)
+	}
 }
 
 func TestNamedPortsAreTheEnvsInYourConfig(t *testing.T) {

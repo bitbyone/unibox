@@ -52,7 +52,7 @@ func (m *Manager) Logins(ctx context.Context, env Env, sandbox string) ([]Login,
 		if k.Dir != "" {
 			ref = k.Dir
 		}
-		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.Envs[env.Name]))
+		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.ArgsFor(env)))
 		if err != nil {
 			return nil, err
 		}

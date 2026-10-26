@@ -122,15 +122,18 @@ See [Envs](/guide/envs).
 ### `unibox var`
 
 ```
-unibox var ls [-e <env>]
-unibox var set <name> <value> [-e <env>]
-unibox var rm <name> [-e <env>]
+unibox var ls [-e <env> | -g]
+unibox var set <name> <value> [-e <env> | -g]
+unibox var rm <name> [-e <env> | -g]
 ```
 
 Your own values for the args an env asks for - a user name, a mirror - kept
-per env in `~/.config/unibox/vars.toml` and passed to `sbx env create` as an
-args file. A sandbox is not created while a required one is missing. No
-secret belongs here; store tokens with `unibox login`.
+in `~/.config/unibox/vars.toml`, with `-g` for every env that declares the
+arg, or for one env, which wins; passed to `sbx env create` as an args
+file. A sandbox is not created while a required one is missing. No secret
+belongs here; store tokens with `unibox login`. The CPUs and memory your
+sandboxes get are written in the same file by hand; see
+[files](./files#vars-toml).
 
 ### `unibox login`
 

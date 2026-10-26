@@ -159,26 +159,26 @@ func TestFingerprintFollowsFilesKitsAndArgsOnly(t *testing.T) {
 		return e
 	}
 	args := map[string]string{"user": "me"}
-	base, err := read().Fingerprint(args)
+	base, err := read().Fingerprint(args, Resources{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(root, "README.md"), "not the env's\n")
 	write(t, filepath.Join(root, "kits", "unused", "unused.yaml"), "kind: mixin\n")
-	if same, _ := read().Fingerprint(args); same != base {
+	if same, _ := read().Fingerprint(args, Resources{}); same != base {
 		t.Fatal("a file outside the env changed the fingerprint")
 	}
-	if other, _ := read().Fingerprint(map[string]string{"user": "you"}); other == base {
+	if other, _ := read().Fingerprint(map[string]string{"user": "you"}, Resources{}); other == base {
 		t.Fatal("an arg did not change the fingerprint")
 	}
 	write(t, filepath.Join(root, "kits", "git", "git.yaml"), "kind: mixin\n# changed\n")
-	kit, _ := read().Fingerprint(args)
+	kit, _ := read().Fingerprint(args, Resources{})
 	if kit == base {
 		t.Fatal("a kit's file did not change the fingerprint")
 	}
 	b, _ := os.ReadFile(file)
 	write(t, file, string(b)+"# changed\n")
-	if changed, _ := read().Fingerprint(args); changed == kit {
+	if changed, _ := read().Fingerprint(args, Resources{}); changed == kit {
 		t.Fatal("the env's file did not change the fingerprint")
 	}
 }

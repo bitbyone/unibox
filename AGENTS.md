@@ -76,10 +76,13 @@ about it. Keep command output short: pipe through `head`, `tail` or
   agent - unibox does not repeat. docs/sbx-pivot.md has why and how it
   got here.
 - **A person's values are theirs.** The args an env declares are given in
-  `~/.config/unibox/vars.toml`, per env, and reach sbx only through a
-  private `--env-args-file` removed when sbx is done. A run stops while a
-  required one is missing; `run`, `sandbox create` and `init` ask for it
-  at a terminal.
+  `~/.config/unibox/vars.toml`, for every env or one, and reach sbx only
+  through a private `--env-args-file` removed when sbx is done. A run
+  stops while a required one is missing; `run`, `sandbox create` and
+  `init` ask for it at a terminal. The CPUs and memory a sandbox gets are
+  the person's alike (`[resources]`, by hand): shares are resolved on the
+  host at each create and handed to sbx in a last sbxenv file of
+  `sandboxOptions` alone (`resources.go`).
 - **One client of sbx, behind an interface.** `Runtime` in `runtime.go`
   is what the manager asks of sbx; `sbx.go` is the only implementation,
   `fake_test.go` the tests'. It is there for tests, not for another

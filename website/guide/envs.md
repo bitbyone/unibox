@@ -97,12 +97,19 @@ memory  8g     default
 user    jdoe   yours    Your user name on the registry
 ```
 
-The values are kept per env in `~/.config/unibox/vars.toml`:
+The values are kept in `~/.config/unibox/vars.toml`. One you give with
+`-g` is for every env that declares the arg, and an env's own wins:
 
 ```toml
-[envs.dev.args]
+[args]
 user = 'jdoe'
+
+[envs.dev.args]
+user = 'john'
 ```
+
+`unibox var ls -g` lists the ones for every env; `var ls -e dev` shows
+`global` for a value it takes from them.
 
 Before each `sbx env create`, unibox writes the values the env declares into
 a file only you can read, hands it to sbx as `--env-args-file`, and removes
@@ -118,6 +125,32 @@ arg's name and the `unibox var set` that fixes it.
 The args file is plain text, and so is `vars.toml`. A value starting with
 `secret:` is refused: tokens are [logins](./logins), kept by sbx.
 :::
+
+## Resources
+
+How much of your machine a sandbox gets is yours to say, not the team's:
+an env's `sandboxOptions` may set `cpus` and `memory`, and your
+`vars.toml` sets them over it, for every env or for one:
+
+```toml
+[resources]
+cpus = '100%'
+memory = '75%'
+
+[envs.dev.resources]
+memory = '16g'
+```
+
+`cpus` is a count, `0` for all of them, or a share of this machine's;
+`memory` a size or a share. sbx takes no share, so at each create unibox
+works it out on the host - a share of the CPUs rounded and at least one,
+`100%` as `0`, memory in MiB - and gives sbx the amounts in an sbxenv file
+of its own, after the env's, so that they win. sbx gives a sandbox at
+most 75% of the host's memory; asking for more gets that, said in the
+output. What you leave unset stays the env's.
+
+A change reaches a sandbox when it is recreated: the next start says the
+env changed and that `unibox sandbox recreate` applies it.
 
 ## Its sandbox
 

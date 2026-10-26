@@ -28,10 +28,13 @@ type fakeRuntime struct {
 	creates, removes, envRemoves, stops int
 	calls                               []string
 	args                                string
-	kits                                map[string]Kit
-	secrets                             []Secret
-	remotes                             map[string]string
-	published                           map[string][]api.PublishedPort
+	// overlay is the resources file of the last create, read before
+	// unibox removes it.
+	overlay   string
+	kits      map[string]Kit
+	secrets   []Secret
+	remotes   map[string]string
+	published map[string][]api.PublishedPort
 	// mounted is what each sandbox has mounted, host and target, which
 	// the guest's /proc/self/mountinfo shows.
 	mounted                              map[string][][2]string
@@ -97,6 +100,16 @@ func (f *fakeRuntime) EnvCreate(_ context.Context, name, args string, files []st
 			return err
 		}
 		f.args = string(data)
+	}
+	f.overlay = ""
+	for _, file := range files {
+		if strings.Contains(filepath.Base(file), "resources-") {
+			data, err := os.ReadFile(file)
+			if err != nil {
+				return err
+			}
+			f.overlay = string(data)
+		}
 	}
 	if f.failCreate {
 		return errors.New("sbx env create failed")

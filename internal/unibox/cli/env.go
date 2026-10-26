@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -74,7 +75,7 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 			return err
 		}
 		message := fmt.Sprintf("env %s: sandbox %s from %d file(s)", e.Name, e.SandboxName(), len(e.SBX.Files))
-		if missing := e.SBX.Missing(values.Envs[e.Name]); len(missing) > 0 && !o.json {
+		if missing := e.SBX.Missing(values.ArgsFor(e)); len(missing) > 0 && !o.json {
 			message += fmt.Sprintf("\nit needs a value of yours for %v; set each with unibox var set -e %s <name> <value>", missing, e.Name)
 		}
 		return o.success(message)
@@ -174,11 +175,10 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 					said = append(said, fmt.Sprintf("  env %s: %v", name, err))
 					continue
 				}
-				mine := values.Envs[name]
-				if missing := env.SBX.Missing(mine); len(missing) > 0 {
+				if missing := env.SBX.Missing(values.ArgsFor(env)); len(missing) > 0 {
 					said = append(said, fmt.Sprintf("  env %s now asks for %s: unibox var set -e %s %s <value>", name, strings.Join(missing, ", "), name, missing[0]))
 				}
-				if changed(state, env, mine) {
+				if changed(state, env, values) {
 					said = append(said, fmt.Sprintf("  env %s changed for sandbox %s: unibox sandbox recreate %s", name, env.SandboxName(), env.SandboxName()))
 				}
 			}
@@ -215,7 +215,7 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		if err != nil {
 			return err
 		}
-		mine := values.Envs[name]
+		mine := values.ArgsFor(e)
 		if o.json {
 			type port struct {
 				Port        string `json:"port"`
@@ -227,7 +227,7 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 			for k, v := range e.Ports {
 				ports[k] = port{v.Spec, v.Description, v.Team, v.Default}
 			}
-			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "ports": ports})
+			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "resources": values.ResourcesFor(name), "ports": ports})
 		}
 		fmt.Fprintf(o.output, "env %s, sandbox %s, agent %s\n", name, e.SandboxName(), e.SBX.Agent)
 		for _, f := range e.SBX.Files {
@@ -235,6 +235,19 @@ repository of your own is never pulled; update it with git.`, RunE: func(cmd *co
 		}
 		if e.Config.Repo != "" {
 			fmt.Fprintf(o.output, "  repo %s\n", e.Config.Repo)
+		}
+		if r := values.ResourcesFor(name); r != (unibox.Resources{}) {
+			resolved, err := r.Resolve(unibox.HostResources(), io.Discard)
+			for _, n := range unibox.ResourceNames {
+				v := r.Get(n)
+				if v == "" {
+					continue
+				}
+				if got := resolved.Get(n); err == nil && got != v {
+					v += " (" + got + " here)"
+				}
+				fmt.Fprintf(o.output, "  %s %s, from vars.toml\n", n, v)
+			}
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
 		if len(e.SBX.Args) > 0 {

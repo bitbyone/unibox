@@ -210,9 +210,10 @@ func (e SBXEnv) Declared(values map[string]string) map[string]string {
 }
 
 // Fingerprint stands for everything a sandbox is created from: the env's
-// files, its local kits' files and the person's args. Image kits are named
+// files, its local kits' files, the person's args and the resources they
+// give it, as resolved on this host. Image kits are named
 // by their reference, which the files carry already.
-func (e SBXEnv) Fingerprint(args map[string]string) (string, error) {
+func (e SBXEnv) Fingerprint(args map[string]string, r Resources) (string, error) {
 	h := sha256.New()
 	add := func(parts ...string) {
 		for _, p := range parts {
@@ -256,6 +257,7 @@ func (e SBXEnv) Fingerprint(args map[string]string) (string, error) {
 	for _, name := range sortedKeys(args) {
 		add("arg", name, args[name])
 	}
+	add(r.fingerprint()...)
 	return hex.EncodeToString(h.Sum(nil))[:16], nil
 }
 

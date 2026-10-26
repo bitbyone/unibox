@@ -230,7 +230,7 @@ func (m *Manager) args(env Env) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	mine := values.Envs[env.Name]
+	mine := values.ArgsFor(env)
 	if missing := env.SBX.Missing(mine); len(missing) > 0 {
 		a := env.SBX.Args[missing[0]]
 		hint := ""
@@ -245,6 +245,64 @@ func (m *Manager) args(env Env) (map[string]string, error) {
 	return env.SBX.Declared(mine), nil
 }
 
+// resources are what the person gives an env's sandboxes of this host,
+// resolved into what sbx takes; a cap is said to log.
+func (m *Manager) resources(env Env, log io.Writer) (Resources, error) {
+	values, err := m.Paths.LoadEnvValues()
+	if err != nil {
+		return Resources{}, err
+	}
+	r, err := values.ResourcesFor(env.Name).Resolve(HostResources(), log)
+	if err != nil {
+		return r, Fail(4, "resources_invalid", "env %s: %v", env.Name, err)
+	}
+	return r, nil
+}
+
+// fingerprint stands for what a sandbox of the env would be created from
+// now, args and resources included.
+func (m *Manager) fingerprint(env Env, args map[string]string) (string, error) {
+	r, err := m.resources(env, io.Discard)
+	if err != nil {
+		return "", err
+	}
+	return env.SBX.Fingerprint(args, r)
+}
+
+// createFiles are what sbx env create and plan read for an env: the
+// person's args in a file, and the env's files with one of unibox's last
+// giving the resources. done removes what was written.
+func (m *Manager) createFiles(env Env, args map[string]string, log io.Writer) (argsFile string, files []string, done func(), err error) {
+	removes := []func(){}
+	done = func() {
+		for _, f := range removes {
+			f()
+		}
+	}
+	if len(args) > 0 {
+		f, remove, err := WriteArgsFile(filepath.Join(m.Paths.Cache, "args"), args)
+		if err != nil {
+			return "", nil, done, err
+		}
+		removes = append(removes, remove)
+		argsFile = f
+	}
+	r, err := m.resources(env, log)
+	if err != nil {
+		return "", nil, done, err
+	}
+	f, remove, err := WriteResourcesFile(filepath.Join(m.Paths.Cache, "args"), r)
+	if err != nil {
+		return "", nil, done, err
+	}
+	removes = append(removes, remove)
+	files = slices.Clone(env.SBX.Files)
+	if f != "" {
+		files = append(files, f)
+	}
+	return argsFile, files, done, nil
+}
+
 // Plan has sbx check an env's files with the person's args, changing
 // nothing, and gives the line saying what creating or updating its
 // sandbox would do; a failure carries sbx's first line of error.
@@ -253,16 +311,12 @@ func (m *Manager) Plan(ctx context.Context, env Env) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	file := ""
-	if len(args) > 0 {
-		f, remove, err := WriteArgsFile(filepath.Join(m.Paths.Cache, "args"), args)
-		if err != nil {
-			return "", err
-		}
-		defer remove()
-		file = f
+	file, files, done, err := m.createFiles(env, args, io.Discard)
+	defer done()
+	if err != nil {
+		return "", err
 	}
-	out, err := m.SBX.EnvPlan(ctx, env.SandboxName(), file, env.SBX.Files)
+	out, err := m.SBX.EnvPlan(ctx, env.SandboxName(), file, files)
 	if err != nil {
 		for _, line := range strings.Split(out, "\n") {
 			if line = strings.TrimSpace(line); line != "" {
@@ -297,7 +351,7 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 		}
 		result.Needs = append(result.Needs, api.Need{Code: code, Message: err.Error()})
 	} else if b.Fingerprint != "" {
-		if fp, err := env.SBX.Fingerprint(args); err == nil && fp != b.Fingerprint {
+		if fp, err := m.fingerprint(env, args); err == nil && fp != b.Fingerprint {
 			result.Needs = append(result.Needs, api.Need{Code: "env_changed", Warning: true, Message: fmt.Sprintf("env %s changed since sandbox %s was created; unibox sandbox recreate %s applies it", env.Name, b.Name, b.Name)})
 		}
 	}
@@ -350,7 +404,7 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 	if err != nil {
 		return err
 	}
-	fingerprint, err := env.SBX.Fingerprint(args)
+	fingerprint, err := m.fingerprint(env, args)
 	if err != nil {
 		return fmt.Errorf("env %s: %w", env.Name, err)
 	}
@@ -405,14 +459,10 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 // create has sbx create a sandbox from its env, on the user's terminal,
 // and readies it for tasks.
 func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[string]string, fingerprint string) error {
-	file := ""
-	if len(args) > 0 {
-		f, remove, err := WriteArgsFile(filepath.Join(m.Paths.Cache, "args"), args)
-		if err != nil {
-			return err
-		}
-		defer remove()
-		file = f
+	file, files, done, err := m.createFiles(env, args, m.Log)
+	defer done()
+	if err != nil {
+		return err
 	}
 	b.State = "creating"
 	b.ID, b.Fingerprint = "", ""
@@ -421,7 +471,7 @@ func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[
 		return err
 	}
 	fmt.Fprintf(m.Log, "creating sandbox %s from env %s\n", b.Name, env.Name)
-	if err := m.SBX.EnvCreate(ctx, b.Name, file, env.SBX.Files, m.In, m.Out, m.Err); err != nil {
+	if err := m.SBX.EnvCreate(ctx, b.Name, file, files, m.In, m.Out, m.Err); err != nil {
 		return err
 	}
 	box, ok, err := m.findBox(ctx, *b)
@@ -473,7 +523,7 @@ func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string, map[s
 		if k.Dir != "" {
 			ref = k.Dir
 		}
-		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.Envs[env.Name]))
+		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.ArgsFor(env)))
 		if err != nil {
 			fmt.Fprintf(m.Log, "%v\n", err)
 			continue
@@ -535,7 +585,7 @@ func (m *Manager) Create(ctx context.Context, req Request, adopt bool) (api.Sand
 		}
 		b.ID, b.Adopted, b.State = box.ID, true, box.State
 		if args, err := m.args(env); err == nil {
-			b.Fingerprint, _ = env.SBX.Fingerprint(args)
+			b.Fingerprint, _ = m.fingerprint(env, args)
 		}
 		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
 			return b, err
