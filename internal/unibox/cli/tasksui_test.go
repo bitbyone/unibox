@@ -50,8 +50,8 @@ func TestATaskIsPickedAndActedOnByAKey(t *testing.T) {
 			t.Fatalf("%v: %+v", c.keys, m.chosen)
 		}
 	}
-	if m := keys(tasksModel{rows: rows}, "j", "q"); m.chosen != nil {
-		t.Fatalf("q chose %+v", m.chosen)
+	if m := keys(tasksModel{rows: rows}, "j", "q"); m.chosen != nil || m.View() != "" {
+		t.Fatalf("q chose %+v, or left the list drawn", m.chosen)
 	}
 	m := keys(tasksModel{rows: rows}, "j")
 	if v := m.View(); !strings.Contains(v, "fix (t2)") || !strings.Contains(v, "s shell") {

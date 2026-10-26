@@ -373,7 +373,13 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 		}
 		chosen := out.(tasksModel).chosen
 		if chosen == nil {
-			return nil
+			// Left as it is, it is said as task ls says it, as unibox port
+			// leaves its ports.
+			args := []string{"task", "ls"}
+			if sandbox != "" {
+				args = append(args, "-s", sandbox)
+			}
+			return o.runStep(cmd, args...)
 		}
 		t := chosen.task
 		switch chosen.kind {

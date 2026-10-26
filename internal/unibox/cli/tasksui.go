@@ -39,6 +39,7 @@ type tasksModel struct {
 	mode   int
 	agent  int
 	chosen *taskAction
+	done   bool
 }
 
 func (m tasksModel) Init() tea.Cmd { return nil }
@@ -57,6 +58,7 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if key.String() == "ctrl+c" {
+		m.done = true
 		return m, tea.Quit
 	}
 	switch m.mode {
@@ -79,6 +81,7 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		switch key.String() {
 		case "q", "esc":
+			m.done = true
 			return m, tea.Quit
 		case "up", "k":
 			m.cursor = max(m.cursor-1, 0)
@@ -109,7 +112,7 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 var taskPicked = lipgloss.NewStyle().Reverse(true)
 
 func (m tasksModel) View() string {
-	if m.chosen != nil {
+	if m.chosen != nil || m.done {
 		return ""
 	}
 	if len(m.rows) == 0 {
