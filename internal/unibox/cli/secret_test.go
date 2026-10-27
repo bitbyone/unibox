@@ -282,6 +282,14 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	if out, _, _ := run(t, paths, "", "doctor"); !strings.Contains(out, "the env changed since the sandbox was created") {
 		t.Fatalf("%s", out)
 	}
+	// One yes in doctor -i recreates it, the cost said in that question
+	// and not asked again.
+	t.Setenv("ACCESSIBLE", "1")
+	_, said, _ := runAt(t, paths, "y\n", "doctor", "-i", "-e", "team")
+	if !strings.Contains(said, "Run unibox sandbox recreate team? It discards what the sandbox holds outside its tasks.") || strings.Contains(said, "[y/N]") || !strings.Contains(calls(t, log), "env create") {
+		t.Fatalf("%s\n%s", said, calls(t, log))
+	}
+	t.Setenv("ACCESSIBLE", "")
 	if err := paths.State(func(s *unibox.State) error { delete(s.Sandboxes, "team"); return nil }); err != nil {
 		t.Fatal(err)
 	}

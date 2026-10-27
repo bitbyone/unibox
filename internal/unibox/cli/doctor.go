@@ -26,6 +26,9 @@ type doctorCheck struct {
 	// Fix is the unibox command that fixes it, which doctor -i offers to
 	// run; empty where the fix needs a value or a choice of the person's.
 	Fix []string `json:"-"`
+	// Cost is what running Fix gives up, said in the one question asked,
+	// as the command runs with --yes once the person agrees.
+	Cost string `json:"-"`
 }
 
 // doctorCommand checks what a run needs, before a run fails on it: sbx,
@@ -38,7 +41,7 @@ func (o *options) doctorCommand() *cobra.Command {
 		ctx := cmd.Context()
 		checks := []doctorCheck{}
 		add := func(area, name, status, message, hint string) {
-			checks = append(checks, doctorCheck{area, name, status, message, hint, nil})
+			checks = append(checks, doctorCheck{area, name, status, message, hint, nil, ""})
 		}
 		// fix gives the check added last the command that fixes it.
 		fix := func(args ...string) { checks[len(checks)-1].Fix = args }
@@ -204,6 +207,7 @@ func (o *options) doctorCommand() *cobra.Command {
 			if changed(state, env, values) {
 				add(area, "sandbox "+sandbox, "warn", "the env changed since the sandbox was created", "unibox sandbox recreate "+sandbox)
 				fix("sandbox", "recreate", sandbox)
+				checks[len(checks)-1].Cost = "it discards what the sandbox holds outside its tasks"
 			}
 			if repo := env.Config.Repo; env.Config.Source != "" && repo != "" {
 				if _, done := behind[repo]; !done {
@@ -307,14 +311,23 @@ func (o *options) offerFixes(cmd *cobra.Command, checks []doctorCheck) error {
 			continue
 		}
 		offered++
-		run, err := o.askYes(fmt.Sprintf("%s, %s: %s. Run unibox %s?", c.Area, c.Name, c.Message, strings.Join(c.Fix, " ")), true)
+		question := fmt.Sprintf("%s, %s: %s. Run unibox %s?", c.Area, c.Name, c.Message, strings.Join(c.Fix, " "))
+		if c.Cost != "" {
+			question = fmt.Sprintf("%s, %s: %s. Run unibox %s? %s", c.Area, c.Name, c.Message, strings.Join(c.Fix, " "), strings.ToUpper(c.Cost[:1])+c.Cost[1:]+".")
+		}
+		run, err := o.askYes(question, true)
 		if err != nil {
 			return err
 		}
 		if !run {
 			continue
 		}
-		if err := o.runStep(cmd, c.Fix...); err != nil {
+		// Agreed once: the command does not ask again for the same.
+		yes := o.yes
+		o.yes = true
+		err = o.runStep(cmd, c.Fix...)
+		o.yes = yes
+		if err != nil {
 			return err
 		}
 	}
