@@ -563,6 +563,16 @@ unibox's and goes when nothing is to be said; a task's directory the
 agent cannot write in - sbx makes a mount's parents as root, so
 `mountTask` makes it as the agent first - is said and left.
 
+sbx says the same of the sandbox: each kit's `agentContext` goes to
+`~/kits-agent-context/<kit>.md`, listed in a `## Kits` section of the
+agent's own file. The two do not overlap - the kits describe the sandbox's
+tools, `instructions` a task's work. Verified with sbx 0.49: for Copilot
+that file is `~/AGENTS.md`, which Copilot never reads (only the git root's
+and the working directory's), in sbx's workspace or a task's; a link from
+`~/.copilot/copilot-instructions.md`, or `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`,
+makes it read. That is the team's kit's to set, not unibox's. A
+`CLAUDE.md` linked to `AGENTS.md` in one directory is read by Copilot once.
+
 A task is removed while others of its sandbox work: it waits for its own
 session lock alone, checks its own clones, and takes only its record out
 of the state (`removeTask`).

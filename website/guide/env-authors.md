@@ -57,7 +57,10 @@ This site is for people using an env repository. If you maintain one:
 - Tell the agents what they need under `instructions: |`, for the env at
   the top of the file and for each repository under `repos:`; unibox
   gathers them into the task's `AGENTS.md` (see
-  [Tasks](/guide/tasks#what-the-agent-is-told)).
+  [Tasks](/guide/tasks#what-the-agent-is-told)). What a kit's tools need
+  saying goes in the kit's `agentContext`, which sbx lists in the agent's
+  own file. Copilot does not read that file (`~/AGENTS.md`) unless a kit
+  links it: `ln -s ../AGENTS.md ~/.copilot/copilot-instructions.md`.
 - Put hosts everyone needs in a kit, not in each person's
   `unibox network` rules.
 - Say in the README which token each secret wants and where to create it.
