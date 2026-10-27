@@ -89,8 +89,8 @@ checkout, alone. Named, `task new` takes `--branch`, `--task` and
 ### What the agent is told
 
 A repository can carry `instructions`, and the env too, at the top of the
-team's `unibox.yaml` beside the sbxenv files or `<env>.unibox.yaml` beside
-an env's own, or of your `config.yaml` (for every env, or under
+team repository's `unibox.yaml` or of `<env>.unibox.yaml` beside the env's
+sbxenv file, or of your `config.yaml` (for every env, or under
 `envs.<env>`):
 
 ```yaml
