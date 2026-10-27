@@ -29,6 +29,9 @@ type portsModel struct {
 	// switchPort publishes or unpublishes a port and reads the ports anew,
 	// with the last line it would have said.
 	switchPort func(key string, on bool) ([]unibox.PortState, string, error)
+	// setDefault has a named port on or off at each start, for the person,
+	// and reads the ports anew.
+	setDefault func(key string, on bool) ([]unibox.PortState, string, error)
 }
 
 type portsSwitched struct {
@@ -65,6 +68,20 @@ func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.turn(func(bool) bool { return true })
 		case " ", "x":
 			return m.turn(func(on bool) bool { return !on })
+		case "d":
+			if m.busy || len(m.rows) == 0 || m.setDefault == nil {
+				break
+			}
+			row := m.rows[m.cursor]
+			if !row.Named {
+				m.err, m.note = nil, "a port no file names is on only until the sandbox stops; name it under ports: in your config.yaml"
+				break
+			}
+			m.busy, m.err, m.note = true, nil, ""
+			return m, func() tea.Msg {
+				rows, note, err := m.setDefault(row.Name, !row.Default)
+				return portsSwitched{rows, note, err}
+			}
 		case "m":
 			if m.busy || len(m.rows) == 0 {
 				break
@@ -142,9 +159,9 @@ func (m portsModel) View() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Ports of sandbox %s, until it next starts\n\n", m.sandbox)
-	nameW, specW := 4, 7
+	nameW, specW, startW := 4, 7, 0
 	for _, r := range m.rows {
-		nameW, specW = max(nameW, len(r.Name)), max(specW, len(r.Spec))
+		nameW, specW, startW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r)))
 	}
 	for i, r := range m.rows {
 		mark, state := "  ", portOff.Render("off")
@@ -155,7 +172,7 @@ func (m portsModel) View() string {
 		if i == m.cursor {
 			mark, name = "> ", portCursor.Render(name)
 		}
-		line := fmt.Sprintf("%s%s  %s  %-*s  %s  %s", mark, state, name, specW, r.Spec, cmp.Or(strings.Join(portURLs(r), " "), "-"), r.Description)
+		line := fmt.Sprintf("%s%s  %s  %-*s  %-*s  %s  %s", mark, state, name, startW, atStart(r), specW, r.Spec, cmp.Or(strings.Join(portURLs(r), " "), "-"), r.Description)
 		b.WriteString(strings.TrimRight(line, " ") + "\n")
 	}
 	b.WriteString("\n")
@@ -174,8 +191,21 @@ func (m portsModel) View() string {
 	default:
 		b.WriteString("\n")
 	}
-	b.WriteString(portHelp.Render("↑/↓ j/k move · ←/h off · →/l on · space switch · m on another host port · enter/q done") + "\n")
+	b.WriteString(portHelp.Render("↑/↓ j/k move · ←/h off · →/l on · space switch · m on another host port · d on/off at start · enter/q done") + "\n")
 	return b.String()
+}
+
+// atStart says whether a port is published at each start, and when that is
+// the person's say rather than the files'.
+func atStart(r unibox.PortState) string {
+	if !r.Named {
+		return "-"
+	}
+	s := "start " + map[bool]string{true: "on", false: "off"}[r.Default]
+	if r.DefaultYours {
+		s += " (yours)"
+	}
+	return s
 }
 
 // portURLs are the addresses a port is published at, for a browser.

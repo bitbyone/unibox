@@ -238,6 +238,7 @@ unibox port [-s <sandbox>]
 unibox port ls [-s <sandbox>]
 unibox port on [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
 unibox port off [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
+unibox port default <name> on|off|- [-e <env>]
 ```
 
 Publishes a running sandbox's ports on the host's loopback until it stops;
@@ -246,8 +247,10 @@ the next start goes back to the named ports in the files (see
 port; `--map` (repeatable) a mapping no file names, as
 `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. `ls` lists ports, where
 each is named, and URLs. List keys: `←`/`h` off, `→`/`l` on, `space`
-switch, `m` on at a host port typed there (as `name=HOST_PORT`), `enter`
-or `q` leave.
+switch, `m` on at a host port typed there (as `name=HOST_PORT`), `d` on
+or off at each start, for you (as `port default`), `enter` or `q` leave.
+`default` writes whether a named port is on at start into your
+`config.yaml` under the env; `-` takes it back to the team's.
 
 ### `unibox network`
 

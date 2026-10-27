@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -62,6 +63,24 @@ func TestANamedPortIsSwitchedOnAtAnotherHostPortWithM(t *testing.T) {
 	pressPort(&m, "m")
 	if m.asking || !strings.Contains(m.View(), "--map") {
 		t.Fatalf("%q", m.View())
+	}
+}
+
+func TestDSaysWhetherANamedPortIsOnAtStartForThePerson(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	m := portsModel{sandbox: "dev", rows: []unibox.PortState{{Name: "spring", Spec: "8080:8080", Named: true}, {Name: "9090", Spec: "9090:9090"}}, setDefault: func(key string, on bool) ([]unibox.PortState, string, error) {
+		calls = append(calls, fmt.Sprintf("%s %v", key, on))
+		return []unibox.PortState{{Name: "spring", Spec: "8080:8080", Named: true, Default: on, DefaultYours: true}, {Name: "9090", Spec: "9090:9090"}}, "port spring is on", nil
+	}}
+	pressPort(&m, "d")
+	if len(calls) != 1 || calls[0] != "spring true" || !strings.Contains(m.View(), "start on (yours)") || !strings.Contains(m.View(), "port spring is on") {
+		t.Fatalf("%v\n%s", calls, m.View())
+	}
+	pressPort(&m, "j")
+	pressPort(&m, "d")
+	if len(calls) != 1 || !strings.Contains(m.View(), "name it under ports:") {
+		t.Fatalf("%v\n%s", calls, m.View())
 	}
 }
 

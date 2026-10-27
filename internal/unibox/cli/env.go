@@ -300,12 +300,15 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 			if from == "" {
 				from = "yours"
 			}
-			at := map[bool]string{true: "on", false: "off"}[port.Default]
+			at := map[bool]string{true: "on", false: "off"}[port.Default] + " at start"
+			if port.From != port.DefaultFrom && (port.DefaultFrom == unibox.FromYours || port.DefaultFrom == unibox.FromYoursAll) {
+				at += " (yours)"
+			}
 			about := ""
 			if port.Description != "" {
 				about = ": " + port.Description
 			}
-			fmt.Fprintf(o.output, "  port %s %s, %s, %s at start%s\n", p, port.Spec, from, at, about)
+			fmt.Fprintf(o.output, "  port %s %s, %s, %s%s\n", p, port.Spec, from, at, about)
 		}
 		return nil
 	}})

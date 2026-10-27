@@ -93,11 +93,13 @@ type Port struct {
 	Description string `json:"description,omitempty"`
 	Team        bool   `json:"team,omitempty"`
 	// From is where the port is named: repo, env, yours-all or yours.
-	From      string          `json:"from,omitempty"`
-	Default   bool            `json:"default"`
-	Named     bool            `json:"named"`
-	On        bool            `json:"on"`
-	Published []PublishedPort `json:"published"`
+	From    string `json:"from,omitempty"`
+	Default bool   `json:"default"`
+	// DefaultYours says your config.yaml decides Default.
+	DefaultYours bool            `json:"default_yours,omitempty"`
+	Named        bool            `json:"named"`
+	On           bool            `json:"on"`
+	Published    []PublishedPort `json:"published"`
 }
 
 // NetworkRule is a host a sandbox may or may not reach, as unibox network

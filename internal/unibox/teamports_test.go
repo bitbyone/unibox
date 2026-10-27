@@ -43,7 +43,7 @@ func TestTheTeamsPortsAreReadBesideTheSbxenvFilesAndThePersonsWin(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ports["db"] != (Port{Spec: "5432", Default: true, Team: true, From: FromEnv}) || ports["web"] != (Port{Spec: "8001:3000", Description: "The dev server", Team: true, From: FromEnv}) || ports["mine"] != (Port{Spec: "9000", From: FromYours}) {
+	if ports["db"] != (Port{Spec: "5432", Default: true, Team: true, From: FromEnv, DefaultFrom: FromYours}) || ports["web"] != (Port{Spec: "8001:3000", Description: "The dev server", Team: true, From: FromEnv, DefaultFrom: FromYours}) || ports["mine"] != (Port{Spec: "9000", From: FromYours, DefaultFrom: FromYours}) {
 		t.Fatalf("%+v", ports)
 	}
 	if _, err := envPorts(EnvConfig{Files: []string{alone}, Ports: map[string]Port{"db": {Default: true}}}, nil); err == nil || !strings.Contains(err.Error(), "names no such port") {
@@ -109,7 +109,7 @@ func TestPortsAreLayeredFromTheRepositoryToThePersonsEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ports["spring"].Default || ports["devtools"] != (Port{Spec: "19222:9222", Team: true, From: FromRepo}) || ports["extra"] != (Port{Spec: "7000", Default: true, From: FromYoursAll}) {
+	if !ports["spring"].Default || ports["spring"].DefaultFrom != FromYoursAll || ports["vite"].DefaultFrom != FromRepo || ports["devtools"] != (Port{Spec: "19222:9222", Team: true, From: FromRepo, DefaultFrom: FromYours}) || ports["extra"] != (Port{Spec: "7000", Default: true, From: FromYoursAll, DefaultFrom: FromYoursAll}) {
 		t.Fatalf("%+v", ports)
 	}
 	if _, ok := ports["absent"]; ok {
@@ -119,5 +119,31 @@ func TestPortsAreLayeredFromTheRepositoryToThePersonsEnv(t *testing.T) {
 	ports, err = envPorts(EnvConfig{Files: []string{ci}}, nil)
 	if err != nil || len(ports) != 3 || ports["vite"].Default || ports["vite"].Spec != "5173" {
 		t.Fatalf("%v %+v", err, ports)
+	}
+}
+
+func TestAPortOfOnesOwnKeepsItsMappingWhenItsDefaultIsSetOrTakenBack(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	ec := m.Config.Envs["dev"]
+	ec.Ports = map[string]Port{"api": {Spec: "9000:9000", Default: true}}
+	m.Config.Envs["dev"] = ec
+	if err := m.Paths.SaveConfig(m.Config); err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	if err := m.SetPortDefault("dev", "api", &off); err != nil {
+		t.Fatal(err)
+	}
+	if p := m.Config.Envs["dev"].Ports["api"]; p != (Port{Spec: "9000:9000"}) {
+		t.Fatalf("%+v", p)
+	}
+	// Nothing beneath it says otherwise, so taking it back is on, as the
+	// port written alone is.
+	if err := m.SetPortDefault("dev", "api", nil); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := m.Paths.LoadConfig(); c.Envs["dev"].Ports["api"] != (Port{Spec: "9000:9000", Default: true}) {
+		t.Fatalf("%+v", c.Envs["dev"].Ports)
 	}
 }

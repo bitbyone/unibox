@@ -517,8 +517,14 @@ never in an sbxenv.
 
 - **Ports are written by hand.** The team's files and config.yaml's
   `ports:` say each port's mapping and whether it is published at start;
-  no command writes them, as a command per field only stood between a
-  person and a short file. `port on|off [name[=HOST_PORT]...] [--map]`
+  no command writes a mapping, as a command per field only stood between
+  a person and a short file. Whether a port is on at start is the one
+  exception, being what a person changes while looking at the list:
+  `port default <name> on|off|-` (`d` in the list) writes `{default:
+  on|off}` under the env in config.yaml, drops it when the layers beneath
+  say the same, and `-` takes it back, a port of one's own mapping
+  keeping it. The list and `port ls` mark a default that is the
+  person's, and `env show` one the person set for a port the team names. `port on|off [name[=HOST_PORT]...] [--map]`
   publish and unpublish on a running sandbox alone, for as long as it
   runs (`PortSwitches`, `PortMaps` in the state); the next start goes
   back to the files. `name=HOST_PORT` keeps the named port's sandbox

@@ -46,5 +46,13 @@ A port with `default: off` is published only by `unibox port on`. A
 change is applied at the next `run`, `resume`, `sandbox shell` or
 `port on|off`.
 
+Whether a port is on at start is also set for you by a command, or `d`
+in the `unibox port` list, which marks such a port `(yours)`:
+
+```sh
+unibox port default spring on       # on at each start of the env's sandboxes
+unibox port default spring -        # as the team's files say again
+```
+
 Order, later wins: `unibox.yaml`, `<env>.unibox.yaml`, your top-level
 `ports:`, your `envs.<env>.ports:`.

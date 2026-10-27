@@ -687,7 +687,23 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	}
 	writeMine("            vite: {port: '9173:5173', default: on}\n")
 	out, _, err = run(t, paths, "", "env", "show", "team")
-	if err != nil || !strings.Contains(out, "port vite 9173:5173, the env's, on at start: Vite dev server") {
+	if err != nil || !strings.Contains(out, "port vite 9173:5173, the env's, on at start (yours): Vite dev server") {
 		t.Fatalf("%v\n%s", err, out)
+	}
+	// Switched for oneself by command, and taken back.
+	if out, _, err = run(t, paths, "", "port", "default", "api", "off"); err != nil || !strings.Contains(out, "port api is off at each start of env team's sandboxes, by your config.yaml") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "env", "show", "team"); err != nil || !strings.Contains(out, "port api 8080:8080, the env's, off at start (yours)") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "port", "default", "api", "-"); err != nil || !strings.Contains(out, "on at each start of env team's sandboxes, as the env's files say") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); strings.Contains(string(cfg), "api") {
+		t.Fatalf("taking it back left\n%s", cfg)
+	}
+	if _, _, err = run(t, paths, "", "port", "default", "nope", "on"); err == nil || !strings.Contains(err.Error(), "has no port nope") {
+		t.Fatalf("%v", err)
 	}
 }

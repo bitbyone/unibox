@@ -133,8 +133,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **What only unibox reads sits beside the sbxenv file.** The team's
   ports are in `<name>.unibox.yaml`, which sbx never reads, so a team
   member without unibox is limited by nothing. Ports are written by
-  hand; the user's in config.yaml win over the team's, and `port on|off`
-  only switches a running sandbox's.
+  hand; the user's in config.yaml win over the team's, `port default`
+  (`d` in the list) writes only whether one is on at start for the user,
+  and `port on|off` only switches a running sandbox's.
 - **Nobody using unibox needs sbx's CLI.** The network policy
   (`unibox network`), `env.rememberHostCommands` (`unibox config`) and
   stray mounts (`unibox prune`) have commands, and every hint doctor or

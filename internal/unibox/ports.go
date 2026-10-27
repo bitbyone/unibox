@@ -26,8 +26,10 @@ type Port struct {
 	Default     bool   `yaml:"default" json:"default"`
 	Description string `yaml:"-" json:"-"`
 	Team        bool   `yaml:"-" json:"-"`
-	// From is the layer that names it, FromRepo to FromYours.
-	From string `yaml:"-" json:"-"`
+	// From is the layer that names it, FromRepo to FromYours, and
+	// DefaultFrom the one that says whether it is on at start.
+	From        string `yaml:"-" json:"-"`
+	DefaultFrom string `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML takes a port as its spec alone, on by default, or as
@@ -267,6 +269,8 @@ type PortState struct {
 	Team    bool
 	From    string
 	Default bool
+	// DefaultYours says the person's config.yaml decides Default.
+	DefaultYours bool
 	// Named is false for a port switched on for the sandbox alone.
 	Named     bool
 	On        bool
@@ -301,7 +305,7 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	}
 	out := []PortState{}
 	add := func(name string, p Port, named bool) {
-		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, Named: named}
+		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, DefaultYours: p.DefaultFrom == FromYours || p.DefaultFrom == FromYoursAll, Named: named}
 		spec := p.Spec
 		if w, on := want[name]; on {
 			spec, s.Spec, s.On = w, w, true
@@ -346,6 +350,61 @@ func (p PortSpec) withHost(port int) string {
 // runs: by the env's name, by name=HOST_PORT for one of them on another
 // host port, or, for a port the env does not name, by its spec. The next
 // start of the sandbox goes back to the env's defaults.
+// SetPortDefault has a port of an env on or off at each start of its
+// sandboxes, in the person's config.yaml under the env; with neither, the
+// person's say for the env is taken back, leaving what the layers under it
+// say. A port the person names only to switch is dropped once the layers
+// under it say the same, so config.yaml keeps no switch that does nothing.
+func (m *Manager) SetPortDefault(envName, port string, on *bool) error {
+	c, err := m.Paths.LoadConfig()
+	if err != nil {
+		return err
+	}
+	ec, ok := c.Envs[envName]
+	if !ok {
+		return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", envName)
+	}
+	ports, err := envPorts(ec, c.Ports)
+	if err != nil {
+		return err
+	}
+	if _, named := ports[port]; !named {
+		return fmt.Errorf("env %s has no port %s; unibox port ls lists them", envName, port)
+	}
+	mine := ec.Ports[port]
+	ec.Ports = maps.Clone(ec.Ports)
+	if ec.Ports == nil {
+		ec.Ports = map[string]Port{}
+	}
+	delete(ec.Ports, port)
+	under, err := envPorts(ec, c.Ports)
+	if err != nil {
+		return err
+	}
+	beneath, below := under[port]
+	switch {
+	case on == nil && mine.Spec == "":
+	case on == nil:
+		// A port of the person's own mapping keeps it; with no default
+		// written, the format reads it as on, so the one beneath is written.
+		mine.Default = !below || beneath.Default
+		ec.Ports[port] = mine
+	case below && mine.Spec == "" && beneath.Default == *on:
+	default:
+		mine.Default = *on
+		ec.Ports[port] = mine
+	}
+	if len(ec.Ports) == 0 {
+		ec.Ports = nil
+	}
+	c.Envs[envName] = ec
+	if err = m.Paths.SaveConfig(c); err != nil {
+		return err
+	}
+	m.Config.Envs = c.Envs
+	return nil
+}
+
 func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[string]bool) error {
 	guard, err := m.guard(name)
 	if err != nil {

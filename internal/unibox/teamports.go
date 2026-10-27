@@ -185,7 +185,7 @@ func envPorts(ec EnvConfig, global map[string]Port) (map[string]Port, error) {
 	}
 	out := map[string]Port{}
 	for k, v := range team {
-		out[k] = Port{Spec: v.Spec, Default: v.Default, Description: v.Description, Team: true, From: v.From}
+		out[k] = Port{Spec: v.Spec, Default: v.Default, Description: v.Description, Team: true, From: v.From, DefaultFrom: v.From}
 	}
 	for _, layer := range []struct {
 		ports map[string]Port
@@ -205,7 +205,7 @@ func envPorts(ec EnvConfig, global map[string]Port) (map[string]Port, error) {
 			if v.Spec != "" {
 				p.Spec = v.Spec
 			}
-			p.Default = v.Default
+			p.Default, p.DefaultFrom = v.Default, layer.from
 			out[k] = p
 		}
 	}
