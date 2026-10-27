@@ -79,10 +79,10 @@ func TestArgsAndResourcesForEveryEnvAreKeptAndAnEnvsOwnWin(t *testing.T) {
 	if got.Args["user"] != "everyone" || got.Envs["dev"]["token"] != "mine" || got.Resources != v.Resources || got.EnvResources["dev"] != v.EnvResources["dev"] || got.EnvResources["ci"] != v.EnvResources["ci"] {
 		t.Fatalf("%+v", got)
 	}
-	if r := got.ResourcesFor("dev", ""); r != (Resources{CPUs: "100%", Memory: "8g"}) {
+	if r := got.ResourcesFor(Env{Name: "dev"}, ""); r != (Resources{CPUs: "100%", Memory: "8g"}) {
 		t.Fatalf("%+v", r)
 	}
-	if r := got.ResourcesFor("other", ""); r != v.Resources {
+	if r := got.ResourcesFor(Env{Name: "other"}, ""); r != v.Resources {
 		t.Fatalf("%+v", r)
 	}
 	env := Env{Name: "dev"}
@@ -143,6 +143,38 @@ func TestResourcesReachSbxInAFileGivenLastAndAChangeIsTold(t *testing.T) {
 	}
 	if check, _ = m.Check(ctx, Request{Env: "dev"}); len(check.Needs) != 0 {
 		t.Fatalf("%+v", check.Needs)
+	}
+}
+
+func TestTheTeamsResourcesComeUnderThePersons(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	sandboxes := filepath.Dir(m.Config.Envs["dev"].Files[0])
+	root := filepath.Dir(sandboxes)
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The repository's for every env, the env's own over it.
+	write(t, filepath.Join(root, "unibox.yaml"), "resources: {cpus: '2', memory: 2g}\n")
+	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "resources:\n  memory: 3g\n")
+	env, err := m.Config.LoadEnv("dev")
+	if err != nil || env.Resources != (Resources{CPUs: "2", Memory: "3g"}) {
+		t.Fatalf("%+v %v", env.Resources, err)
+	}
+	if _, err := m.Create(context.Background(), Request{Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.overlay, "sandboxOptions:\n  cpus: 2\n  memory: \"3g\"\n") {
+		t.Fatalf("%q", f.overlay)
+	}
+	// The person's for every env win over the team's for this one.
+	values := EnvValues{Resources: Resources{Memory: "1g"}}
+	if r := values.ResourcesFor(env, "dev"); r != (Resources{CPUs: "2", Memory: "1g"}) || values.ResourceFrom(env, "dev", "cpus") != ResourceOfTeam || values.ResourceFrom(env, "dev", "memory") != ResourceOfAll {
+		t.Fatalf("%+v", r)
+	}
+	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "resources: {cpus: lots}\n")
+	if _, err := m.Config.LoadEnv("dev"); err == nil || !strings.Contains(err.Error(), "dev.unibox.yaml: resources") {
+		t.Fatalf("%v", err)
 	}
 }
 

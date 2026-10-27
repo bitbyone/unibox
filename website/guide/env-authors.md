@@ -34,6 +34,17 @@ This site is for people using an env repository. If you maintain one:
 
   unibox knows GitHub's page for `github` and `copilot`; a team's entry
   replaces it.
+- Give the env's sandboxes a default share of the machine in the same
+  files; each person's `vars.toml` wins over it:
+
+  ```yaml
+  resources:
+    cpus: 50%
+    memory: 50%
+  ```
+
+  A share fits every machine; unibox converts it at each create and it
+  wins over the sbxenv's own `sandboxOptions`.
 - Put hosts everyone needs in a kit, not in each person's
   `unibox network` rules.
 - Say in the README which token each secret wants and where to create it.

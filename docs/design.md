@@ -384,7 +384,11 @@ docs/sandboxes.md.
   A value for an arg the env does not declare is left out (sbx refuses
   one) and doctor names it.
 - **Resources are the person's too.** How much of a machine a sandbox
-  gets depends on the machine, which a team's env cannot know.
+  gets depends on the machine, which a team's env cannot know; a share of
+  it fits every machine, so the team may give one as the env's default
+  under `resources:` in its unibox.yaml files (the repository's, the
+  env's over it), which sbx does not read and which wins over the
+  sbxenv's own `sandboxOptions`. The person's win over the team's:
   `[resources]` and `[envs.<env>.resources]` in vars.toml give `cpus` and
   `memory`, absolute or as a share of the host, written by hand - no
   command, as two values a person sets once need none. sbx takes no

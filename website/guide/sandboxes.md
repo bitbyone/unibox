@@ -42,7 +42,9 @@ unibox sandbox recreate dev                        # applies the change
 size such as `16g` or a share. sbx caps a sandbox at 75% of the host's
 memory. For every env, or one env, set `[resources]` or
 `[envs.<env>.resources]` in `vars.toml` (see
-[Files](/reference/files#vars-toml)).
+[Files](/reference/files#vars-toml)). The env's team may give a default in
+its `unibox.yaml` files; yours win over it, and `unibox sandbox resources`
+says where each value comes from.
 
 ## A second sandbox
 

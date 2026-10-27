@@ -100,8 +100,9 @@ func (p *TeamPort) UnmarshalYAML(n *yaml.Node) error {
 
 // teamDoc is what a team's unibox.yaml or <env>.unibox.yaml says.
 type teamDoc struct {
-	Ports   map[string]TeamPort   `yaml:"ports"`
-	Secrets map[string]TokenGuide `yaml:"secrets"`
+	Ports     map[string]TeamPort   `yaml:"ports"`
+	Secrets   map[string]TokenGuide `yaml:"secrets"`
+	Resources Resources             `yaml:"resources"`
 }
 
 // readTeamFiles reads the team's files of an env in the order they apply:

@@ -119,9 +119,10 @@ func (o *options) askResources(cmd *cobra.Command, b api.Sandbox) error {
 		return err
 	}
 	own := values.SandboxResources[b.Name]
+	env := o.envOf(b)
 	args := []string{"sandbox", "resources", b.Name}
 	for _, r := range unibox.ResourceNames {
-		now := cmp.Or(values.ResourcesFor(b.Env, b.Name).Get(r), "as the env's files say") + resourceFrom(values, b, r)
+		now := cmp.Or(values.ResourcesFor(env, b.Name).Get(r), "as the env's files say") + resourceFrom(values, env, b, r)
 		hint := "now " + now + "; empty keeps it"
 		if own.Get(r) != "" {
 			hint += ", - gives back the env's"

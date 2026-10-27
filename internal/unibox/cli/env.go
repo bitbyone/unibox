@@ -243,7 +243,7 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 			for k, v := range e.Ports {
 				ports[k] = port{v.Spec, v.Description, v.Team, v.Default}
 			}
-			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "resources": values.ResourcesFor(name, e.SandboxName()), "ports": ports})
+			return o.write(map[string]any{"api_version": api.Version, "env": name, "sandbox": e.SandboxName(), "sbxenv": e.SBX, "values": mine, "missing": e.SBX.Missing(mine), "resources": values.ResourcesFor(e, e.SandboxName()), "ports": ports})
 		}
 		fmt.Fprintf(o.output, "env %s, sandbox %s, agent %s\n", name, e.SandboxName(), e.SBX.Agent)
 		for _, f := range e.SBX.Files {
@@ -252,7 +252,7 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 		if e.Config.Repo != "" {
 			fmt.Fprintf(o.output, "  repo %s\n", e.Config.Repo)
 		}
-		if r := values.ResourcesFor(name, e.SandboxName()); r != (unibox.Resources{}) {
+		if r := values.ResourcesFor(e, e.SandboxName()); r != (unibox.Resources{}) {
 			resolved, err := r.Resolve(unibox.HostResources(), io.Discard)
 			for _, n := range unibox.ResourceNames {
 				v := r.Get(n)
@@ -262,7 +262,11 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 				if got := resolved.Get(n); err == nil && got != v {
 					v += " (" + got + " here)"
 				}
-				fmt.Fprintf(o.output, "  %s %s, from vars.toml\n", n, v)
+				from := "from vars.toml"
+				if values.ResourceFrom(e, e.SandboxName(), n) == unibox.ResourceOfTeam {
+					from = "the team's"
+				}
+				fmt.Fprintf(o.output, "  %s %s, %s\n", n, v, from)
 			}
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)

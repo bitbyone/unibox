@@ -16,7 +16,8 @@ default to these, on Windows too:
 | `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |
 
 In the env repository, besides sbxenv files and kits, unibox reads the
-team's named ports and where its tokens are made (`secrets:`):
+team's named ports, where its tokens are made (`secrets:`) and the
+resources its sandboxes start from (`resources: {cpus, memory}`):
 `unibox.yaml` at the root (every env) and `<env>.unibox.yaml` beside
 `<env>.sbxenv.yaml`. Tokens themselves are in none of these files; they
 are in sbx's store.
@@ -76,7 +77,8 @@ cpus = '8'
 `cpus` is a count, `0` for all, or `1%`-`100%` of this machine; `memory` a
 size (`k`, `m`, `g`) or a share. sbx takes no shares, so unibox converts
 them at each create and caps memory at sbx's 75% of the host. Values are
-one line each; one starting with `secret:` is refused.
+one line each; one starting with `secret:` is refused. All of these win
+over the team's `resources:` in the env repository's `unibox.yaml` files.
 
 ## In the sandbox
 

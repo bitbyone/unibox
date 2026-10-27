@@ -174,11 +174,35 @@ func (v EnvValues) ArgsFor(env Env) map[string]string {
 	return out
 }
 
-// ResourcesFor are the person's resources for a sandbox of an env: the
-// sandbox's own, then the env's, then those for every env, each taking
-// what the one before leaves unset.
-func (v EnvValues) ResourcesFor(env, sandbox string) Resources {
-	return v.SandboxResources[sandbox].Over(v.EnvResources[env].Over(v.Resources))
+// ResourcesFor are the resources of a sandbox of an env: the person's for
+// the sandbox, then for the env, then for every env, then the team's, each
+// taking what the one before leaves unset.
+func (v EnvValues) ResourcesFor(env Env, sandbox string) Resources {
+	return v.SandboxResources[sandbox].Over(v.EnvResources[env.Name].Over(v.Resources.Over(env.Resources)))
+}
+
+// Where a sandbox's resource comes from, the person's first.
+const (
+	ResourceOfSandbox = "sandbox"
+	ResourceOfEnv     = "env"
+	ResourceOfAll     = "all"
+	ResourceOfTeam    = "team"
+)
+
+// ResourceFrom says which layer of ResourcesFor gives a resource, or ""
+// when none does and the env's files decide.
+func (v EnvValues) ResourceFrom(env Env, sandbox, name string) string {
+	switch {
+	case v.SandboxResources[sandbox].Get(name) != "":
+		return ResourceOfSandbox
+	case v.EnvResources[env.Name].Get(name) != "":
+		return ResourceOfEnv
+	case v.Resources.Get(name) != "":
+		return ResourceOfAll
+	case env.Resources.Get(name) != "":
+		return ResourceOfTeam
+	}
+	return ""
 }
 
 // SetSandboxResources makes r a sandbox's own resources; none forgets

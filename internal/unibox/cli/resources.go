@@ -67,12 +67,13 @@ again: unibox sandbox recreate applies them.`, Example: "  unibox sandbox resour
 
 func (o *options) printResources(b api.Sandbox, values unibox.EnvValues, changed bool) error {
 	own := values.SandboxResources[b.Name]
-	all := values.ResourcesFor(b.Env, b.Name)
+	env := o.envOf(b)
+	all := values.ResourcesFor(env, b.Name)
 	if o.json {
 		return o.write(map[string]any{"api_version": api.Version, "sandbox": b.Name, "env": b.Env, "own": own, "resources": all})
 	}
 	for _, r := range unibox.ResourceNames {
-		fmt.Fprintf(o.output, "%-7s %s\n", r, cmp.Or(all.Get(r), "as the env's files say")+resourceFrom(values, b, r))
+		fmt.Fprintf(o.output, "%-7s %s\n", r, cmp.Or(all.Get(r), "as the env's files say")+resourceFrom(values, env, b, r))
 	}
 	if changed && b.State != "missing" {
 		fmt.Fprintf(o.output, "unibox sandbox recreate %s applies it\n", b.Name)
@@ -81,14 +82,25 @@ func (o *options) printResources(b api.Sandbox, values unibox.EnvValues, changed
 }
 
 // resourceFrom says where a sandbox's resource comes from.
-func resourceFrom(values unibox.EnvValues, b api.Sandbox, r string) string {
-	switch {
-	case values.SandboxResources[b.Name].Get(r) != "":
+func resourceFrom(values unibox.EnvValues, env unibox.Env, b api.Sandbox, r string) string {
+	switch values.ResourceFrom(env, b.Name, r) {
+	case unibox.ResourceOfSandbox:
 		return " (its own)"
-	case values.EnvResources[b.Env].Get(r) != "":
+	case unibox.ResourceOfEnv:
 		return " (env " + b.Env + "'s)"
-	case values.Resources.Get(r) != "":
+	case unibox.ResourceOfAll:
 		return " (every env's)"
+	case unibox.ResourceOfTeam:
+		return " (the team's)"
 	}
 	return ""
+}
+
+// envOf is the env a sandbox was made from, with the team's resources; an
+// env no longer there is its name alone, which gives none.
+func (o *options) envOf(b api.Sandbox) unibox.Env {
+	if env, err := o.manager.Config.LoadEnv(b.Env); err == nil {
+		return env
+	}
+	return unibox.Env{Name: b.Env}
 }

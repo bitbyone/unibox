@@ -258,7 +258,7 @@ func (m *Manager) resources(env Env, sandbox string, log io.Writer) (Resources, 
 	if err != nil {
 		return Resources{}, err
 	}
-	r, err := values.ResourcesFor(env.Name, cmp.Or(sandbox, env.SandboxName())).Resolve(HostResources(), log)
+	r, err := values.ResourcesFor(env, cmp.Or(sandbox, env.SandboxName())).Resolve(HostResources(), log)
 	if err != nil {
 		return r, Fail(4, "resources_invalid", "env %s: %v", env.Name, err)
 	}

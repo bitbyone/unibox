@@ -293,7 +293,7 @@ func (o *options) askCreate(envName string) ([]string, error) {
 		return nil, err
 	}
 	args := []string{"sandbox", "create", name, "-e", envName}
-	env := values.ResourcesFor(envName, "")
+	env := values.ResourcesFor(e, "")
 	for _, r := range unibox.ResourceNames {
 		v, err := o.askText(r, "empty keeps the env's: "+cmp.Or(env.Get(r), "as the env's files say"), "", func(s string) error {
 			if s == "" {

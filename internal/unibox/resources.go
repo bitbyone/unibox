@@ -10,14 +10,35 @@ import (
 	"strings"
 )
 
-// Resources are what a person gives their sandboxes of their machine: CPUs
-// and memory, absolute or as a share of the host. A team's env cannot know
-// either, so they are the person's, in vars.toml - for every env, or for
-// one. sbx takes no share, so unibox works it out on the host at each
-// create and hands sbx the amount, in an sbxenv file of its own given last.
+// Resources are what a sandbox gets of the machine: CPUs and memory,
+// absolute or as a share of the host. A team may say what an env's
+// sandboxes start from in its unibox.yaml files, a share being the one
+// thing that fits every machine; the person's in vars.toml - for every
+// env, one, or one sandbox - win over it. sbx takes no share, so unibox
+// works it out on the host at each create and hands sbx the amount, in an
+// sbxenv file of its own given last.
 type Resources struct {
-	CPUs   string `toml:"cpus,omitempty" json:"cpus,omitempty"`
-	Memory string `toml:"memory,omitempty" json:"memory,omitempty"`
+	CPUs   string `toml:"cpus,omitempty" json:"cpus,omitempty" yaml:"cpus"`
+	Memory string `toml:"memory,omitempty" json:"memory,omitempty" yaml:"memory"`
+}
+
+// ReadTeamResources are the resources a team gives an env's sandboxes: the
+// repository's unibox.yaml, then the file beside each of the env's sbxenv
+// files over it, a later file's over an earlier one's.
+func ReadTeamResources(sbxenvFiles []string) (Resources, error) {
+	var out Resources
+	err := readTeamFiles(sbxenvFiles, func(name, _ string, doc teamDoc) error {
+		for _, r := range ResourceNames {
+			if v := doc.Resources.Get(r); v != "" {
+				if err := ValidResource(r, v); err != nil {
+					return fmt.Errorf("%s: resources: %w", name, err)
+				}
+			}
+		}
+		out = doc.Resources.Over(out)
+		return nil
+	})
+	return out, err
 }
 
 // ResourceNames are the resources a person may set.
