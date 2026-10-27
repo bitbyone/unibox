@@ -94,6 +94,33 @@ esac
 	}
 }
 
+func TestSignedInStartsTheDaemonSbxNeedsToSay(t *testing.T) {
+	bin, dir := t.TempDir(), t.TempDir()
+	started := filepath.Join(dir, "started")
+	// sbx diagnose exits 1 whenever a check fails, the daemon's or the
+	// network policy's on a fresh install, and prints its report all the same.
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
+case "$1 $2" in
+"daemon start") touch `+Quote(started)+` ;;
+diagnose*)
+	if [ -e `+Quote(started)+` ]; then
+		echo '{"checks":[{"name":"Daemon","status":"pass"},{"name":"Authentication","status":"pass"},{"name":"Global network policy","status":"fail"}]}'
+	else
+		echo '{"checks":[{"name":"Daemon","status":"fail"},{"name":"Authentication","status":"skip"}]}'
+	fi
+	exit 1 ;;
+esac
+`))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	signedIn, err := (&SBX{}).SignedIn(context.Background())
+	if err != nil || !signedIn {
+		t.Fatalf("%v %v", signedIn, err)
+	}
+	if _, err := os.Stat(started); err != nil {
+		t.Fatal("the daemon was not started")
+	}
+}
+
 func TestASessionUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)

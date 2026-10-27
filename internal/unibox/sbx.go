@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -389,6 +390,16 @@ func (r *SBX) SignedIn(ctx context.Context) (bool, error) {
 	checks, err := r.Diagnose(ctx)
 	if err != nil {
 		return false, err
+	}
+	// sbx knows who is signed in only through its daemon, which a fresh
+	// install or a restarted machine has not started yet.
+	if slices.ContainsFunc(checks, func(c RuntimeCheck) bool { return c.Name == "Daemon" && c.Status == "fail" }) {
+		if err := runQuiet(hostCommand(ctx, "sbx", "daemon", "start", "--detach")); err != nil {
+			return false, fmt.Errorf("sbx's daemon did not start, so whether sbx is signed in is unknown; unibox doctor says what sbx lacks: %w", err)
+		}
+		if checks, err = r.Diagnose(ctx); err != nil {
+			return false, err
+		}
 	}
 	for _, c := range checks {
 		if c.Name == "Authentication" {

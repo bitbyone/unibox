@@ -97,7 +97,9 @@ func commandOutput(c *exec.Cmd) ([]byte, error) {
 	c.Stderr = &errout
 	b, err := c.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%s failed; check its configuration and retry: %s", c.Path, strings.TrimSpace(errout.String()))
+		// What the command printed goes back with the failure: sbx diagnose
+		// exits non-zero whenever a check fails, and its report is the answer.
+		return b, fmt.Errorf("%s failed; check its configuration and retry: %s", c.Path, strings.TrimSpace(errout.String()))
 	}
 	return b, nil
 }
