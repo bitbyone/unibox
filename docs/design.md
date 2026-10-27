@@ -509,6 +509,26 @@ replaces.
   is left as it is. The hook is rewritten before each session; it lives
   in the guest, outside the host's `.git`.
 
+## Repositories by name
+
+An env's tasks may be given repositories by name from an index (`repos:`,
+`repoindex.go`): the team's in its unibox.yaml files and the person's in
+config.yaml, for every env or one, laid as ports are, a later layer's
+fields over an earlier one's and a person's entry of `default` alone a
+switch. Each is a forge address, a `ref` and a default: `always` puts it
+into every new task of the env (`run`, `prepare`, `check`), cloned even
+beside mounted directories - a task's repositories are mounted or cloned
+each on its own (`Repository.Mounted`, `RepoInput.Clone`), and `decide`
+leaves those always cloned out of whether the rest are mounted; `on`
+has `task new` pick it to begin with; `off` is only there to pick. A task
+that exists keeps what it holds. A name works wherever a repository does,
+unless a directory of that name is here. `task new` picks at a terminal
+from `pickModel` (`pickui.go`), a list narrowed by typing, fuzzily
+(`fuzzy.go`, letters in order, side by side and at a word's start
+counting more), and runs `run --clone` with what was picked; the noun
+lists filter alike after `/`. `unibox repo add|rm|default` write the
+person's.
+
 ## Ports
 
 A host port is the machine's business - what already runs there, what

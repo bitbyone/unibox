@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -748,5 +749,74 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	}
 	if _, _, err = run(t, paths, "", "port", "default", "nope", "on"); err == nil || !strings.Contains(err.Error(), "has no port nope") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	if err := os.WriteFile(unibox.TeamFile(file), []byte("repos:\n  adrs: {url: https://gitlab.example.com/arch/adrs.git, ref: main, default: always, description: Decisions}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "env", "add", "team", file); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "repo", "add", "api", "https://gitlab.example.com/x/api.git", "--ref", "develop"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "repo", "default", "api", "on"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "repo", "ls")
+	if err != nil || !strings.Contains(out, "adrs  main     always   the env's") || !strings.Contains(out, "api   develop  on       yours") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// Named, a repository of the index is its address; the one that says
+	// always comes along, cloned.
+	out, _, err = run(t, paths, "", "task", "check", "api", "--json")
+	var check api.Check
+	if json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 2 || check.Repositories[0].URL != "https://gitlab.example.com/x/api.git" || check.Repositories[0].Branch != "develop" || check.Repositories[1].Name != "adrs" || check.Repositories[1].Mounted {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// A branch given wins over the index's.
+	out, _, _ = run(t, paths, "", "task", "check", "api", "--branch", "fix-1", "--json")
+	if json.Unmarshal([]byte(out), &check) != nil || check.Repositories[0].Branch != "fix-1" || check.Repositories[1].Branch != "main" {
+		t.Fatalf("%s", out)
+	}
+	// A checkout of the repository every task takes is not given it again.
+	checkout := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "git@gitlab.example.com:arch/adrs.git"}} {
+		if b, err := exec.Command("git", append([]string{"-C", checkout}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, b)
+		}
+	}
+	out, _, _ = run(t, paths, "", "task", "check", checkout, "--json")
+	if json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 1 || !check.Repositories[0].Mounted {
+		t.Fatalf("%s", out)
+	}
+	// Beside a mounted directory it is cloned still.
+	dir := t.TempDir()
+	out, _, _ = run(t, paths, "", "task", "check", dir, "--json")
+	if json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 2 || !check.Repositories[0].Mounted || check.Repositories[1].Mounted || check.Repositories[1].Name != "adrs" {
+		t.Fatalf("%s", out)
+	}
+	// task new offers them, those that say on or always picked.
+	t.Setenv("ACCESSIBLE", "1")
+	_, said, _ := runAt(t, paths, "\n", "task", "new")
+	if !strings.Contains(said, "Repositories for a new task in env team") || !strings.Contains(said, "always · Decisions") {
+		t.Fatalf("%s", said)
+	}
+	if _, _, err := run(t, paths, "", "task", "new", "nope"); err == nil || !strings.Contains(err.Error(), "names no repository nope") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "repo", "rm", "adrs"); err == nil || !strings.Contains(err.Error(), "one of the team's stays") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "repo", "rm", "api"); err != nil {
+		t.Fatal(err)
 	}
 }

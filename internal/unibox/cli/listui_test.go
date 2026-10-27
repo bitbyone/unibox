@@ -134,3 +134,74 @@ func TestNounsAloneListWithoutATerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestFuzzyMatchesLettersInOrderTheCloserTheBetter(t *testing.T) {
+	t.Parallel()
+	texts := []string{"payments-api main", "architecture-decisions", "ad-hoc", "spec business"}
+	if got := fuzzyFilter("arch dec", texts); !slices.Equal(got, []int{1}) {
+		t.Fatalf("%v", got)
+	}
+	if got := fuzzyFilter("ad", texts); !slices.Equal(got, []int{2, 1}) {
+		t.Fatalf("ad-hoc, its letters side by side at a word's start, is not first: %v", got)
+	}
+	if got := fuzzyFilter("spcbus", texts); !slices.Equal(got, []int{3}) {
+		t.Fatalf("%v", got)
+	}
+	if got := fuzzyFilter("", texts); len(got) != len(texts) {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestAListIsFilteredAfterASlashAndActsOnWhatItLeaves(t *testing.T) {
+	t.Parallel()
+	m := listModel{title: "repos", header: []string{"NAME"}, rows: [][]string{{"payments"}, {"adrs"}, {"spec"}}, ids: []string{"payments", "adrs", "spec"}, actions: []listAction{
+		{key: "enter", name: "open", help: "open"},
+	}}
+	// Typed after /, a q or a j is the filter's, not the list's.
+	got := listKeys(m, "/", "s", "p", "q")
+	if got.done || !got.filtering || got.query != "spq" || !strings.Contains(got.View(), "nothing matches") {
+		t.Fatalf("%+v\n%s", got, got.View())
+	}
+	got = listKeys(m, "/", "s", "p")
+	got = listKeys(got, "enter")
+	if got.filtering || got.query != "sp" || got.id() != "spec" || got.chosen != nil {
+		t.Fatalf("%+v", got)
+	}
+	if got = listKeys(got, "enter"); got.chosen == nil || got.id() != "spec" {
+		t.Fatalf("%+v", got)
+	}
+	// Esc clears a filter before it leaves.
+	var tm tea.Model = listKeys(m, "/", "a", "enter")
+	tm, _ = tm.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if got := tm.(listModel); got.done || got.query != "" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAPickIsNarrowedByWhatIsTypedAndPickedWithSpace(t *testing.T) {
+	t.Parallel()
+	m := pickModel{title: "repos", items: []pickItem{{value: "payments", label: "payments"}, {value: "adrs", label: "adrs  always", picked: true}, {value: "spec", label: "spec"}}}
+	var tm tea.Model = m
+	for _, k := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("pa")}, {Type: tea.KeySpace}, // payments
+		{Type: tea.KeyEsc},                                             // clears the filter, does not leave
+		{Type: tea.KeyDown}, {Type: tea.KeyDown}, {Type: tea.KeySpace}, // spec
+		{Type: tea.KeyEnter},
+	} {
+		tm, _ = tm.Update(k)
+	}
+	got := tm.(pickModel)
+	picked := []string{}
+	for _, it := range got.items {
+		if it.picked {
+			picked = append(picked, it.value)
+		}
+	}
+	if !got.done || got.gaveUp || !slices.Equal(picked, []string{"payments", "adrs", "spec"}) {
+		t.Fatalf("%+v", got)
+	}
+	tm, _ = pickModel{items: m.items}.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if !tm.(pickModel).gaveUp {
+		t.Fatal("esc with nothing typed did not leave")
+	}
+}

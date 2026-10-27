@@ -71,9 +71,13 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 	if err != nil {
 		return api.Task{}, err
 	}
+	// A task is named by the repositories asked for; those the env has
+	// every task take leave its name be, so a task made before they were
+	// there is found still.
+	own := req.own(repos)
 	id := req.Task
 	if id == "" {
-		id = taskID(repos)
+		id = taskID(own)
 		// The same repositories in another sandbox are another task, and a
 		// task's name has to say which one without naming the sandbox.
 		if other := taskOwner(state, id); other != "" && other != b.Name {
@@ -92,7 +96,7 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 			// A task grown by add-repo is still the task its first
 			// repositories name; they find it with all it holds now.
 			if digest(old.Repositories) != digest(repos) {
-				if !containsRepositories(old.Repositories, repos) {
+				if !containsRepositories(old.Repositories, own) {
 					return t, fmt.Errorf("task %s belongs to different repositories, branches or authors; choose another --task name", id)
 				}
 				t.Repositories = old.Repositories
@@ -155,7 +159,7 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 		return nil, err
 	}
 	if req.Push {
-		if err = PushRepositories(ctx, repos); err != nil {
+		if err = pushRepositories(ctx, repos, req.alwaysNames()); err != nil {
 			return nil, err
 		}
 		repos, needs, err = ResolveRepositories(ctx, req)
@@ -226,9 +230,17 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	if t.ID == "" {
 		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox task ls lists them", req.Task)
 	}
-	// A task's repositories are all mounted or all cloned.
+	// A task's directories are mounted or cloned as its first ones were;
+	// an address, which no mount can take, is cloned beside mounted ones.
 	req.Mount = slices.ContainsFunc(t.Repositories, func(r api.Repository) bool { return r.Mounted })
 	req.Clone = !req.Mount
+	if req.Mount {
+		for i, in := range req.Repositories {
+			if p, err := ExpandPath(in.Source); err != nil || !isDir(p) {
+				req.Repositories[i].Clone = true
+			}
+		}
+	}
 	repos, err := resolveForTask(ctx, req)
 	if err != nil {
 		return t, nil, err

@@ -30,6 +30,39 @@ A `--branch` before every `--repo` applies to all of them; one after a
 `--repo` applies to that repository alone. The agent starts in
 `/work/<task>`, above the repositories.
 
+## Repositories by name
+
+An env can name the repositories its tasks use - the team's under
+`repos:` in its `unibox.yaml` files, yours in `config.yaml` - so a task is
+started by picking them rather than typing addresses:
+
+```sh
+unibox task new                     # pick them; type to filter, space picks
+unibox task new payments adrs       # or name them
+unibox run adrs                     # a name works wherever a repository does
+unibox repo                         # the index: / filter, space default, a add
+```
+
+```yaml
+repos:
+  adrs:
+    url: https://gitlab.example.com/arch/adrs.git
+    ref: main
+    default: always               # every new task takes it
+    description: Architecture decisions
+  spec: {url: https://gitlab.example.com/biz/spec.git, default: on}
+  payments: https://gitlab.example.com/x/payments.git
+```
+
+`default: always` puts the repository into every new task of the env -
+cloned beside your mounted checkout in `unibox run` too - so the agent
+always has the decisions and specifications at hand. `on` has it picked
+to begin with in `task new`, `off` (the default) only when picked. `ref`
+is the branch a task works on, else the forge's default. `task new`
+clones each picked repository. Yours win over the team's:
+`unibox repo add name url [--ref] [--default] [--every-env]`, `unibox repo
+default name always|on|off|-` and `unibox repo rm name` write them.
+
 ## Mount or clone
 
 By default a task mounts your checkout. `--clone`, or a repository given as

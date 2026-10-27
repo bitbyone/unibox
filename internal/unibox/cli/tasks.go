@@ -182,6 +182,9 @@ func (o *options) taskCommand(name string) *cobra.Command {
 			req.Repositories = []unibox.RepoInput{{Source: "."}}
 		}
 		o.defaultTarget(&req)
+		if err := o.withIndexedRepos(&req, true); err != nil {
+			return err
+		}
 		if name == "check" {
 			check, err := o.manager.Check(cmd.Context(), req)
 			if err != nil {
@@ -237,6 +240,9 @@ func (o *options) addRepoCommand() *cobra.Command {
 		}
 		if len(req.Repositories) == 0 {
 			return fmt.Errorf("no repository selected; name a directory or URL, or pass --repo for several")
+		}
+		if err := o.withIndexedRepos(&req, false); err != nil {
+			return err
 		}
 		if err := o.preflight(cmd, &req); err != nil {
 			return err

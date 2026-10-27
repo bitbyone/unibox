@@ -166,6 +166,15 @@ are stored globally: sbx removes a sandbox's own with the sandbox.
 
 ## Tasks
 
+`unibox task new` starts a task on repositories the env names - the
+team's under `repos:` in its `unibox.yaml` files, yours in `config.yaml`
+(`unibox repo add`) - picked from a list filtered as you type, each
+cloned on its `ref`. One that says `default: always` comes with every new
+task of the env, cloned beside your mounted checkout in `run` too: the
+architecture decisions and specifications an agent should always have.
+A name from that index works wherever a repository does (`unibox run
+adrs`).
+
 By default `run` mounts the directories you name (the current one when
 none) into the sandbox at `/work/<task>/<name>`: the agent works on your
 files and your `.git` as they are, and what it writes there - a git hook

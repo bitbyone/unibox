@@ -172,6 +172,7 @@ Without a task at a terminal, lists tasks to pick.
 
 ```
 unibox task [-s <sandbox>]
+unibox task new [repo...] [-e <env>] [-s <sandbox>] [--task <name>] [--agent <a> | --shell]
 unibox task ls [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
@@ -180,6 +181,10 @@ unibox task rename <task> [name] [--reset]
 unibox task rm <task>
 ```
 
+- `new` - a task on repositories of the env's index (`unibox repo`), each
+  cloned: picked at a terminal from a list filtered by typing, or named;
+  those that say `always` come along, and `on` ones are picked to begin
+  with. Then it runs as `run` does.
 - `ls` - prepared tasks, in every sandbox or with `-s` in one.
 - `check` - what a task needs before it can start; changes nothing. Takes
   `run`'s flags except `--shell` and `--agent`. Codes:
@@ -279,6 +284,24 @@ for the sandbox. A host is `name`, `*.name`, `**.name` or `name:port`;
 lack, and the hosts refused lately commented out, as a kit's
 `network-policy@2` entry; `--json` gives them as `allow`, `deny` and
 `refused`. List keys: `a` allow, `n` deny, `d` remove, `x` export.
+
+### `unibox repo`
+
+```
+unibox repo [-e <env>]
+unibox repo ls [-e <env>]
+unibox repo add <name> <url> [--ref <branch>] [--default always|on|off] [--description <text>] [-e <env> | --every-env]
+unibox repo default <name> always|on|off|- [-e <env>]
+unibox repo rm <name> [-e <env> | --every-env]
+```
+
+The repositories an env's tasks are given by name: the team's under
+`repos:` in its `unibox.yaml` files, yours in `config.yaml` for every env
+or one, over the team's. `always` has every new task take one, cloned
+beside what it mounts; `on` has `task new` pick it to begin with. A name
+works wherever `run`, `prepare`, `check` and `add-repo` take a repository.
+List keys: `/` filter, `n` new task with it, `space` off/on/always, `a`
+add, `d` remove yours.
 
 ### `unibox prune`
 

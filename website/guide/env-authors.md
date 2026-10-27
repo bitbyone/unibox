@@ -34,6 +34,15 @@ This site is for people using an env repository. If you maintain one:
 
   unibox knows GitHub's page for `github` and `copilot`; a team's entry
   replaces it.
+- Name the repositories the env's tasks use, and have every task take the
+  decisions and specifications (see [Tasks](/guide/tasks#repositories-by-name)):
+
+  ```yaml
+  repos:
+    adrs: {url: https://gitlab.example.com/arch/adrs.git, ref: main, default: always}
+    payments: https://gitlab.example.com/x/payments.git
+  ```
+
 - Give the env's sandboxes a default share of the machine in the same
   files; each person's `vars.toml` wins over it:
 

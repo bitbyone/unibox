@@ -12,6 +12,8 @@ type EnvConfig struct {
 	Files []string        `yaml:"files" json:"files"`
 	Name  string          `yaml:"name,omitempty" json:"name,omitempty"`
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
+	// Repos are the person's repositories for this env, over the team's.
+	Repos map[string]IndexedRepo `yaml:"repos,omitempty" json:"repos,omitempty"`
 	// Repo is the git repository the files are in, as init found them.
 	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
 	// Source is the address unibox cloned Repo from; a repository of the
@@ -28,6 +30,9 @@ type Env struct {
 	Ports map[string]Port
 	// Resources are the team's, which the person's in vars.toml win over.
 	Resources Resources
+	// Repos are the repositories a task of the env may be given by name,
+	// the team's and the person's.
+	Repos map[string]IndexedRepo
 }
 
 // SandboxName is the name of the env's sandbox: the user's, else the
@@ -61,7 +66,11 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
-	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources}, nil
+	repos, err := envRepos(ec, c.Repos)
+	if err != nil {
+		return Env{}, fmt.Errorf("env %s: %w", name, err)
+	}
+	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources, Repos: repos}, nil
 }
 
 // ValidEnvConfig checks what an env says before it is kept: a name, files

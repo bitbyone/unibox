@@ -7,12 +7,65 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-type RepoInput struct{ Source, Branch, Name string }
+// RepoInput is a repository a task is asked to hold. Clone has it cloned
+// from the forge even in a task whose directories are mounted. Always is
+// one the env has every new task take, not one the person asked for: the
+// task's name, a shared --branch and --push leave it be.
+type RepoInput struct {
+	Source, Branch, Name string
+	Clone, Always        bool
+}
+
+// alwaysNames are the names of the repositories a request takes because
+// its env has every new task take them.
+func (req Request) alwaysNames() map[string]bool {
+	out := map[string]bool{}
+	for _, in := range req.Repositories {
+		if in.Always {
+			out[in.Name] = true
+		}
+	}
+	return out
+}
+
+// own leaves out of repos those the env has every new task take.
+func (req Request) own(repos []api.Repository) []api.Repository {
+	always := req.alwaysNames()
+	out := []api.Repository{}
+	for _, r := range repos {
+		if !always[r.Name] {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		return repos
+	}
+	return out
+}
+
+// SourceURL is the forge address a source stands for: an address as it
+// is, a checkout of the host by its origin; "" when it has none.
+func SourceURL(ctx context.Context, source string) string {
+	if p, err := ExpandPath(source); err == nil && isDir(p) {
+		raw, err := git(ctx, p, "config", "--get", "remote.origin.url")
+		if err != nil {
+			return ""
+		}
+		source = raw
+	}
+	u, err := CloneURL(source)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(u, ".git")
+}
+
 type Request struct {
 	// Sandbox names the sandbox to work in, Env the env it is made from.
 	Sandbox, Env, Task, Branch, Author string
@@ -28,12 +81,16 @@ type Request struct {
 	Mount, Clone bool
 }
 
-// decide settles whether a request's repositories are mounted or cloned.
+// decide settles whether a request's repositories are mounted or cloned;
+// one that is always cloned has no say in it.
 func (req *Request) decide() {
-	if req.Mount || req.Clone || len(req.Repositories) == 0 {
+	if req.Mount || req.Clone || !slices.ContainsFunc(req.Repositories, func(in RepoInput) bool { return !in.Clone }) {
 		return
 	}
 	for _, in := range req.Repositories {
+		if in.Clone {
+			continue
+		}
 		p, err := ExpandPath(in.Source)
 		if err != nil {
 			return
@@ -99,14 +156,39 @@ func AuthorParts(author string) (string, string, error) {
 
 func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []api.Need, error) {
 	if req.Mount {
-		return resolveMounted(ctx, req)
+		// The directories are mounted, and what is always cloned is cloned
+		// beside them.
+		mounted, cloned := req, req
+		mounted.Repositories, cloned.Repositories = nil, nil
+		for _, in := range req.Repositories {
+			if in.Clone {
+				cloned.Repositories = append(cloned.Repositories, in)
+			} else {
+				mounted.Repositories = append(mounted.Repositories, in)
+			}
+		}
+		repos, needs, err := resolveMounted(ctx, mounted)
+		if err != nil || len(cloned.Repositories) == 0 {
+			return repos, needs, err
+		}
+		cloned.Mount, cloned.Push, cloned.Branch = false, false, ""
+		more, moreNeeds, err := ResolveRepositories(ctx, cloned)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, r := range more {
+			if slices.ContainsFunc(repos, func(o api.Repository) bool { return o.Name == r.Name }) {
+				return nil, nil, fmt.Errorf("duplicate repository directory %s; use --repo name=source", r.Name)
+			}
+		}
+		return append(repos, more...), append(needs, moreNeeds...), nil
 	}
 	repos := []api.Repository{}
 	needs := []api.Need{}
 	names := map[string]bool{}
 	for _, in := range req.Repositories {
 		r := api.Repository{Name: in.Name, Branch: in.Branch, Author: req.Author}
-		if r.Branch == "" {
+		if r.Branch == "" && !in.Always {
 			r.Branch = req.Branch
 		}
 		_, statErr := os.Stat(in.Source)
@@ -278,7 +360,16 @@ func createRemoteBranch(ctx context.Context, r api.Repository) error {
 }
 
 func PushRepositories(ctx context.Context, repos []api.Repository) error {
+	return pushRepositories(ctx, repos, nil)
+}
+
+// pushRepositories pushes repos but those skip names: a repository the env
+// has every task take is the team's, and no task's branch goes there.
+func pushRepositories(ctx context.Context, repos []api.Repository, skip map[string]bool) error {
 	for _, r := range repos {
+		if skip[r.Name] {
+			continue
+		}
 		if r.HostPath == "" {
 			if err := createRemoteBranch(ctx, r); err != nil {
 				return err
@@ -408,4 +499,9 @@ func switchMounted(ctx context.Context, repos []api.Repository) error {
 		}
 	}
 	return nil
+}
+
+func isDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
 }

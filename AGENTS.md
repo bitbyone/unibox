@@ -159,7 +159,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
   switches a running sandbox's ports, `unibox task` (and `resume` without
   a task) resumes, names or removes a task, `unibox sandbox` opens,
   stops, recreates or removes a sandbox; `env`, `var`, `secret`,
-  `network` and `context` are lists of `listModel` (`listui.go`), whose
+  `network`, `repo` and `context` are lists of `listModel` (`listui.go`),
+  filtered fuzzily after `/` (`fuzzy.go`), whose
   actions run their subcommand through `runStep`, each by a key (`*ui.go`,
   bubbletea). A list's line is cut to the terminal's width, or it wraps
   and is no longer drawn over. Nothing may write to the terminal while a list is drawn. An action that takes the terminal or asks
@@ -172,6 +173,12 @@ about it. Keep command output short: pipe through `head`, `tail` or
   to `UNIBOX_ENV` and `UNIBOX_SANDBOX`, then the context (`unibox context
   use`), then the only one. `sandbox rm` and `task ls` never take the
   default, so a forgotten context cannot remove or hide anything.
+- **Repositories by name.** An env's index (`repos:` in the team's
+  unibox.yaml files and the person's config.yaml, `repoindex.go`) gives
+  tasks repositories by name; `default: always` ones go into every new
+  task, cloned even beside mounted directories, as mount or clone is per
+  repository (`RepoInput.Clone`). `task new` picks from it with
+  `pickModel`, then runs `run --clone`.
 - **unibox 1 is set aside, not migrated.** Its `state.json` becomes
   `state.v1.json` with the old sandboxes named once; its config.yaml keys
   are read and dropped at the next write.

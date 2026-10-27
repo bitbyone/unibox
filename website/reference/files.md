@@ -16,8 +16,10 @@ default to these, on Windows too:
 | `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |
 
 In the env repository, besides sbxenv files and kits, unibox reads the
-team's named ports, where its tokens are made (`secrets:`) and the
-resources its sandboxes start from (`resources: {cpus, memory}`):
+team's named ports, where its tokens are made (`secrets:`), the
+resources its sandboxes start from (`resources: {cpus, memory}`) and the
+repositories its tasks are given by name (`repos:`, see
+[Tasks](/guide/tasks#repositories-by-name)):
 `unibox.yaml` at the root (every env) and `<env>.unibox.yaml` beside
 `<env>.sbxenv.yaml`. Tokens themselves are in none of these files; they
 are in sbx's store.
@@ -38,6 +40,8 @@ envs:
       vite: {default: on}         # a team port, switched on for you
 ports:                            # yours, for every env
   devtools: {port: '19222:9222', default: off}
+repos:                            # yours, for every env; envs.<env>.repos for one
+  notes: {url: https://github.com/me/notes.git, default: always}
 sandboxes:                        # unibox network rules
   dev:
     network:

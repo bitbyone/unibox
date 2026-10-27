@@ -44,6 +44,46 @@ type listModel struct {
 	ownLeave bool
 	// width and height are the terminal's, once it says them.
 	width, height int
+	// query narrows the rows to those it matches, fuzzily, typed after /
+	// while filtering.
+	query     string
+	filtering bool
+}
+
+// visible are the indexes of the rows the query leaves, the best match
+// first; all of them with none typed.
+func (m listModel) visible() []int {
+	texts := make([]string, len(m.rows))
+	for i, r := range m.rows {
+		texts[i] = strings.Join(r, " ")
+	}
+	return fuzzyFilter(m.query, texts)
+}
+
+// filter takes a key while the query is typed.
+func (m listModel) filter(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.Type {
+	case tea.KeyCtrlC:
+		m.done = true
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.filtering, m.query, m.cursor = false, "", 0
+	case tea.KeyEnter:
+		m.filtering = false
+	case tea.KeyBackspace:
+		if r := []rune(m.query); len(r) > 0 {
+			m.query, m.cursor = string(r[:len(r)-1]), 0
+		}
+	case tea.KeyUp:
+		m.cursor = max(m.cursor-1, 0)
+	case tea.KeyDown:
+		m.cursor = min(m.cursor+1, max(len(m.visible())-1, 0))
+	case tea.KeySpace:
+		m.query, m.cursor = m.query+" ", 0
+	case tea.KeyRunes:
+		m.query, m.cursor = m.query+string(key.Runes), 0
+	}
+	return m, nil
 }
 
 func (m listModel) Init() tea.Cmd { return nil }
@@ -66,19 +106,32 @@ func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.filtering {
+		return m.filter(key)
+	}
 	switch key.String() {
-	case "ctrl+c", "q", "esc":
+	case "esc":
+		if m.query != "" {
+			m.query, m.cursor = "", 0
+			return m, nil
+		}
 		m.done = true
 		return m, tea.Quit
+	case "ctrl+c", "q":
+		m.done = true
+		return m, tea.Quit
+	case "/":
+		m.filtering = true
+		return m, nil
 	case "up", "k":
 		m.cursor = max(m.cursor-1, 0)
 		return m, nil
 	case "down", "j":
-		m.cursor = min(m.cursor+1, max(len(m.rows)-1, 0))
+		m.cursor = min(m.cursor+1, max(len(m.visible())-1, 0))
 		return m, nil
 	}
 	for i, a := range m.actions {
-		if a.key != key.String() || (!a.any && len(m.rows) == 0) {
+		if a.key != key.String() || (!a.any && len(m.visible()) == 0) {
 			continue
 		}
 		if a.confirm != "" {
@@ -93,8 +146,8 @@ func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // id is the ID of the row under the cursor, "" with none.
 func (m listModel) id() string {
-	if m.cursor < len(m.ids) {
-		return m.ids[m.cursor]
+	if v := m.visible(); m.cursor < len(v) && v[m.cursor] < len(m.ids) {
+		return m.ids[v[m.cursor]]
 	}
 	return ""
 }
@@ -107,28 +160,46 @@ func (m listModel) View() string {
 		return ""
 	}
 	var foot []string
-	if m.pending != nil {
+	switch {
+	case m.pending != nil:
 		foot = []string{fmt.Sprintf(m.pending.confirm+" [y/N]", m.id())}
-	} else {
+	case m.filtering:
+		foot = []string{keyHelp("↑/↓", "move", "enter", "keep the filter", "esc", "clear it")}
+	default:
 		if m.note != "" {
 			foot = strings.Split(m.note, "\n")
 		}
-		help := []string{"↑/↓ j/k", "move"}
+		help := []string{"↑/↓ j/k", "move", "/", "filter"}
 		for _, a := range m.actions {
 			help = append(help, displayKey(a.key), a.help)
 		}
 		foot = append(foot, keyHelp(append(help, "q", "quit")...))
 	}
 	lines := []string{listTitle.Render(m.title), ""}
-	if len(m.rows) == 0 {
+	visible := m.visible()
+	if m.filtering || m.query != "" {
+		typing := ""
+		if m.filtering {
+			typing = "_"
+		}
+		lines = append(lines, cursorMark()+"/"+m.query+typing+"  "+portHelp.Render(fmt.Sprintf("%d of %d", len(visible), len(m.rows))), "")
+	}
+	switch {
+	case len(m.rows) == 0:
 		lines = append(lines, portHelp.Render("  nothing yet"))
-	} else {
-		table := strings.Split(strings.TrimSuffix(drawTable(append([][]string{m.header}, m.rows...), m.cursor), "\n"), "\n")
+	case len(visible) == 0:
+		lines = append(lines, portHelp.Render("  nothing matches"))
+	default:
+		shown := [][]string{m.header}
+		for _, i := range visible {
+			shown = append(shown, m.rows[i])
+		}
+		table := strings.Split(strings.TrimSuffix(drawTable(shown, m.cursor), "\n"), "\n")
 		rows := table[1:]
 		if m.height > 0 {
-			// The title, the header, the blank lines and the line the
-			// cursor is left on take the rest.
-			room := max(m.height-len(foot)-5, 1)
+			// The title, the header, the blank lines, the filter and the
+			// line the cursor is left on take the rest.
+			room := max(m.height-len(foot)-7, 1)
 			if room < len(rows) {
 				first := min(max(m.cursor-room/2, 0), len(rows)-room)
 				rows = rows[first : first+room]
@@ -153,24 +224,25 @@ func displayKey(k string) string {
 }
 
 // runList shows a list until an action is chosen or it is left; nil is
-// left.
-func (o *options) runList(cmd *cobra.Command, m listModel) (*listAction, string, error) {
-	m.cursor = min(m.cursor, max(len(m.rows)-1, 0))
+// left. The model it ends with says where its cursor and filter were.
+func (o *options) runList(cmd *cobra.Command, m listModel) (*listAction, listModel, error) {
+	m.cursor = min(m.cursor, max(len(m.visible())-1, 0))
 	lipgloss.HasDarkBackground()
 	out, err := tea.NewProgram(m, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(cmd.Context())).Run()
 	if err != nil {
-		return nil, "", err
+		return nil, m, err
 	}
 	done := out.(listModel)
-	return done.chosen, done.id(), nil
+	return done.chosen, done, nil
 }
 
-// actList draws a list again after each action, at the row it was on,
-// with what the action said, until it is left; then the list stays as the
-// noun's ls prints it - the rows just read, not read again - or, with
-// none or a leave of its own, leave says where things stand.
+// actList draws a list again after each action, at the row it was on and
+// with the filter it had, with what the action said, until it is left;
+// then the list stays as the noun's ls prints it - the rows just read, not
+// read again - or, with none or a leave of its own, leave says where
+// things stand.
 func (o *options) actList(cmd *cobra.Command, build func() (listModel, error), act func(action, id string) (string, error), leave func() error) error {
-	note, at := "", ""
+	note, at, query := "", "", ""
 	for {
 		var m listModel
 		err := o.waiting("reading", func() (err error) {
@@ -180,11 +252,11 @@ func (o *options) actList(cmd *cobra.Command, build func() (listModel, error), a
 		if err != nil {
 			return err
 		}
-		m.note = note
+		m.note, m.query = note, query
 		if i := slices.Index(m.ids, at); i >= 0 {
-			m.cursor = i
+			m.cursor = max(slices.Index(m.visible(), i), 0)
 		}
-		a, id, err := o.runList(cmd, m)
+		a, done, err := o.runList(cmd, m)
 		if err != nil {
 			return err
 		}
@@ -194,7 +266,8 @@ func (o *options) actList(cmd *cobra.Command, build func() (listModel, error), a
 			}
 			return o.printRows(m)
 		}
-		at = id
+		at, query = done.id(), done.query
+		id := at
 		note, err = act(a.name, id)
 		if errors.Is(err, errCancelled) {
 			note, err = "", nil

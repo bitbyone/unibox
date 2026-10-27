@@ -53,6 +53,9 @@ type Config struct {
 	// Ports are the person's for every env: their own, or another mapping
 	// or switch of a port the teams name, under each env's own.
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
+	// Repos are the person's repositories for every env, under each env's
+	// own and over the teams'.
+	Repos map[string]IndexedRepo `yaml:"repos,omitempty" json:"repos,omitempty"`
 	// Sandboxes are what the person keeps for one sandbox, by its name.
 	Sandboxes map[string]SandboxConfig `yaml:"sandboxes,omitempty" json:"sandboxes,omitempty"`
 
