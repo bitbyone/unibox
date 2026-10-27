@@ -95,7 +95,7 @@ for d in $(down "$cwd" "${root:-$cwd}"); do if [ -f "$d/AGENTS.override.md" ]; t
 `,
 	"copilot": `emit "$HOME/.copilot/copilot-instructions.md"; tree "$HOME/.copilot/instructions" '*.instructions.md'
 for d in $(printf '%s\n' "$root" "$cwd" $(printf '%s' "$COPILOT_CUSTOM_INSTRUCTIONS_DIRS" | tr ',:' '  ') | awk 'NF && !seen[$0]++'); do
-  emit "$d/CLAUDE.md"; emit "$d/GEMINI.md"; emit "$d/AGENTS.md"; tree "$d/.claude/rules" '*.md'
+  emit "$d/AGENTS.md"; emit "$d/CLAUDE.md"; emit "$d/GEMINI.md"; tree "$d/.claude/rules" '*.md'
   tree "$d/.github/instructions" '*.instructions.md'; emit "$d/.github/copilot-instructions.md"
 done
 `,
