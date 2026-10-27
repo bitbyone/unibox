@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -341,5 +342,59 @@ written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Exam
 	c.Flags().BoolVar(&adopt, "adopt", false, "Take over a sandbox sbx already has instead of creating one")
 	c.Flags().StringVar(&res.CPUs, "cpus", "", "CPUs for this sandbox alone: a count, 0 for all, or a share such as 50%")
 	c.Flags().StringVar(&res.Memory, "memory", "", "Memory for this sandbox alone: a size such as 16g, or a share such as 75%")
+	return c
+}
+
+// instructionsCommand shows what a task's agent is told when a session
+// starts, so a person can see the env's, the repositories' and the kits'
+// instructions as the agent gets them, not as each file says them.
+func (o *options) instructionsCommand() *cobra.Command {
+	var agent string
+	var paths bool
+	c := &cobra.Command{Use: "instructions task", Args: cobra.ExactArgs(1), Short: "Show the instructions a task's agent reads when its session starts", Long: `Show the instructions a task's agent reads when its session starts: the
+files its own documentation names - its home's, the kits' that sbx writes
+there, the session directory's and its repository's - in the order it reads
+them, each once. What unibox writes before each session, the task's
+AGENTS.md, is shown as the next session gets it. The files are read in the
+running sandbox; a sandbox that is not running is not started, and only
+what unibox writes is shown.`, RunE: func(cmd *cobra.Command, args []string) error {
+		got, err := o.manager.AgentInstructions(cmd.Context(), args[0], agent)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(got)
+		}
+		switch {
+		case !got.Known:
+			fmt.Fprintf(o.log, "unibox knows no instruction files of %s; only what unibox writes is shown\n", cmp.Or(got.Agent, "the task's agent"))
+		case !got.Read:
+			fmt.Fprintf(o.log, "sandbox %s is not running; only what unibox writes is shown - start it with unibox resume %s\n", got.Sandbox, got.Task)
+		}
+		if len(got.Files) == 0 {
+			return o.success(fmt.Sprintf("%s in %s reads no instructions", cmp.Or(got.Agent, "the agent"), got.Directory))
+		}
+		for i, f := range got.Files {
+			head := f.Path
+			if f.Link != "" {
+				head += " -> " + f.Link
+			}
+			if f.Unibox {
+				head += " (unibox writes it before each session)"
+			}
+			if paths {
+				fmt.Fprintln(o.output, head)
+				continue
+			}
+			if i > 0 {
+				fmt.Fprintln(o.output)
+			}
+			fmt.Fprintln(o.output, listTitle.Render("== "+head))
+			fmt.Fprintln(o.output, strings.TrimRight(f.Content, "\n"))
+		}
+		return nil
+	}}
+	c.Flags().StringVar(&agent, "agent", "", "The agent to read for, if not the task's")
+	c.Flags().BoolVar(&paths, "paths", false, "List the files alone")
 	return c
 }

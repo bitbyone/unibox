@@ -178,6 +178,7 @@ unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
 unibox task add-repo <task> [directory|url] [flags]
 unibox task rename <task> [name] [--reset]
+unibox task instructions <task> [--agent <a>] [--paths]
 unibox task rm <task>
 ```
 
@@ -193,6 +194,12 @@ unibox task rm <task>
   repository keeps its ref and is never pushed to. Then it runs as `run`
   does.
 - `ls` - prepared tasks, in every sandbox or with `-s` in one.
+- `instructions` - the files the task's agent (or `--agent`'s) reads its
+  instructions from when a session starts, in the order it reads them,
+  each once: its home's, with the kits' guidance sbx writes there, the
+  session directory's and its repository's. The task's `AGENTS.md` is
+  shown as the next session gets it. Read in the running sandbox; a
+  stopped one shows only what unibox writes. `--paths` lists the files.
 - `check` - what a task needs before it can start; changes nothing. Takes
   `run`'s flags except `--shell` and `--agent`. Codes:
   `runtime_unavailable`, `arg_missing`, `arg_invalid`, `env_changed`,

@@ -550,10 +550,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if env, err := m.Config.LoadEnv(b.Env); err == nil {
 		instructions = TaskInstructions(t, env)
 	}
-	dir := t.Directory
-	if len(t.Repositories) == 1 && instructions == "" {
-		dir = path.Join(dir, t.Repositories[0].Name)
-	}
+	dir := sessionDir(t, instructions)
 	told := instructionsScript(t, instructions)
 	if req.Shell {
 		// A shell is the user's own session: no agent is credited in its

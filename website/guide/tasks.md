@@ -113,6 +113,12 @@ repositories. The file is outside every repository, so it is never
 committed; it is written again at every session and goes when there is
 nothing to say. A repository's own `AGENTS.md` still holds inside it.
 
+`unibox task instructions <task>` shows what the agent reads when a
+session starts, every file it reads in its order - its home's, with the
+kits' guidance, then the task's and its repository's - the task's own as
+the next session gets it. `--agent` reads for another agent, `--paths`
+lists the files alone.
+
 Yours win over the team's: `unibox repo add name url|directory [--ref]
 [--default] [--context true|false] [--every-env]`, `unibox repo default
 name always|on|off|-` and `unibox repo rm name` write them.

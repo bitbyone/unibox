@@ -108,6 +108,7 @@ unibox resume <task>                            # continue later
 unibox resume <task> --shell                    # a shell beside its agent
 unibox resume <task> --agent codex              # another agent the env has
 unibox task add-repo <task> ../web              # one more, even while it runs
+unibox task instructions <task>                 # what its agent is told at a session's start
 unibox task rm <task>                           # unmounts; never deletes your files
 unibox sandbox recreate dev                     # after the team changed the env
 ```

@@ -799,6 +799,21 @@ repos:
 	if got, _ := os.ReadFile(seen); !strings.HasSuffix(strings.TrimSpace(string(got)), "/work/pricing") {
 		t.Fatalf("started in %s", got)
 	}
+	// What it reads is told in its order, unibox's file as the next
+	// session gets it, though the link to it is the name claude reads.
+	write(t, filepath.Join(f.root, "dev", "home", ".claude", "CLAUDE.md"), "Be brief.\n")
+	f.setState("dev", "running")
+	told, err := m.AgentInstructions(ctx, "pricing", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !told.Read || len(told.Files) != 2 || told.Files[0].Content != "Be brief.\n" || !strings.HasSuffix(told.Files[1].Path, "/work/pricing/CLAUDE.md") || told.Files[1].Link != "AGENTS.md" || !told.Files[1].Unibox || !strings.Contains(told.Files[1].Content, "## payments") {
+		t.Fatalf("%+v", told)
+	}
+	f.setState("dev", "stopped")
+	if told, err = m.AgentInstructions(ctx, "pricing", ""); err != nil || told.Read || len(told.Files) != 1 || !told.Files[0].Unibox {
+		t.Fatalf("%+v %v", told, err)
+	}
 	// With nothing to say, what unibox wrote goes.
 	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "ports: {}\n")
 	if err := m.Run(ctx, Request{Task: "pricing"}, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {

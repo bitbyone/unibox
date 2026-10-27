@@ -573,6 +573,13 @@ and the working directory's), in sbx's workspace or a task's; a link from
 makes it read. That is the team's kit's to set, not unibox's. A
 `CLAUDE.md` linked to `AGENTS.md` in one directory is read by Copilot once.
 
+`unibox task instructions` reads in the running sandbox, never starting
+one, the files each agent's documentation says it reads (Copilot's
+`/help`, Claude's and Codex's memory files; `agentInstructionFiles`), from
+the directory a session starts in, each once by its real path - Copilot,
+checked, reads a `CLAUDE.md` linked to `AGENTS.md` once. unibox's own file
+is shown as the next session writes it.
+
 A task is removed while others of its sandbox work: it waits for its own
 session lock alone, checks its own clones, and takes only its record out
 of the state (`removeTask`).
@@ -803,7 +810,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox run [dir\|url] [--repo ...] [--clone] [-- args]` | prepares a task, runs the kit's agent (or `--shell`) here |
 | `unibox resume <task> [--shell \| --agent]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox task check\|prepare …` | what stands in the way, as `needs` with a `code` each; the task ready, JSON at the end |
-| `unibox task ls [-s S]`, `task add-repo`, `task rename`, `task rm` | tasks across sandboxes; one more repository; an alias; removal |
+| `unibox task ls [-s S]`, `task add-repo`, `task rename`, `task instructions`, `task rm` | tasks across sandboxes; one more repository; an alias; what its agent reads; removal |
 | `unibox sandbox create [--adopt]\|ls\|inspect\|shell\|stop\|recreate\|rm` | as named; removal checks for sessions and unpushed work |
 | `unibox port on\|off\|ls` | a running sandbox's ports |
 | `unibox context [use -s S -e E \| clear]` | the sandbox and env commands work in when not told |

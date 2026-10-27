@@ -29,7 +29,7 @@ agent, another or a shell, or to name or remove it, each by a key.`}
 		}
 		return o.tasksUI(cmd, sandbox)
 	}
-	c.AddCommand(o.taskNewCommand(), o.tasksCommand(), o.taskCommand("prepare"), o.taskCommand("check"), o.addRepoCommand(), o.renameCommand(), o.removeCommand(true))
+	c.AddCommand(o.taskNewCommand(), o.tasksCommand(), o.taskCommand("prepare"), o.taskCommand("check"), o.addRepoCommand(), o.renameCommand(), o.instructionsCommand(), o.removeCommand(true))
 	return c
 }
 

@@ -155,6 +155,31 @@ type Prepared struct {
 	State      string `json:"state"`
 }
 
+// Instructions are the files a task's agent reads its instructions from
+// when a session starts in Directory, in the order it reads them. Read is
+// false while the sandbox is not running, when Files holds only what
+// unibox writes; Known is false for an agent unibox knows no files of.
+type Instructions struct {
+	APIVersion int               `json:"api_version"`
+	Sandbox    string            `json:"sandbox"`
+	Task       string            `json:"task"`
+	Agent      string            `json:"agent"`
+	Directory  string            `json:"directory"`
+	Read       bool              `json:"read"`
+	Known      bool              `json:"known"`
+	Files      []InstructionFile `json:"files"`
+}
+
+// InstructionFile is one of them. Link is where a symbolic link points;
+// Unibox says unibox writes the file before each session, and Content is
+// then what the next session gets.
+type InstructionFile struct {
+	Path    string `json:"path"`
+	Link    string `json:"link,omitempty"`
+	Unibox  bool   `json:"unibox,omitempty"`
+	Content string `json:"content"`
+}
+
 type Error struct {
 	APIVersion int    `json:"api_version"`
 	Code       string `json:"code"`
