@@ -114,7 +114,16 @@ func (req *Request) decide() {
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
 	c := hostCommand(ctx, "git", append([]string{"-C", dir}, args...)...)
+	// git on the host acts as the person, with their SSH agent, but never
+	// asks on the terminal: a password prompt there would take the keys of
+	// whatever unibox draws, and outlive it.
 	c.Env = append(c.Env, "GIT_TERMINAL_PROMPT=0")
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		c.Env = append(c.Env, "SSH_AUTH_SOCK="+sock)
+	}
+	if os.Getenv("GIT_SSH_COMMAND") == "" {
+		c.Env = append(c.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	}
 	b, err := commandOutput(c)
 	return strings.TrimSpace(string(b)), err
 }
@@ -529,6 +538,10 @@ func isDir(p string) bool {
 // ForgeBranch asks a forge, with the host's own git and credentials, for a
 // repository's default branch and whether it has branch.
 func ForgeBranch(ctx context.Context, url, branch string) (defaultBranch string, has bool, err error) {
+	// Asked as the task's clone asks, by its HTTPS address.
+	if url, err = CloneURL(url); err != nil {
+		return "", false, err
+	}
 	defaultBranch, tip, err := remoteRefs(ctx, ".", url, branch)
 	return defaultBranch, tip != "", err
 }
