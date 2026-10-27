@@ -568,7 +568,11 @@ when the sandbox is removed. `ls` is about the difference: the person's
 rules, ones added with sbx itself, and the hosts `sbx policy log` says
 were refused (the DNS search-domain guesses under `docker.internal` left
 out) - what the env's files may want to say; the kits' and the defaults'
-hosts are only counted unless `--all`. Hosts are joined with commas for
+hosts are only counted unless `--all`. `export` hands that difference to
+the team: the person's rules and those added with sbx, less a host a kit
+allows already (ports ignored, as a kit's allow list ignores them), as a
+kit's `network-policy@2` entry to merge, the refused hosts as lines to
+uncomment. A kit's entry has no protocol, so a udp rule is marked. Hosts are joined with commas for
 sbx, so one holding a comma or whitespace, or starting with `-`, is
 refused first. A rule the whole team needs belongs in a kit, reviewed
 with the env.

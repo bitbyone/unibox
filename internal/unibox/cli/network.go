@@ -125,7 +125,7 @@ sandbox's own rules to it later.`, Example: "  unibox network init\n  unibox net
 		}
 		return o.success("sbx starts every sandbox from the " + policy + " network policy")
 	}}
-	c.AddCommand(ls, rule("allow"), rule("deny"), rm, choose)
+	c.AddCommand(ls, rule("allow"), rule("deny"), rm, choose, o.networkExportCommand())
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		ls.SetContext(cmd.Context())
@@ -226,6 +226,9 @@ func printNetwork(out io.Writer, sandbox string, v unibox.NetworkView, all bool)
 	}
 	if len(v.Blocked) == 0 {
 		fmt.Fprintln(out, "\nnothing refused lately")
+		if len(rules) > 0 {
+			fmt.Fprintln(out, "unibox network export writes your rules for a kit of the env")
+		}
 		return nil
 	}
 	fmt.Fprintln(out, "\nrefused lately - what the env may want to allow:")
@@ -234,7 +237,11 @@ func printNetwork(out io.Writer, sandbox string, v unibox.NetworkView, all bool)
 	for _, b := range v.Blocked {
 		fmt.Fprintf(w, "%s\t%d\t%s\n", b.Host, b.Count, ago(b.LastSeen))
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "unibox network export writes these and your rules for a kit of the env")
+	return nil
 }
 
 // ago says how long ago a moment was, roughly.

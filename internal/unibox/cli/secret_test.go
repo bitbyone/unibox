@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/tobola/unibox/internal/testenv"
 	"github.com/tobola/unibox/internal/unibox"
 )
@@ -599,6 +601,20 @@ func TestNetworkRulesAreKeptForTheSandbox(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if out, _, err := run(t, paths, "", "network", "ls", "--all"); err != nil || !strings.Contains(out, "gitlab.example.com") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// What the env lacks is written for a kit, the refused hosts to
+	// uncomment; the kit's own host is left out.
+	out, _, err = run(t, paths, "", "network", "export")
+	var kit []struct {
+		Type   string
+		Config struct {
+			Runtime struct{ Allow, Deny []string }
+		}
+	}
+	if err != nil || yaml.Unmarshal([]byte(out), &kit) != nil || len(kit) != 1 || kit[0].Type != "com.docker.sandbox/network-policy@2" ||
+		strings.Join(kit[0].Config.Runtime.Allow, " ") != "registry.npmjs.org *.npmjs.org stun.example.com:3478" || strings.Join(kit[0].Config.Runtime.Deny, " ") != "ads.example.com" ||
+		!strings.Contains(out, "# - pypi.org  # refused 3 times") || !strings.Contains(out, "udp; a kit's host is any protocol") || strings.Contains(out, "gitlab.example.com") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if _, _, err := run(t, paths, "", "network", "rm", "ads.example.com"); err != nil {

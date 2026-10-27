@@ -257,6 +257,7 @@ unibox network ls [-s <sandbox>] [--all]
 unibox network allow <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
 unibox network deny <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
 unibox network rm <host...> [-s <sandbox>]
+unibox network export [-s <sandbox>]
 ```
 
 `init` chooses, once, the policy every sandbox starts from, which sbx
@@ -266,8 +267,10 @@ each create, removed with the sandbox. `ls` lists your rules, rules added
 with sbx, and hosts refused lately; `--all` adds the env's and sbx's
 defaults. `deny` wins over the env. `rm` removes your rule or an sbx one
 for the sandbox. A host is `name`, `*.name`, `**.name` or `name:port`;
-`--protocol` defaults to `tcp`. List keys: `a` allow, `n` deny, `d`
-remove.
+`--protocol` defaults to `tcp`. `export` writes the rules the env's kits
+lack, and the hosts refused lately commented out, as a kit's
+`network-policy@2` entry; `--json` gives them as `allow`, `deny` and
+`refused`. List keys: `a` allow, `n` deny, `d` remove, `x` export.
 
 ### `unibox prune`
 

@@ -210,6 +210,7 @@ the team's file.
 unibox network init                      # once: the policy every sandbox starts from
 unibox network ls -s dev                 # your rules, and the hosts refused lately
 unibox network allow jitpack.io -s dev   # kept by unibox, for this sandbox
+unibox network export -s dev             # what the env lacks, as a kit's network policy
 ```
 
 The rules are sbx's network policy; a rule the team needs belongs in a

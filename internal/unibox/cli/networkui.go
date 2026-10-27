@@ -27,6 +27,7 @@ func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 			{key: "a", name: "allow", help: "allow", any: true},
 			{key: "n", name: "deny", help: "deny", any: true},
 			{key: "d", name: "rm", help: "remove", confirm: "take the rule for %s away?"},
+			{key: "x", name: "export", help: "write for a kit", any: true},
 		}}
 		for _, r := range rules {
 			decision := portOn.Render(r.Decision)
@@ -79,6 +80,8 @@ func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 				return "took the rule for " + id + " away from every sandbox", nil
 			}
 			return o.quietStep(cmd, "network", "rm", id, "-s", sandbox)
+		case "export":
+			return errListDone, o.runStep(cmd, "network", "export", "-s", sandbox)
 		}
 		return "", nil
 	}

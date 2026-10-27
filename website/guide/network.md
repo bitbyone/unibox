@@ -36,8 +36,37 @@ sbx's default hosts.
 ```sh
 unibox network deny gist.github.com  # even if the env allows it
 unibox network rm jitpack.io         # remove your rule
-unibox network                       # a list: a allows, n denies, d removes
+unibox network                       # a list: a allows, n denies, d removes, x exports
 ```
+
+## Hand rules over to the env
+
+What one sandbox needed is often what everyone does. `unibox network
+export` writes your rules and those added with sbx, less the hosts the
+env's kits allow already, as a kit's network-policy entry; the hosts
+refused lately follow as lines to uncomment:
+
+```sh
+unibox network export -s dev
+```
+
+```yaml
+- type: com.docker.sandbox/network-policy@2
+  config:
+    runtime:
+      allow:
+        - jitpack.io
+        # - pypi.org  # refused 3 times, last 2h ago
+      deny:
+        - gist.github.com
+```
+
+Merge it into the network-policy entry of one of the env's kits (a kit
+has one), then `unibox sandbox recreate dev` applies the kit and `unibox
+network rm` takes your own rules away. A kit's host is any protocol, so a
+udp rule is marked. In the `unibox network` list, `x` does the same.
+
+## Hosts
 
 A host is a name, `*.name` for its subdomains, `**.name` for any depth, or
 `name:port`. The protocol is tcp unless `--protocol` says `udp` or
