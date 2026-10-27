@@ -813,7 +813,7 @@ func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T
 		t.Fatalf("%s", said)
 	}
 	t.Setenv("ACCESSIBLE", "")
-	if _, _, err := run(t, paths, "", "task", "new", "nope"); err == nil || !strings.Contains(err.Error(), "names no repository nope") {
+	if _, _, err := run(t, paths, "", "task", "new", "nope"); err == nil || !strings.Contains(err.Error(), "nope is neither a directory nor a repository env team names") {
 		t.Fatalf("%v", err)
 	}
 	if _, _, err := run(t, paths, "", "repo", "rm", "adrs"); err == nil || !strings.Contains(err.Error(), "one of the team's stays") {

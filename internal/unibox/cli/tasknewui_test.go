@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -130,5 +131,56 @@ func TestANewTasksScreenShowsWhatEachRepositoryGetsAndTheTasksName(t *testing.T)
 	// A name a task cannot have is refused where it is typed.
 	if bad := taskKeys(m, "t", "Not A Name", "enter").(taskPickModel); bad.editing == "" || !strings.Contains(bad.View(), "letters, digits and dashes") {
 		t.Fatalf("%+v", bad)
+	}
+}
+
+func TestADirectoryNamedToANewTaskIsOfferedFirstAndMounted(t *testing.T) {
+	t.Parallel()
+	gitInit := func(dir string, args ...[]string) string {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range append([][]string{{"init", "-q", "-b", "trunk"}}, args...) {
+			if b, err := exec.Command("git", append([]string{"-C", dir}, a...)...).CombinedOutput(); err != nil {
+				t.Fatalf("%v %s", err, b)
+			}
+		}
+		top, _ := filepath.EvalSymlinks(dir)
+		return top
+	}
+	// A checkout of a repository the index clones takes its place and name.
+	api := gitInit(t.TempDir(), []string{"remote", "add", "origin", "git@forge.example.com:x/api.git"})
+	// One the index does not know is named after its directory.
+	scratch := gitInit(filepath.Join(t.TempDir(), "scratch"))
+	read := true
+	repos := map[string]unibox.IndexedRepo{
+		"adrs": {URL: "https://forge.example.com/arch/adrs.git", Default: unibox.RepoOn, Context: &read},
+		"api":  {URL: "https://forge.example.com/x/api.git", Default: unibox.RepoOff, Instructions: "Money is in cents."},
+	}
+	index := taskRows(context.Background(), repos)
+	host, replaced, err := hostRows(context.Background(), []string{api, scratch}, index)
+	if err != nil || !slices.Equal(replaced, []string{"api"}) || len(host) != 2 {
+		t.Fatalf("%+v %v %v", host, replaced, err)
+	}
+	if h := host[0]; h.name != "api" || !h.picked || h.context || !h.push || h.current != "trunk" || h.repo.Instructions == "" {
+		t.Fatalf("%+v", h)
+	}
+	if h := host[1]; h.name != "scratch" || h.push {
+		t.Fatalf("%+v", h)
+	}
+	index = slices.DeleteFunc(index, func(r taskRepo) bool { return slices.Contains(replaced, r.name) })
+	var tm tea.Model = taskPickModel{env: "dev", rows: append(host, index...), existing: map[string]bool{}}
+	v := tm.View()
+	if !strings.Contains(v, "api      work     mount  trunk") || !strings.Contains(v, "mounted from the host") || strings.Count(v, "api ") != 1 {
+		t.Fatalf("%s", v)
+	}
+	// The task's branch goes to the checkout too, pushed to its forge.
+	got := taskKeys(tm, "b", "feat/x", "enter").(taskPickModel)
+	ins := got.inputs()
+	if len(ins) != 3 || ins[0].Source != api || ins[0].Name != "api" || ins[0].Clone || ins[0].Branch != "feat/x" || !ins[0].Push || ins[1].Push {
+		t.Fatalf("%+v", ins)
+	}
+	if _, _, err := hostRows(context.Background(), []string{filepath.Join(scratch, "missing")}, nil); err == nil {
+		t.Fatal("a missing directory was taken")
 	}
 }

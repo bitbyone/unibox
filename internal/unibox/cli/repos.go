@@ -378,18 +378,23 @@ func (o *options) taskExists(name string) bool {
 func (o *options) taskNewCommand() *cobra.Command {
 	var sandbox, envFlag, task, agent, author, branch string
 	var shell, noPush bool
-	c := &cobra.Command{Use: "new [repo...]", Short: "Start a task on repositories of the env's index, picked or named, each cloned", Long: `Start a task on repositories the env's index names (unibox repo ls),
-each cloned from its forge. A repository is worked in, or read - a
-context one, such as decisions or a specification, which stays on its ref
-and is never pushed to. Those worked in get the task's branch, made on the
-forge from its default branch when it has none, else their ref.
+	c := &cobra.Command{Use: "new [repo|directory...]", Short: "Start a task on repositories of the env's index and your checkouts, picked or named", Long: `Start a task on repositories the env's index names (unibox repo ls) -
+each cloned from its forge, or mounted when the index names a directory -
+and on checkouts of yours named as directories (unibox task new .), each
+mounted. A repository is worked in, or read - a context one, such as
+decisions or a specification, which stays on its ref and is never pushed
+to. Those worked in get the task's branch, made on the forge from its
+default branch when it has none, else their ref; a mounted one keeps its
+own branch until one is typed.
 
-At a terminal without names, one screen offers them: space picks, c
-switches work and context, b types the branch, t the task's name, / filters,
-and each row shows the branch it gets and whether it is made; enter
-starts. Named, or without a terminal, the task takes those named and every
-one that says always - with no names, those that say on as well - with
---branch and --task. The task then runs as unibox run does.`, Example: "  unibox task new\n  unibox task new payments adrs --branch feat/pricing\n  unibox task new spec --task pricing --shell"}
+At a terminal without names, or with a directory, one screen offers them,
+the directories first and picked: space picks, c switches work and
+context, b types the branch, p whether a row's is pushed, t the task's
+name, / filters; each row shows where it comes from, the branch it gets
+and whether it is pushed; enter starts. Named, or without a terminal, the
+task takes those named and every one that says always - with no index
+names, those that say on as well - with --branch and --task. The task then
+runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  unibox task new payments adrs --branch feat/pricing\n  unibox task new spec --task pricing --shell"}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		req := unibox.Request{Sandbox: sandbox, Env: envFlag, Task: task, Agent: agent, Author: author, Shell: shell}
 		o.defaultTarget(&req)
@@ -397,27 +402,43 @@ one that says always - with no names, those that say on as well - with
 		if err != nil {
 			return err
 		}
-		if len(env.Repos) == 0 {
-			return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:", env.Name)
-		}
+		// A directory here is mounted, as run mounts it; any other name is
+		// one of the index's.
+		names, dirs := []string{}, []string{}
 		for _, a := range args {
-			if _, ok := env.Repos[a]; !ok {
-				return fmt.Errorf("env %s names no repository %s; unibox repo ls lists them", env.Name, a)
+			p, _ := unibox.ExpandPath(a)
+			switch _, indexed := env.Repos[a]; {
+			case isDirectory(p):
+				dirs = append(dirs, p)
+			case indexed:
+				names = append(names, a)
+			default:
+				return fmt.Errorf("%s is neither a directory nor a repository env %s names; unibox repo ls lists them", a, env.Name)
 			}
 		}
+		if len(env.Repos) == 0 && len(dirs) == 0 {
+			return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:, or name a directory of yours: unibox task new .", env.Name)
+		}
+		rows := taskRows(cmd.Context(), env.Repos)
+		host, replaced, err := hostRows(cmd.Context(), dirs, rows)
+		if err != nil {
+			return err
+		}
+		rows = slices.DeleteFunc(rows, func(r taskRepo) bool { return slices.Contains(replaced, r.name) })
 		// What the task takes: picked at a terminal, else named, else the
-		// index's defaults; each worked in or read as the index says.
-		picked := taskPickModel{branch: branch, task: task, rows: taskRows(cmd.Context(), env.Repos)}
+		// index's defaults; each worked in or read as the index says. The
+		// directories named are picked and offered first.
+		picked := taskPickModel{branch: branch, task: task, rows: append(host, rows...)}
 		for i, r := range picked.rows {
-			if len(args) > 0 {
-				named := slices.Contains(args, r.name)
+			if len(names) > 0 && !r.host {
+				named := slices.Contains(names, r.name)
 				picked.rows[i].picked = named || r.repo.Default == unibox.RepoAlways
 				picked.rows[i].preset = !named
 			}
 			picked.rows[i].push = picked.rows[i].push && !noPush
 		}
-		if len(args) == 0 && o.canAsk() {
-			if picked, err = o.pickTask(cmd, env, nil, branch, noPush); err != nil {
+		if (len(args) == 0 || len(dirs) > 0) && o.canAsk() {
+			if picked, err = o.pickTask(cmd, env, nil, branch, noPush, picked.rows); err != nil {
 				return err
 			}
 		}

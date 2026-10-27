@@ -174,7 +174,7 @@ Without a task at a terminal, lists tasks to pick.
 
 ```
 unibox task [-s <sandbox>]
-unibox task new [repo...] [-e <env>] [-s <sandbox>] [--branch <b>] [--no-push] [--task <name>] [--agent <a> | --shell]
+unibox task new [repo|directory...] [-e <env>] [-s <sandbox>] [--branch <b>] [--no-push] [--task <name>] [--agent <a> | --shell]
 unibox task ls [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
@@ -185,7 +185,10 @@ unibox task rm <task>
 ```
 
 - `new` - a task on repositories of the env's index (`unibox repo`), a
-  forge's cloned and a directory mounted. At a terminal one screen: `space`
+  forge's cloned and a directory mounted, and on checkouts of yours named
+  as directories (`unibox task new .`): each is mounted, offered first and
+  picked, on its own branch until `b` types one; one whose forge the index
+  names takes that repository's place and name. At a terminal one screen: `space`
   pick, `c` work/context, `b` the branch of those worked in, `t` the task's
   name, `p` push a row's branch, `/` filter, `enter` start; each row shows
   the branch it gets (`default` for the forge's default) and whether it is

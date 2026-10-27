@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -21,11 +22,24 @@ import (
 // it: picked or not, worked in or read, its branch pushed or not. One that
 // is a directory of the host is mounted, and local holds it with what a
 // mount takes from it: the top of its checkout, its forge and its branch.
+// host is a directory named to task new rather than one of the index.
 type taskRepo struct {
-	name                          string
-	repo                          unibox.IndexedRepo
-	picked, context, push, preset bool
-	local, top, origin, current   string
+	name                                string
+	repo                                unibox.IndexedRepo
+	picked, context, push, preset, host bool
+	local, top, origin, current         string
+}
+
+// about is what a row says of its repository.
+func (r taskRepo) about() string {
+	about := cmp.Or(r.repo.Description, r.repo.URL)
+	if r.host {
+		about = "your checkout, mounted from the host: " + tildePath(r.top)
+	}
+	if r.repo.Default == unibox.RepoAlways {
+		about = "always · " + about
+	}
+	return about
 }
 
 // taskPickModel picks a new task's repositories, each worked in or read,
@@ -339,12 +353,9 @@ func (m taskPickModel) View() string {
 				push = portOn.Render("yes")
 			}
 		}
-		about := cmp.Or(r.repo.Description, r.repo.URL)
+		about := r.about()
 		if r.local != "" && r.top == "" {
 			about = portErr.Render("no such directory: " + r.repo.URL)
-		}
-		if r.repo.Default == unibox.RepoAlways {
-			about = "always · " + about
 		}
 		table = append(table, []string{box, r.name, role, from, branch, push, about})
 	}
@@ -390,6 +401,30 @@ func (m taskPickModel) View() string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+// hostRows are directories of the host named to task new, each mounted and
+// picked, worked in on its own branch. One whose forge the index names
+// takes that repository's place, with its name and what the index says of
+// it, so it is not offered twice; those replaced are returned.
+func hostRows(ctx context.Context, dirs []string, index []taskRepo) ([]taskRepo, []string, error) {
+	rows, replaced := []taskRepo{}, []string{}
+	for _, d := range dirs {
+		top, origin, current, err := unibox.HostCheckout(ctx, d)
+		if err != nil || !isDirectory(top) {
+			return nil, nil, fmt.Errorf("%s is not a directory to mount; name a checkout of yours, or a repository of the index", d)
+		}
+		row := taskRepo{name: filepath.Base(top), picked: true, push: origin != "", host: true, local: top, top: top, origin: origin, current: current}
+		for _, r := range index {
+			if r.local != "" && r.top == top || r.local == "" && origin != "" && unibox.SourceURL(ctx, r.repo.URL) == unibox.SourceURL(ctx, origin) {
+				row.name, row.repo = r.name, r.repo
+				replaced = append(replaced, r.name)
+				break
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows, replaced, nil
+}
+
 // taskRows are an env's indexed repositories as a new task takes them by
 // default, a mounted one with what its checkout is.
 func taskRows(ctx context.Context, repos map[string]unibox.IndexedRepo) []taskRepo {
@@ -416,9 +451,12 @@ func taskRows(ctx context.Context, repos map[string]unibox.IndexedRepo) []taskRe
 // it is pushed, and the task's name. In accessible mode the same are
 // numbered questions, the roles as the index says them and every branch
 // pushed.
-func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task, branch string, noPush bool) (taskPickModel, error) {
+func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task, branch string, noPush bool, rows []taskRepo) (taskPickModel, error) {
 	ctx := cmd.Context()
-	m := taskPickModel{env: env.Name, branch: branch, rows: taskRows(ctx, env.Repos), existing: map[string]bool{}}
+	if rows == nil {
+		rows = taskRows(ctx, env.Repos)
+	}
+	m := taskPickModel{env: env.Name, branch: branch, rows: rows, existing: map[string]bool{}}
 	if noPush {
 		for i := range m.rows {
 			m.rows[i].push = false
@@ -452,10 +490,15 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 	}
 	if o.accessible() {
 		labels, preset := []string{}, []string{}
-		for _, it := range repoItems(env.Repos) {
-			labels = append(labels, it.label)
-			if it.picked {
-				preset = append(preset, it.label)
+		nameW := 0
+		for _, r := range m.rows {
+			nameW = max(nameW, len(r.name))
+		}
+		for _, r := range m.rows {
+			label := fmt.Sprintf("%-*s  %s", nameW, r.name, r.about())
+			labels = append(labels, label)
+			if r.picked {
+				preset = append(preset, label)
 			}
 		}
 		chosen, err := o.askChoices("Repositories for a new task in env "+env.Name, "", labels, preset, nil)
@@ -525,6 +568,18 @@ func (m taskPickModel) inputs() []unibox.RepoInput {
 	return out
 }
 
+// tildePath is a path under the home as ~ says it, shorter to read.
+func tildePath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	if rest, ok := strings.CutPrefix(p, home); ok && (rest == "" || strings.HasPrefix(rest, string(filepath.Separator))) {
+		return "~" + filepath.ToSlash(rest)
+	}
+	return p
+}
+
 func isDirectory(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()
@@ -540,7 +595,7 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	if len(env.Repos) == 0 {
 		return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:", env.Name)
 	}
-	picked, err := o.pickTask(cmd, env, &t, "", false)
+	picked, err := o.pickTask(cmd, env, &t, "", false, nil)
 	if err != nil {
 		return err
 	}

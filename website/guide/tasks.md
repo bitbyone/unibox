@@ -38,6 +38,7 @@ started by picking them rather than typing addresses:
 
 ```sh
 unibox task new                     # pick them on one screen
+unibox task new .                   # the same screen, with this checkout of yours mounted
 unibox task new payments adrs --branch feat/pricing   # or name them
 unibox run adrs                     # a name works wherever a repository does
 unibox run --repo . --repo adrs     # your checkout, and one of the index beside it

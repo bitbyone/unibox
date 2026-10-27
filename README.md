@@ -175,7 +175,8 @@ and the task's name; context repositories keep their `ref`. One that says `defau
 task of the env, cloned beside your mounted checkout in `run` too: the
 architecture decisions and specifications an agent should always have.
 A name from that index works wherever a repository does (`unibox run
-adrs`).
+adrs`); `unibox task new .` opens the same screen with your checkout
+mounted among them.
 
 By default `run` mounts the directories you name (the current one when
 none) into the sandbox at `/work/<task>/<name>`: the agent works on your
