@@ -307,7 +307,7 @@ func (o *options) painter() func(style, text string) string {
 func changed(state unibox.State, env unibox.Env, values unibox.EnvValues) bool {
 	mine := values.ArgsFor(env)
 	b, ok := state.Sandboxes[env.SandboxName()]
-	if !ok || b.Env != env.Name || b.Fingerprint == "" || b.Adopted || env.SBX.Missing(mine) != nil {
+	if !ok || b.Env != env.Name || b.Fingerprint == "" || b.Adopted || len(env.SBX.Missing(mine)) > 0 {
 		return false
 	}
 	r, err := values.ResourcesFor(env, env.SandboxName()).Resolve(unibox.HostResources(), io.Discard)

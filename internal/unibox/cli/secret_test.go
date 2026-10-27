@@ -12,6 +12,7 @@ import (
 
 	"github.com/tobola/unibox/internal/testenv"
 	"github.com/tobola/unibox/internal/unibox"
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
 // fakeSBX puts on PATH an sbx that keeps its secrets' names in a file and
@@ -253,6 +254,19 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	}
 	if out, _, err := run(t, paths, "", "doctor"); err != nil || !strings.Contains(out, "1 to add · 0 to change · 0 to destroy") {
 		t.Fatalf("%v\n%s", err, out)
+	}
+	// A sandbox made from what the env no longer is is told.
+	if err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["team"] = api.Sandbox{Name: "team", Env: "team", Fingerprint: "before", State: "ready"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, _ := run(t, paths, "", "doctor"); !strings.Contains(out, "the env changed since the sandbox was created") {
+		t.Fatalf("%s", out)
+	}
+	if err := paths.State(func(s *unibox.State) error { delete(s.Sandboxes, "team"); return nil }); err != nil {
+		t.Fatal(err)
 	}
 	if !strings.Contains(calls(t, log), "env plan --name team --env-args-file ") {
 		t.Fatalf("%s", calls(t, log))
