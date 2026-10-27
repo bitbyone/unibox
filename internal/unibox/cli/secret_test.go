@@ -875,6 +875,11 @@ func TestADirectoryOfTheIndexStaysMountedBesideAnAddressThatIsCloned(t *testing.
 			t.Fatalf("--defaults %v: %s", defaults, out)
 		}
 	}
+	// --only takes what is named, not even what every task takes.
+	out, _, _ = run(t, paths, "", "task", "check", "--branch", "main", "https://gitlab.example.com/x/raw.git", "--only", "--json")
+	if err := json.Unmarshal([]byte(out), &check); err != nil || len(check.Repositories) != 1 {
+		t.Fatalf("%v\n%s", err, out)
+	}
 }
 
 func TestANewTaskStopsWhereItsBranchExistsAlready(t *testing.T) {

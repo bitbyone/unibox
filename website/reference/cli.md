@@ -154,6 +154,7 @@ named with `--repo`, which does not mix with the argument. Arguments after
 | `--clone` | clone from the forge inside the sandbox |
 | `--repo <[dirname=]source>` | a directory, HTTPS URL or a name of the env's index; repeat for several |
 | `--defaults` | take also the index's repositories that say `default: on`, as `task new` picks them (those that say `always` come anyway) |
+| `--only` | take only the repositories named, not even those that say `always` |
 | `--branch <name>` | before all `--repo`: shared branch; after one: that repository's (default: current branch, or the forge's default) |
 | `--author "Name <email>"` | commit author |
 | `--push` | push the selected local branches first; create a missing one from local HEAD (or a URL's default tip); never forces |

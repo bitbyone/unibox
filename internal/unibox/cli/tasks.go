@@ -166,10 +166,12 @@ func oneSource(req *unibox.Request, args []string) error {
 
 func (o *options) taskCommand(name string) *cobra.Command {
 	var req unibox.Request
-	var defaults bool
+	var defaults, only bool
 	c := &cobra.Command{Use: name + " [directory|url] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare a task in a sandbox: its directories mounted, or cloned from the forge", "run": "Prepare a task and run its agent, or a shell, in this terminal (unibox resume runs it again)"}[name]}
 	taskFlags(c, &req)
 	c.Flags().BoolVar(&defaults, "defaults", false, "Take also the env's indexed repositories that say default: on, as task new picks them to begin with")
+	c.Flags().BoolVar(&only, "only", false, "Take only the repositories named, not even those the index says every task takes")
+	c.MarkFlagsMutuallyExclusive("defaults", "only")
 	if name == "run" {
 		shellFlag(c, &req)
 	}
@@ -189,7 +191,7 @@ func (o *options) taskCommand(name string) *cobra.Command {
 			req.Repositories = []unibox.RepoInput{{Source: "."}}
 		}
 		o.defaultTarget(&req)
-		if err := o.withIndexedRepos(&req, true, defaults); err != nil {
+		if err := o.withIndexedRepos(&req, !only, defaults); err != nil {
 			return err
 		}
 		if name == "check" {

@@ -42,6 +42,7 @@ unibox task new payments adrs --branch feat/pricing   # or name them
 unibox run adrs                     # a name works wherever a repository does
 unibox run --repo . --repo adrs     # your checkout, and one of the index beside it
 unibox run --defaults               # your checkout, and those the index says on
+unibox run --only                   # your checkout alone, not even those it says always
 unibox repo                         # the index: / filter, space default, a add
 ```
 
