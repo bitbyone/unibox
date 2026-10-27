@@ -47,6 +47,9 @@ type Config struct {
 	// over SSH needs no token then, but the agent signs with every key the
 	// user has. Unset, sbx's forwarding is refused.
 	SSHAgentOn *bool `yaml:"ssh_agent,omitempty" json:"ssh_agent,omitempty"`
+	// EditorSSHOn says editors and desktop apps may reach sandboxes over
+	// sbx's SSH endpoint, as ssh <sandbox>.sbx; sbx is set to match.
+	EditorSSHOn *bool `yaml:"editor_ssh,omitempty" json:"editor_ssh,omitempty"`
 	// Ports are the person's for every env: their own, or another mapping
 	// or switch of a port the teams name, under each env's own.
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
@@ -287,6 +290,15 @@ func (c Config) SSHAgent() (on, said bool) {
 		return false, false
 	}
 	return *c.SSHAgentOn, true
+}
+
+// EditorSSH says whether editors may reach sandboxes over SSH, and whether
+// the user said so at all.
+func (c Config) EditorSSH() (on, said bool) {
+	if c.EditorSSHOn == nil {
+		return false, false
+	}
+	return *c.EditorSSHOn, true
 }
 
 func (c Config) StopIdle() bool { return c.StopIdleSandbox == nil || *c.StopIdleSandbox }

@@ -166,6 +166,8 @@ func (o *options) configCommand() *cobra.Command {
   default_env  the env a sandbox is created from when none is named
   stop_idle    whether a sandbox is stopped when its last session ends
   ssh_agent    whether sandboxes may use your SSH agent (sbx is set to match)
+  editor_ssh   whether editors and apps reach sandboxes as ssh <sandbox>.sbx
+               (sbx is set to match, its daemon restarted)
   remember_host_commands
                whether approving an env's host commands covers their later
                runs too, rather than being asked each time (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
@@ -186,6 +188,18 @@ func (o *options) configCommand() *cobra.Command {
 				return fmt.Errorf("there is no env %s; unibox env ls lists them", value)
 			}
 			cfg.DefaultEnv = value
+		case "editor_ssh":
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("%s must be true or false", key)
+			}
+			if err := o.setEditorSSH(cmd, v); err != nil {
+				return err
+			}
+			if v {
+				return o.success("editors reach a sandbox as ssh <sandbox>.sbx")
+			}
+			return o.success("configuration updated")
 		case "stop_idle", "ssh_agent":
 			v, err := strconv.ParseBool(value)
 			if err != nil {
@@ -228,6 +242,12 @@ func (o *options) configCommand() *cobra.Command {
 			}
 			cfg = o.manager.Config
 			cfg.SSHAgentOn = nil
+		case "editor_ssh":
+			if err := o.setEditorSSH(cmd, false); err != nil {
+				return err
+			}
+			cfg = o.manager.Config
+			cfg.EditorSSHOn = nil
 		default:
 			return fmt.Errorf("unknown configuration key %q; the keys are %s", args[0], configKeys)
 		}
@@ -239,7 +259,7 @@ func (o *options) configCommand() *cobra.Command {
 	return c
 }
 
-const configKeys = "default_env, stop_idle, ssh_agent and remember_host_commands"
+const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh and remember_host_commands"
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {
@@ -251,6 +271,9 @@ func configValue(c unibox.Config, key string) (any, error) {
 		return c.StopIdle(), nil
 	case "ssh_agent":
 		on, _ := c.SSHAgent()
+		return on, nil
+	case "editor_ssh":
+		on, _ := c.EditorSSH()
 		return on, nil
 	}
 	return nil, fmt.Errorf("unknown configuration key %q", key)

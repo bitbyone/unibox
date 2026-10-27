@@ -150,7 +150,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **The SSH agent is the user's call.** sbx forwards it by default; unibox
   refuses that until `ssh_agent` in config.yaml says yes or no (`init`
   asks, recommending no) and sets sbx to match. With it, sessions get
-  `GIT_SSH_COMMAND` with `StrictHostKeyChecking=accept-new`.
+  `GIT_SSH_COMMAND` with `StrictHostKeyChecking=accept-new`. Editors
+  over SSH (`editor_ssh`, `ssh <sandbox>.sbx`) are asked alike; turning
+  it on restarts sbx's daemon, which serves SSH only from a start with
+  `feature.ssh` on.
 - **A noun alone at a terminal is a list to act in.** `unibox port`
   switches a running sandbox's ports, `unibox task` (and `resume` without
   a task) resumes, names or removes a task, `unibox sandbox` opens,

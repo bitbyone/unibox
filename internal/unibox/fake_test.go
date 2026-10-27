@@ -73,6 +73,8 @@ func (f *fakeRuntime) SetSSHForwarding(_ context.Context, on bool) error {
 }
 func (f *fakeRuntime) Diagnose(context.Context) ([]RuntimeCheck, error) { return nil, nil }
 func (f *fakeRuntime) SignedIn(context.Context) (bool, error)           { return true, nil }
+func (f *fakeRuntime) EditorSSH(context.Context) (bool, error)          { return false, nil }
+func (f *fakeRuntime) SetEditorSSH(context.Context, bool) error         { return nil }
 func (f *fakeRuntime) NetworkPolicyChosen(context.Context) (bool, error) {
 	return !f.policyUnchosen, nil
 }

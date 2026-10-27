@@ -145,6 +145,21 @@ esac
 	}
 }
 
+func TestEditorSSHIsReadAsAFlagOrABool(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for answer, want := range map[string]bool{
+		`{"key":"feature.ssh","default":{"enabled":false},"value":{"enabled":true,"variant":""}}`: true,
+		`{"key":"feature.ssh","value":{"enabled":false}}`:                                         false,
+		`{"key":"feature.ssh","value":true}`:                                                      true,
+	} {
+		mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nprintf '%s' "+Quote(answer)+"\n"))
+		if on, err := (&SBX{}).EditorSSH(context.Background()); err != nil || on != want {
+			t.Errorf("%s: %v %v", answer, on, err)
+		}
+	}
+}
+
 func TestASessionUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)

@@ -49,6 +49,7 @@ context:
   sandbox: dev
 stop_idle: true
 ssh_agent: false
+editor_ssh: true
 ```
 
 Edit it through `unibox env`, `config`, `context` and `network`. Only

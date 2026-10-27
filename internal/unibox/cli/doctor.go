@@ -65,6 +65,9 @@ func (o *options) doctorCommand() *cobra.Command {
 				if c.Name == "Global network policy" && c.Status == "fail" {
 					hint = "unibox network init chooses it"
 				}
+				if c.Name == "SSH client config" && c.Status != "pass" {
+					hint = "unibox config set editor_ssh true sets it up"
+				}
 				add("sbx", c.Name, c.Status, c.Message, hint)
 			}
 			if version, err := sbx.Version(ctx); err != nil {
@@ -97,6 +100,19 @@ func (o *options) doctorCommand() *cobra.Command {
 				add("sbx", "SSH agent", "pass", "not forwarded, as you chose", "")
 			default:
 				add("sbx", "SSH agent", "pass", "not forwarded", "")
+			}
+			if on, said := o.manager.Config.EditorSSH(); said {
+				serving, err := sbx.EditorSSH(ctx)
+				switch {
+				case err != nil:
+					add("sbx", "editor SSH", "warn", err.Error(), "")
+				case serving != on:
+					add("sbx", "editor SSH", "warn", fmt.Sprintf("your config.yaml says %t, sbx's feature.ssh %t", on, serving), fmt.Sprintf("unibox config set editor_ssh %t sets sbx to match", on))
+				case on:
+					add("sbx", "editor SSH", "pass", "editors reach a sandbox as ssh <sandbox>.sbx", "")
+				default:
+					add("sbx", "editor SSH", "pass", "off, as you chose", "")
+				}
 			}
 		}
 		if _, err := o.paths.LoadEnvValues(); err != nil {

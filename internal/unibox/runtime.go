@@ -62,6 +62,11 @@ type Runtime interface {
 	NetworkBlocked(ctx context.Context, sandbox string) ([]BlockedHost, error)
 	SSHForwarding(ctx context.Context) (bool, error)
 	SetSSHForwarding(ctx context.Context, on bool) error
+	// EditorSSH says whether the runtime serves SSH to editors, and
+	// SetEditorSSH turns it on, with the host entry an SSH client needs,
+	// or off and the entry out.
+	EditorSSH(ctx context.Context) (bool, error)
+	SetEditorSSH(ctx context.Context, on bool) error
 	// AllowSSHAgent records the user's leave for sandboxes to use their
 	// SSH agent, which Available holds sbx's forwarding to.
 	AllowSSHAgent(on bool)

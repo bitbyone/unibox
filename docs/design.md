@@ -633,6 +633,20 @@ sets sbx to match (restarting sbx's daemon, which a change takes effect
 with). With it, sessions get `GIT_SSH_COMMAND` with
 `StrictHostKeyChecking=accept-new`, as the guest has no known_hosts.
 
+## Editors over SSH
+
+sbx serves each sandbox to editors and desktop apps as `ssh
+<sandbox>.sbx` when its `feature.ssh` flag is on, a flag that may also
+arrive from Docker's side (`source: remote`); its daemon registers the
+endpoint only when it starts with the flag on, so a daemon started before
+`sbx login` - as unibox starts one to ask whether sbx is signed in -
+answers 404 until it restarts. `editor_ssh` in config.yaml is the user's
+say, asked by init after the SSH agent: on, unibox sets the flag,
+restarts the daemon and runs `sbx setup ssh`, which writes the client's
+host entry; off, `sbx setup ssh remove` goes first. Doctor compares the
+flag with the say. An editor's session is not unibox's, so stop_idle may
+stop a sandbox under it.
+
 ## Trust
 
 - **The team's repository is trusted**, as its sbxenv files run host
@@ -721,7 +735,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox sandbox create [--adopt]\|ls\|inspect\|shell\|stop\|recreate\|rm` | as named; removal checks for sessions and unpushed work |
 | `unibox port on\|off\|ls` | a running sandbox's ports |
 | `unibox context [use -s S -e E \| clear]` | the sandbox and env commands work in when not told |
-| `unibox config get\|set\|unset` | `default_env`, `stop_idle`, `ssh_agent` |
+| `unibox config get\|set\|unset` | `default_env`, `stop_idle`, `ssh_agent`, `editor_ssh` |
 | `unibox prune` | forgets the sandboxes sbx no longer has |
 | `unibox destroy [--all] [--force]` | every sandbox unibox created; with `--all` its state, configuration and the person's args too |
 | `unibox herdr install-plugin\|uninstall-plugin\|status` | [herdr](#herdr) |

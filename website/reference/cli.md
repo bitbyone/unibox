@@ -323,6 +323,7 @@ unibox config unset <key>
 | `default_env` | env a sandbox is created from when none is named |
 | `stop_idle` | stop a sandbox when its last session ends (default `true`) |
 | `ssh_agent` | may sandboxes use your SSH agent; sbx is set to match ([Security](./security#your-ssh-agent)) |
+| `editor_ssh` | may editors and apps reach a sandbox as `ssh <sandbox>.sbx`; sbx is set to match and its daemon restarted |
 | `remember_host_commands` | sbx's `env.rememberHostCommands`: approving an env's host commands covers later runs (default `false`) |
 
 ### `unibox herdr`

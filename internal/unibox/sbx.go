@@ -53,6 +53,58 @@ func (r *SBX) SetSSHForwarding(ctx context.Context, on bool) error {
 	return nil
 }
 
+// EditorSSH reads sbx's feature.ssh, a flag whose value is {enabled}, or
+// a bare true or false where it is set as one.
+func (r *SBX) EditorSSH(ctx context.Context) (bool, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "settings", "get", "feature.ssh", "--json"))
+	if err != nil {
+		return false, err
+	}
+	var setting struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if i := bytes.IndexByte(b, '{'); i >= 0 {
+		b = b[i:]
+	}
+	if err := json.Unmarshal(b, &setting); err != nil {
+		return false, fmt.Errorf("cannot read sbx settings get feature.ssh --json; update sbx or retry: %w", err)
+	}
+	var on bool
+	if json.Unmarshal(setting.Value, &on) == nil {
+		return on, nil
+	}
+	var flag struct{ Enabled bool }
+	if err := json.Unmarshal(setting.Value, &flag); err != nil {
+		return false, fmt.Errorf("cannot read sbx's feature.ssh, which is %s; update sbx or retry", setting.Value)
+	}
+	return flag.Enabled, nil
+}
+
+// SetEditorSSH turns sbx's SSH endpoint on or off. sbx serves it only from
+// a daemon started with the flag on, so the daemon restarts either way;
+// sbx setup ssh then adds its host entry to the SSH client's
+// configuration, which sbx setup ssh remove takes out first when it goes
+// off.
+func (r *SBX) SetEditorSSH(ctx context.Context, on bool) error {
+	if !on {
+		if err := runQuiet(hostCommand(ctx, "sbx", "setup", "ssh", "remove")); err != nil {
+			return fmt.Errorf("sbx did not take its host entry out of your SSH client's configuration: %w", err)
+		}
+	}
+	if err := runQuiet(hostCommand(ctx, "sbx", "settings", "set", "feature.ssh", strconv.FormatBool(on))); err != nil {
+		return fmt.Errorf("sbx did not change feature.ssh: %w", err)
+	}
+	if err := runQuiet(hostCommand(ctx, "sbx", "daemon", "restart")); err != nil {
+		return fmt.Errorf("sbx changed feature.ssh, but its daemon did not restart; unibox config set editor_ssh %t tries again: %w", on, err)
+	}
+	if on {
+		if err := runQuiet(hostCommand(ctx, "sbx", "setup", "ssh")); err != nil {
+			return fmt.Errorf("sbx serves SSH, but did not add its host entry to your SSH client's configuration; unibox config set editor_ssh true tries again: %w", err)
+		}
+	}
+	return nil
+}
+
 // sbxForwarding reads whether sbx forwards the host's SSH agent. It takes
 // the JSON from its first brace, past any line sbx says before it, and asks
 // once more if the answer does not read - a daemon starting can answer

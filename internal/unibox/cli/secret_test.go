@@ -186,7 +186,7 @@ func TestATokenSbxDidNotStoreSaysHowToGoOn(t *testing.T) {
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// sbx has said why on the terminal; its exit status is not repeated.
-	_, _, err := runAt(t, paths, "1\nperson\ny\n", "init", repo)
+	_, _, err := runAt(t, paths, "1\n2\nperson\ny\n", "init", repo)
 	if err == nil || err.Error() != "sbx did not store the anthropic token; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing" {
 		t.Fatalf("%v", err)
 	}
@@ -297,13 +297,16 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the one file is taken without asking; the arg; store
 	// the secrets; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", repo)
+	_, said, err := runAt(t, paths, "1\n1\nperson\ny\nn\n", "init", repo)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	cfg, _ := paths.LoadConfig()
 	if on, chosen := cfg.SSHAgent(); on || !chosen {
 		t.Fatal("the SSH agent was not decided")
+	}
+	if on, chosen := cfg.EditorSSH(); !on || !chosen {
+		t.Fatal("editors over SSH were not decided")
 	}
 	if cfg.DefaultEnv != "team" || len(cfg.Envs["team"].Files) != 1 {
 		t.Fatalf("%+v", cfg)
@@ -312,7 +315,8 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	if values.Envs["team"]["user"] != "person" {
 		t.Fatalf("%+v", values)
 	}
-	if c := calls(t, log); !strings.Contains(c, "secret set anthropic\n") || !strings.Contains(c, "secret set gitlab\n") || strings.Contains(c, "env create") {
+	if c := calls(t, log); !strings.Contains(c, "secret set anthropic\n") || !strings.Contains(c, "secret set gitlab\n") || strings.Contains(c, "env create") ||
+		!strings.Contains(c, "settings set feature.ssh true\ndaemon restart\nsetup ssh\n") {
 		t.Fatalf("%s", c)
 	}
 	if !strings.Contains(said, "env team, sandboxes/team.sbxenv.yaml: added") || !strings.Contains(said, "unibox run creates team when it first needs it") {
@@ -331,7 +335,7 @@ func TestInitAwayFromARepositoryAsksForTheFile(t *testing.T) {
 	file := teamEnv(t)
 	// SSH agent: no; the file; its name as it says; the arg; no secrets
 	// stored; no sandbox.
-	_, said, err := runAt(t, paths, "1\n"+file+"\n\nperson\nn\nn\n", "init", t.TempDir())
+	_, said, err := runAt(t, paths, "1\n2\n"+file+"\n\nperson\nn\nn\n", "init", t.TempDir())
 	if err != nil || !strings.Contains(said, "no sbxenv file in") || !strings.Contains(said, "later: unibox secret set -e team") {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -375,7 +379,7 @@ func TestInitFindsEveryEnvOfTheRepository(t *testing.T) {
 	// SSH agent: no; both files as offered; review's name, as its own does
 	// not make one; dev as the default, review being added first; dev's arg;
 	// no sandboxes.
-	_, said, err := runAt(t, paths, "1\n0\nreview\n2\nme\nn\nn\n", "init")
+	_, said, err := runAt(t, paths, "1\n2\n0\nreview\n2\nme\nn\nn\n", "init")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -678,7 +682,7 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	}
 	// SSH agent: no; the arg; store the secrets; no sandbox yet. The walk
 	// asks nothing of ports.
-	_, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", filepath.Dir(filepath.Dir(file)))
+	_, said, err := runAt(t, paths, "1\n2\nperson\ny\nn\n", "init", filepath.Dir(filepath.Dir(file)))
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}

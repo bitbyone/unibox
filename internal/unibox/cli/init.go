@@ -298,6 +298,9 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	if err := o.askSSHAgent(cmd); err != nil {
 		return err
 	}
+	if err := o.askEditorSSH(cmd); err != nil {
+		return err
+	}
 	if err := sbx.Available(ctx); err != nil {
 		return err
 	}
