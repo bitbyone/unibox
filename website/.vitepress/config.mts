@@ -7,22 +7,28 @@ const repo = 'https://github.com/bitbyone/unibox'
 
 const guideSidebar = [
   {
-    text: 'Introduction',
+    text: 'Getting Started',
     items: [
-      { text: 'Getting Started', link: '/guide/' },
-      { text: 'How it Works', link: '/guide/how-it-works' },
+      { text: 'Introduction', link: '/' },
+      { text: 'Installation', link: '/guide/installation' },
+      { text: 'Usage', link: '/guide/usage' },
     ],
   },
   {
     text: 'Daily Work',
     items: [
+      { text: 'Setting Up: init', link: '/guide/init' },
       { text: 'Tasks', link: '/guide/tasks' },
+      { text: 'Interactive Lists', link: '/guide/interactive' },
+      { text: 'Repository Index', link: '/guide/repos' },
+      { text: 'Agent Instructions', link: '/guide/instructions' },
+      { text: 'Team and Personal Configuration', link: '/guide/configuration' },
       { text: 'Sandboxes', link: '/guide/sandboxes' },
       { text: 'Ports', link: '/guide/ports' },
       { text: 'Network', link: '/guide/network' },
-      { text: 'Secrets & Agents', link: '/guide/secrets' },
+      { text: 'Secrets', link: '/guide/secrets' },
+      { text: 'Doctor', link: '/guide/doctor' },
       { text: 'Keeping the Env Current', link: '/guide/updating' },
-      { text: 'Troubleshooting', link: '/guide/troubleshooting' },
     ],
   },
   {
@@ -51,11 +57,31 @@ const referenceSidebar = [
   },
 ]
 
+// A fenced block of the language term is a terminal session drawn as a
+// window: a line that starts with "$ " is a command, and [dim], [ok],
+// [err], [warn], [blue], [key], [b] and [sel] ... [/] colour what they
+// enclose as unibox does. The info string after term is the window's title.
+const termTags = ['dim', 'ok', 'err', 'warn', 'blue', 'key', 'b', 'sel']
+function renderTerm(content: string, title: string): string {
+  const escape = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const paint = (t: string) =>
+    escape(t)
+      .replace(new RegExp(`\\[(${termTags.join('|')})\\]`, 'g'), '<span class="t-$1">')
+      .replace(/\[\/\]/g, '</span>')
+  const lines = content.replace(/\n$/, '').split('\n').map((line) => {
+    if (line.startsWith('$ ')) {
+      return `<span class="t-line t-cmd"><span class="t-prompt">$</span> <b>${escape(line.slice(2))}</b></span>`
+    }
+    return `<span class="t-line">${paint(line)}</span>`
+  })
+  return `<div class="term-shot" v-pre><div class="term-bar"><i></i><i></i><i></i><span>${escape(title || 'terminal')}</span></div><pre class="term-body">${lines.join('')}</pre></div>\n`
+}
+
 export default defineConfig({
   base,
   title: 'unibox',
   titleTemplate: ':title | unibox',
-  description: 'Run Claude Code, Codex, Copilot or OpenCode in a Docker Sandbox, a VM on your machine that gets your repository and nothing else, set up from your team\'s env repository with one command.',
+  description: 'unibox is a companion to Docker Sandboxes (sbx): tasks, a repository index, agent instructions and interactive lists over the sandboxes your team describes in plain sbx files.',
   cleanUrls: true,
   lastUpdated: true,
   head: [
@@ -63,17 +89,25 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0b7a5c' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'unibox' }],
-    ['meta', { property: 'og:title', content: 'unibox: coding agents in a sandbox, not on your laptop' }],
-    ['meta', { property: 'og:description', content: 'A CLI over Docker Sandboxes. Your team describes the sandbox once; you run unibox run.' }],
+    ['meta', { property: 'og:title', content: 'unibox, a companion to Docker Sandboxes' }],
+    ['meta', { property: 'og:description', content: 'Tasks, a repository index, agent instructions and interactive lists over plain sbx configuration.' }],
   ],
   markdown: {
     theme: { light: 'github-light', dark: 'github-dark-dimmed' },
+    config(md) {
+      const fence = md.renderer.rules.fence!
+      md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+        const [lang, ...title] = tokens[idx].info.trim().split(/\s+/)
+        if (lang === 'term') return renderTerm(tokens[idx].content, title.join(' '))
+        return fence(tokens, idx, options, env, self)
+      }
+    },
   },
   themeConfig: {
     logo: { light: '/logo-light.svg', dark: '/logo-dark.svg', alt: 'unibox' },
     siteTitle: false,
     nav: [
-      { text: 'Guide', link: '/guide/', activeMatch: '^/guide/' },
+      { text: 'Guide', link: '/', activeMatch: '^/($|guide/)' },
       { text: 'Reference', link: '/reference/cli', activeMatch: '^/reference/' },
       {
         text: 'Resources',
@@ -86,8 +120,8 @@ export default defineConfig({
       },
     ],
     sidebar: {
-      '/guide/': guideSidebar,
       '/reference/': referenceSidebar,
+      '/': guideSidebar,
     },
     socialLinks: [{ icon: 'github', link: repo }],
     outline: { level: [2, 3], label: 'On this page' },

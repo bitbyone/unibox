@@ -1,7 +1,9 @@
 # Network
 
-A sandbox reaches only the hosts sbx allows by default, the hosts the env's
-kits add, and the rules you add for that sandbox.
+A sandbox reaches the hosts sbx's policy allows, the hosts the env's kits
+add, and the rules added for that sandbox. sbx enforces all of it. unibox
+adds the list of what the sandbox was refused lately, rules per sandbox
+kept across a recreate, and a way to hand rules back to the team's kits.
 
 ## The policy every sandbox starts from
 
@@ -25,6 +27,20 @@ unibox network ls                    # your rules, and hosts refused lately
 unibox network allow jitpack.io
 unibox network allow '*.npmjs.org' registry.npmjs.org
 unibox network allow stun.example.com:3478 --protocol udp
+```
+
+```term
+$ unibox network ls
+sandbox dev has no rules of its own; unibox network allow <host> adds one
+the env's kits allow 29 hosts, sbx's defaults 195; --all lists them
+
+refused lately - what the env may want to allow:
+HOST              TIMES  LAST
+jitpack.io        4      12m ago
+repo.gradle.org   1      12m ago
+unibox network export writes these and your rules for a kit of the env
+
+$ unibox network allow jitpack.io
 ```
 
 `network ls` lists the hosts the sandbox was refused recently, which is

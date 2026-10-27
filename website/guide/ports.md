@@ -1,7 +1,9 @@
 # Ports
 
-Ports of a sandbox reach your machine only when published, on
-`127.0.0.1`.
+sbx publishes a sandbox's ports with `sbx ports`. unibox adds names: the
+team lists the ports its projects listen on, each person decides which are
+on when the sandbox starts, and a running sandbox's ports are switched in
+a list. A port reaches your machine only when published, on `127.0.0.1`.
 
 ## Open a port
 
@@ -12,6 +14,17 @@ unibox port on vite=15173            # on another host port
 unibox port on --map 8080:3000       # a port no file names
 unibox port off vite
 unibox port                          # switch them with the arrow keys or h and l, m for another host port
+```
+
+```term
+$ unibox port
+[blue]Ports of sandbox dev, until it next starts[/]
+
+[blue]>[/] [ok]on [/]  [b]spring  [/]  start on   8080:8080  http://127.0.0.1:8080  the Spring Boot application
+  [dim]off[/]  vite      start off  5173:5173  -                      the Vite dev server
+  [dim]off[/]  devtools  start off  9222:9222  -                      Chrome DevTools
+
+[key]↑/↓ j/k[/] move · [key]←/h[/] off · [key]→/l[/] on · [key]space[/] switch · [key]m[/] on another host port · [key]d[/] on/off at start · [key]enter/q[/] done
 ```
 
 Add `-s dev` for another sandbox than the default. The sandbox must be

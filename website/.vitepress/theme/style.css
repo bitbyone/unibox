@@ -274,3 +274,46 @@
 
 .VPFooter { border-top: 1px solid var(--ub-frame) !important; background: var(--vp-c-bg) !important; }
 .VPDocFooter .pager-link { border-radius: 10px; }
+
+/*
+ * A terminal session in the guide (```term blocks): the window of a
+ * terminal with unibox's own colours, the same in light and dark mode.
+ */
+.term-shot {
+  margin: 20px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #121614;
+  border: 1px solid #232a27;
+}
+.term-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  background: #1a201d;
+  font-size: 12px;
+  color: #86928d;
+}
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: #36403c; }
+.term-bar span { margin-left: 8px; font-family: var(--vp-font-family-mono); }
+.term-body {
+  margin: 0;
+  padding: 14px 18px;
+  overflow-x: auto;
+  font-family: var(--vp-font-family-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #c6d0cb;
+}
+.term-body .t-line { display: block; white-space: pre; min-height: 1.65em; }
+.term-body .t-cmd b { color: #eef3f0; font-weight: 600; }
+.term-body .t-prompt { color: #4fd1a5; user-select: none; }
+.term-body .t-dim { color: #75817c; }
+.term-body .t-ok { color: #7fd49a; }
+.term-body .t-err { color: #ed567a; }
+.term-body .t-warn { color: #e0b05a; }
+.term-body .t-blue { color: #7cc4fa; font-weight: 600; }
+.term-body .t-key { color: #d7af00; }
+.term-body .t-b { color: #eef3f0; font-weight: 600; }
+.term-body .t-sel { color: #eef3f0; font-weight: 600; background: rgba(124, 196, 250, 0.12); }

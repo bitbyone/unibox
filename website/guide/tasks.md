@@ -1,209 +1,176 @@
 # Tasks
 
-A task is your repositories in a sandbox, at `/work/<task>/<repo>`, with an
-agent working in them.
+sbx gives a sandbox one workspace. unibox puts any number of tasks into
+one sandbox instead: a task is a set of repositories at
+`/work/<task>/<repo>`, the branch they are worked on, and the agent
+working there. A task is kept until it is removed, and resumed by name.
 
 ## Start a task
 
 ```sh
 cd ~/code/api
-unibox run                          # this repository, the default sandbox
+unibox run                          # this checkout, the default sandbox
 unibox run ~/code/api               # the same, by path
-unibox run --task login             # name the task (default: repo name and a digest)
-unibox run --branch feat/login      # switch your checkout to feat/login first
+unibox run --task login             # a name of yours (default: its first repository and a digest)
+unibox run --branch feat/login      # switch the checkout to feat/login first, made from HEAD if missing
 unibox run --agent codex            # another agent the sandbox has
-unibox run --shell                  # a shell in the task, no agent
-unibox run -- --model opus          # everything after -- goes to the agent
+unibox run --shell                  # a shell in the task instead of an agent
+unibox run -- --model opus          # what follows -- goes to the agent
 ```
 
-The sandbox is created on first use. If the env asks for a value you have
-not set, `run` asks for it.
+The sandbox is created on first use. A value the env asks for and you have
+not given is asked for at the terminal.
 
 Several repositories in one task:
 
 ```sh
 unibox run --repo ~/code/api --repo ~/code/web
 unibox run --branch feat/login --repo ~/code/api --repo ~/code/web --branch main
+unibox run --repo . --repo adrs     # a name of the env's repository index
 ```
 
-A `--branch` before every `--repo` applies to all of them; one after a
-`--repo` applies to that repository alone. The agent starts in
-`/work/<task>`, above the repositories.
+A `--branch` before every `--repo` is the task's branch; one after a
+`--repo` is that repository's alone. With several repositories the agent
+starts in `/work/<task>`, above them, where
+[`AGENTS.md`](./instructions) tells it what each one is.
 
-## Repositories by name
-
-An env can name the repositories its tasks use - the team's under
-`repos:` in its `unibox.yaml` files, yours in `config.yaml` - so a task is
-started by picking them rather than typing addresses:
-
-```sh
-unibox task new                     # pick them on one screen
-unibox task new .                   # the same screen, with this checkout of yours mounted
-unibox task new payments adrs --branch feat/pricing   # or name them
-unibox run adrs                     # a name works wherever a repository does
-unibox run --repo . --repo adrs     # your checkout, and one of the index beside it
-unibox run --defaults               # your checkout, and those the index says on
-unibox run --only                   # your checkout alone, not even those it says always
-unibox repo                         # the index: / filter, space default, a add
-```
-
-```yaml
-repos:
-  adrs:
-    url: https://gitlab.example.com/arch/adrs.git
-    ref: main
-    default: always               # every new task takes it
-    description: Architecture decisions
-  spec: {url: https://gitlab.example.com/biz/spec.git, default: on, context: true}
-  payments: https://gitlab.example.com/x/payments.git
-  web: ~/code/web                 # a directory of yours: mounted, not cloned
-```
-
-`default: always` puts the repository into every new task of the env -
-cloned beside your mounted checkout in `unibox run` too, and with
-`--defaults` those that say `on` as well - so the agent
-always has the decisions and specifications at hand. `on` has it picked
-to begin with in `task new`, `off` (the default) only when picked. `ref`
-is the branch a task works on, else the forge's default. A forge address
-is cloned; a directory of your machine (`/…`, `~/…`) is mounted, as
-`run` mounts one.
-
-A repository is worked in, or read: `context: true` - unsaid, true for
-one that says `always` - keeps it on its `ref`, and no branch of a task's
-is made or pushed there, wherever the task names it - in `task new` or
-with `--repo` alike.
-
-`task new` shows them on one screen: `space` picks, `c` switches work and
-context, `b` types the branch the ones worked in get, `t` the task's name,
-`p` whether a row's branch is pushed, `/` filters, `enter` starts. Each row
-shows where it comes from (clone or mount), the branch it gets - `default`
-for the forge's default branch when the index names none - and whether it
-is pushed; nothing is asked of a forge while you pick. As the task
-starts, unibox looks for the branch once, with git: where it exists
-already, it asks whether to work on it there. The task's name - the
-one typed, or the one it will be given - stands at the top, with
-`(exists; it is resumed)` when a task has it. A generated name follows the
-first repository you picked by hand and work in, not one picked to begin
-with or only read, so tasks on the same decisions stay apart. In
-`unibox task`, `r` adds repositories of the index to a task the same way,
-seen at once by an agent working in it. A new branch that is pushed
-is made on the forge from its default branch, or pushed from your
-checkout; one that is not is made in the sandbox's clone, or your
-checkout, alone. Named, `task new` takes `--branch`, `--task` and
-`--no-push`.
-
-### What the agent is told
-
-A repository can carry `instructions`, and the env too, at the top of the
-team repository's `unibox.yaml` or of `<env>.unibox.yaml` beside the env's
-sbxenv file, or of your `config.yaml` (for every env, or under
-`envs.<env>`):
-
-```yaml
-instructions: |
-  Answer in Czech. Run the build before you say you are done.
-repos:
-  adrs:
-    url: https://gitlab.example.com/arch/adrs.git
-    default: always
-    instructions: |
-      Read README.md, the index of decisions, before changing a module's
-      boundaries. A new decision is a new record; never edit an old one.
-```
-
-Before each session unibox gathers them into `/work/<task>/AGENTS.md`,
-with `CLAUDE.md` a link to it: the task's repositories first - each read
-or worked in, on which branch - then the env's instructions, then each
-repository's. The agent then starts in `/work/<task>`, above the
-repositories. The file is outside every repository, so it is never
-committed; it is written again at every session. A task of several
-repositories always gets it, for the list alone; one of a single
-repository without instructions does not, and its session starts in the
-repository. A repository's own `AGENTS.md` still holds inside it.
-
-`unibox task instructions <task>` shows what the agent reads when a
-session starts, every file it reads in its order - its home's, with the
-kits' guidance, then the task's and its repository's - the task's own as
-the next session gets it. `--agent` reads for another agent, `--paths`
-lists the files alone.
-
-Yours win over the team's: `unibox repo add name url|directory [--ref]
-[--default] [--context true|false] [--every-env]`, `unibox repo default
-name always|on|off|-` and `unibox repo rm name` write them.
+The repositories the [index](./repos) says every task takes come along;
+`--defaults` adds those it says `on`, `--only` takes nothing but what is
+named.
 
 ## Mount or clone
 
-By default a task mounts your checkout. `--clone`, or a repository given as
-an HTTPS URL, clones it from the forge inside the sandbox instead.
+A directory is mounted; an address, or any repository with `--clone`, is
+cloned from the forge inside the sandbox.
 
-| | Mount (default) | Clone (`--clone`) |
+| | Mount (default for directories) | Clone (`--clone`, or an address) |
 | --- | --- | --- |
-| The agent works on | your checkout, as it is | its own clone of the forge's branch |
+| The agent works on | your checkout as it is | its own clone of the forge's branch |
 | You see its changes | at once, on disk | after it pushes and you fetch |
 | Uncommitted local work | visible to the agent | not there |
 | It can change your `.git` (hooks, config) | yes | no |
 
 ```sh
 unibox run --clone --branch feat/login
-unibox run --clone --push --branch feat/login    # push your local branch first
-unibox run --clone --ignore-local                # use the forge's version, leave local changes
-unibox run https://github.com/acme/api           # a URL is always cloned
+unibox run --clone --push --branch feat/login    # push your local branch first, never forced
+unibox run --clone --ignore-local                # take the forge's version despite local changes
+unibox run https://github.com/acme/api           # an address is always cloned
 unibox run --repo api=https://github.com/acme/api --repo docs=https://github.com/acme/docs
 ```
 
-With a clone, the branch must exist on the forge: `--push` pushes yours
-first (never forced). `run` warns about uncommitted or unpushed local work
-the clone will not see, and asks whether to go on.
+A clone needs its branch on the forge, or made there: `--push` pushes
+yours first. `run` names uncommitted or unpushed work the clone would not
+see and asks whether to go on.
 
 ::: warning A mount gives the agent your .git
-Hooks and config the agent writes into a mounted `.git` run on your machine
-the next time you or your editor run git there. Use `--clone` for a
-repository you would not let the agent configure.
+A hook or setting the agent writes into a mounted `.git` runs on your
+machine the next time you or your editor run git there. unibox says so the
+first time it mounts a directory. Use `--clone` for a repository you would
+not let the agent configure.
 :::
 
 ## Check before starting
 
-```sh
-unibox task check --clone --branch feat/login
+`task check` takes the same arguments as `run`, changes nothing, and lists
+what is in the way: a missing value or token, a branch not on the forge,
+local work a clone would miss, an env changed since the sandbox was made.
+
+```term ~/code/api
+$ unibox task check --clone --branch feat/login
+uncommitted: api local edits will not reach the sandbox; commit and push them or use --ignore-local
+branch_not_pushed: api push the selected branch first (or pass --push)
 ```
 
-`task check` takes the same arguments as `run`, changes nothing, and lists
-what is in the way: a missing value, a branch not on the forge, local work
-a clone would miss, an env that changed since the sandbox was made.
-`unibox task prepare` sets the task up without starting an agent.
+`unibox task prepare` sets a task up without starting an agent; with
+`--json` both are for scripts.
 
 ## Come back to a task
 
 ```sh
-unibox task                      # pick a task: enter resumes, t starts a new one, a attaches another agent, r adds repositories, s a shell
-unibox task ls                   # every task, in every sandbox
-unibox task ls -s dev            # one sandbox's tasks
+unibox task                      # the list: enter resumes
+unibox task ls                   # every task in every sandbox
 unibox resume login              # its agent again
-unibox resume login --agent claude
-unibox resume login --shell
+unibox resume login --shell      # a shell beside it, also while the agent runs
 unibox resume login -- --continue
 ```
 
-## Change a task
+A task keeps its repositories, branches and agent; `run` with the same
+repositories on the same branches resumes the task it made before.
 
-```sh
-unibox task rename api-3f2a9c1e login     # a name of your own
-unibox task rename login --reset          # back to its ID
-unibox task add-repo login ~/code/web     # add a repository, even while the agent runs
+## Another agent on the same task
+
+`--agent` resumes a task with another agent the sandbox has; the task
+keeps it from then on. In the list, `a` asks which:
+
+```term
+$ unibox task
+[blue]Tasks[/]
+
+  TASK   SANDBOX  AGENT   STATE  SESSIONS  REPOSITORIES
+[blue]>[/] [b]login  dev      claude  ready  1         api@feat/login, adrs@main[/]
+
+Resume login with  [b]claude[/]  [blue]codex[/]
+[key]←/→ h/l[/] agent · [key]enter[/] resume · [key]esc[/] back
 ```
 
-## Remove a task
+Both may work in the task at once: each session is its own process in the
+same directories.
+
+## Add a repository while the agent works
 
 ```sh
+unibox task add-repo login ~/code/web     # a directory, an address or an index name
+```
+
+In the list, `r` offers the index's repositories the task does not hold,
+on the screen [`task new`](./repos#task-new) uses:
+
+```term
+$ unibox task
+[dim]... r on login ...[/]
+[blue]Add repositories to task login[/]
+
+  branch  [dim]none: each its ref, its checkout's branch or the forge's default[/]
+
+     REPO      ROLE     FROM   BRANCH        PUSH  ABOUT
+[blue]>[/] [ok]✓[/]  [b]web       work     clone  default             The web front end[/]
+  [dim]•[/]  payments  work     clone  [dim]default[/]             Payments service
+  [dim]•[/]  spec      [dim]context[/]  clone  [dim]default[/]             Product specification
+
+[dim]1 picked[/]
+[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]p[/] push · [key]b[/] branch · [key]/[/] filter · [key]enter[/] add them · [key]q[/] cancel
+adding 1 repositories to task login
+added web to task login at /work/login/web
+```
+
+A running agent sees the new directory at once; the next session's
+`AGENTS.md` lists it.
+
+## Rename and remove
+
+```sh
+unibox task rename api-3f2a9c1e login     # a name taken wherever its ID is
+unibox task rename login --reset          # back to its ID
 unibox task rm login
 ```
 
-It refuses while a session is running in the task or a clone has unpushed
-work. A mounted directory is unmounted, never deleted.
+```term
+$ unibox task rm pricing
+  payments: clean, every commit on the forge, no stashes
+  spec: clean, every commit on the forge, no stashes
+  nothing outside the repositories
+removed task pricing-3f2a9c1e
+```
+
+Removal refuses while the task's own session runs, or while a clone holds
+uncommitted files, unpushed commits or stashes; `--force` discards them.
+Sessions of other tasks in the sandbox do not stand in the way. A mounted
+directory is unmounted and checked to be gone from the sandbox, never
+deleted.
 
 ## Commits
 
 Commits use your `user.name` and `user.email` from the repository's git
-config, or `--author "Name <email>"`. Each commit made during an agent
-session gets a `Co-authored-by` line for that agent; commits you make in
-a shell do not.
+configuration, or `--author "Name <email>"`. Each commit made during an
+agent session gets a `Co-authored-by` line for that agent; commits made
+in a shell do not.

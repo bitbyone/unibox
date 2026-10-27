@@ -1,5 +1,11 @@
 # Sandboxes
 
+A sandbox is sbx's: unibox creates it with `sbx env create` from the
+env's files and your values, and keeps a record of what it was made
+from. What unibox adds is knowing when the sandbox no longer matches its
+env, bringing tasks back after it is made again, resources given as a
+share of the machine, and defaults so that most commands need no name.
+
 ## See and use them
 
 ```sh
@@ -13,14 +19,31 @@ unibox sandbox stop dev         # stop it; disk and tasks stay
 A sandbox stops by itself when its last session ends. To keep sandboxes
 running, `unibox config set stop_idle false`.
 
+```term
+$ unibox sandbox ls
+SANDBOX  ENV  AGENT   STATE    TASKS  SESSIONS
+dev      dev  claude  running  2      1
+dev-big  dev  claude  stopped  0      0
+```
+
 ## Recreate after the env changed
 
-When a teammate changes the env, or you change a value, the next `run` and
-`unibox doctor` say the sandbox no longer matches. Nothing is applied until
-you ask:
+The sandbox keeps a fingerprint of the env's files, kits and your values.
+When a teammate changes the env, or you change a value, the next start and
+`unibox doctor` say so. Nothing is applied until you ask:
 
-```sh
-unibox sandbox recreate dev
+```term ~/code/api
+$ unibox run
+env dev changed since sandbox dev was created; unibox sandbox recreate dev applies it
+[dim]...[/]
+
+$ unibox sandbox recreate dev
+[blue]?[/] [b]Recreate sandbox dev and discard what it holds outside its tasks?[/]  Yes
+removing sandbox dev to create it again from env dev
+creating sandbox dev from env dev
+[dim]... sbx shows its plan and asks to approve it ...[/]
+mounted /Users/jdoe/code/api at /work/login/api in sandbox dev again
+sandbox recreated
 ```
 
 This removes the sandbox and creates it again from the env as it is now.
@@ -36,6 +59,13 @@ unibox sandbox resources dev                       # what it gets, and from wher
 unibox sandbox resources dev --cpus 50% --memory 16g
 unibox sandbox resources dev --memory -            # back to the env's
 unibox sandbox recreate dev                        # applies the change
+```
+
+```term
+$ unibox sandbox resources dev --memory 16g
+cpus    100% (the team's)
+memory  16g (its own)
+unibox sandbox recreate dev applies it
 ```
 
 `--cpus` is a count, `0` for all, or a share such as `50%`. `--memory` is a

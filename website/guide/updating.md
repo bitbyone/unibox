@@ -1,8 +1,20 @@
 # Keeping the Env Current
 
+The team changes its repository; each person's sandbox follows when they
+choose. unibox pulls the repository and says what the change means for
+you.
+
 ```sh
 unibox env update          # every env repository
 unibox env update dev      # the one dev comes from
+```
+
+```term
+$ unibox env update
+/Users/jdoe/.local/share/unibox/repos/github.com/acme/agent-sandboxes: updated
+  env dev now asks for npmUser: unibox var set -e dev npmUser <value>
+  env dev changed for sandbox dev: unibox sandbox recreate dev
+unibox doctor checks the secrets they need
 ```
 
 `env update` fast-forwards the env repository and says what that changes

@@ -14,9 +14,10 @@ the [context](#unibox-context), or the only sandbox; `-e` from
 every sandbox unless given `-s`.
 
 A noun alone at a terminal (`unibox task`, `sandbox`, `env`, `var`,
-`secret`, `network`, `port`, `context`) opens a list to act on by keys;
-elsewhere it is the noun's `ls`. `↑` `↓` or `j` `k` move, `q` or `esc`
-leave, `d` (or `x`) removes after `y`.
+`secret`, `network`, `port`, `repo`, `context`) opens a list to act on by
+keys; elsewhere it is the noun's `ls`. `↑` `↓` or `j` `k` move, `q` or
+`esc` leave, `d` removes after `y`; in the `env`, `var`, `secret`,
+`network`, `repo` and `context` lists `/` filters.
 
 ### Global flags
 
@@ -69,8 +70,9 @@ commands setting, SSH agent), `vars.toml`, each env (files, args,
 sandbox (still in sbx, mounts). Names the fix for each finding. `-e`
 checks one env. `-i` then offers, problem by problem, to run the unibox
 command that fixes it - `sandbox recreate` for a changed env, `secret
-set`, `network init`, `env update`, `prune` - at a terminal. Exits `4` on
-a failure, without `-i`.
+set`, `network init`, `env update`, `config set`, `var rm`, `prune` - at a
+terminal; what needs a value of yours stays a hint. Exits `4` on a
+failure, without `-i`.
 
 ### `unibox env`
 
@@ -116,19 +118,23 @@ every env declaring the arg; an env's own value wins. A value starting with
 ```
 unibox secret [-e <env>]
 unibox secret ls [-e <env>]
-unibox secret set [service...] [-e <env>] [--all] [--command <cmd>]
+unibox secret set [service...] [-e <env>] [--all] [-g] [--command <cmd>]
 ```
 
 The tokens an env needs, kept by sbx. `ls` lists them and whether sbx has
 each. `set` has sbx ask for the missing ones (or those named) on this
-terminal; without a terminal, one service's token may be piped in.
+terminal; without a terminal, one service's token may be piped in. Before
+sbx asks, `set` offers to open the page where a new token is made, when it
+knows one: GitHub's for `github` and `copilot`, and those the team names
+under `secrets:` in its `unibox.yaml` files.
 
 | Flag | Meaning |
 | --- | --- |
 | `--all` | ask for optional tokens too |
+| `-g`, `--generate` | open the page where a new token is made without asking, then ask for it |
 | `--command <cmd>` | store a command sbx runs on the host for the token; one service |
 
-List keys: `enter` store, `c` store a command.
+List keys: `enter` store, `g` generate a new token, `c` store a command.
 
 ## Tasks
 
@@ -139,9 +145,11 @@ unibox run [directory|url] [-- agent-args...] [flags]
 ```
 
 Prepares a task and runs its agent, or a shell, in this terminal. The
-argument is the repository (default: the current directory); several are
-named with `--repo`, which does not mix with the argument. Arguments after
-`--` go to the agent.
+argument is the repository - a directory, an HTTPS URL or a name of the
+env's index (default: the current directory); several are named with
+`--repo`, which does not mix with the argument. A new task also takes the
+index's repositories that say `default: always`, cloned beside what it
+mounts, unless `--only`. Arguments after `--` go to the agent.
 
 | Flag | Meaning |
 | --- | --- |
@@ -194,22 +202,28 @@ unibox task rm <task>
   the branch it gets (`default` for the forge's default) and whether it is
   pushed, and the task's name stands at the top; nothing is asked of a
   forge while picking. As it starts, a branch that exists already in a
-  repository worked in is asked about (`--yes` takes it), once. Named, those that say `always`
-  come along; `--branch`, `--task` and `--no-push` say the rest. A context
-  repository keeps its ref and is never pushed to. Then it runs as `run`
-  does.
+  repository worked in is asked about (`--yes` takes it), once. Named, or
+  without a terminal, the task takes those named and every one that says
+  `always` - with no name of the index given, those that say `on` as
+  well; `--branch` (default: each its ref, its checkout's branch or the
+  forge's default), `--task` and `--no-push` (make the branch in the
+  sandbox or the host's checkout alone, never on the forge) say the rest.
+  A context repository keeps its ref and is never pushed to. Then it runs
+  as `run` does.
 - `ls` - prepared tasks, in every sandbox or with `-s` in one.
 - `instructions` - the files the task's agent (or `--agent`'s) reads its
   instructions from when a session starts, in the order it reads them,
   each once: its home's, with the kits' guidance sbx writes there, the
-  session directory's and its repository's. The task's `AGENTS.md` is
-  shown as the next session gets it. Read in the running sandbox; a
+  session directory's and its repository's. The task's `AGENTS.md`, which
+  unibox writes before each session from its repositories and the
+  `instructions:` of the team's files, yours and the index, is shown as
+  the next session gets it. Read in the running sandbox; a
   stopped one shows only what unibox writes. `--paths` lists the files.
 - `check` - what a task needs before it can start; changes nothing. Takes
   `run`'s flags except `--shell` and `--agent`. Codes:
-  `runtime_unavailable`, `arg_missing`, `arg_invalid`, `env_changed`,
-  `branch_not_pushed`, `branch_missing`, `uncommitted`, `local_commits`,
-  `remote_check_pending`, `branch_switch`.
+  `runtime_unavailable`, `network_policy`, `arg_missing`, `arg_invalid`,
+  `env_changed`, `branch_not_pushed`, `branch_missing`, `uncommitted`,
+  `local_commits`, `remote_check_pending`, `branch_switch`.
 - `prepare` - set the task up (mount or clone) and print it; takes the same
   flags as `check`.
 - `add-repo` - add repositories, even while the agent runs, mounted or
@@ -319,11 +333,15 @@ unibox repo rm <name> [-e <env> | --every-env]
 The repositories an env's tasks are given by name: the team's under
 `repos:` in its `unibox.yaml` files, yours in `config.yaml` for every env
 or one, over the team's. A forge address is cloned, a directory of this
-machine mounted. `always` has every new task take one, cloned beside what
-it mounts; `on` has `task new` pick it to begin with. `context` - unsaid,
-true for `always` - is one a task reads: it keeps its ref and is never
-pushed to. A name
-works wherever `run`, `prepare`, `check` and `add-repo` take a repository.
+machine mounted. `--ref` is the branch a task works on (default: the
+forge's default branch). `always` has every new task take one, cloned
+beside what it mounts; `on` has `task new` pick it to begin with, and
+`run`, `prepare` and `check` with `--defaults`; `off` (the default) only
+when picked or named. `context` - unsaid, true for `always` - is one a
+task reads: it keeps its ref and is never pushed to. A name works
+wherever `run`, `prepare`, `check` and `add-repo` take a repository.
+`default` writes your say for the env into `config.yaml`, over the
+team's; `-` takes it back. `rm` forgets one of yours; the team's stay.
 List keys: `/` filter, `n` new task with it, `space` off/on/always, `a`
 add, `d` remove yours.
 

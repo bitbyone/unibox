@@ -1,8 +1,10 @@
-# Secrets & Agents
+# Secrets
 
 Every token a sandbox uses - the agent's login, the forge, a registry - is
-an sbx secret, stored once on your machine and shared by every sandbox
-that needs it. The env's kits say which tokens it needs.
+an sbx secret, kept by sbx on your machine and put into requests by its
+proxy; a sandbox sees placeholders only. unibox adds which tokens an env
+needs, read from its kits, and where each one is made. It never sees a
+token's value: sbx asks for it.
 
 ## See what is missing
 
@@ -10,11 +12,12 @@ that needs it. The env's kits say which tokens it needs.
 unibox secret ls
 ```
 
-```
+```term
+$ unibox secret ls
 SERVICE    STORED  NEEDED    FOR
-anthropic  global  yes       sbx-kit-claude
+anthropic  global  yes       the Claude API key
 github     no      yes       the token git pushes with
-npm        no      optional  ../kits/registry
+npm        no      optional  the registry's token
 ```
 
 ## Store them
@@ -35,6 +38,23 @@ when it knows where the token is made: GitHub's fine-grained token page
 for `github` and `copilot`, filled in with the permissions they need, and
 any page the env's team names. A new token opens that page in your
 browser; make it there and paste it at sbx's prompt.
+
+```term
+$ unibox secret set github
+github: the token git pushes with
+[blue]?[/] [b]The github token[/]  Generate a new token
+  the browser opens https://github.com/settings/personal-access-tokens/new?name=...; make the token there, then paste it here
+[dim](sbx's prompt for the value)[/]
+```
+
+The team names its own pages under `secrets:` in `unibox.yaml`:
+
+```yaml
+secrets:
+  gitlab:
+    page: https://gitlab.acme.com/-/user_settings/personal_access_tokens?scopes=read_repository,write_repository
+    hint: a GitLab token with read_repository and write_repository, nothing else
+```
 
 To keep a token in another store, give sbx a command it runs on the host
 whenever it needs the value:

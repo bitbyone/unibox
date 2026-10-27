@@ -35,7 +35,7 @@ This site is for people using an env repository. If you maintain one:
   unibox knows GitHub's page for `github` and `copilot`; a team's entry
   replaces it.
 - Name the repositories the env's tasks use, and have every task take the
-  decisions and specifications (see [Tasks](/guide/tasks#repositories-by-name)):
+  decisions and specifications (see [Repository index](/guide/repos)):
 
   ```yaml
   repos:
@@ -57,7 +57,7 @@ This site is for people using an env repository. If you maintain one:
 - Tell the agents what they need under `instructions: |`, for the env at
   the top of the file and for each repository under `repos:`; unibox
   gathers them into the task's `AGENTS.md` (see
-  [Tasks](/guide/tasks#what-the-agent-is-told)). What a kit's tools need
+  [Agent instructions](/guide/instructions)). What a kit's tools need
   saying goes in the kit's `agentContext`, which sbx lists in the agent's
   own file. Copilot does not read that file (`~/AGENTS.md`); most of it is
   sbx's guidance on itself, which nothing turns off, so a kit's startup
