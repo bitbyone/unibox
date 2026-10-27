@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -73,6 +74,26 @@ func TestStateWritesDoNotLoseConcurrentTasks(t *testing.T) {
 	info, _ := os.Stat(filepath.Join(paths.Config, "state.json"))
 	if info.Mode().Perm() != 0o600 {
 		t.Fatal(info.Mode())
+	}
+}
+
+func TestNoSandboxIsCreatedBeforeTheNetworkPolicyIsChosen(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if err := m.Paths.SaveEnvValues(EnvValues{Envs: map[string]map[string]string{"dev": {"user": "person"}}}); err != nil {
+		t.Fatal(err)
+	}
+	f.policyUnchosen = true
+	check, err := m.Check(ctx, Request{Sandbox: "box", Env: "dev", Repositories: []RepoInput{{Source: t.TempDir()}}})
+	if err != nil || check.Ready || !slices.ContainsFunc(check.Needs, func(n api.Need) bool { return n.Code == "network_policy" }) {
+		t.Fatalf("%+v %v", check, err)
+	}
+	if _, err := m.Create(ctx, Request{Sandbox: "box", Env: "dev"}, false); err == nil || !strings.Contains(err.Error(), "unibox network init") || len(f.called("env create")) != 0 {
+		t.Fatalf("%v %v", err, f.calls)
+	}
+	if b, _, _ := m.Definition(Request{Sandbox: "box", Env: "dev"}); b.State != "missing" {
+		t.Fatalf("the refused sandbox was recorded as %s", b.State)
 	}
 }
 

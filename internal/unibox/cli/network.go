@@ -92,7 +92,40 @@ depth, or name:port.`, Example: "  unibox network allow registry.npmjs.org *.npm
 	}}
 	sandboxFlag(ls, &sandbox)
 	ls.Flags().BoolVar(&all, "all", false, "List the hosts of the env's kits and sbx's defaults too")
-	c.AddCommand(ls, rule("allow"), rule("deny"), rm)
+	choose := &cobra.Command{Use: "init [" + strings.Join(unibox.NetworkPolicies, "|") + "]", Args: cobra.MaximumNArgs(1), Short: "Choose the network policy every sandbox starts from, once", Long: `sbx creates no sandbox until the network policy every sandbox starts from
+is chosen, once on this machine: balanced lets a sandbox reach the AI
+services and package registries of typical development, allow-all every
+host, deny-all only what the env's kits and your rules allow. At a
+terminal unibox asks which; unibox network allow and deny add a
+sandbox's own rules to it later.`, Example: "  unibox network init\n  unibox network init balanced", RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		chosen, err := o.manager.SBX.NetworkPolicyChosen(ctx)
+		if err != nil {
+			return err
+		}
+		if chosen {
+			return fmt.Errorf("sbx's network policy is chosen already; unibox network allow and deny change what a sandbox reaches")
+		}
+		policy := first(args)
+		if policy == "" {
+			if !o.canAsk() {
+				return unibox.Fail(4, "network_policy", "say which network policy every sandbox starts from: unibox network init %s", strings.Join(unibox.NetworkPolicies, ", "))
+			}
+			policy, err = o.askPick("The network policy every sandbox starts from", "chosen once; unibox network allow and deny add a sandbox's own rules to it", []pick{
+				{"balanced", "balanced - the AI services and package registries of typical development (recommended)"},
+				{"allow-all", "allow-all - every host"},
+				{"deny-all", "deny-all - only what the env's kits and your rules allow"},
+			}, "balanced")
+			if err != nil {
+				return err
+			}
+		}
+		if err := o.manager.SBX.ChooseNetworkPolicy(ctx, policy); err != nil {
+			return err
+		}
+		return o.success("sbx starts every sandbox from the " + policy + " network policy")
+	}}
+	c.AddCommand(ls, rule("allow"), rule("deny"), rm, choose)
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		ls.SetContext(cmd.Context())
@@ -107,6 +140,21 @@ depth, or name:port.`, Example: "  unibox network allow registry.npmjs.org *.npm
 	}
 	sandboxFlag(c, &sandbox)
 	return c
+}
+
+// ensureNetworkPolicy has the network policy every sandbox starts from
+// chosen before one is created, as sbx creates none without it: asked at a
+// terminal, else named as what to run. What sbx cannot say is left to the
+// create, which says it.
+func (o *options) ensureNetworkPolicy(cmd *cobra.Command) error {
+	chosen, err := o.manager.SBX.NetworkPolicyChosen(cmd.Context())
+	if err != nil || chosen {
+		return nil
+	}
+	if !o.canAsk() {
+		return unibox.Fail(4, "network_policy", "%s", unibox.NetworkPolicyUnchosen)
+	}
+	return o.runStep(cmd, "network", "init")
 }
 
 // networkRules are a view's rules one host to a line: the person's, those

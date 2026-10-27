@@ -415,6 +415,39 @@ func (r *SBX) SignedIn(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// NetworkPolicies are the global network policies sbx starts from, the
+// one it recommends first.
+var NetworkPolicies = []string{"balanced", "allow-all", "deny-all"}
+
+// NetworkPolicyChosen says whether sbx's global network policy has been
+// chosen, which sbx creates no sandbox without. What diagnose cannot say,
+// with its daemon down or in a release without the check, is taken as
+// chosen; creating a sandbox says otherwise.
+func (r *SBX) NetworkPolicyChosen(ctx context.Context) (bool, error) {
+	checks, err := r.Diagnose(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range checks {
+		if c.Name == "Global network policy" {
+			return c.Status != "fail" || !strings.Contains(c.Message, "not initialized"), nil
+		}
+	}
+	return true, nil
+}
+
+// ChooseNetworkPolicy has sbx start every sandbox from one of
+// NetworkPolicies, once; rules added later change it.
+func (r *SBX) ChooseNetworkPolicy(ctx context.Context, policy string) error {
+	if !slices.Contains(NetworkPolicies, policy) {
+		return fmt.Errorf("%q is no network policy sbx has; choose %s", policy, strings.Join(NetworkPolicies, ", "))
+	}
+	if err := runQuiet(hostCommand(ctx, "sbx", "policy", "init", policy)); err != nil {
+		return fmt.Errorf("sbx did not take the %s network policy: %w", policy, err)
+	}
+	return nil
+}
+
 // Login runs sbx login on the user's terminal, where sbx asks for what it
 // needs; nothing of it passes through unibox.
 func (r *SBX) Login(ctx context.Context, in io.Reader, out, errout io.Writer) error {

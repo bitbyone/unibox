@@ -349,6 +349,10 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 	}
 	if err = m.SBX.Available(ctx); err != nil {
 		result.Needs = append(result.Needs, api.Need{Code: "runtime_unavailable", Message: err.Error()})
+	} else if b.State == "missing" || b.State == "creating" {
+		if chosen, err := m.SBX.NetworkPolicyChosen(ctx); err == nil && !chosen {
+			result.Needs = append(result.Needs, api.Need{Code: "network_policy", Message: NetworkPolicyUnchosen})
+		}
 	}
 	if args, err := m.args(env); err != nil {
 		code := "arg_missing"
@@ -465,9 +469,16 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 	return m.saveBox(*b)
 }
 
+// NetworkPolicyUnchosen is why sbx creates no sandbox before its global
+// network policy is chosen, and what chooses it.
+const NetworkPolicyUnchosen = "sbx creates no sandbox until the network policy every sandbox starts from is chosen; unibox network init chooses it"
+
 // create has sbx create a sandbox from its env, on the user's terminal,
 // and readies it for tasks.
 func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[string]string, fingerprint string) error {
+	if chosen, err := m.SBX.NetworkPolicyChosen(ctx); err == nil && !chosen {
+		return Fail(4, "network_policy", "%s", NetworkPolicyUnchosen)
+	}
 	file, files, done, err := m.createFiles(env, b.Name, args, m.Log)
 	defer done()
 	if err != nil {

@@ -47,6 +47,11 @@ type Runtime interface {
 	// Login signs it in on the user's terminal.
 	SignedIn(ctx context.Context) (bool, error)
 	Login(ctx context.Context, in io.Reader, out, errout io.Writer) error
+	// NetworkPolicyChosen says whether the global network policy every
+	// sandbox starts from has been chosen, and ChooseNetworkPolicy
+	// chooses it, once.
+	NetworkPolicyChosen(ctx context.Context) (bool, error)
+	ChooseNetworkPolicy(ctx context.Context, policy string) error
 	// NetworkRules are the network rules for sandbox, or all of them;
 	// SetNetworkRule allows or denies hosts to sandbox, or to every one,
 	// RemoveNetworkRule takes such a rule away, and NetworkBlocked are

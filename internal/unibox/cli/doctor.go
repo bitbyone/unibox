@@ -62,6 +62,9 @@ func (o *options) doctorCommand() *cobra.Command {
 				if c.Link != "" {
 					hint = strings.TrimSpace(strings.Replace(hint, " from the link above", "", 1)) + ": " + c.Link
 				}
+				if c.Name == "Global network policy" && c.Status == "fail" {
+					hint = "unibox network init chooses it"
+				}
 				add("sbx", c.Name, c.Status, c.Message, hint)
 			}
 			if version, err := sbx.Version(ctx); err != nil {

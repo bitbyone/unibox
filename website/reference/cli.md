@@ -252,13 +252,16 @@ switch, `enter` or `q` leave.
 
 ```
 unibox network [-s <sandbox>]
+unibox network init [balanced|allow-all|deny-all]
 unibox network ls [-s <sandbox>] [--all]
 unibox network allow <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
 unibox network deny <host...> [-s <sandbox>] [--protocol tcp|udp|tcp,udp]
 unibox network rm <host...> [-s <sandbox>]
 ```
 
-A sandbox's own network rules, kept in `config.yaml`, applied again after
+`init` chooses, once, the policy every sandbox starts from, which sbx
+creates no sandbox without; at a terminal it asks. The rest are a
+sandbox's own network rules, kept in `config.yaml`, applied again after
 each create, removed with the sandbox. `ls` lists your rules, rules added
 with sbx, and hosts refused lately; `--all` adds the env's and sbx's
 defaults. `deny` wins over the env. `rm` removes your rule or an sbx one

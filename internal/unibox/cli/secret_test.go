@@ -24,7 +24,10 @@ echo "$*" >> ` + unibox.Quote(log) + `
 case "$1 $2" in
 "settings get") echo '{"value":false}' ;;
 "version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.49.2) 1234abc" ;;
-"diagnose --format") echo '{"checks":[]}' ;;
+"diagnose --format")
+	if [ -f ` + unibox.Quote(filepath.Join(dir, "policy-unchosen")) + ` ]; then echo '{"checks":[{"name":"Global network policy","status":"fail","message":"not initialized"}]}'; exit 1; fi
+	echo '{"checks":[]}' ;;
+"policy init") rm -f ` + unibox.Quote(filepath.Join(dir, "policy-unchosen")) + ` ;;
 "env plan")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "plan-error")) + ` ]; then echo "Error: $(cat ` + unibox.Quote(filepath.Join(dir, "plan-error")) + `)" >&2; echo "  try: sbx env --help" >&2; exit 1; fi
 	printf 'SANDBOX\n  + team\n\n  1 to add · 0 to change · 0 to destroy\n' ;;
@@ -185,6 +188,43 @@ func TestATokenSbxDidNotStoreSaysHowToGoOn(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	if _, _, err = runAt(t, paths, "", "secret", "set", "anthropic"); err == nil || err.Error() != "sbx did not store the anthropic token; run unibox secret to set the tokens still missing" {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestTheNetworkPolicyIsChosenBeforeASandboxIsCreated(t *testing.T) {
+	log := fakeSBX(t)
+	unchosen := filepath.Join(filepath.Dir(log), "policy-unchosen")
+	if err := os.WriteFile(unchosen, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	// Away from a terminal the sandbox is refused, naming what chooses it.
+	if _, _, err := run(t, paths, "", "sandbox", "create", "-e", "team"); err == nil || !strings.Contains(err.Error(), "unibox network init") || strings.Contains(calls(t, log), "env create") {
+		t.Fatalf("%v\n%s", err, calls(t, log))
+	}
+	if _, _, err := run(t, paths, "", "network", "init"); err == nil || !strings.Contains(err.Error(), "unibox network init balanced, allow-all, deny-all") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "network", "init", "open"); err == nil || !strings.Contains(err.Error(), "no network policy sbx has") {
+		t.Fatalf("%v", err)
+	}
+	// At a terminal it is asked, balanced first, and sbx goes on to create
+	// the sandbox, which the stand-in does not list.
+	t.Setenv("ACCESSIBLE", "1")
+	if _, _, err := runAt(t, paths, "1\n", "sandbox", "create", "-e", "team"); err != nil && strings.Contains(err.Error(), "network") {
+		t.Fatal(err)
+	}
+	if c := calls(t, log); !strings.Contains(c, "policy init balanced\n") || !strings.Contains(c, "env create") {
+		t.Fatalf("%s", c)
+	}
+	if _, _, err := run(t, paths, "", "network", "init", "deny-all"); err == nil || !strings.Contains(err.Error(), "chosen already") {
 		t.Fatalf("%v", err)
 	}
 }

@@ -552,7 +552,14 @@ never in an sbxenv.
 
 What a sandbox may reach is sbx's network policy; unibox gives it
 commands so nobody needs `sbx policy` (`policy.go`, `cli/network.go`):
-`network ls|allow|deny|rm`. A rule is one sandbox's, never every
+`network init|ls|allow|deny|rm`. A fresh sbx creates no sandbox until the
+global policy every sandbox starts from is chosen (`sbx policy init
+balanced|allow-all|deny-all`, once; until then `env create` fails with
+412). `network init` chooses it, asking at a terminal with balanced
+first, and init asks it in its first step; `sandbox create` and `run`
+ask too, and away from a terminal stop before sbx is called, naming
+`unibox network init`. Whether it is chosen is sbx diagnose's `Global
+network policy` check. A rule is one sandbox's, never every
 sandbox's, as a forgotten `-s` should not open a host to all of them.
 sbx refuses a rule for a sandbox it does not have, so unibox keeps the
 person's in config.yaml (`sandboxes.<name>.network`, `network.go`) and
@@ -595,7 +602,8 @@ Every fix doctor or an error names is a unibox command - `unibox prune`,
 never sbx's, so that nobody using unibox needs its CLI.
 
 `init` sets up what doctor checks, as a walk of five steps (`cli/init.go`):
-sbx (installed, `sbx login` run for the person, the SSH agent), Envs,
+sbx (installed, its daemon started, `sbx login` run for the person, the
+SSH agent, the network policy), Envs,
 Values, Secrets, Sandboxes. Each step runs the command it stands for
 (`env add`, `var set`, `secret set`, `sandbox create`), so the
 walk and the commands never differ; what is in place already is only said.
@@ -871,6 +879,12 @@ removed.
   the `local` policy scoped to S; `rm network --force --resource h1,h2`
   removes by hosts; `policy log --type network --limit N` shows the
   decisions. Checked on a throwaway sandbox, then removed.
+- **A fresh sbx has neither its daemon running nor a network policy**
+  (0.49): `sbx diagnose --format json` then exits 1 with its report on
+  stdout, the daemon `fail` and the sign-in `skip`; `sbx daemon start
+  --detach` starts it without asking, after which diagnose says whether
+  sbx is signed in and that the `Global network policy` is `not
+  initialized`.
 - **`sbx settings set|unset|get <key> --json`** reads and writes sbx's
   settings; `env.rememberHostCommands` is false by default.
 - Gradle's locks in a cache shared by several sandboxes are the team's

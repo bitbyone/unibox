@@ -207,6 +207,7 @@ the team's file.
 ## Network
 
 ```sh
+unibox network init                      # once: the policy every sandbox starts from
 unibox network ls -s dev                 # your rules, and the hosts refused lately
 unibox network allow jitpack.io -s dev   # kept by unibox, for this sandbox
 ```

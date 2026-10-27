@@ -35,6 +35,9 @@ type fakeRuntime struct {
 	secrets   []Secret
 	remotes   map[string]string
 	published map[string][]api.PublishedPort
+	// policyUnchosen is sbx with no global network policy yet, which
+	// creates no sandbox.
+	policyUnchosen bool
 	// mounted is what each sandbox has mounted, host and target, which
 	// the guest's /proc/self/mountinfo shows.
 	mounted                              map[string][][2]string
@@ -70,6 +73,13 @@ func (f *fakeRuntime) SetSSHForwarding(_ context.Context, on bool) error {
 }
 func (f *fakeRuntime) Diagnose(context.Context) ([]RuntimeCheck, error) { return nil, nil }
 func (f *fakeRuntime) SignedIn(context.Context) (bool, error)           { return true, nil }
+func (f *fakeRuntime) NetworkPolicyChosen(context.Context) (bool, error) {
+	return !f.policyUnchosen, nil
+}
+func (f *fakeRuntime) ChooseNetworkPolicy(context.Context, string) error {
+	f.policyUnchosen = false
+	return nil
+}
 func (f *fakeRuntime) Login(context.Context, io.Reader, io.Writer, io.Writer) error {
 	return nil
 }

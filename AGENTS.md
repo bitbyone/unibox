@@ -119,8 +119,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
 - **init starts from the team's repository** (`cli/init.go`): the
   current one, a path, or a git address, which it clones with the user's
   own git into `$XDG_DATA_HOME/unibox/repos/<host>/<path>`. It offers every
-  sbxenv file found and walks five steps: sbx, Envs, Values, Secrets,
-  Sandboxes. A step runs its command (`secret set`, `sandbox create`), so the walk and the commands never differ. Without a
+  sbxenv file found and walks five steps: sbx (signed in, the network
+  policy every sandbox starts from), Envs, Values, Secrets, Sandboxes. A step runs its command (`secret set`, `sandbox create`), so the walk and the commands never differ. Without a
   terminal or with `--no-input` it asks nothing and fails naming the flag
   (`--file`, `--var`) that gives what is missing. `unibox doctor` checks
   what the walk sets up.

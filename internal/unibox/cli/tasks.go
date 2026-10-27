@@ -125,6 +125,14 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 					return unibox.Fail(4, n.Code, "%s", n.Message)
 				}
 				changed = true
+			case "network_policy":
+				if !o.canAsk() {
+					return unibox.Fail(4, n.Code, "%s", n.Message)
+				}
+				if err := o.runStep(cmd, "network", "init"); err != nil {
+					return err
+				}
+				changed = true
 			default:
 				return unibox.Fail(4, n.Code, "%s", n.Message)
 			}
@@ -300,6 +308,9 @@ written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Exam
 				if _, err = o.askArgs(e); err != nil {
 					return err
 				}
+			}
+			if err := o.ensureNetworkPolicy(cmd); err != nil {
+				return err
 			}
 		}
 		b, err := o.manager.Create(cmd.Context(), req, adopt)

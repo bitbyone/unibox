@@ -3,6 +3,21 @@
 A sandbox reaches only the hosts sbx allows by default, the hosts the env's
 kits add, and the rules you add for that sandbox.
 
+## The policy every sandbox starts from
+
+sbx creates no sandbox until you choose, once on this machine, what every
+sandbox may reach to begin with. `unibox init` asks, and so does the first
+`unibox sandbox create` or `unibox run` at a terminal:
+
+```sh
+unibox network init             # asks
+unibox network init balanced    # or allow-all, deny-all
+```
+
+`balanced`, recommended, lets a sandbox reach the AI services and package
+registries of typical development; `allow-all` every host; `deny-all` only
+what the env's kits and your rules allow. The rules below are added to it.
+
 ## Something is blocked
 
 ```sh

@@ -302,6 +302,11 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		return err
 	}
 	fmt.Fprintln(o.log, "  installed and signed in")
+	// Asked here rather than when the first sandbox is created: sbx
+	// would refuse it, at the walk's last step.
+	if err := o.ensureNetworkPolicy(cmd); err != nil {
+		return err
+	}
 
 	o.walkStep(2, "Envs")
 	names, err := o.walkEnvs(cmd, root, named)
