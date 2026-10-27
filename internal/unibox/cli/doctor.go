@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,9 @@ type doctorCheck struct {
 	Status  string `json:"status"` // pass, warn or fail
 	Message string `json:"message"`
 	Hint    string `json:"hint,omitempty"`
+	// Fix is the unibox command that fixes it, which doctor -i offers to
+	// run; empty where the fix needs a value or a choice of the person's.
+	Fix []string `json:"-"`
 }
 
 // doctorCommand checks what a run needs, before a run fails on it: sbx,
@@ -29,12 +33,15 @@ type doctorCheck struct {
 // keeps.
 func (o *options) doctorCommand() *cobra.Command {
 	var only string
+	var interactive bool
 	c := &cobra.Command{Use: "doctor", Args: cobra.NoArgs, Short: "Check sbx, the envs, your args and secrets, and the sandboxes, and say what to fix", RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		checks := []doctorCheck{}
 		add := func(area, name, status, message, hint string) {
-			checks = append(checks, doctorCheck{area, name, status, message, hint})
+			checks = append(checks, doctorCheck{area, name, status, message, hint, nil})
 		}
+		// fix gives the check added last the command that fixes it.
+		fix := func(args ...string) { checks[len(checks)-1].Fix = args }
 		sbx := o.manager.SBX
 		sbxOK := false
 		if !sbx.Present() {
@@ -69,6 +76,9 @@ func (o *options) doctorCommand() *cobra.Command {
 					hint = "unibox config set editor_ssh true sets it up"
 				}
 				add("sbx", c.Name, c.Status, c.Message, hint)
+				if c.Name == "Global network policy" && c.Status == "fail" {
+					fix("network", "init")
+				}
 			}
 			if version, err := sbx.Version(ctx); err != nil {
 				add("sbx", "for unibox", "warn", err.Error(), "")
@@ -81,6 +91,7 @@ func (o *options) doctorCommand() *cobra.Command {
 			if remember, err := sbx.Setting(ctx, "env.rememberHostCommands"); err == nil {
 				if remember == "true" {
 					add("sbx", "host commands", "warn", "sbx runs an env's host commands again without asking", "unibox config set remember_host_commands false has it ask each time")
+					fix("config", "set", "remember_host_commands", "false")
 				} else {
 					add("sbx", "host commands", "pass", "sbx asks before an env's host commands run", "")
 				}
@@ -94,6 +105,7 @@ func (o *options) doctorCommand() *cobra.Command {
 				add("sbx", "SSH agent", "fail", "sbx forwards your SSH agent, which you have not allowed", "unibox config set ssh_agent false turns it off, or true allows it")
 			case !forwarding && allowed:
 				add("sbx", "SSH agent", "warn", "you allowed the SSH agent, but sbx does not forward it", "unibox config set ssh_agent true sets sbx to match")
+				fix("config", "set", "ssh_agent", "true")
 			case forwarding:
 				add("sbx", "SSH agent", "pass", "forwarded, as you allowed", "")
 			case said:
@@ -108,6 +120,7 @@ func (o *options) doctorCommand() *cobra.Command {
 					add("sbx", "editor SSH", "warn", err.Error(), "")
 				case serving != on:
 					add("sbx", "editor SSH", "warn", fmt.Sprintf("your config.yaml says %t, sbx's feature.ssh %t", on, serving), fmt.Sprintf("unibox config set editor_ssh %t sets sbx to match", on))
+					fix("config", "set", "editor_ssh", strconv.FormatBool(on))
 				case on:
 					add("sbx", "editor SSH", "pass", "editors reach a sandbox as ssh <sandbox>.sbx", "")
 				default:
@@ -147,6 +160,7 @@ func (o *options) doctorCommand() *cobra.Command {
 				add(area, "args", "pass", "given", "")
 				for _, u := range unknown {
 					add(area, "arg "+u, "warn", "set, but the env declares no such arg", "unibox var rm -e "+name+" "+u)
+					fix("var", "rm", "-e", name, u)
 				}
 				if sbxOK {
 					var plan string
@@ -183,11 +197,13 @@ func (o *options) doctorCommand() *cobra.Command {
 						add(area, "secret "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "unibox secret set -e "+name+" "+l.Service)
 					default:
 						add(area, "secret "+l.Service, "fail", cmp.Or(l.Description, "not stored"), "unibox secret set -e "+name+" "+l.Service)
+						fix("secret", "set", "-e", name, l.Service)
 					}
 				}
 			}
 			if changed(state, env, values) {
 				add(area, "sandbox "+sandbox, "warn", "the env changed since the sandbox was created", "unibox sandbox recreate "+sandbox)
+				fix("sandbox", "recreate", sandbox)
 			}
 			if repo := env.Config.Repo; env.Config.Source != "" && repo != "" {
 				if _, done := behind[repo]; !done {
@@ -204,6 +220,7 @@ func (o *options) doctorCommand() *cobra.Command {
 						add(area, "clone", "warn", err.Error(), "")
 					case n > 0:
 						add(area, "clone", "warn", fmt.Sprintf("%d commit(s) behind its remote", n), "unibox env update")
+						fix("env", "update", name)
 					default:
 						add(area, "clone", "pass", "as its remote", "")
 					}
@@ -236,6 +253,7 @@ func (o *options) doctorCommand() *cobra.Command {
 					}
 					for _, mt := range stray {
 						add("Sandboxes", b.Name, "warn", mt[0]+" is mounted at "+mt[1]+", but no task has it", "unibox prune unmounts it")
+						fix("prune")
 					}
 				}
 				for _, t := range b.Tasks {
@@ -263,13 +281,47 @@ func (o *options) doctorCommand() *cobra.Command {
 		} else {
 			o.printChecks(checks, failed)
 		}
+		if interactive {
+			return o.offerFixes(cmd, checks)
+		}
 		if failed > 0 {
 			return &reportedError{4}
 		}
 		return nil
 	}}
 	c.Flags().StringVarP(&only, "env", "e", "", "Check this env alone (default: every env)")
+	c.Flags().BoolVarP(&interactive, "interactive", "i", false, "Offer to run the command that fixes each problem, one at a time")
 	return c
+}
+
+// offerFixes asks, problem by problem, whether to run the unibox command
+// that fixes it, and runs it as its own command would. What needs a value
+// or a choice of the person's has no fix and stays a hint.
+func (o *options) offerFixes(cmd *cobra.Command, checks []doctorCheck) error {
+	if !o.canAsk() {
+		return fmt.Errorf("doctor -i asks at a terminal; run it in one, or run the commands it names")
+	}
+	offered := 0
+	for _, c := range checks {
+		if c.Status == "pass" || len(c.Fix) == 0 {
+			continue
+		}
+		offered++
+		run, err := o.askYes(fmt.Sprintf("%s, %s: %s. Run unibox %s?", c.Area, c.Name, c.Message, strings.Join(c.Fix, " ")), true)
+		if err != nil {
+			return err
+		}
+		if !run {
+			continue
+		}
+		if err := o.runStep(cmd, c.Fix...); err != nil {
+			return err
+		}
+	}
+	if offered == 0 {
+		return o.success("nothing doctor can fix by itself; the hints above say the rest")
+	}
+	return o.success("run unibox doctor again to see what is left")
 }
 
 // printChecks lays the checks out by area, one column for their names

@@ -590,7 +590,11 @@ with the env.
 ## Doctor
 
 `unibox doctor` checks what a run needs before a run fails on it, each
-failure with the command that fixes it:
+failure with the command that fixes it. A check whose fix is one unibox
+command with nothing left to choose carries it (`Fix`), and `doctor -i`
+offers them one at a time at a terminal, running each through `runStep`
+as init runs its steps; one needing a value or a choice (an arg, the SSH
+agent yes or no) stays a hint:
 
 - **sbx**: installed; its own `sbx diagnose` (details that may name the
   user's account left out); a version of at least `MinSBXVersion` (0.49.2,
@@ -724,7 +728,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | command | does |
 | --- | --- |
 | `unibox init` | the walk: sbx, an env, its args, secrets, the sandbox |
-| `unibox doctor [-e E]` | what a run needs, and what to fix |
+| `unibox doctor [-e E] [-i]` | what a run needs, and what to fix; `-i` offers to run each fix |
 | `unibox env add\|ls\|rm\|show` | the envs: sbxenv files, the sandbox's name |
 | `unibox var ls\|set\|rm -e E` | the person's values for an env's args |
 | `unibox secret ls\|set -e E [--command C] [--all] [--generate]` | the tokens an env needs, and having sbx store them |

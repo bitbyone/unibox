@@ -3,6 +3,7 @@
 ```sh
 unibox doctor             # everything
 unibox doctor -e dev      # one env
+unibox doctor -i          # and offer to run each fix
 ```
 
 `doctor` checks that sbx is installed, signed in and 0.49.2 or newer; your
@@ -10,7 +11,8 @@ SSH agent setting; that each env's files read and sbx accepts them with
 your values; every required value and token; whether each sandbox still
 matches its env and still exists; mounted directories that are gone; and
 whether a cloned env repository is behind. Each problem comes with the
-command that fixes it.
+command that fixes it; with `-i` doctor asks, one by one, whether to run
+it, such as `unibox sandbox recreate` once the env's files or kits change.
 
 ## Common errors
 

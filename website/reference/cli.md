@@ -60,14 +60,17 @@ Running it again adds only what is new.
 ### `unibox doctor`
 
 ```
-unibox doctor [-e <env>]
+unibox doctor [-e <env>] [-i]
 ```
 
 Checks sbx (installed, `sbx diagnose`, version 0.49.2 or newer, host
 commands setting, SSH agent), `vars.toml`, each env (files, args,
 `sbx env plan`, secrets, drift, cloned repository behind), and each
 sandbox (still in sbx, mounts). Names the fix for each finding. `-e`
-checks one env. Exits `4` on a failure.
+checks one env. `-i` then offers, problem by problem, to run the unibox
+command that fixes it - `sandbox recreate` for a changed env, `secret
+set`, `network init`, `env update`, `prune` - at a terminal. Exits `4` on
+a failure, without `-i`.
 
 ### `unibox env`
 

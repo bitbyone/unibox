@@ -132,7 +132,8 @@ unibox env show dev
 sbx merges the files in order, so a file of your own after the team's
 adds a kit or a mount without changing theirs. The sandbox is named as
 the file names it, or `--name`. When the files, a kit or your args change
-after a sandbox was made, `doctor` and the next `run` say so;
+after a sandbox was made, `doctor` and the next `run` say so, and
+`doctor -i` offers to recreate it;
 `unibox sandbox recreate` applies it, keeping the tasks: mounts are made
 again, clones cloned again. A sandbox made with sbx itself can be taken
 over with `unibox sandbox create --adopt <name> -e <env>`.

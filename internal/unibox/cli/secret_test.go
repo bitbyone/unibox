@@ -232,6 +232,23 @@ func TestTheNetworkPolicyIsChosenBeforeASandboxIsCreated(t *testing.T) {
 	}
 }
 
+func TestDoctorOffersToRunTheFixOfEachProblem(t *testing.T) {
+	log := fakeSBX(t)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "policy-unchosen"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "doctor", "-i"); err == nil || !strings.Contains(err.Error(), "doctor -i asks at a terminal") {
+		t.Fatalf("%v", err)
+	}
+	t.Setenv("ACCESSIBLE", "1")
+	// Yes to running unibox network init, which asks the policy.
+	_, said, err := runAt(t, paths, "y\n1\n", "doctor", "-i")
+	if err != nil || !strings.Contains(said, "Run unibox network init?") || !strings.Contains(calls(t, log), "policy init balanced\n") {
+		t.Fatalf("%v\n%s\n%s", err, said, calls(t, log))
+	}
+}
+
 func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	log := fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
