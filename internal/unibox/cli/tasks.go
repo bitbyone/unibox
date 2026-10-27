@@ -166,8 +166,10 @@ func oneSource(req *unibox.Request, args []string) error {
 
 func (o *options) taskCommand(name string) *cobra.Command {
 	var req unibox.Request
+	var defaults bool
 	c := &cobra.Command{Use: name + " [directory|url] [-- agent-args...]", Short: map[string]string{"check": "Explain what a task needs before it can start", "prepare": "Prepare a task in a sandbox: its directories mounted, or cloned from the forge", "run": "Prepare a task and run its agent, or a shell, in this terminal (unibox resume runs it again)"}[name]}
 	taskFlags(c, &req)
+	c.Flags().BoolVar(&defaults, "defaults", false, "Take also the env's indexed repositories that say default: on, as task new picks them to begin with")
 	if name == "run" {
 		shellFlag(c, &req)
 	}
@@ -187,7 +189,7 @@ func (o *options) taskCommand(name string) *cobra.Command {
 			req.Repositories = []unibox.RepoInput{{Source: "."}}
 		}
 		o.defaultTarget(&req)
-		if err := o.withIndexedRepos(&req, true); err != nil {
+		if err := o.withIndexedRepos(&req, true, defaults); err != nil {
 			return err
 		}
 		if name == "check" {
@@ -246,7 +248,7 @@ func (o *options) addRepoCommand() *cobra.Command {
 		if len(req.Repositories) == 0 {
 			return fmt.Errorf("no repository selected; name a directory or URL, or pass --repo for several")
 		}
-		if err := o.withIndexedRepos(&req, false); err != nil {
+		if err := o.withIndexedRepos(&req, false, false); err != nil {
 			return err
 		}
 		if err := o.preflight(cmd, &req); err != nil {

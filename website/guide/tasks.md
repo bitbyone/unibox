@@ -41,6 +41,7 @@ unibox task new                     # pick them on one screen
 unibox task new payments adrs --branch feat/pricing   # or name them
 unibox run adrs                     # a name works wherever a repository does
 unibox run --repo . --repo adrs     # your checkout, and one of the index beside it
+unibox run --defaults               # your checkout, and those the index says on
 unibox repo                         # the index: / filter, space default, a add
 ```
 
@@ -57,7 +58,8 @@ repos:
 ```
 
 `default: always` puts the repository into every new task of the env -
-cloned beside your mounted checkout in `unibox run` too - so the agent
+cloned beside your mounted checkout in `unibox run` too, and with
+`--defaults` those that say `on` as well - so the agent
 always has the decisions and specifications at hand. `on` has it picked
 to begin with in `task new`, `off` (the default) only when picked. `ref`
 is the branch a task works on, else the forge's default. A forge address

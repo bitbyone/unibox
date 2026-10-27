@@ -152,7 +152,8 @@ named with `--repo`, which does not mix with the argument. Arguments after
 | `--task <name>` | the task's name, unique across sandboxes (default: first repository and a digest) |
 | `--mount` | mount the host's directories (default for directories) |
 | `--clone` | clone from the forge inside the sandbox |
-| `--repo <[dirname=]source>` | a directory or HTTPS URL; repeat for several |
+| `--repo <[dirname=]source>` | a directory, HTTPS URL or a name of the env's index; repeat for several |
+| `--defaults` | take also the index's repositories that say `default: on`, as `task new` picks them (those that say `always` come anyway) |
 | `--branch <name>` | before all `--repo`: shared branch; after one: that repository's (default: current branch, or the forge's default) |
 | `--author "Name <email>"` | commit author |
 | `--push` | push the selected local branches first; create a missing one from local HEAD (or a URL's default tip); never forces |

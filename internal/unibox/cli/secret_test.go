@@ -858,6 +858,23 @@ func TestADirectoryOfTheIndexStaysMountedBesideAnAddressThatIsCloned(t *testing.
 	if i := slices.IndexFunc(check.Repositories, func(r api.Repository) bool { return r.Name == "adrs" }); i < 0 || !check.Repositories[i].Context || check.Repositories[i].Branch != "master" {
 		t.Fatalf("%s", out)
 	}
+	// Those that say on come along when asked for, as task new picks them.
+	if _, _, err := run(t, paths, "", "repo", "default", "adrs", "on"); err != nil {
+		t.Fatal(err)
+	}
+	for _, defaults := range []bool{false, true} {
+		args := []string{"task", "check", "--branch", "main", "https://gitlab.example.com/x/raw.git", "--json"}
+		if defaults {
+			args = append(args, "--defaults")
+		}
+		out, _, _ = run(t, paths, "", args...)
+		if err := json.Unmarshal([]byte(out), &check); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		if got := slices.ContainsFunc(check.Repositories, func(r api.Repository) bool { return r.Name == "adrs" && r.Context && r.Branch == "master" }); got != defaults {
+			t.Fatalf("--defaults %v: %s", defaults, out)
+		}
+	}
 }
 
 func TestANewTaskStopsWhereItsBranchExistsAlready(t *testing.T) {

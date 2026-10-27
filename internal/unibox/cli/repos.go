@@ -285,9 +285,10 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 
 // withIndexedRepos gives a request the addresses of the repositories it
 // names from its env's index, and a new task the ones every task of the
-// env takes, cloned beside what it mounts. A name that is a directory here
-// stays the directory; a task that exists keeps what it holds.
-func (o *options) withIndexedRepos(req *unibox.Request, always bool) error {
+// env takes, cloned beside what it mounts, and with on those task new
+// picks to begin with. A name that is a directory here stays the
+// directory; a task that exists keeps what it holds.
+func (o *options) withIndexedRepos(req *unibox.Request, always, on bool) error {
 	_, env, err := o.manager.Definition(*req)
 	if err != nil || len(env.Repos) == 0 {
 		// Without an env to read, the task's own preparation says why.
@@ -334,11 +335,15 @@ func (o *options) withIndexedRepos(req *unibox.Request, always bool) error {
 	}
 	for _, name := range sorted(env.Repos) {
 		r := env.Repos[name]
-		if r.Default != unibox.RepoAlways || asked[unibox.SourceURL(context.Background(), cmp.Or(r.LocalPath(), r.URL))] || slices.ContainsFunc(req.Repositories, func(in unibox.RepoInput) bool { return in.Name == name }) {
+		if (r.Default != unibox.RepoAlways && (!on || r.Default != unibox.RepoOn)) || asked[unibox.SourceURL(context.Background(), cmp.Or(r.LocalPath(), r.URL))] || slices.ContainsFunc(req.Repositories, func(in unibox.RepoInput) bool { return in.Name == name }) {
 			continue
 		}
-		in := indexedInput(name, r, r.Ref)
-		in.Always, in.Context = true, r.IsContext()
+		branch := r.Ref
+		if r.Default == unibox.RepoOn && !r.IsContext() {
+			branch = cmp.Or(req.Branch, r.Ref)
+		}
+		in := indexedInput(name, r, branch)
+		in.Always, in.Context = r.Default == unibox.RepoAlways, r.IsContext()
 		req.Repositories = append(req.Repositories, in)
 		mounts = mounts || r.LocalPath() != ""
 	}
