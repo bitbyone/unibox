@@ -570,7 +570,11 @@ tools, `instructions` a task's work. Verified with sbx 0.49: for Copilot
 that file is `~/AGENTS.md`, which Copilot never reads (only the git root's
 and the working directory's), in sbx's workspace or a task's; a link from
 `~/.copilot/copilot-instructions.md`, or `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`,
-makes it read. That is the team's kit's to set, not unibox's. A
+makes it read. Most of that file, though, some 18 KB, is the agent kit's
+guidance on sbx itself (between `sbx:guidance` marks), which no setting
+leaves out; the `## Kits` section alone, between `sbx:kits-section` marks,
+copied into Copilot's file at each start, is what the kits say. That is
+the team's kit's to do, not unibox's. A
 `CLAUDE.md` linked to `AGENTS.md` in one directory is read by Copilot once.
 
 `unibox task instructions` reads in the running sandbox, never starting
