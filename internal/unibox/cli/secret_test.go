@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -845,6 +846,17 @@ func TestADirectoryOfTheIndexStaysMountedBesideAnAddressThatIsCloned(t *testing.
 		if (r.Name == "notes") != r.Mounted {
 			t.Fatalf("%s", out)
 		}
+	}
+	// One named by the index is read, as it says, on its own ref.
+	if _, _, err := run(t, paths, "", "repo", "add", "adrs", "https://gitlab.example.com/x/adrs.git", "--ref", "master", "--context", "true"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ = run(t, paths, "", "task", "check", "--branch", "main", "--repo", "https://gitlab.example.com/x/raw.git", "--repo", "adrs", "--json")
+	if err := json.Unmarshal([]byte(out), &check); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if i := slices.IndexFunc(check.Repositories, func(r api.Repository) bool { return r.Name == "adrs" }); i < 0 || !check.Repositories[i].Context || check.Repositories[i].Branch != "master" {
+		t.Fatalf("%s", out)
 	}
 }
 

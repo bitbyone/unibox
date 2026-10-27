@@ -302,8 +302,14 @@ func (o *options) withIndexedRepos(req *unibox.Request, always bool) error {
 		if _, err := os.Stat(in.Source); err == nil {
 			continue
 		}
-		// A branch the person gives wins over the index's.
-		req.Repositories[i] = indexedInput(in.Source, r, cmp.Or(in.Branch, req.Branch, r.Ref))
+		// A branch the person gives wins over the index's; the task's own
+		// is not one a repository to read is moved to.
+		branch := cmp.Or(in.Branch, req.Branch, r.Ref)
+		if r.IsContext() {
+			branch = cmp.Or(in.Branch, r.Ref)
+		}
+		req.Repositories[i] = indexedInput(in.Source, r, branch)
+		req.Repositories[i].Context = r.IsContext()
 		mounts = mounts || r.LocalPath() != ""
 	}
 	defer func() {

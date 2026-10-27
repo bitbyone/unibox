@@ -40,6 +40,7 @@ started by picking them rather than typing addresses:
 unibox task new                     # pick them on one screen
 unibox task new payments adrs --branch feat/pricing   # or name them
 unibox run adrs                     # a name works wherever a repository does
+unibox run --repo . --repo adrs     # your checkout, and one of the index beside it
 unibox repo                         # the index: / filter, space default, a add
 ```
 
@@ -65,7 +66,8 @@ is cloned; a directory of your machine (`/…`, `~/…`) is mounted, as
 
 A repository is worked in, or read: `context: true` - unsaid, true for
 one that says `always` - keeps it on its `ref`, and no branch of a task's
-is made or pushed there.
+is made or pushed there, wherever the task names it - in `task new` or
+with `--repo` alike.
 
 `task new` shows them on one screen: `space` picks, `c` switches work and
 context, `b` types the branch the ones worked in get, `t` the task's name,
