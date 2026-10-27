@@ -113,13 +113,13 @@ func (m listModel) View() string {
 		if m.note != "" {
 			foot = strings.Split(m.note, "\n")
 		}
-		help := []string{"↑/↓ j/k move"}
+		help := []string{"↑/↓ j/k", "move"}
 		for _, a := range m.actions {
-			help = append(help, displayKey(a.key)+" "+a.help)
+			help = append(help, displayKey(a.key), a.help)
 		}
-		foot = append(foot, portHelp.Render(strings.Join(append(help, "q quit"), " · ")))
+		foot = append(foot, keyHelp(append(help, "q", "quit")...))
 	}
-	lines := []string{m.title, ""}
+	lines := []string{listTitle.Render(m.title), ""}
 	if len(m.rows) == 0 {
 		lines = append(lines, portHelp.Render("  nothing yet"))
 	} else {

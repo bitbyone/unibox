@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/tobola/unibox/internal/unibox"
 )
 
@@ -145,20 +144,12 @@ func (m portsModel) turn(to func(bool) bool) (tea.Model, tea.Cmd) {
 	}
 }
 
-var (
-	portOn     = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	portOff    = lipgloss.NewStyle().Faint(true)
-	portCursor = lipgloss.NewStyle().Bold(true)
-	portHelp   = lipgloss.NewStyle().Faint(true)
-	portErr    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-)
-
 func (m portsModel) View() string {
 	if m.done {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Ports of sandbox %s, until it next starts\n\n", m.sandbox)
+	fmt.Fprintf(&b, "%s\n\n", listTitle.Render("Ports of sandbox "+m.sandbox+", until it next starts"))
 	nameW, specW, startW := 4, 7, 0
 	for _, r := range m.rows {
 		nameW, specW, startW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r)))
@@ -170,7 +161,7 @@ func (m portsModel) View() string {
 		}
 		name := fmt.Sprintf("%-*s", nameW, r.Name)
 		if i == m.cursor {
-			mark, name = "> ", portCursor.Render(name)
+			mark, name = cursorMark(), portCursor.Render(name)
 		}
 		line := fmt.Sprintf("%s%s  %s  %-*s  %-*s  %s  %s", mark, state, name, startW, atStart(r), specW, r.Spec, cmp.Or(strings.Join(portURLs(r), " "), "-"), r.Description)
 		b.WriteString(strings.TrimRight(line, " ") + "\n")
@@ -178,7 +169,7 @@ func (m portsModel) View() string {
 	b.WriteString("\n")
 	if m.asking {
 		fmt.Fprintf(&b, "host port for %s: %s_\n", m.rows[m.cursor].Name, m.hostPort)
-		b.WriteString(portHelp.Render("enter publish it there · esc cancel") + "\n")
+		b.WriteString(keyHelp("enter", "publish it there", "esc", "cancel") + "\n")
 		return b.String()
 	}
 	switch {
@@ -191,7 +182,7 @@ func (m portsModel) View() string {
 	default:
 		b.WriteString("\n")
 	}
-	b.WriteString(portHelp.Render("↑/↓ j/k move · ←/h off · →/l on · space switch · m on another host port · d on/off at start · enter/q done") + "\n")
+	b.WriteString(keyHelp("↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done") + "\n")
 	return b.String()
 }
 

@@ -82,10 +82,14 @@ func (m sandboxesModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Sandboxes\n\n")
+	b.WriteString(listTitle.Render("Sandboxes") + "\n\n")
 	cols := [][]string{{"SANDBOX", "ENV", "AGENT", "STATE", "TASKS", "SESSIONS"}}
 	for _, r := range m.rows {
-		cols = append(cols, []string{r.Name, r.Env, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(len(r.Tasks)), fmt.Sprint(len(r.Runs))})
+		state := r.State
+		if state == "running" {
+			state = portOn.Render(state)
+		}
+		cols = append(cols, []string{r.Name, r.Env, cmp.Or(r.Agent, "-"), state, fmt.Sprint(len(r.Tasks)), fmt.Sprint(len(r.Runs))})
 	}
 	b.WriteString(drawTable(cols, m.cursor))
 	b.WriteString("\n")
@@ -96,7 +100,7 @@ func (m sandboxesModel) View() string {
 	case "remove":
 		fmt.Fprintf(&b, "Remove sandbox %s? [y/N]\n", name)
 	default:
-		b.WriteString(portHelp.Render("↑/↓ j/k move · enter tasks · s shell · p ports · i inspect · r resources · t stop · c recreate · d remove · q quit") + "\n")
+		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit") + "\n")
 	}
 	return b.String()
 }

@@ -119,7 +119,7 @@ func (m tasksModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Tasks\n\n")
+	b.WriteString(listTitle.Render("Tasks") + "\n\n")
 	cols := [][]string{{"TASK", "SANDBOX", "AGENT", "STATE", "SESSIONS", "REPOSITORIES"}}
 	for _, r := range m.rows {
 		name := r.ID
@@ -147,11 +147,11 @@ func (m tasksModel) View() string {
 			agents = append(agents, a)
 		}
 		fmt.Fprintf(&b, "Resume %s with %s\n", cmp.Or(row.Alias, row.ID), strings.Join(agents, ""))
-		b.WriteString(portHelp.Render("←/→ h/l agent · enter resume · esc back") + "\n")
+		b.WriteString(keyHelp("←/→ h/l", "agent", "enter", "resume", "esc", "back") + "\n")
 	case tasksRemove:
 		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
 	default:
-		b.WriteString(portHelp.Render("↑/↓ j/k move · enter/r resume · a another agent · s shell · n rename · d remove · q quit") + "\n")
+		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter/r", "resume", "a", "another agent", "s", "shell", "n", "rename", "d", "remove", "q", "quit") + "\n")
 	}
 	return b.String()
 }
@@ -171,12 +171,19 @@ func drawTable(cols [][]string, cursor int) string {
 		for i, v := range c {
 			cells = append(cells, v+strings.Repeat(" ", widths[i]-lipgloss.Width(v)))
 		}
+		if n-1 == cursor {
+			// Each cell bold on its own: a cell of its own colour ends
+			// its style, and with it a bold the whole line would share.
+			for i, v := range cells {
+				cells[i] = portCursor.Render(v)
+			}
+		}
 		line := strings.TrimRight(strings.Join(cells, "  "), " ")
 		switch {
 		case n == 0:
 			line = "  " + portHelp.Render(line)
 		case n-1 == cursor:
-			line = "> " + portCursor.Render(line)
+			line = cursorMark() + line
 		default:
 			line = "  " + line
 		}
