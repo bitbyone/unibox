@@ -204,6 +204,7 @@ List keys: `enter`/`r` resume, `a` another agent (`←` `→` or `h` `l`),
 ### `unibox sandbox`
 
 ```
+unibox                      # alone at a terminal: the same list
 unibox sandbox
 unibox sandbox ls
 unibox sandbox create [name] [-e <env>] [--cpus <n>] [--memory <size>] [--adopt]

@@ -66,6 +66,22 @@ func (o *options) root() *cobra.Command {
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
 		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.secretCommand(), o.portCommand(), o.networkCommand(),
 		o.herdrCommand(), o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
+	// Alone at a terminal, unibox is its sandboxes, the list one acts in
+	// most; anywhere else, or before init, it says how it is used.
+	root.Args = cobra.NoArgs
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		if o.json || !o.interactive {
+			return cmd.Help()
+		}
+		if len(o.manager.Config.Envs) == 0 {
+			if err := cmd.Help(); err != nil {
+				return err
+			}
+			fmt.Fprintln(o.log, "\nunibox is not set up yet; unibox init sets it up from your team's repository")
+			return nil
+		}
+		return o.runStep(cmd, "sandbox")
+	}
 	return root
 }
 

@@ -96,6 +96,7 @@ unibox var set -e dev artifactoryUser tobola    # a value the env asks of you
 unibox secret ls -e dev                          # the tokens it needs, and which sbx has
 unibox secret set -e dev                         # have sbx store the missing ones
 unibox sandbox create -e dev                    # or let run create it
+unibox                                          # alone at a terminal: the sandbox list
 
 cd ~/src/payments
 unibox run --branch feat/refunds                # mount this checkout, run the agent

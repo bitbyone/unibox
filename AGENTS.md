@@ -154,7 +154,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
   over SSH (`editor_ssh`, `ssh <sandbox>.sbx`) are asked alike; turning
   it on restarts sbx's daemon, which serves SSH only from a start with
   `feature.ssh` on.
-- **A noun alone at a terminal is a list to act in.** `unibox port`
+- **A noun alone at a terminal is a list to act in**, and `unibox`
+  alone is `unibox sandbox` (help elsewhere, or before init). `unibox port`
   switches a running sandbox's ports, `unibox task` (and `resume` without
   a task) resumes, names or removes a task, `unibox sandbox` opens,
   stops, recreates or removes a sandbox; `env`, `var`, `secret`,
