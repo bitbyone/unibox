@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -27,25 +28,6 @@ type taskRepo struct {
 	local, top, origin, current   string
 }
 
-// branchState is what the forge, or the host's checkout, says of a work
-// branch: it has it, it has not and the task makes it, or it is being
-// asked.
-type branchState int
-
-const (
-	branchAsking branchState = iota
-	branchThere
-	branchNew
-	branchUnknown
-)
-
-// branchChecked answers for one repository: its default branch, and
-// whether it has branch, when one was asked for.
-type branchChecked struct {
-	name, branch, def string
-	state             branchState
-}
-
 // taskPickModel picks a new task's repositories, each worked in or read,
 // the branch the ones worked in get and whether it is pushed, with the
 // task's name: all on one screen, so what each repository gets is seen
@@ -67,23 +49,14 @@ type taskPickModel struct {
 	branch, task string
 	editing      string
 	input        string
-	states       map[string]branchState
-	// defaults are the default branches of the forges, which a repository
-	// with no branch of its own is cloned on and the task's name is made
-	// from.
-	defaults map[string]string
 	// existing are the tasks unibox has, which a name of theirs resumes.
-	existing map[string]bool
-	// check asks a repository's forge, or its checkout, for its default
-	// branch and whether it has branch.
-	check         func(r taskRepo, branch string) (string, branchState)
+	existing      map[string]bool
 	note          string
 	done, gaveUp  bool
 	width, height int
 }
 
-// Init asks what the repositories picked to begin with leave open.
-func (m taskPickModel) Init() tea.Cmd { return m.asks() }
+func (m taskPickModel) Init() tea.Cmd { return nil }
 
 func (m taskPickModel) visible() []int {
 	texts := make([]string, len(m.rows))
@@ -103,47 +76,6 @@ func (m taskPickModel) branchOf(r taskRepo) (string, bool) {
 		return r.current, false
 	}
 	return r.repo.Ref, false
-}
-
-// asks are the questions the picked repositories leave open: whether one
-// worked in has the task's branch, and a forge's default branch for one
-// with no branch at all.
-func (m *taskPickModel) asks() tea.Cmd {
-	if m.check == nil {
-		return nil
-	}
-	cmds := []tea.Cmd{}
-	for _, r := range m.rows {
-		if !r.picked {
-			continue
-		}
-		b, own := m.branchOf(r)
-		switch {
-		case own:
-			key := r.name + "\x00" + b
-			if _, asked := m.states[key]; asked {
-				continue
-			}
-			m.states[key] = branchAsking
-		case b == "" && r.local == "":
-			if _, asked := m.defaults[r.name]; asked {
-				continue
-			}
-			m.defaults[r.name] = ""
-		default:
-			continue
-		}
-		branch := ""
-		if own {
-			branch = b
-		}
-		row, check := r, m.check
-		cmds = append(cmds, func() tea.Msg {
-			def, state := check(row, branch)
-			return branchChecked{row.name, branch, def, state}
-		})
-	}
-	return tea.Batch(cmds...)
 }
 
 // lead is the repository a task is named after: one picked by hand and
@@ -183,9 +115,10 @@ func (m taskPickModel) taskName() string {
 			mounted = append(mounted, api.Repository{Name: r.name, URL: r.origin, Branch: b, HostPath: r.top})
 			continue
 		}
-		b = cmp.Or(b, m.defaults[r.name])
+		// One cloned on the forge's default branch is named by that, as
+		// unibox knows it here: not at all.
 		url, err := unibox.CloneURL(r.repo.URL)
-		if b == "" || err != nil {
+		if err != nil {
 			return ""
 		}
 		cloned = append(cloned, api.Repository{Name: r.name, URL: url, Branch: b})
@@ -201,14 +134,6 @@ func (m taskPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		return m, nil
-	case branchChecked:
-		if msg.def != "" {
-			m.defaults[msg.name] = msg.def
-		}
-		if msg.branch != "" {
-			m.states[msg.name+"\x00"+msg.branch] = msg.state
-		}
 		return m, nil
 	}
 	key, ok := msg.(tea.KeyMsg)
@@ -235,7 +160,7 @@ func (m taskPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.branch = value
 			}
 			m.editing, m.note = "", ""
-			return m, m.asks()
+			return m, nil
 		case tea.KeyBackspace:
 			if r := []rune(m.input); len(r) > 0 {
 				m.input = string(r[:len(r)-1])
@@ -303,12 +228,12 @@ func (m taskPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.rows[under].picked = !m.rows[under].picked
-			return m, m.asks()
+			return m, nil
 		}
 	case "c":
 		if under >= 0 {
 			m.rows[under].context = !m.rows[under].context
-			return m, m.asks()
+			return m, nil
 		}
 	case "p":
 		if under >= 0 {
@@ -333,16 +258,14 @@ func (m taskPickModel) View() string {
 		return ""
 	}
 	visible := m.visible()
-	picked, made, pushed := 0, 0, 0
+	picked, working, pushed := 0, 0, 0
 	for _, r := range m.rows {
 		if !r.picked {
 			continue
 		}
 		picked++
-		if b, own := m.branchOf(r); own {
-			if m.states[r.name+"\x00"+b] == branchNew {
-				made++
-			}
+		if _, own := m.branchOf(r); own {
+			working++
 			if r.push {
 				pushed++
 			}
@@ -361,8 +284,6 @@ func (m taskPickModel) View() string {
 	name := m.taskName()
 	corner := "task " + portCursor.Render(name)
 	switch {
-	case name == "" && picked > 0:
-		corner = portHelp.Render("task: asking for its branches")
 	case name == "":
 		corner = ""
 	case m.existing[name]:
@@ -410,22 +331,12 @@ func (m taskPickModel) View() string {
 			from = "mount"
 		}
 		b, own := m.branchOf(r)
-		branch := cmp.Or(b, portHelp.Render(cmp.Or(m.defaults[r.name], "default")))
+		branch := cmp.Or(b, portHelp.Render("default"))
 		push := ""
 		if own {
 			push = portHelp.Render("no")
 			if r.push {
 				push = portOn.Render("yes")
-			}
-			if r.picked {
-				switch m.states[r.name+"\x00"+b] {
-				case branchNew:
-					branch += " " + portOn.Render("(new)")
-				case branchAsking:
-					branch += " " + portHelp.Render("(asking)")
-				case branchUnknown:
-					branch += " " + portErr.Render("(not known)")
-				}
 			}
 		}
 		about := cmp.Or(r.repo.Description, r.repo.URL)
@@ -453,7 +364,7 @@ func (m taskPickModel) View() string {
 	}
 	summary := fmt.Sprintf("%d picked", picked)
 	if m.branch != "" {
-		summary += fmt.Sprintf(" · branch %s made in %d, pushed from %d", m.branch, made, pushed)
+		summary += fmt.Sprintf(" · branch %s in %d, pushed from %d", m.branch, working, pushed)
 	}
 	lines = append(lines, "", portHelp.Render(summary))
 	if m.note != "" {
@@ -507,22 +418,7 @@ func taskRows(ctx context.Context, repos map[string]unibox.IndexedRepo) []taskRe
 // pushed.
 func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task, branch string, noPush bool) (taskPickModel, error) {
 	ctx := cmd.Context()
-	m := taskPickModel{env: env.Name, branch: branch, rows: taskRows(ctx, env.Repos), states: map[string]branchState{}, defaults: map[string]string{}, existing: map[string]bool{}, check: func(r taskRepo, branch string) (string, branchState) {
-		if r.local != "" {
-			if unibox.HostHasBranch(context.Background(), r.top, branch) {
-				return r.current, branchThere
-			}
-			return r.current, branchNew
-		}
-		def, has, err := unibox.ForgeBranch(context.Background(), r.repo.URL, branch)
-		switch {
-		case err != nil:
-			return "", branchUnknown
-		case has:
-			return def, branchThere
-		}
-		return def, branchNew
-	}}
+	m := taskPickModel{env: env.Name, branch: branch, rows: taskRows(ctx, env.Repos), existing: map[string]bool{}}
 	if noPush {
 		for i := range m.rows {
 			m.rows[i].push = false
@@ -648,6 +544,9 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	if err != nil {
 		return err
 	}
+	if err := o.confirmBranch(cmd, picked); err != nil {
+		return err
+	}
 	req := unibox.Request{Task: t.ID, Repositories: picked.inputs()}
 	if len(req.Repositories) == 0 {
 		return nil
@@ -658,6 +557,90 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	}
 	for _, r := range added {
 		fmt.Fprintf(o.log, "added %s to task %s at %s/%s\n", r.Name, t.ID, t.Directory, r.Name)
+	}
+	return nil
+}
+
+// branchClashes are the picked repositories worked in that have the task's
+// branch already - on the forge, or in a mounted checkout - each asked
+// once, as the task starts.
+func (m taskPickModel) branchClashes(ctx context.Context) ([]string, error) {
+	if m.branch == "" {
+		return nil, nil
+	}
+	type answer struct {
+		name string
+		has  bool
+		err  error
+	}
+	answers := make(chan answer)
+	asked := 0
+	for _, r := range m.rows {
+		if _, own := m.branchOf(r); !r.picked || !own {
+			continue
+		}
+		asked++
+		go func() {
+			if r.local != "" {
+				has := unibox.HostHasBranch(ctx, r.top, m.branch)
+				if !has && r.origin != "" {
+					var err error
+					has, err = unibox.RemoteHasBranch(ctx, r.origin, m.branch)
+					answers <- answer{r.name, has, err}
+					return
+				}
+				answers <- answer{r.name, has, nil}
+				return
+			}
+			has, err := unibox.RemoteHasBranch(ctx, r.repo.URL, m.branch)
+			answers <- answer{r.name, has, err}
+		}()
+	}
+	clashes, errs := []string{}, []error{}
+	for range asked {
+		a := <-answers
+		if a.err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", a.name, a.err))
+		}
+		if a.has {
+			clashes = append(clashes, a.name)
+		}
+	}
+	slices.Sort(clashes)
+	return clashes, errors.Join(errs...)
+}
+
+// confirmBranch stops a task whose branch exists already where the person
+// meant to make it, unless they say to work on it there.
+func (o *options) confirmBranch(cmd *cobra.Command, m taskPickModel) error {
+	// A task that exists made its branch itself.
+	if m.branch == "" || m.adding == "" && o.taskExists(m.taskName()) {
+		return nil
+	}
+	var clashes []string
+	err := o.waiting("looking for branch "+m.branch, func() (err error) {
+		clashes, err = m.branchClashes(cmd.Context())
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("cannot tell whether branch %s exists already: %w", m.branch, err)
+	}
+	if len(clashes) == 0 {
+		return nil
+	}
+	said := fmt.Sprintf("branch %s exists already in %s", m.branch, strings.Join(clashes, ", "))
+	if !o.canAsk() {
+		return unibox.Fail(4, "branch_exists", "%s; give another --branch, or pass --yes to work on it there", said)
+	}
+	if o.yes {
+		return nil
+	}
+	ok, err := o.askYes(said+"; work on it there?", false)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%s; pick another branch", said)
 	}
 	return nil
 }

@@ -169,7 +169,7 @@ are stored globally: sbx removes a sandbox's own with the sandbox.
 `unibox task new` starts a task on repositories the env names - the
 team's under `repos:` in its `unibox.yaml` files, yours in `config.yaml`
 (`unibox repo add`), a forge's cloned and a directory mounted - picked on
-one screen that shows each one's branch, whether it is made and pushed,
+one screen that shows each one's branch and whether it is pushed,
 and the task's name; context repositories keep their `ref`. One that says `default: always` comes with every new
 task of the env, cloned beside your mounted checkout in `run` too: the
 architecture decisions and specifications an agent should always have.

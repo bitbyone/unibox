@@ -344,7 +344,7 @@ func (o *options) tasksCommand() *cobra.Command {
 			}
 			repos := []string{}
 			for _, r := range t.Repositories {
-				repos = append(repos, r.Name+"@"+r.Branch)
+				repos = append(repos, r.Name+"@"+cmp.Or(r.Branch, "default"))
 			}
 			fmt.Fprintf(w, "%s\t", t.ID)
 			if aliased {

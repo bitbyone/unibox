@@ -185,8 +185,10 @@ unibox task rm <task>
   forge's cloned and a directory mounted. At a terminal one screen: `space`
   pick, `c` work/context, `b` the branch of those worked in, `t` the task's
   name, `p` push a row's branch, `/` filter, `enter` start; each row shows
-  the branch it gets, `(new)` where it is made, and whether it is pushed,
-  and the task's name stands at the top. Named, those that say `always`
+  the branch it gets (`default` for the forge's default) and whether it is
+  pushed, and the task's name stands at the top; nothing is asked of a
+  forge while picking. As it starts, a branch that exists already in a
+  repository worked in is asked about (`--yes` takes it), once. Named, those that say `always`
   come along; `--branch`, `--task` and `--no-push` say the rest. A context
   repository keeps its ref and is never pushed to. Then it runs as `run`
   does.

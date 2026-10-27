@@ -847,3 +847,26 @@ func TestADirectoryOfTheIndexStaysMountedBesideAnAddressThatIsCloned(t *testing.
 		}
 	}
 }
+
+func TestANewTaskStopsWhereItsBranchExistsAlready(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	web := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"commit", "-q", "--allow-empty", "-m", "first"}, {"branch", "feat/x"}} {
+		if b, err := exec.Command("git", append([]string{"-C", web}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, b)
+		}
+	}
+	if _, _, err := run(t, paths, "", "repo", "add", "web", web); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "task", "new", "web", "--branch", "feat/x", "--no-push"); err == nil || !strings.Contains(err.Error(), "branch feat/x exists already in web") {
+		t.Fatalf("%v", err)
+	}
+}

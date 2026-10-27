@@ -604,8 +604,9 @@ func TestATaskWorksOnTheForgesDefaultBranchAndRunsTheAgentChosen(t *testing.T) {
 	if got := ran(Request{Sandbox: "dev", Task: "refunds", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url}}}); got != "claude --dangerously-skip-permissions|Claude" {
 		t.Fatalf("ran %q", got)
 	}
+	// The host asked the forge nothing; the clone found main.
 	b, err := m.sandbox("dev")
-	if err != nil || b.Tasks[0].Repositories[0].Branch != "main" {
+	if err != nil || b.Tasks[0].Repositories[0].Branch != "" || gitTest(t, filepath.Join(f.root, "dev", "work", "refunds", "payments"), "branch", "--show-current") != "main" {
 		t.Fatalf("%+v %v", b.Tasks, err)
 	}
 	// Another agent the sandbox has, as sbx's kit for it starts it; the
@@ -686,6 +687,22 @@ func TestABranchTheForgeLacksIsMadeInTheSandboxFromItsBaseAndNotPushed(t *testin
 	again.Repositories = []RepoInput{{Source: url, Name: "payments", Branch: "feat/mine", Clone: true}}
 	if _, err := m.Prepare(ctx, again); err != nil {
 		t.Fatal(err)
+	}
+	// No branch is the forge's default, found by the clone in the sandbox,
+	// and a branch made there with no base starts from it.
+	plain := Request{Sandbox: "dev", Task: "plain", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Clone: true}}}
+	if _, err := m.Prepare(ctx, plain); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitTest(t, filepath.Join(f.root, "dev", "work", "plain", "payments"), "branch", "--show-current"); got != "main" {
+		t.Fatal(got)
+	}
+	headed := Request{Sandbox: "dev", Task: "headed", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "feat/other", Clone: true, Fork: true}}}
+	if _, err := m.Prepare(ctx, headed); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitTest(t, filepath.Join(f.root, "dev", "work", "headed", "payments"), "branch", "--show-current"); got != "feat/other" {
+		t.Fatal(got)
 	}
 	// Without a base, a branch the forge lacks is refused, naming it.
 	req.Task, req.Repositories[0].Base, req.Repositories[0].Fork = "none", "", false

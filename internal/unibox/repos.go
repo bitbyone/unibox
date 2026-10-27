@@ -263,20 +263,12 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 			if err != nil {
 				return nil, nil, err
 			}
-			if r.Branch == "" {
-				// Without a branch the task works where the forge's work
-				// lands: its default branch, bounded by the forge's
-				// protection of it.
-				if r.Branch, err = forgeDefaultBranch(ctx, r.URL); err != nil {
-					return nil, nil, err
-				}
-			}
-			// A branch made in the sandbox alone starts where the forge's
-			// work lands, unless told where.
+			// Without a branch the task works where the forge's work lands,
+			// its default branch, which the clone in the sandbox finds; the
+			// host asks the forge nothing. A branch made in the sandbox
+			// alone starts there too, unless told where.
 			if in.Fork && r.Base == "" {
-				if r.Base, err = forgeDefaultBranch(ctx, r.URL); err != nil {
-					return nil, nil, err
-				}
+				r.Base = "HEAD"
 			}
 			if r.Author == "" {
 				name, _ := git(ctx, ".", "config", "user.name")
@@ -295,8 +287,10 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 			return nil, nil, fmt.Errorf("duplicate repository directory %s; use --repo name=source", r.Name)
 		}
 		names[r.Name] = true
-		if _, err := git(ctx, ".", "check-ref-format", "--branch", r.Branch); err != nil {
-			return nil, nil, fmt.Errorf("invalid branch %q; use a git branch name", r.Branch)
+		if r.Branch != "" {
+			if _, err := git(ctx, ".", "check-ref-format", "--branch", r.Branch); err != nil {
+				return nil, nil, fmt.Errorf("invalid branch %q; use a git branch name", r.Branch)
+			}
 		}
 		if _, _, err := AuthorParts(r.Author); err != nil {
 			return nil, nil, err
@@ -344,20 +338,6 @@ func remoteRefs(ctx context.Context, dir, url, branch string) (string, string, e
 		}
 	}
 	return defaultBranch, tip, nil
-}
-
-// forgeDefaultBranch is the branch a repository's HEAD names on the forge.
-func forgeDefaultBranch(ctx context.Context, url string) (string, error) {
-	out, err := git(ctx, ".", "ls-remote", "--symref", url, "HEAD")
-	if err != nil {
-		return "", fmt.Errorf("cannot reach %s to find its default branch; check forge access or pass --branch: %w", url, err)
-	}
-	for _, line := range strings.Split(out, "\n") {
-		if fields := strings.Fields(line); len(fields) == 3 && fields[0] == "ref:" && fields[2] == "HEAD" {
-			return strings.TrimPrefix(fields[1], "refs/heads/"), nil
-		}
-	}
-	return "", fmt.Errorf("%s names no default branch; pass --branch", url)
 }
 
 // createRemoteBranch starts the chosen branch on the forge from its default
@@ -535,17 +515,6 @@ func isDir(p string) bool {
 	return err == nil && info.IsDir()
 }
 
-// ForgeBranch asks a forge, with the host's own git and credentials, for a
-// repository's default branch and whether it has branch.
-func ForgeBranch(ctx context.Context, url, branch string) (defaultBranch string, has bool, err error) {
-	// Asked as the task's clone asks, by its HTTPS address.
-	if url, err = CloneURL(url); err != nil {
-		return "", false, err
-	}
-	defaultBranch, tip, err := remoteRefs(ctx, ".", url, branch)
-	return defaultBranch, tip != "", err
-}
-
 // HostCheckout is what a task mounting a directory of the host takes from
 // it: the top of its checkout, its forge address and the branch it is on.
 func HostCheckout(ctx context.Context, dir string) (top, url, branch string, err error) {
@@ -573,4 +542,15 @@ func HostCheckout(ctx context.Context, dir string) (top, url, branch string, err
 func HostHasBranch(ctx context.Context, top, branch string) bool {
 	_, err := git(ctx, top, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	return err == nil
+}
+
+// RemoteHasBranch asks a forge, with the host's git and as a task's clone
+// would, whether a repository has branch.
+func RemoteHasBranch(ctx context.Context, url, branch string) (bool, error) {
+	url, err := CloneURL(url)
+	if err != nil {
+		return false, err
+	}
+	_, tip, err := remoteRefs(ctx, ".", url, branch)
+	return tip != "", err
 }

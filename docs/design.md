@@ -531,12 +531,18 @@ prepare script cloning the base and switching), which a later
 preparation leaves as it is until the forge has it. A name works wherever a repository does,
 unless a directory of that name is here. `task new` picks at a terminal
 on one screen (`taskPickModel`, `tasknewui.go`): roles, the work branch,
-push per row and the task's name, with the forge - or the checkout -
-asked in the background which branches it has and its default, so each
-row shows what it gets and the name the task will have
+push per row and the task's name, asking no forge anything while it is
+drawn: a repository with no branch shows `default`, the forge's default
+branch, which the clone in the sandbox finds (the host never resolves it,
+an empty `Branch` standing for it), and each row shows what it gets and
+the name the task will have
 (`unibox.TaskID`, mounted repositories first as a task holds them, named
 after the first picked by hand and worked in; `run` names a task after
-its first repository worked in). `r` in the task list adds repositories
+its first repository worked in; `task new` passes the name it showed).
+As the task starts, the work branch is looked for once - `git ls-remote`
+for a clone, the checkout and its origin for a mount - and a branch that
+exists already is asked about rather than taken unawares
+(`confirmBranch`). `r` in the task list adds repositories
 to a task on the same screen (`AddRepositories`). Where a branch made in
 the sandbox started (`Base`) is no part of a task's identity.
 Lists filter fuzzily after `/` (`fuzzy.go`, letters in order, side by

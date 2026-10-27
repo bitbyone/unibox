@@ -70,8 +70,11 @@ is made or pushed there.
 `task new` shows them on one screen: `space` picks, `c` switches work and
 context, `b` types the branch the ones worked in get, `t` the task's name,
 `p` whether a row's branch is pushed, `/` filters, `enter` starts. Each row
-shows where it comes from (clone or mount), the branch it gets, `(new)`
-where that branch is made, and whether it is pushed; the task's name - the
+shows where it comes from (clone or mount), the branch it gets - `default`
+for the forge's default branch when the index names none - and whether it
+is pushed; nothing is asked of a forge while you pick. As the task
+starts, unibox looks for the branch once, with git: where it exists
+already, it asks whether to work on it there. The task's name - the
 one typed, or the one it will be given - stands at the top, with
 `(exists; it is resumed)` when a task has it. A generated name follows the
 first repository you picked by hand and work in, not one picked to begin

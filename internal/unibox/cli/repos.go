@@ -412,6 +412,9 @@ one that says always - with no names, those that say on as well - with
 		}
 		// The name the screen showed is the one the task gets.
 		req.Task = cmp.Or(picked.taskName(), req.Task)
+		if err := o.confirmBranch(cmd, picked); err != nil {
+			return err
+		}
 		// A work branch is pushed, or made on the forge, where asked; a
 		// context repository is never pushed to.
 		req.Repositories = picked.inputs()

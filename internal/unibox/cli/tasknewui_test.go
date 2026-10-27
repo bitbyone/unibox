@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,16 +64,8 @@ func TestANewTasksScreenShowsWhatEachRepositoryGetsAndTheTasksName(t *testing.T)
 		"spec": {URL: "https://forge.example.com/biz/spec.git", Default: unibox.RepoOff},
 		"web":  {URL: checkout, Default: unibox.RepoOn},
 	}
-	asked := []string{}
-	m := taskPickModel{env: "dev", rows: taskRows(context.Background(), repos), states: map[string]branchState{}, defaults: map[string]string{}, existing: map[string]bool{}, check: func(r taskRepo, branch string) (string, branchState) {
-		asked = append(asked, r.name+"@"+branch)
-		switch {
-		case branch == "" || r.name == "api":
-			return "master", branchThere
-		}
-		return "master", branchNew
-	}}
-	var tm tea.Model = runCmd(m, m.Init())
+	m := taskPickModel{env: "dev", rows: taskRows(context.Background(), repos), existing: map[string]bool{}}
+	var tm tea.Model = m
 	// The task is named by what is picked, mounted first, before anything
 	// is asked - after the first worked in, not the decisions every task
 	// reads.
@@ -81,15 +74,20 @@ func TestANewTasksScreenShowsWhatEachRepositoryGetsAndTheTasksName(t *testing.T)
 		{Name: "adrs", URL: "https://forge.example.com/arch/adrs.git", Branch: "main"},
 		{Name: "api", URL: "https://forge.example.com/x/api.git", Branch: "develop"},
 	})
-	if v := tm.View(); !strings.Contains(v, "task "+want+" (generated)") || !strings.HasPrefix(want, "api-") || len(asked) != 0 || !strings.Contains(v, "mount  trunk") {
-		t.Fatalf("%v\n%s", asked, v)
+	if v := tm.View(); !strings.Contains(v, "task "+want+" (generated)") || !strings.HasPrefix(want, "api-") || !strings.Contains(v, "mount  trunk") {
+		t.Fatalf("%s", v)
 	}
 	// The branch typed goes to the ones worked in, pushed unless told not;
-	// a context one keeps its ref.
+	// a context one keeps its ref, one with none its forge's default.
 	tm = taskKeys(tm, "b", "feat/x", "enter", "j", "j", " ")
 	v := tm.View()
-	if !strings.Contains(v, "context  clone  main") || !strings.Contains(v, "feat/x        yes") || !strings.Contains(v, "feat/x (new)  yes") || !strings.Contains(v, "made in 2, pushed from 3") {
-		t.Fatalf("%v\n%s", asked, v)
+	if !strings.Contains(v, "context  clone  main") || !strings.Contains(v, "feat/x  yes") || !strings.Contains(v, "branch feat/x in 3, pushed from 3") {
+		t.Fatalf("%s", v)
+	}
+	fresh := m
+	fresh.rows = slices.Clone(m.rows)
+	if v := taskKeys(fresh, "j", "j", " ").View(); !strings.Contains(v, "spec  work     clone  default") {
+		t.Fatalf("%s", v)
 	}
 	// spec, picked by hand, names the task now.
 	if got := tm.(taskPickModel); !strings.HasPrefix(got.taskName(), "spec-") {

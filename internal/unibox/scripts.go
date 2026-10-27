@@ -36,11 +36,22 @@ rm -f "$errs"
 [ -z "$moved" ] || url=${moved%/}
 tip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$branch" '$2 == ref {print $1}')
 head=$(printf '%s\n' "$refs" | sed -n 's|^ref: refs/heads/\(.*\)	HEAD$|\1|p')
+headtip=$(printf '%s\n' "$refs" | awk '$2 == "HEAD" {print $1}')
+# No branch is the forge's default one, and a base of HEAD starts there.
+if [ -z "$branch" ]; then
+  [ -n "$head" ] || { echo "$given names no default branch; give the task a branch of it" >&2; exit 4; }
+  branch=$head tip=$headtip
+fi
+fromhead=
+if [ "$base" = HEAD ]; then
+  base=$head fromhead=1
+fi
 # A branch the forge lacks is the task's alone when it has a base: made in
 # the sandbox from it, and pushed by nobody but the agent.
 basetip=
 if [ -z "$tip" ] && [ -n "$base" ]; then
   basetip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$base" '$2 == ref {print $1}')
+  [ -z "$fromhead" ] || basetip=$headtip
   [ -n "$basetip" ] || { echo "$given has neither branch $branch nor $base to make it from${head:+ (its default branch is $head)}" >&2; exit 4; }
 fi
 [ -n "$tip" ] || [ -n "$basetip" ] || { echo "$given has no branch $branch${head:+ (its default branch is $head)}; push it first, or name a branch it has - for a repository of the env's index, its ref" >&2; exit 4; }

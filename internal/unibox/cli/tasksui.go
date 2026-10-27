@@ -132,7 +132,7 @@ func (m tasksModel) View() string {
 		}
 		repos := []string{}
 		for _, repo := range r.Repositories {
-			repos = append(repos, repo.Name+"@"+repo.Branch)
+			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default"))
 		}
 		cols = append(cols, []string{name, r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, ", ")})
 	}
