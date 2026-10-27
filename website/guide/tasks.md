@@ -131,7 +131,7 @@ a clone would miss, an env that changed since the sandbox was made.
 ## Come back to a task
 
 ```sh
-unibox task                      # pick a task: enter resumes, a attaches another agent, r adds repositories, s a shell
+unibox task                      # pick a task: enter resumes, t starts a new one, a attaches another agent, r adds repositories, s a shell
 unibox task ls                   # every task, in every sandbox
 unibox task ls -s dev            # one sandbox's tasks
 unibox resume login              # its agent again

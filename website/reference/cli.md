@@ -206,7 +206,8 @@ unibox task rm <task>
 - `rm` - remove a task after checking for running sessions and unpushed
   work. Mounted directories are unmounted, never deleted.
 
-List keys: `enter` resume, `a` attach another agent (`←` `→` or `h` `l`),
+List keys: `enter` resume, `t` new task (`task new` in the sandbox of the
+one under the cursor), `a` attach another agent (`←` `→` or `h` `l`),
 `r` add repositories of the env's index (picked as in `task new`, seen at
 once by a running agent), `s` shell, `n` rename, `d` remove.
 

@@ -20,7 +20,7 @@ type taskRow struct {
 // taskAction is what a person chose to do with a task; the list ends for
 // it, as resuming a task takes the terminal.
 type taskAction struct {
-	kind  string // resume, shell, repos, rename, remove
+	kind  string // resume, shell, repos, new, rename, remove
 	task  api.Task
 	agent string
 }
@@ -91,6 +91,8 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return choose("resume", "")
 		case "r":
 			return choose("repos", "")
+		case "t":
+			return choose("new", "")
 		case "s":
 			return choose("shell", "")
 		case "n":
@@ -153,7 +155,7 @@ func (m tasksModel) View() string {
 	case tasksRemove:
 		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
 	default:
-		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter", "resume", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit") + "\n")
+		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit") + "\n")
 	}
 	return b.String()
 }
