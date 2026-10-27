@@ -18,8 +18,8 @@ const instructionsMark = "<!-- Written by unibox for this task before each sessi
 
 // TaskInstructions are what a task's agents are told of it: its
 // repositories, each read or worked in and on which branch, then the env's
-// instructions and each repository's from the index. "" when neither the
-// env nor a repository of the task has any.
+// instructions and each repository's from the index. "" for a task of one
+// repository with none, whose session starts in it.
 func TaskInstructions(t api.Task, env Env) string {
 	repoText := map[string]string{}
 	for _, r := range t.Repositories {
@@ -27,7 +27,7 @@ func TaskInstructions(t api.Task, env Env) string {
 			repoText[r.Name] = text
 		}
 	}
-	if len(env.Instructions) == 0 && len(repoText) == 0 {
+	if len(env.Instructions) == 0 && len(repoText) == 0 && len(t.Repositories) < 2 {
 		return ""
 	}
 	var b strings.Builder

@@ -110,8 +110,10 @@ with `CLAUDE.md` a link to it: the task's repositories first - each read
 or worked in, on which branch - then the env's instructions, then each
 repository's. The agent then starts in `/work/<task>`, above the
 repositories. The file is outside every repository, so it is never
-committed; it is written again at every session and goes when there is
-nothing to say. A repository's own `AGENTS.md` still holds inside it.
+committed; it is written again at every session. A task of several
+repositories always gets it, for the list alone; one of a single
+repository without instructions does not, and its session starts in the
+repository. A repository's own `AGENTS.md` still holds inside it.
 
 `unibox task instructions <task>` shows what the agent reads when a
 session starts, every file it reads in its order - its home's, with the

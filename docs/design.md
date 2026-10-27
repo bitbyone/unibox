@@ -559,7 +559,9 @@ it: the task's repositories with their role and branch, the env's, then
 each repository's. `CLAUDE.md` links to it, as Claude reads that name;
 Codex and Copilot read `AGENTS.md`. With it the session starts in the
 task's directory rather than its one repository. The file is marked as
-unibox's and goes when nothing is to be said; a task's directory the
+unibox's and goes when nothing is to be said - a task of one repository
+and no instructions, whose session starts in it; a task of several always
+has the list of them. A task's directory the
 agent cannot write in - sbx makes a mount's parents as root, so
 `mountTask` makes it as the agent first - is said and left.
 

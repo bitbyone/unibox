@@ -814,12 +814,12 @@ repos:
 	if told, err = m.AgentInstructions(ctx, "pricing", ""); err != nil || told.Read || len(told.Files) != 1 || !told.Files[0].Unibox {
 		t.Fatalf("%+v %v", told, err)
 	}
-	// With nothing to say, what unibox wrote goes.
+	// Without instructions the agent is still told the task's repositories.
 	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "ports: {}\n")
 	if err := m.Run(ctx, Request{Task: "pricing"}, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(task, "AGENTS.md")); err == nil {
-		t.Fatal("AGENTS.md stayed")
+	if b, err := os.ReadFile(filepath.Join(task, "AGENTS.md")); err != nil || !strings.Contains(string(b), "- `adrs/` - read it") || strings.Contains(string(b), "## Env") {
+		t.Fatalf("%s %v", b, err)
 	}
 }
