@@ -155,7 +155,10 @@ unibox var set -e dev artifactoryUser tobola
 
 The env's kits and bindings name the tokens its sandboxes use.
 `unibox secret ls` shows each, whether sbx has it and what it is for;
-`unibox secret set` has sbx ask for the missing ones, or stores the one piped in. `--command` gives sbx a host command that
+`unibox secret set` has sbx ask for the missing ones, or stores the one piped in. Before sbx
+asks, it offers to open the page where a new token is made - GitHub's for
+`github` and `copilot`, others where the team names them - and
+`--generate` opens it straight away. `--command` gives sbx a host command that
 prints the token - a keychain, a vault - which sbx runs itself. Secrets
 are stored globally: sbx removes a sandbox's own with the sandbox.
 

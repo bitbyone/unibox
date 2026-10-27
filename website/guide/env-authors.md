@@ -22,6 +22,18 @@ This site is for people using an env repository. If you maintain one:
   ```
 
   sbx never reads these files.
+- Say where each token is made in the same files, and unibox offers to
+  open the page before sbx asks for the token:
+
+  ```yaml
+  secrets:
+    gitlab:
+      page: https://gitlab.example.com/-/user_settings/personal_access_tokens?name=unibox&scopes=read_repository,write_repository
+      hint: a personal access token with read_repository and write_repository
+  ```
+
+  unibox knows GitHub's page for `github` and `copilot`; a team's entry
+  replaces it.
 - Put hosts everyone needs in a kit, not in each person's
   `unibox network` rules.
 - Say in the README which token each secret wants and where to create it.

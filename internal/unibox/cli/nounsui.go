@@ -39,6 +39,7 @@ func (o *options) secretUI(cmd *cobra.Command, envName string, leave func() erro
 		}
 		m := listModel{title: "tokens env " + env.Name + " needs", header: []string{"SERVICE", "STORED", "NEEDED", "FOR"}, actions: []listAction{
 			{key: "enter", name: "set", help: "store"},
+			{key: "g", name: "generate", help: "generate a new token"},
 			{key: "c", name: "command", help: "store a command for it"},
 		}}
 		for _, l := range list {
@@ -69,7 +70,11 @@ func (o *options) secretUI(cmd *cobra.Command, envName string, leave func() erro
 		}
 		// sbx asks for the value on this terminal; it goes from the
 		// keyboard to sbx.
-		if err := o.runStep(cmd, "secret", "set", service, "-e", env.Name); err != nil {
+		args := []string{"secret", "set", service, "-e", env.Name}
+		if action == "generate" {
+			args = append(args, "--generate")
+		}
+		if err := o.runStep(cmd, args...); err != nil {
 			return "", err
 		}
 		return "", nil

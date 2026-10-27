@@ -16,9 +16,10 @@ default to these, on Windows too:
 | `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |
 
 In the env repository, besides sbxenv files and kits, unibox reads the
-team's named ports: `unibox.yaml` at the root (every env) and
-`<env>.unibox.yaml` beside `<env>.sbxenv.yaml`. Tokens are in none of
-these files; they are in sbx's store.
+team's named ports and where its tokens are made (`secrets:`):
+`unibox.yaml` at the root (every env) and `<env>.unibox.yaml` beside
+`<env>.sbxenv.yaml`. Tokens themselves are in none of these files; they
+are in sbx's store.
 
 ### `config.yaml`
 

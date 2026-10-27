@@ -123,6 +123,52 @@ func TestSecretsAreListedAndTheMissingOnesStoredBySbx(t *testing.T) {
 	}
 }
 
+func TestSettingATokenOffersThePageWhereANewOneIsMade(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	// The browser is a stand-in that notes the page it is given.
+	bin, opened := t.TempDir(), filepath.Join(t.TempDir(), "opened")
+	for _, name := range []string{"open", "xdg-open"} {
+		if err := testenv.WriteExecutable(filepath.Join(bin, name), []byte("#!/bin/sh\necho \"$1\" >> "+unibox.Quote(opened)+"\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	page := "https://gitlab.example.com/-/user_settings/personal_access_tokens?name=unibox"
+	if err := os.WriteFile(unibox.TeamFile(file), []byte("secrets:\n  gitlab:\n    page: "+page+"\n    hint: read and write repository\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "env", "add", "team", file); err != nil {
+		t.Fatal(err)
+	}
+	// Asked whether there is a token, the person makes a new one.
+	if _, said, err := runAt(t, paths, "2\n", "secret", "set", "gitlab"); err != nil || !strings.Contains(said, "read and write repository") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if b, _ := os.ReadFile(opened); string(b) != page+"\n" || !strings.Contains(calls(t, log), "secret set gitlab\n") {
+		t.Fatalf("%q\n%s", b, calls(t, log))
+	}
+	// A service whose page is not known goes straight to sbx, and cannot
+	// be generated.
+	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic", "--generate"); err == nil || !strings.Contains(err.Error(), "knows no page") {
+		t.Fatalf("%v", err)
+	}
+	if out, _, err := run(t, paths, "", "secret", "ls", "--json"); err != nil || !strings.Contains(out, `"page": "`+page+`"`) {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if err := os.WriteFile(unibox.TeamFile(file), []byte("secrets:\n  gitlab: {page: gitlab.example.com}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "ls"); err == nil || !strings.Contains(err.Error(), "no web address") {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	log := fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}

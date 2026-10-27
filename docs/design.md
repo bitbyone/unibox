@@ -433,6 +433,14 @@ replaces.
   `--json`, state or config.yaml. `--command` stores instead a host
   command that prints the token - a keychain read, a vault - which sbx
   runs itself whenever it needs the token.
+- **Where a token is made** is not in a kit, so unibox knows GitHub's
+  fine-grained token page for `github` and `copilot`, filled in with the
+  permissions through its URL parameters (`user_copilot_requests=read`
+  for copilot), and the team names any other, or its own for those, under
+  `secrets.<service>: {page, hint}` in its unibox.yaml files
+  (`TokenGuides`). Before sbx asks, `secret set` offers to open the page
+  in the browser; `--generate` opens it without asking. The page is all
+  unibox hands over: the token is still typed into sbx.
 - **Always global.** `sbx env rm` deletes a sandbox's own secrets with
   the sandbox, so a token stored for one sandbox would be lost at the
   first recreation. unibox never stores one per sandbox.
@@ -528,6 +536,8 @@ never in an sbxenv.
   env's several files, a later one's ports win, as its sbxenv does.
   `unibox.yaml` at the root of the repository (the first directory up
   with `.git`) names ports for every env in it, under the env's own file.
+  The same files say where the env's tokens are made (`secrets:`, see
+  the secrets above).
 - **Four layers, the person's last.** The repository's, the env's file's,
   the person's for every env (`ports:` at the top of config.yaml) and the
   person's for the env. A switch for every env that an
@@ -681,7 +691,7 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox doctor [-e E]` | what a run needs, and what to fix |
 | `unibox env add\|ls\|rm\|show` | the envs: sbxenv files, the sandbox's name |
 | `unibox var ls\|set\|rm -e E` | the person's values for an env's args |
-| `unibox secret ls\|set -e E [--command C] [--all]` | the tokens an env needs, and having sbx store them |
+| `unibox secret ls\|set -e E [--command C] [--all] [--generate]` | the tokens an env needs, and having sbx store them |
 | `unibox run [dir\|url] [--repo ...] [--clone] [-- args]` | prepares a task, runs the kit's agent (or `--shell`) here |
 | `unibox resume <task> [--shell \| --agent]` | a prepared task's agent again, in the sandbox that holds it |
 | `unibox task check\|prepare …` | what stands in the way, as `needs` with a `code` each; the task ready, JSON at the end |

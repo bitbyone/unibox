@@ -98,12 +98,17 @@ func (p *TeamPort) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-// ReadTeamPorts reads the ports the team names for an env: those of the
-// repository's unibox.yaml, then the files beside the env's sbxenv files
-// over them, a later file's over an earlier one's as sbx merges the files
-// themselves. A file that is not there names no ports.
-func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
-	out := map[string]TeamPort{}
+// teamDoc is what a team's unibox.yaml or <env>.unibox.yaml says.
+type teamDoc struct {
+	Ports   map[string]TeamPort   `yaml:"ports"`
+	Secrets map[string]TokenGuide `yaml:"secrets"`
+}
+
+// readTeamFiles reads the team's files of an env in the order they apply:
+// the repository's unibox.yaml, then the file beside each of the env's
+// sbxenv files, as sbx merges the files themselves. A file that is not
+// there says nothing.
+func readTeamFiles(sbxenvFiles []string, each func(name, from string, doc teamDoc) error) error {
 	read := func(name, from string) error {
 		b, err := os.ReadFile(name)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -112,14 +117,36 @@ func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
 		if err != nil {
 			return err
 		}
-		var doc struct {
-			Ports map[string]TeamPort `yaml:"ports"`
-		}
+		var doc teamDoc
 		d := yaml.NewDecoder(bytes.NewReader(b))
 		d.KnownFields(true)
 		if err := d.Decode(&doc); err != nil && !errors.Is(err, io.EOF) {
 			return fmt.Errorf("%s: %w", name, err)
 		}
+		return each(name, from, doc)
+	}
+	repos := map[string]bool{}
+	for _, f := range sbxenvFiles {
+		if r := RepoFile(f); r != "" && !repos[r] {
+			repos[r] = true
+			if err := read(r, FromRepo); err != nil {
+				return err
+			}
+		}
+	}
+	for _, f := range sbxenvFiles {
+		if err := read(TeamFile(f), FromEnv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ReadTeamPorts reads the ports the team names for an env, a later file's
+// over an earlier one's.
+func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
+	out := map[string]TeamPort{}
+	err := readTeamFiles(sbxenvFiles, func(name, from string, doc teamDoc) error {
 		for k, v := range doc.Ports {
 			if !portName.MatchString(k) {
 				return fmt.Errorf("%s: port name %q must be lower case letters, digits and dashes, starting with a letter", name, k)
@@ -138,20 +165,9 @@ func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
 			out[k] = v
 		}
 		return nil
-	}
-	repos := map[string]bool{}
-	for _, f := range sbxenvFiles {
-		if r := RepoFile(f); r != "" && !repos[r] {
-			repos[r] = true
-			if err := read(r, FromRepo); err != nil {
-				return nil, err
-			}
-		}
-	}
-	for _, f := range sbxenvFiles {
-		if err := read(TeamFile(f), FromEnv); err != nil {
-			return nil, err
-		}
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

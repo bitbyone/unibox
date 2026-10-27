@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,6 +40,63 @@ type NeededSecret struct {
 	Stored bool     `json:"stored"`
 	// Scope is where the token is stored: global, or a sandbox's name.
 	Scope string `json:"scope,omitempty"`
+	// Page is where the token is made, and Hint what to make there.
+	Page string `json:"page,omitempty"`
+	Hint string `json:"hint,omitempty"`
+}
+
+// TokenGuide says where a service's token is made - a page a browser
+// opens, filled in as far as the service allows - and what to make there.
+type TokenGuide struct {
+	Page string `yaml:"page"`
+	Hint string `yaml:"hint"`
+}
+
+// githubTokenPage is GitHub's page for a fine-grained token, filled in by
+// its parameters: a name, and permissions such as contents=write.
+func githubTokenPage(name, description string, permissions ...string) string {
+	q := url.Values{"name": {name}, "description": {description}}
+	for _, p := range permissions {
+		k, v, _ := strings.Cut(p, "=")
+		q.Set(k, v)
+	}
+	return "https://github.com/settings/personal-access-tokens/new?" + q.Encode()
+}
+
+// knownTokenGuides are the services unibox knows the page of without the
+// team saying it: GitHub's, which sbx's own kits ask for.
+var knownTokenGuides = map[string]TokenGuide{
+	"copilot": {
+		Page: githubTokenPage("unibox copilot", "Copilot requests from unibox's sandboxes", "user_copilot_requests=read"),
+		Hint: "a fine-grained token with Copilot Requests read-only and access to no repository",
+	},
+	"github": {
+		Page: githubTokenPage("unibox github", "git and gh in unibox's sandboxes", "contents=write", "pull_requests=write"),
+		Hint: "a fine-grained token for the repositories the agent works on; leave Workflows out, so it cannot change GitHub Actions",
+	},
+}
+
+// TokenGuides are where an env's tokens are made: unibox's own for the
+// services it knows, under what the team's files say, a later file's over
+// an earlier one's.
+func TokenGuides(sbxenvFiles []string) (map[string]TokenGuide, error) {
+	out := maps.Clone(knownTokenGuides)
+	err := readTeamFiles(sbxenvFiles, func(name, _ string, doc teamDoc) error {
+		for service, g := range doc.Secrets {
+			if !ValidSecretName(service) {
+				return fmt.Errorf("%s: secret %q is no service name sbx takes; use letters, digits and dashes", name, service)
+			}
+			if g.Page != "" {
+				if u, err := url.Parse(g.Page); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+					return fmt.Errorf("%s: secret %s: page %q is no web address; give one starting with https://", name, service, g.Page)
+				}
+			}
+			was := out[service]
+			out[service] = TokenGuide{Page: cmp.Or(g.Page, was.Page), Hint: cmp.Or(g.Hint, was.Hint)}
+		}
+		return nil
+	})
+	return out, err
 }
 
 // NeededSecrets are the services an env needs tokens for: those its kits
@@ -87,9 +147,14 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 	if secretsErr != nil {
 		return nil, fmt.Errorf("cannot list sbx's secrets: %w", secretsErr)
 	}
+	guides, err := TokenGuides(env.Config.Files)
+	if err != nil {
+		return nil, err
+	}
 	out := []NeededSecret{}
 	for _, service := range order {
 		l := *byService[service]
+		l.Page, l.Hint = guides[service].Page, guides[service].Hint
 		for _, s := range secrets {
 			if s.Name != service {
 				continue

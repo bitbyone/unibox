@@ -23,11 +23,18 @@ npm        no      optional  ../kits/registry
 unibox secret set               # sbx asks for each missing token
 unibox secret set --all         # the optional ones too
 unibox secret set github        # one, by name
-unibox secret                   # a list: enter stores, c stores a command
+unibox secret set copilot -g    # open the page where a new one is made first
+unibox secret                   # a list: enter stores, g generates, c stores a command
 ```
 
 sbx asks on your terminal; the value goes from your keyboard to sbx and
 never through unibox. Add `-e dev` for another env than the default.
+
+Before sbx asks, unibox offers *I have a token* or *Generate a new token*
+when it knows where the token is made: GitHub's fine-grained token page
+for `github` and `copilot`, filled in with the permissions they need, and
+any page the env's team names. A new token opens that page in your
+browser; make it there and paste it at sbx's prompt.
 
 To keep a token in another store, give sbx a command it runs on the host
 whenever it needs the value:

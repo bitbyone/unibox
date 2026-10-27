@@ -305,7 +305,7 @@ func (r *SBX) SecretSet(ctx context.Context, service, command string, in io.Read
 	cmd := hostCommand(ctx, "sbx", args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sbx did not store the %s token; run sbx secret set %s yourself: %w", service, service, err)
+		return fmt.Errorf("sbx did not store the %s token; run unibox secret set %s to try again: %w", service, service, err)
 	}
 	return nil
 }

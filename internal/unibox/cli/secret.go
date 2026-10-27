@@ -3,9 +3,12 @@ package cli
 import (
 	"cmp"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -26,8 +29,12 @@ proxy puts them into requests, so none enters a sandbox.
 ls lists them and whether sbx has each. set has sbx ask for the missing
 ones on this terminal - the value goes from the keyboard to sbx, never
 through unibox - or with --command stores a command sbx runs on the host
-for it, a keychain read say.`, Example: `  unibox secret ls -e dev
+for it, a keychain read say. Before sbx asks, set offers to open the page
+where a new token is made, when it knows one: GitHub's for github and
+copilot, and what the team names under secrets: in its unibox.yaml files;
+--generate opens it without asking.`, Example: `  unibox secret ls -e dev
   unibox secret set -e dev
+  unibox secret set copilot --generate
   unibox secret set copilot --command 'security find-generic-password -s copilot -w'
   security find-generic-password -s artifactory -w | unibox secret set artifactory`}
 	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
@@ -77,7 +84,7 @@ for it, a keychain read say.`, Example: `  unibox secret ls -e dev
 		return w.Flush()
 	}})
 	var command string
-	var all bool
+	var all, generate bool
 	set := &cobra.Command{Use: "set [service...]", Short: "Have sbx store the tokens an env lacks, or those named", RunE: func(cmd *cobra.Command, args []string) error {
 		env, list, err := needed(cmd)
 		if err != nil {
@@ -97,20 +104,36 @@ for it, a keychain read say.`, Example: `  unibox secret ls -e dev
 		if command != "" && len(services) != 1 {
 			return fmt.Errorf("--command stores one service's token; name the service")
 		}
+		if command != "" && generate {
+			return fmt.Errorf("--generate makes a token to type in, --command has sbx run one; give one of them")
+		}
 		// Away from a terminal sbx reads the value from stdin, which holds
 		// one.
 		if command == "" && !o.canAsk() && len(services) != 1 {
 			return fmt.Errorf("sbx asks for each token on a terminal; run this in one, or pipe one service's token in")
 		}
+		if generate && !o.canAsk() {
+			return fmt.Errorf("--generate opens the page where the token is made, then sbx asks for it; run this at a terminal, or pipe the token in without --generate")
+		}
+		guides, err := unibox.TokenGuides(env.Config.Files)
+		if err != nil {
+			return err
+		}
 		for _, service := range services {
 			if !unibox.ValidSecretName(service) {
 				return fmt.Errorf("%q is no service name sbx takes; use letters, digits and dashes", service)
 			}
+			guide := guides[service]
 			i := slices.IndexFunc(list, func(l unibox.NeededSecret) bool { return l.Service == service })
 			if i < 0 {
 				fmt.Fprintf(o.log, "env %s does not ask for %s; it is stored all the same\n", env.Name, service)
 			} else if o.canAsk() && command == "" {
 				fmt.Fprintf(o.log, "%s: %s\n", service, cmp.Or(list[i].Description, "the token for "+service))
+			}
+			if command == "" && o.canAsk() {
+				if err := o.offerTokenPage(service, guide, generate); err != nil {
+					return err
+				}
 			}
 			if err := o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log); err != nil {
 				return err
@@ -120,6 +143,7 @@ for it, a keychain read say.`, Example: `  unibox secret ls -e dev
 	}}
 	set.Flags().StringVar(&command, "command", "", "A command sbx runs on the host for the token, instead of asking for it")
 	set.Flags().BoolVar(&all, "all", false, "Ask for the optional tokens too")
+	set.Flags().BoolVarP(&generate, "generate", "g", false, "Open the page where a new token is made, then ask for it")
 	c.AddCommand(set)
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
@@ -134,4 +158,58 @@ for it, a keychain read say.`, Example: `  unibox secret ls -e dev
 		return o.secretUI(cmd, name, func() error { return o.runStep(cmd, "secret", "ls", "-e", name) })
 	}
 	return c
+}
+
+// offerTokenPage asks, before sbx asks for a token, whether the person has
+// one or makes a new one, and for a new one opens the page where it is
+// made. A service whose page unibox does not know goes straight to sbx.
+func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) error {
+	if guide.Page == "" {
+		if generate {
+			return fmt.Errorf("unibox knows no page where the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
+		}
+		return nil
+	}
+	if !generate {
+		choice, err := o.askPick("The "+service+" token", guide.Hint, []pick{{"have", "I have a token"}, {"generate", "Generate a new token"}}, "have")
+		if err != nil {
+			return err
+		}
+		if choice != "generate" {
+			return nil
+		}
+	}
+	if guide.Hint != "" {
+		fmt.Fprintf(o.log, "  %s\n", guide.Hint)
+	}
+	if err := openPage(guide.Page); err != nil {
+		fmt.Fprintf(o.log, "  make it at %s, then paste it here\n", guide.Page)
+	} else {
+		fmt.Fprintf(o.log, "  the browser opens %s; make the token there, then paste it here\n", guide.Page)
+	}
+	return nil
+}
+
+// openPage opens a web address in the person's browser. A browser that
+// keeps its opener waiting is left to it after a moment.
+func openPage(page string) error {
+	name, args := "xdg-open", []string{page}
+	switch runtime.GOOS {
+	case "darwin":
+		name = "open"
+	case "windows":
+		name, args = "rundll32", []string{"url.dll,FileProtocolHandler", page}
+	}
+	c := exec.Command(name, args...)
+	if err := c.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- c.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(2 * time.Second):
+		return nil
+	}
 }
