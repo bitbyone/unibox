@@ -363,6 +363,9 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			// not asked for again for the next.
 			for _, name := range lacking {
 				if err = o.runStep(cmd, "secret", "set", "-e", name); err != nil {
+					if missing, ok := errors.AsType[tokenNotStored](err); ok {
+						return fmt.Errorf("%w; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing", missing.err)
+					}
 					return err
 				}
 			}

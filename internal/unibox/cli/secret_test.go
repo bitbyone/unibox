@@ -36,7 +36,9 @@ case "$1 $2" in
 	printf '['; sep=''
 	[ -f ` + unibox.Quote(secrets) + ` ] && while read -r n; do printf '%s{"scope":"global","type":"service","name":"%s"}' "$sep" "$n"; sep=,; done < ` + unibox.Quote(secrets) + `
 	echo ']' ;;
-"secret set") echo "$3" >> ` + unibox.Quote(secrets) + ` ;;
+"secret set")
+	if [ -f ` + unibox.Quote(filepath.Join(dir, "secret-fails")) + ` ]; then echo "error: secret entry cancelled" >&2; exit 1; fi
+	echo "$3" >> ` + unibox.Quote(secrets) + ` ;;
 esac
 `
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
@@ -165,6 +167,24 @@ func TestSettingATokenOffersThePageWhereANewOneIsMade(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err := run(t, paths, "", "secret", "ls"); err == nil || !strings.Contains(err.Error(), "no web address") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestATokenSbxDidNotStoreSaysHowToGoOn(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "secret-fails"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
+	// sbx has said why on the terminal; its exit status is not repeated.
+	_, _, err := runAt(t, paths, "1\nperson\ny\n", "init", repo)
+	if err == nil || err.Error() != "sbx did not store the anthropic token; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing" {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err = runAt(t, paths, "", "secret", "set", "anthropic"); err == nil || err.Error() != "sbx did not store the anthropic token; run unibox secret to set the tokens still missing" {
 		t.Fatalf("%v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -305,7 +306,12 @@ func (r *SBX) SecretSet(ctx context.Context, service, command string, in io.Read
 	cmd := hostCommand(ctx, "sbx", args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sbx did not store the %s token; run unibox secret set %s to try again: %w", service, service, err)
+		// sbx has said on the terminal why, a cancelled entry say; its exit
+		// status adds nothing to that.
+		if _, exited := errors.AsType[*exec.ExitError](err); exited {
+			return fmt.Errorf("sbx did not store the %s token", service)
+		}
+		return fmt.Errorf("sbx did not store the %s token: %w", service, err)
 	}
 	return nil
 }

@@ -136,7 +136,7 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 				}
 			}
 			if err := o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log); err != nil {
-				return err
+				return tokenNotStored{err}
 			}
 		}
 		return o.success(fmt.Sprintf("sbx has stored %s", strings.Join(services, ", ")))
@@ -159,6 +159,16 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 	}
 	return c
 }
+
+// tokenNotStored is a token sbx did not store, which unibox secret asks
+// for again with the others still missing; init says how to go on there.
+type tokenNotStored struct{ err error }
+
+func (e tokenNotStored) Error() string {
+	return e.err.Error() + "; run unibox secret to set the tokens still missing"
+}
+
+func (e tokenNotStored) Unwrap() error { return e.err }
 
 // offerTokenPage asks, before sbx asks for a token, whether the person has
 // one or makes a new one, and for a new one opens the page where it is
