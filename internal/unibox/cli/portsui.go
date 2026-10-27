@@ -150,9 +150,10 @@ func (m portsModel) View() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", listTitle.Render("Ports of sandbox "+m.sandbox+", until it next starts"))
-	nameW, specW, startW := 4, 7, 0
+	nameW, specW, startW, urlW := 4, 7, 0, 0
+	url := func(r unibox.PortState) string { return cmp.Or(strings.Join(portURLs(r), " "), "-") }
 	for _, r := range m.rows {
-		nameW, specW, startW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r)))
+		nameW, specW, startW, urlW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r))), max(urlW, len(url(r)))
 	}
 	for i, r := range m.rows {
 		mark, state := "  ", portOff.Render("off")
@@ -163,7 +164,7 @@ func (m portsModel) View() string {
 		if i == m.cursor {
 			mark, name = cursorMark(), portCursor.Render(name)
 		}
-		line := fmt.Sprintf("%s%s  %s  %-*s  %-*s  %s  %s", mark, state, name, startW, atStart(r), specW, r.Spec, cmp.Or(strings.Join(portURLs(r), " "), "-"), r.Description)
+		line := fmt.Sprintf("%s%s  %s  %-*s  %-*s  %-*s  %s", mark, state, name, startW, atStart(r), specW, r.Spec, urlW, url(r), r.Description)
 		b.WriteString(strings.TrimRight(line, " ") + "\n")
 	}
 	b.WriteString("\n")
