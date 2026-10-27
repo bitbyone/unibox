@@ -22,6 +22,9 @@ type IndexedRepo struct {
 	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
 	Context     *bool  `yaml:"context,omitempty" json:"context,omitempty"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Instructions are what a task's agents are told of the repository,
+	// gathered with the others' into the task's AGENTS.md.
+	Instructions string `yaml:"instructions,omitempty" json:"instructions,omitempty"`
 	// From is the layer that names it, FromRepo to FromYours, and
 	// DefaultFrom the one that says its Default.
 	From        string `yaml:"-" json:"from,omitempty"`
@@ -103,6 +106,8 @@ func (r *IndexedRepo) UnmarshalYAML(n *yaml.Node) error {
 				r.Ref = v.Value
 			case "description":
 				r.Description = v.Value
+			case "instructions":
+				r.Instructions = v.Value
 			case "context":
 				on, ok := onOff(v.Value)
 				if !ok {
@@ -116,7 +121,7 @@ func (r *IndexedRepo) UnmarshalYAML(n *yaml.Node) error {
 				}
 				r.Default = d
 			default:
-				return fmt.Errorf("line %d: a repository says url, ref, default, context and description, not %s", k.Line, k.Value)
+				return fmt.Errorf("line %d: a repository says url, ref, default, context, description and instructions, not %s", k.Line, k.Value)
 			}
 		}
 		return nil
@@ -127,7 +132,7 @@ func (r *IndexedRepo) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML writes a repository with its address alone as just that, as
 // a person would write it.
 func (r IndexedRepo) MarshalYAML() (any, error) {
-	if r.Ref == "" && r.Default == "" && r.Context == nil && r.Description == "" {
+	if r.Ref == "" && r.Default == "" && r.Context == nil && r.Description == "" && r.Instructions == "" {
 		return r.URL, nil
 	}
 	type plain IndexedRepo
@@ -182,6 +187,9 @@ func layerRepos(out map[string]IndexedRepo, layer map[string]IndexedRepo, from s
 		}
 		if r.Context != nil {
 			was.Context = r.Context
+		}
+		if r.Instructions != "" {
+			was.Instructions = r.Instructions
 		}
 		if r.Default != "" {
 			was.Default, was.DefaultFrom = r.Default, from
@@ -246,7 +254,10 @@ func (m *Manager) SetRepo(env, name string, r IndexedRepo) error {
 		if r.Context == nil {
 			r.Context = was.Context
 		}
-		repos[name] = IndexedRepo{URL: r.URL, Ref: r.Ref, Default: r.Default, Context: r.Context, Description: r.Description}
+		if r.Instructions == "" {
+			r.Instructions = was.Instructions
+		}
+		repos[name] = IndexedRepo{URL: r.URL, Ref: r.Ref, Default: r.Default, Context: r.Context, Description: r.Description, Instructions: r.Instructions}
 		return nil
 	})
 }
@@ -311,7 +322,7 @@ func (m *Manager) SetRepoDefault(env, name, def string) error {
 		case def == "":
 			mine.Default = ""
 			repos[name] = mine
-		case known && mine.URL == "" && mine.Ref == "" && mine.Context == nil && mine.Description == "" && beneath.Default == def:
+		case known && mine.URL == "" && mine.Ref == "" && mine.Context == nil && mine.Description == "" && mine.Instructions == "" && beneath.Default == def:
 			delete(repos, name)
 		default:
 			mine.Default = def

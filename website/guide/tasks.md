@@ -86,6 +86,32 @@ checkout; one that is not is made in the sandbox's clone, or your
 checkout, alone. Named, `task new` takes `--branch`, `--task` and
 `--no-push`.
 
+### What the agent is told
+
+A repository can carry `instructions`, and the env too, at the top of its
+`unibox.yaml` files or your `config.yaml` (for every env, or under
+`envs.<env>`):
+
+```yaml
+instructions: |
+  Answer in Czech. Run the build before you say you are done.
+repos:
+  adrs:
+    url: https://gitlab.example.com/arch/adrs.git
+    default: always
+    instructions: |
+      Read README.md, the index of decisions, before changing a module's
+      boundaries. A new decision is a new record; never edit an old one.
+```
+
+Before each session unibox gathers them into `/work/<task>/AGENTS.md`,
+with `CLAUDE.md` a link to it: the task's repositories first - each read
+or worked in, on which branch - then the env's instructions, then each
+repository's. The agent then starts in `/work/<task>`, above the
+repositories. The file is outside every repository, so it is never
+committed; it is written again at every session and goes when there is
+nothing to say. A repository's own `AGENTS.md` still holds inside it.
+
 Yours win over the team's: `unibox repo add name url|directory [--ref]
 [--default] [--context true|false] [--every-env]`, `unibox repo default
 name always|on|off|-` and `unibox repo rm name` write them.

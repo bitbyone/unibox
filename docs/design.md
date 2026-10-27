@@ -549,6 +549,24 @@ Lists filter fuzzily after `/` (`fuzzy.go`, letters in order, side by
 side and at a word's start counting more). `unibox repo add|rm|default` write the
 person's.
 
+## What a task's agents are told
+
+`instructions` - the env's, at the top of the team's unibox.yaml files and
+the person's config.yaml (every env, then `envs.<env>`), in that order, and
+each indexed repository's - are gathered into `/work/<task>/AGENTS.md`
+before each session (`agentdoc.go`), in the same `sbx exec` that starts
+it: the task's repositories with their role and branch, the env's, then
+each repository's. `CLAUDE.md` links to it, as Claude reads that name;
+Codex and Copilot read `AGENTS.md`. With it the session starts in the
+task's directory rather than its one repository. The file is marked as
+unibox's and goes when nothing is to be said; a task's directory the
+agent cannot write in - sbx makes a mount's parents as root, so
+`mountTask` makes it as the agent first - is said and left.
+
+A task is removed while others of its sandbox work: it waits for its own
+session lock alone, checks its own clones, and takes only its record out
+of the state (`removeTask`).
+
 ## Ports
 
 A host port is the machine's business - what already runs there, what

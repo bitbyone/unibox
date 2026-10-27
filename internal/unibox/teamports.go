@@ -104,6 +104,8 @@ type teamDoc struct {
 	Secrets   map[string]TokenGuide  `yaml:"secrets"`
 	Resources Resources              `yaml:"resources"`
 	Repos     map[string]IndexedRepo `yaml:"repos"`
+	// Instructions are what every task of the env's agents are told.
+	Instructions string `yaml:"instructions"`
 }
 
 // readTeamFiles reads the team's files of an env in the order they apply:

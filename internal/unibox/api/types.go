@@ -17,6 +17,9 @@ type Repository struct {
 	// Mounted is HostPath mounted into the sandbox at the repository's
 	// place in the task instead of cloned.
 	Mounted bool `json:"mounted,omitempty"`
+	// Context is a repository the task reads, which its agents are told to
+	// leave as it is.
+	Context bool `json:"context,omitempty"`
 	// Base is the branch a clone's Branch is made from in the sandbox when
 	// the forge has none: a branch of the task's alone, which unibox never
 	// pushes.

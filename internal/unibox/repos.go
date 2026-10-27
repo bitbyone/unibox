@@ -212,7 +212,7 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 		if r.Branch == "" && !in.Context {
 			r.Branch = req.Branch
 		}
-		r.Base = in.Base
+		r.Base, r.Context = in.Base, in.Context
 		_, statErr := os.Stat(in.Source)
 		local := statErr == nil
 		if local {
@@ -431,7 +431,7 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, []api.N
 		if strings.Contains(path, ":") {
 			return nil, nil, fmt.Errorf("%s has a colon in its path, which a mount cannot name; mount a directory without one", path)
 		}
-		r := api.Repository{Name: in.Name, HostPath: path, Author: req.Author, Mounted: true}
+		r := api.Repository{Name: in.Name, HostPath: path, Author: req.Author, Mounted: true, Context: in.Context}
 		if top, err := git(ctx, path, "rev-parse", "--show-toplevel"); err == nil {
 			r.HostPath = top
 			// A worktree's .git names its main repository by the host's

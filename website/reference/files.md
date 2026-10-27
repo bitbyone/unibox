@@ -42,6 +42,8 @@ ports:                            # yours, for every env
   devtools: {port: '19222:9222', default: off}
 repos:                            # yours, for every env; envs.<env>.repos for one
   notes: {url: https://github.com/me/notes.git, default: always}
+instructions: |                   # yours for every task's agents; envs.<env>.instructions for one
+  Answer in Czech.
 sandboxes:                        # unibox network rules
   dev:
     network:

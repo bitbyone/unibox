@@ -710,3 +710,101 @@ func TestABranchTheForgeLacksIsMadeInTheSandboxFromItsBaseAndNotPushed(t *testin
 		t.Fatal("a branch the forge lacks was taken without a base")
 	}
 }
+
+func TestATaskIsRemovedWhileAnotherTaskOfItsSandboxHasASession(t *testing.T) {
+	t.Parallel()
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range []string{"done", "busy"} {
+		if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: task, Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "main"}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A session works in busy: it holds the sandbox shared and its task.
+	usage, err := m.usage("dev", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer usage.Close()
+	session, err := LockFile(filepath.Join(m.Paths.Config, "locks", "dev-task-busy.lock"), false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := m.Remove(ctx, "dev", "done", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove(ctx, "dev", "busy", false); err == nil || !strings.Contains(err.Error(), "has an active session") {
+		t.Fatalf("%v", err)
+	}
+	b, _ := m.sandbox("dev")
+	if len(b.Tasks) != 1 || b.Tasks[0].ID != "busy" {
+		t.Fatalf("%+v", b.Tasks)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "dev", "work", "done")); err == nil {
+		t.Fatal("the removed task's directory stayed")
+	}
+}
+
+func TestATasksAgentsAreToldItsRepositoriesAndTheirInstructions(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	adrs := "https://forge.invalid/arch/adrs.git"
+	f.remotes[url], f.remotes[adrs] = "file://"+remote, "file://"+remote
+	sandboxes := filepath.Dir(m.Config.Envs["dev"].Files[0])
+	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), `instructions: |
+  Answer in Czech.
+repos:
+  adrs:
+    url: https://forge.invalid/arch/adrs.git
+    default: always
+    instructions: |
+      A new decision is a new record.
+  payments:
+    url: https://forge.invalid/team/payments.git
+    instructions: Money is in cents.
+`)
+	bin, seen := t.TempDir(), filepath.Join(t.TempDir(), "agent")
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\npwd > "+Quote(seen)+"\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Sandbox: "dev", Task: "pricing", Author: "Person <person@example.com>", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}, {Source: adrs, Name: "adrs", Branch: "main", Context: true}}}
+	if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	task := filepath.Join(f.root, "dev", "work", "pricing")
+	b, err := os.ReadFile(filepath.Join(task, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# Task pricing", "- `payments/` - work in it, on main.", "- `adrs/` - read it, on main; change and commit nothing there.", "## Env dev\n\nAnswer in Czech.", "## adrs\n\nA new decision is a new record.", "## payments\n\nMoney is in cents."} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("no %q in\n%s", want, b)
+		}
+	}
+	if link, err := os.Readlink(filepath.Join(task, "CLAUDE.md")); err != nil || link != "AGENTS.md" {
+		t.Fatalf("%q %v", link, err)
+	}
+	// The agent starts above the repositories, where it is told of them.
+	if got, _ := os.ReadFile(seen); !strings.HasSuffix(strings.TrimSpace(string(got)), "/work/pricing") {
+		t.Fatalf("started in %s", got)
+	}
+	// With nothing to say, what unibox wrote goes.
+	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "ports: {}\n")
+	if err := m.Run(ctx, Request{Task: "pricing"}, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(task, "AGENTS.md")); err == nil {
+		t.Fatal("AGENTS.md stayed")
+	}
+}

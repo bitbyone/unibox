@@ -544,14 +544,21 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		return err
 	}
 	defer m.finishRun(b, run, lease, usage, taskLock)
+	// What the task's agents are told is written before each session; with
+	// it, a session starts above the repositories, where AGENTS.md is.
+	instructions := ""
+	if env, err := m.Config.LoadEnv(b.Env); err == nil {
+		instructions = TaskInstructions(t, env)
+	}
 	dir := t.Directory
-	if len(t.Repositories) == 1 {
+	if len(t.Repositories) == 1 && instructions == "" {
 		dir = path.Join(dir, t.Repositories[0].Name)
 	}
+	told := instructionsScript(t, instructions)
 	if req.Shell {
 		// A shell is the user's own session: no agent is credited in its
 		// commits.
-		return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
+		return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", told + sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
 	a := FindAgent(agent)
 	args := append(command, extra...)
@@ -571,7 +578,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 			fmt.Fprintf(errout, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
 		}
 	}
-	script := sessionScript(run.ID, args)
+	script := told + sessionScript(run.ID, args)
 	if a.Setup != "" {
 		script = "(\n" + a.Setup + ") || echo 'unibox: preparing " + a.ID + " failed; it may ask whether to trust the directory' >&2\n" + script
 	}
@@ -695,6 +702,9 @@ func (m *Manager) Remove(ctx context.Context, name, task string, force bool) err
 // host's mounted directories never.
 func (m *Manager) remove(ctx context.Context, name, task string, force bool) error {
 	task = m.taskID(task)
+	if task != "" {
+		return m.removeTask(ctx, name, task, force)
+	}
 	l, err := m.guard(name)
 	if err != nil {
 		return err
@@ -723,43 +733,6 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 			return err
 		}
 	}
-	if task != "" {
-		if err = ValidName(task); err != nil {
-			return err
-		}
-		index := slices.IndexFunc(b.Tasks, func(t api.Task) bool { return t.ID == task })
-		if index < 0 {
-			return fmt.Errorf("task %s not found", task)
-		}
-		removed := b.Tasks[index]
-		if exists {
-			// Mounted directories come out before anything is deleted, and
-			// the guest checks they did: rm -rf would go into a mount and
-			// delete the host's files.
-			if err = m.unmountTask(ctx, b, removed); err != nil {
-				return err
-			}
-			if s := unmountedScript(removed); s != "" {
-				if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", s}}), m.Log); err != nil {
-					return err
-				}
-				// sbx made the mount points as root; rmdir takes only
-				// empty ones.
-				points := []string{"bash", "-c", `for d; do [ ! -d "$d" ] || rmdir -- "$d"; done`, "bash"}
-				for _, mt := range mounts(removed) {
-					points = append(points, mt[1])
-				}
-				if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: points}), m.Log); err != nil {
-					return err
-				}
-			}
-			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"rm", "-rf", "--", removed.Directory}}), m.Log); err != nil {
-				return err
-			}
-		}
-		b.Tasks = slices.Delete(b.Tasks, index, index+1)
-		return m.saveBox(b)
-	}
 	if exists {
 		if err = m.removeBox(ctx, b); err != nil {
 			return err
@@ -776,6 +749,86 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 		return m.Paths.SetSandboxResources(name, Resources{})
 	}
 	return nil
+}
+
+// removeTask takes a task out of its sandbox while other tasks there may
+// work on: it waits for no sandbox, only for its own session to be over,
+// and checks its own clones for unpushed work. Forced, it checks neither.
+func (m *Manager) removeTask(ctx context.Context, name, task string, force bool) error {
+	if err := ValidName(task); err != nil {
+		return err
+	}
+	l, err := m.guard(name)
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+	own, err := LockFile(filepath.Join(m.Paths.Config, "locks", name+"-task-"+task+".lock"), false, false)
+	if err != nil && !force {
+		return fmt.Errorf("task %s has an active session; finish it first, or remove it with --force", task)
+	}
+	if own != nil {
+		defer own.Close()
+	}
+	b, err := m.sandbox(name)
+	if err != nil {
+		return err
+	}
+	_, exists, err := m.findBox(ctx, b)
+	if err != nil && !force {
+		return err
+	}
+	if !force {
+		for _, r := range b.Runs {
+			if r.Task == task && m.runActive(r) {
+				return fmt.Errorf("task %s has an active session; finish it first, or remove it with --force", task)
+			}
+		}
+	}
+	index := slices.IndexFunc(b.Tasks, func(t api.Task) bool { return t.ID == task })
+	if index < 0 {
+		return fmt.Errorf("task %s not found", task)
+	}
+	removed := b.Tasks[index]
+	// Its clones are checked for unpushed work before anything goes.
+	if exists && !force {
+		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(safeToRemoveScript(removed))}), m.Log); err != nil {
+			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before removing it", task)
+		}
+	}
+	if exists {
+		// Mounted directories come out before anything is deleted, and
+		// the guest checks they did: rm -rf would go into a mount and
+		// delete the host's files.
+		if err = m.unmountTask(ctx, b, removed); err != nil {
+			return err
+		}
+		if s := unmountedScript(removed); s != "" {
+			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", s}}), m.Log); err != nil {
+				return err
+			}
+			// sbx made the mount points as root; rmdir takes only
+			// empty ones.
+			points := []string{"bash", "-c", `for d; do [ ! -d "$d" ] || rmdir -- "$d"; done`, "bash"}
+			for _, mt := range mounts(removed) {
+				points = append(points, mt[1])
+			}
+			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: points}), m.Log); err != nil {
+				return err
+			}
+		}
+		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"rm", "-rf", "--", removed.Directory}}), m.Log); err != nil {
+			return err
+		}
+	}
+	// Only this task's record goes; a session started meanwhile in another
+	// task of the sandbox has recorded its run in the same state.
+	return m.Paths.State(func(s *State) error {
+		box := s.Sandboxes[name]
+		box.Tasks = slices.DeleteFunc(box.Tasks, func(t api.Task) bool { return t.ID == task })
+		s.Sandboxes[name] = box
+		return nil
+	})
 }
 
 // mounts are a task's mounted repositories: each host directory and the
@@ -881,6 +934,13 @@ func unescapeMountinfo(s string) string {
 // mountTask mounts a task's host directories into its sandbox, at their
 // places in the task, before the task is prepared there.
 func (m *Manager) mountTask(ctx context.Context, b api.Sandbox, t api.Task) error {
+	// Made by the agent first, the task's directory stays the agent's: sbx
+	// makes a mount's missing parents as root.
+	if len(mounts(t)) > 0 {
+		if err := runQuiet(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"mkdir", "-p", t.Directory}})); err != nil {
+			return err
+		}
+	}
 	for _, mt := range mounts(t) {
 		if err := m.SBX.Mount(ctx, b.Name, mt[0], mt[1]); err != nil {
 			return err
@@ -924,11 +984,12 @@ func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, t api.Task) er
 func TaskID(lead string, repos []api.Repository) string { return taskIDNamed(lead, repos) }
 
 // withoutBase is a repository as its task is known by: where a branch
-// made in the sandbox started is no part of it.
+// made in the sandbox started, and whether it is only read, are no part of
+// it.
 func withoutBase(repos []api.Repository) []api.Repository {
 	out := slices.Clone(repos)
 	for i := range out {
-		out[i].Base = ""
+		out[i].Base, out[i].Context = "", false
 	}
 	return out
 }

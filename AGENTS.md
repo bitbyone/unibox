@@ -180,6 +180,8 @@ about it. Keep command output short: pipe through `head`, `tail` or
   repository (`RepoInput.Clone`); `context` ones (unsaid: `always`) keep
   their ref and are never pushed to. `task new` picks on one screen
   (`taskPickModel`): roles, work branch, push per row, task name.
+  `instructions:` of the env and each repository become the task's
+  `/work/<task>/AGENTS.md` (`CLAUDE.md` a link) before each session.
 - **unibox 1 is set aside, not migrated.** Its `state.json` becomes
   `state.v1.json` with the old sandboxes named once; its config.yaml keys
   are read and dropped at the next write.

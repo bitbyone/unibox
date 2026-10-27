@@ -56,6 +56,9 @@ type Config struct {
 	// Repos are the person's repositories for every env, under each env's
 	// own and over the teams'.
 	Repos map[string]IndexedRepo `yaml:"repos,omitempty" json:"repos,omitempty"`
+	// Instructions are the person's for every task's agents, after the
+	// team's and before each env's own.
+	Instructions string `yaml:"instructions,omitempty" json:"instructions,omitempty"`
 	// Sandboxes are what the person keeps for one sandbox, by its name.
 	Sandboxes map[string]SandboxConfig `yaml:"sandboxes,omitempty" json:"sandboxes,omitempty"`
 
