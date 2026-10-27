@@ -79,7 +79,11 @@ func needsStatus(needs []api.Need) int {
 
 func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 	for attempt := 0; attempt < 4; attempt++ {
-		check, err := o.manager.Check(cmd.Context(), *r)
+		var check api.Check
+		err := o.waiting("checking what the task needs", func() (err error) {
+			check, err = o.manager.Check(cmd.Context(), *r)
+			return err
+		})
 		if err != nil {
 			return err
 		}

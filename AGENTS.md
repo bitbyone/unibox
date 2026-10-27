@@ -177,8 +177,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
   unibox.yaml files and the person's config.yaml, `repoindex.go`) gives
   tasks repositories by name; `default: always` ones go into every new
   task, cloned even beside mounted directories, as mount or clone is per
-  repository (`RepoInput.Clone`). `task new` picks from it with
-  `pickModel`, then runs `run --clone`.
+  repository (`RepoInput.Clone`); `context` ones (unsaid: `always`) keep
+  their ref and are never pushed to. `task new` picks on one screen
+  (`taskPickModel`): roles, work branch, push per row, task name.
 - **unibox 1 is set aside, not migrated.** Its `state.json` becomes
   `state.v1.json` with the old sandboxes named once; its config.yaml keys
   are read and dropped at the next write.

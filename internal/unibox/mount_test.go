@@ -293,3 +293,54 @@ func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testi
 		t.Fatalf("%v %v", missing, stray)
 	}
 }
+
+func TestAMountedCheckoutAskedToPushHasItsNewBranchOnTheForge(t *testing.T) {
+	t.Parallel()
+	remote, host := remoteFixture(t)
+	m, _ := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Sandbox: "dev", Task: "pushed", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: host, Name: "web", Branch: "feat/web", Push: true}}}
+	req.decide()
+	if _, err := m.Prepare(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitTest(t, host, "branch", "--show-current"); got != "feat/web" {
+		t.Fatal(got)
+	}
+	if out := gitTest(t, remote, "branch", "--list", "feat/web"); !strings.Contains(out, "feat/web") {
+		t.Fatal("the branch did not reach the forge")
+	}
+}
+
+func TestAMountedContextCheckoutKeepsItsBranchAndOneWithoutAForgeIsNotPushed(t *testing.T) {
+	t.Parallel()
+	_, host := remoteFixture(t)
+	m, _ := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Sandbox: "dev", Task: "read", Branch: "feat/x", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: host, Name: "adrs", Context: true}}}
+	req.decide()
+	if _, err := m.Prepare(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitTest(t, host, "branch", "--show-current"); got != "main" {
+		t.Fatalf("a context checkout was switched to %s", got)
+	}
+	// A checkout with no origin is refused a push before it is switched.
+	alone := t.TempDir()
+	gitTest(t, alone, "init", "-q", "-b", "main")
+	gitTest(t, alone, "commit", "-q", "--allow-empty", "-m", "first")
+	req = Request{Sandbox: "dev", Task: "alone", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: alone, Name: "alone", Branch: "feat/y", Push: true}}}
+	req.decide()
+	if _, err := m.Prepare(ctx, req); err == nil || !strings.Contains(err.Error(), "no origin to push") {
+		t.Fatalf("%v", err)
+	}
+	if got := gitTest(t, alone, "branch", "--show-current"); got != "main" {
+		t.Fatalf("the checkout was switched to %s", got)
+	}
+}

@@ -36,12 +36,12 @@ func TestATaskIsPickedAndActedOnByAKey(t *testing.T) {
 		kind, task string
 		agent      string
 	}{
-		{[]string{"r"}, "resume", "t1", ""},
+		{[]string{"r"}, "repos", "t1", ""},
 		{[]string{"j", "enter"}, "resume", "t2", ""},
 		{[]string{"j", "j", "s"}, "shell", "t2", ""},
 		// The picker starts at the task's agent.
 		{[]string{"a", "l", "enter"}, "resume", "t1", "copilot"},
-		{[]string{"a", "h", "h", "h", "r"}, "resume", "t1", "claude"},
+		{[]string{"a", "h", "h", "h", "enter"}, "resume", "t1", "claude"},
 		{[]string{"a", "esc", "n"}, "rename", "t1", ""},
 		{[]string{"d", "n", "d", "y"}, "remove", "t1", ""},
 	} {

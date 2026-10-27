@@ -3,6 +3,7 @@ package unibox
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -12,16 +13,50 @@ import (
 // task by its name: its forge address, the branch a task works on unless
 // told otherwise, and whether a new task takes it - always, every new task
 // of the env, mounted or cloned; on, picked to begin with in unibox task
-// new; off, only when picked.
+// new; off, only when picked. A context repository - decisions, a
+// specification - is one a task reads: it stays on its ref, and no task's
+// branch is made or pushed there. Unsaid, one that says always is one.
 type IndexedRepo struct {
 	URL         string `yaml:"url,omitempty" json:"url"`
 	Ref         string `yaml:"ref,omitempty" json:"ref,omitempty"`
 	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
+	Context     *bool  `yaml:"context,omitempty" json:"context,omitempty"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 	// From is the layer that names it, FromRepo to FromYours, and
 	// DefaultFrom the one that says its Default.
 	From        string `yaml:"-" json:"from,omitempty"`
 	DefaultFrom string `yaml:"-" json:"default_from,omitempty"`
+}
+
+// isPath says whether an address is a directory of the host rather than a
+// forge's: absolute, or under the home or the current directory.
+func isPath(address string) bool {
+	return strings.HasPrefix(address, "/") || strings.HasPrefix(address, "~") || strings.HasPrefix(address, ".")
+}
+
+// LocalPath is the host directory a repository is, which a task mounts;
+// "" for one a task clones from its forge.
+func (r IndexedRepo) LocalPath() string {
+	if !isPath(r.URL) {
+		return ""
+	}
+	p, err := ExpandPath(r.URL)
+	if err != nil {
+		return ""
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	return p
+}
+
+// IsContext says whether a task reads the repository rather than works in
+// it.
+func (r IndexedRepo) IsContext() bool {
+	if r.Context != nil {
+		return *r.Context
+	}
+	return r.Default == RepoAlways
 }
 
 // What a repository's default may be.
@@ -68,6 +103,12 @@ func (r *IndexedRepo) UnmarshalYAML(n *yaml.Node) error {
 				r.Ref = v.Value
 			case "description":
 				r.Description = v.Value
+			case "context":
+				on, ok := onOff(v.Value)
+				if !ok {
+					return fmt.Errorf("line %d: a repository's context is true or false", v.Line)
+				}
+				r.Context = &on
 			case "default":
 				d, ok := repoDefault(v.Value)
 				if !ok {
@@ -75,7 +116,7 @@ func (r *IndexedRepo) UnmarshalYAML(n *yaml.Node) error {
 				}
 				r.Default = d
 			default:
-				return fmt.Errorf("line %d: a repository says url, ref, default and description, not %s", k.Line, k.Value)
+				return fmt.Errorf("line %d: a repository says url, ref, default, context and description, not %s", k.Line, k.Value)
 			}
 		}
 		return nil
@@ -86,7 +127,7 @@ func (r *IndexedRepo) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML writes a repository with its address alone as just that, as
 // a person would write it.
 func (r IndexedRepo) MarshalYAML() (any, error) {
-	if r.Ref == "" && r.Default == "" && r.Description == "" {
+	if r.Ref == "" && r.Default == "" && r.Context == nil && r.Description == "" {
 		return r.URL, nil
 	}
 	type plain IndexedRepo
@@ -105,8 +146,11 @@ func validRepo(name string, r IndexedRepo, known bool) error {
 		}
 		return nil
 	}
+	if isPath(r.URL) {
+		return nil
+	}
 	if _, err := CloneURL(r.URL); err != nil {
-		return fmt.Errorf("repository %s: %w", name, err)
+		return fmt.Errorf("repository %s: %w; or give a directory of this machine, starting with / or ~", name, err)
 	}
 	return nil
 }
@@ -135,6 +179,9 @@ func layerRepos(out map[string]IndexedRepo, layer map[string]IndexedRepo, from s
 		}
 		if r.Description != "" {
 			was.Description = r.Description
+		}
+		if r.Context != nil {
+			was.Context = r.Context
 		}
 		if r.Default != "" {
 			was.Default, was.DefaultFrom = r.Default, from
@@ -179,6 +226,9 @@ func envRepos(ec EnvConfig, global map[string]IndexedRepo) (map[string]IndexedRe
 // or with env "" for every env. A field r leaves out is kept from what the
 // person had.
 func (m *Manager) SetRepo(env, name string, r IndexedRepo) error {
+	if p := r.LocalPath(); p != "" && !isDir(p) {
+		return fmt.Errorf("repository %s: %s is no directory of this machine", name, r.URL)
+	}
 	return m.updateRepos(env, func(_ Config, repos map[string]IndexedRepo) error {
 		was := repos[name]
 		if r.URL == "" {
@@ -193,7 +243,10 @@ func (m *Manager) SetRepo(env, name string, r IndexedRepo) error {
 		if r.Default == "" {
 			r.Default = was.Default
 		}
-		repos[name] = IndexedRepo{URL: r.URL, Ref: r.Ref, Default: r.Default, Description: r.Description}
+		if r.Context == nil {
+			r.Context = was.Context
+		}
+		repos[name] = IndexedRepo{URL: r.URL, Ref: r.Ref, Default: r.Default, Context: r.Context, Description: r.Description}
 		return nil
 	})
 }
@@ -258,7 +311,7 @@ func (m *Manager) SetRepoDefault(env, name, def string) error {
 		case def == "":
 			mine.Default = ""
 			repos[name] = mine
-		case known && mine.URL == "" && mine.Ref == "" && mine.Description == "" && beneath.Default == def:
+		case known && mine.URL == "" && mine.Ref == "" && mine.Context == nil && mine.Description == "" && beneath.Default == def:
 			delete(repos, name)
 		default:
 			mine.Default = def

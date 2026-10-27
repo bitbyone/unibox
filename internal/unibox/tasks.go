@@ -21,12 +21,20 @@ import (
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-func taskID(repos []api.Repository) string {
+func taskID(repos []api.Repository) string { return taskIDNamed("", repos) }
+
+// taskIDNamed is a task's name after the repository named lead, else its
+// first, and a digest of them all.
+func taskIDNamed(lead string, repos []api.Repository) string {
 	name := "task"
 	if len(repos) > 0 {
-		name = repos[0].Name
-		if repos[0].HostPath != "" {
-			candidate := strings.ToLower(filepath.Base(repos[0].HostPath))
+		first := repos[0]
+		if i := slices.IndexFunc(repos, func(r api.Repository) bool { return r.Name == lead }); i >= 0 {
+			first = repos[i]
+		}
+		name = first.Name
+		if first.HostPath != "" {
+			candidate := strings.ToLower(filepath.Base(first.HostPath))
 			if ValidName(candidate) == nil {
 				name = candidate
 			}
@@ -77,7 +85,12 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 	own := req.own(repos)
 	id := req.Task
 	if id == "" {
-		id = taskID(own)
+		// Named after a repository worked in, not one only read.
+		lead := ""
+		if i := slices.IndexFunc(own, func(r api.Repository) bool { return !req.contextNames()[r.Name] }); i >= 0 {
+			lead = own[i].Name
+		}
+		id = taskIDNamed(lead, own)
 		// The same repositories in another sandbox are another task, and a
 		// task's name has to say which one without naming the sandbox.
 		if other := taskOwner(state, id); other != "" && other != b.Name {
@@ -95,12 +108,12 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 		if old.ID == id {
 			// A task grown by add-repo is still the task its first
 			// repositories name; they find it with all it holds now.
-			if digest(old.Repositories) != digest(repos) {
-				if !containsRepositories(old.Repositories, own) {
-					return t, fmt.Errorf("task %s belongs to different repositories, branches or authors; choose another --task name", id)
-				}
-				t.Repositories = old.Repositories
+			// It holds what it was given, where a branch made in the
+			// sandbox started included.
+			if !containsRepositories(old.Repositories, own) {
+				return t, fmt.Errorf("task %s belongs to different repositories, branches or authors; choose another --task name", id)
 			}
+			t.Repositories = old.Repositories
 			if resume && old.State == "ready" {
 				return old, nil
 			}
@@ -159,7 +172,7 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 		return nil, err
 	}
 	if req.Push {
-		if err = pushRepositories(ctx, repos, req.alwaysNames()); err != nil {
+		if err = pushRepositories(ctx, repos, req.contextNames()); err != nil {
 			return nil, err
 		}
 		repos, needs, err = ResolveRepositories(ctx, req)
@@ -170,8 +183,31 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 	if err = checkNeeds(needs); err != nil {
 		return nil, err
 	}
+	// A repository asked alone to push gets its branch on the forge: made
+	// there for a clone, pushed from the host for a mounted checkout, once
+	// it is on it. One with no forge is refused before a checkout moves.
+	push := req.names(func(in RepoInput) bool { return in.Push && !in.Context })
+	for _, r := range repos {
+		if !push[r.Name] {
+			continue
+		}
+		origin := r.URL != ""
+		if r.HostPath != "" {
+			_, err := git(ctx, r.HostPath, "remote", "get-url", "origin")
+			origin = err == nil
+		}
+		if !origin {
+			return nil, fmt.Errorf("%s has no origin to push branch %s to; leave its push off, or give it an origin", cmp.Or(r.HostPath, r.Name), r.Branch)
+		}
+	}
 	if req.Mount {
 		if err = switchMounted(ctx, repos); err != nil {
+			return nil, err
+		}
+	}
+	if len(push) > 0 {
+		these := slices.DeleteFunc(slices.Clone(repos), func(r api.Repository) bool { return !push[r.Name] })
+		if err = pushRepositories(ctx, these, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -180,6 +216,7 @@ func resolveForTask(ctx context.Context, req Request) ([]api.Repository, error) 
 
 // containsRepositories says whether every one of want is among have, as it is.
 func containsRepositories(have, want []api.Repository) bool {
+	have, want = withoutBase(have), withoutBase(want)
 	for _, w := range want {
 		if !slices.ContainsFunc(have, func(h api.Repository) bool { return digest(h) == digest(w) }) {
 			return false
@@ -879,4 +916,19 @@ func (m *Manager) unmountTask(ctx context.Context, b api.Sandbox, t api.Task) er
 		fmt.Fprintf(m.Log, "unmounted %s from sandbox %s\n", mt[0], b.Name)
 	}
 	return nil
+}
+
+// TaskID is the name a task of these repositories gets when it is given
+// none, after the one named lead - else its first - with a digest of their
+// forge addresses, branches and checkouts.
+func TaskID(lead string, repos []api.Repository) string { return taskIDNamed(lead, repos) }
+
+// withoutBase is a repository as its task is known by: where a branch
+// made in the sandbox started is no part of it.
+func withoutBase(repos []api.Repository) []api.Repository {
+	out := slices.Clone(repos)
+	for i := range out {
+		out[i].Base = ""
+	}
+	return out
 }

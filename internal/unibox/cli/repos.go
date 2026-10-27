@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -22,6 +23,14 @@ import (
 // repoFrom says where an indexed repository, or its default, comes from.
 func repoFrom(from string) string {
 	return map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours, every env", unibox.FromYours: "yours"}[from]
+}
+
+// repoRole says whether a task works in a repository or reads it.
+func repoRole(r unibox.IndexedRepo) string {
+	if r.IsContext() {
+		return "context"
+	}
+	return "work"
 }
 
 // repoDefaultText is a repository's default, marked when it is the
@@ -68,16 +77,17 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 			return nil
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "REPO\tREF\tDEFAULT\tFROM\tURL\tDESCRIPTION")
+		fmt.Fprintln(w, "REPO\tROLE\tREF\tDEFAULT\tFROM\tURL\tDESCRIPTION")
 		for _, name := range sorted(env.Repos) {
 			r := env.Repos[name]
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", name, cmp.Or(r.Ref, "-"), repoDefaultText(r), repoFrom(r.From), r.URL, r.Description)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, repoRole(r), cmp.Or(r.Ref, "-"), repoDefaultText(r), repoFrom(r.From), r.URL, r.Description)
 		}
 		return w.Flush()
 	}}
 	var add unibox.IndexedRepo
 	var everyEnv bool
-	addCmd := &cobra.Command{Use: "add name url", Args: cobra.ExactArgs(2), Short: "Name a repository of yours, for the env or every env", RunE: func(cmd *cobra.Command, args []string) error {
+	var contextFlag string
+	addCmd := &cobra.Command{Use: "add name url|directory", Args: cobra.ExactArgs(2), Short: "Name a repository of yours, a forge's to clone or a directory to mount, for the env or every env", RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := o.repoScope(envFlag, everyEnv)
 		if err != nil {
 			return err
@@ -89,6 +99,13 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 			}
 			add.Default = d
 		}
+		if contextFlag != "" {
+			on, err := strconv.ParseBool(contextFlag)
+			if err != nil {
+				return fmt.Errorf("--context is true or false")
+			}
+			add.Context = &on
+		}
 		add.URL = args[1]
 		if err := o.manager.SetRepo(env, args[0], add); err != nil {
 			return err
@@ -98,6 +115,7 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 	addCmd.Flags().StringVar(&add.Ref, "ref", "", "Branch a task works on (default: the forge's default branch)")
 	addCmd.Flags().StringVar(&add.Default, "default", "", "always, on or off (default off)")
 	addCmd.Flags().StringVar(&add.Description, "description", "", "What it is, shown where it is picked")
+	addCmd.Flags().StringVar(&contextFlag, "context", "", "true for one a task reads and keeps on its ref (default: true when always)")
 	addCmd.Flags().BoolVar(&everyEnv, "every-env", false, "Name it for every env rather than this one")
 	var rmEvery bool
 	rm := &cobra.Command{Use: "rm name", Args: cobra.ExactArgs(1), Short: "Forget a repository of yours", RunE: func(cmd *cobra.Command, args []string) error {
@@ -177,7 +195,7 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 		if err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: "repositories of env " + envName, header: []string{"REPO", "REF", "DEFAULT", "FROM", "ABOUT"}, actions: []listAction{
+		m := listModel{title: "repositories of env " + envName, header: []string{"REPO", "ROLE", "REF", "DEFAULT", "FROM", "ABOUT"}, actions: []listAction{
 			{key: "n", name: "new", help: "new task with it"},
 			{key: " ", name: "default", help: "off/on/always"},
 			{key: "a", name: "add", help: "add", any: true},
@@ -192,7 +210,11 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 			case unibox.RepoOff:
 				def = portOff.Render(def)
 			}
-			m.rows = append(m.rows, []string{name, cmp.Or(r.Ref, "-"), def, repoFrom(r.From), cmp.Or(r.Description, r.URL)})
+			role := repoRole(r)
+			if r.IsContext() {
+				role = portOff.Render(role)
+			}
+			m.rows = append(m.rows, []string{name, role, cmp.Or(r.Ref, "-"), def, repoFrom(r.From), cmp.Or(r.Description, r.URL)})
 			m.ids = append(m.ids, name)
 		}
 		return m, nil
@@ -224,7 +246,13 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 			if err != nil {
 				return "", err
 			}
-			url, err := o.askText("Forge address of "+name, "https://host/group/repo.git, or git@host:group/repo.git", "", func(s string) error {
+			url, err := o.askText("Address of "+name, "https://host/group/repo.git or git@host:group/repo.git, cloned; or a directory of this machine, mounted", "", func(s string) error {
+				if p := (unibox.IndexedRepo{URL: s}).LocalPath(); p != "" {
+					if !isDirectory(p) {
+						return fmt.Errorf("%s is no directory of this machine", s)
+					}
+					return nil
+				}
 				_, err := unibox.CloneURL(s)
 				return err
 			})
@@ -265,6 +293,7 @@ func (o *options) withIndexedRepos(req *unibox.Request, always bool) error {
 		// Without an env to read, the task's own preparation says why.
 		return nil
 	}
+	mounts := false
 	for i, in := range req.Repositories {
 		r, named := env.Repos[in.Source]
 		if !named || in.Name != "" {
@@ -274,8 +303,20 @@ func (o *options) withIndexedRepos(req *unibox.Request, always bool) error {
 			continue
 		}
 		// A branch the person gives wins over the index's.
-		req.Repositories[i] = unibox.RepoInput{Source: r.URL, Name: in.Source, Branch: cmp.Or(in.Branch, req.Branch, r.Ref), Clone: true}
+		req.Repositories[i] = indexedInput(in.Source, r, cmp.Or(in.Branch, req.Branch, r.Ref))
+		mounts = mounts || r.LocalPath() != ""
 	}
+	defer func() {
+		// A directory of the index is mounted, so an address beside it is
+		// cloned rather than turning the task to clones.
+		if mounts {
+			for i, in := range req.Repositories {
+				if p, err := unibox.ExpandPath(in.Source); err != nil || !isDirectory(p) {
+					req.Repositories[i].Clone = true
+				}
+			}
+		}
+	}()
 	if !always || req.Task != "" && o.taskExists(req.Task) {
 		return nil
 	}
@@ -287,12 +328,24 @@ func (o *options) withIndexedRepos(req *unibox.Request, always bool) error {
 	}
 	for _, name := range sorted(env.Repos) {
 		r := env.Repos[name]
-		if r.Default != unibox.RepoAlways || asked[unibox.SourceURL(context.Background(), r.URL)] || slices.ContainsFunc(req.Repositories, func(in unibox.RepoInput) bool { return in.Name == name }) {
+		if r.Default != unibox.RepoAlways || asked[unibox.SourceURL(context.Background(), cmp.Or(r.LocalPath(), r.URL))] || slices.ContainsFunc(req.Repositories, func(in unibox.RepoInput) bool { return in.Name == name }) {
 			continue
 		}
-		req.Repositories = append(req.Repositories, unibox.RepoInput{Source: r.URL, Name: name, Branch: r.Ref, Clone: true, Always: true})
+		in := indexedInput(name, r, r.Ref)
+		in.Always, in.Context = true, r.IsContext()
+		req.Repositories = append(req.Repositories, in)
+		mounts = mounts || r.LocalPath() != ""
 	}
 	return nil
+}
+
+// indexedInput is a repository of the index as a task takes it: a host
+// directory mounted, a forge's cloned.
+func indexedInput(name string, r unibox.IndexedRepo, branch string) unibox.RepoInput {
+	if p := r.LocalPath(); p != "" {
+		return unibox.RepoInput{Source: p, Name: name, Branch: branch}
+	}
+	return unibox.RepoInput{Source: r.URL, Name: name, Branch: branch, Clone: true}
 }
 
 // taskExists says whether a task of that name or alias is unibox's.
@@ -312,16 +365,22 @@ func (o *options) taskExists(name string) bool {
 // taskNewCommand starts a task on repositories of the env's index, picked
 // at a terminal or named, each cloned from its forge.
 func (o *options) taskNewCommand() *cobra.Command {
-	var sandbox, envFlag, task, agent, author string
-	var shell bool
+	var sandbox, envFlag, task, agent, author, branch string
+	var shell, noPush bool
 	c := &cobra.Command{Use: "new [repo...]", Short: "Start a task on repositories of the env's index, picked or named, each cloned", Long: `Start a task on repositories the env's index names (unibox repo ls),
-each cloned from its forge on its branch. At a terminal without names, a
-list to filter by typing offers them, those that say on or always picked;
-named, or without a terminal, the task takes those named and every one
-that says always - with no names, those that say on as well. The task then
-runs as unibox run does.`, Example: "  unibox task new\n  unibox task new payments adrs\n  unibox task new spec --task pricing --shell"}
+each cloned from its forge. A repository is worked in, or read - a
+context one, such as decisions or a specification, which stays on its ref
+and is never pushed to. Those worked in get the task's branch, made on the
+forge from its default branch when it has none, else their ref.
+
+At a terminal without names, one screen offers them: space picks, c
+switches work and context, b types the branch, t the task's name, / filters,
+and each row shows the branch it gets and whether it is made; enter
+starts. Named, or without a terminal, the task takes those named and every
+one that says always - with no names, those that say on as well - with
+--branch and --task. The task then runs as unibox run does.`, Example: "  unibox task new\n  unibox task new payments adrs --branch feat/pricing\n  unibox task new spec --task pricing --shell"}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
-		req := unibox.Request{Sandbox: sandbox, Env: envFlag}
+		req := unibox.Request{Sandbox: sandbox, Env: envFlag, Task: task, Agent: agent, Author: author, Shell: shell}
 		o.defaultTarget(&req)
 		_, env, err := o.manager.Definition(req)
 		if err != nil {
@@ -330,61 +389,61 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new paymen
 		if len(env.Repos) == 0 {
 			return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:", env.Name)
 		}
-		names := sorted(env.Repos)
 		for _, a := range args {
 			if _, ok := env.Repos[a]; !ok {
 				return fmt.Errorf("env %s names no repository %s; unibox repo ls lists them", env.Name, a)
 			}
 		}
-		chosen := []string{}
-		switch {
-		case len(args) > 0:
-			for _, n := range names {
-				if slices.Contains(args, n) || env.Repos[n].Default == unibox.RepoAlways {
-					chosen = append(chosen, n)
-				}
+		// What the task takes: picked at a terminal, else named, else the
+		// index's defaults; each worked in or read as the index says.
+		picked := taskPickModel{branch: branch, task: task, rows: taskRows(cmd.Context(), env.Repos)}
+		for i, r := range picked.rows {
+			if len(args) > 0 {
+				named := slices.Contains(args, r.name)
+				picked.rows[i].picked = named || r.repo.Default == unibox.RepoAlways
+				picked.rows[i].preset = !named
 			}
-		case o.canAsk():
-			if chosen, err = o.pick(cmd, "Repositories for a new task in env "+env.Name, repoItems(env.Repos)); err != nil {
+			picked.rows[i].push = picked.rows[i].push && !noPush
+		}
+		if len(args) == 0 && o.canAsk() {
+			if picked, err = o.pickTask(cmd, env, nil, branch, noPush); err != nil {
 				return err
 			}
-		default:
-			for _, n := range names {
-				if env.Repos[n].Default != unibox.RepoOff {
-					chosen = append(chosen, n)
-				}
-			}
 		}
-		if len(chosen) == 0 {
+		// The name the screen showed is the one the task gets.
+		req.Task = cmp.Or(picked.taskName(), req.Task)
+		// A work branch is pushed, or made on the forge, where asked; a
+		// context repository is never pushed to.
+		req.Repositories = picked.inputs()
+		if len(req.Repositories) == 0 {
 			return fmt.Errorf("no repository picked; pick one with space, or name it: unibox task new <repo>")
 		}
-		run := []string{"run", "--clone"}
-		for _, n := range chosen {
-			r := env.Repos[n]
-			run = append(run, "--repo", n+"="+r.URL)
-			if r.Ref != "" {
-				run = append(run, "--branch", r.Ref)
-			}
+		if o.json {
+			return fmt.Errorf("task new owns the terminal, as run does; use task check or prepare with --json")
 		}
-		for flag, v := range map[string]string{"-s": req.Sandbox, "-e": req.Env, "--task": task, "--agent": agent, "--author": author} {
-			if v != "" {
-				run = append(run, flag, v)
-			}
+		if err := o.preflight(cmd, &req); err != nil {
+			return err
 		}
-		if shell {
-			run = append(run, "--shell")
-		}
-		return o.runStep(cmd, run...)
+		return o.manager.Run(cmd.Context(), req, o.input, o.output, o.log, nil)
 	}
 	f := c.Flags()
 	f.StringVarP(&sandbox, "sandbox", "s", "", "Sandbox to work in (default: UNIBOX_SANDBOX, the context's, or the only one)")
 	f.StringVarP(&envFlag, "env", "e", "", "Env whose index and sandbox to use (default with no sandbox: UNIBOX_ENV, the context's, or the only one)")
 	f.StringVar(&task, "task", "", "Name for the task, unique across sandboxes")
+	f.StringVar(&branch, "branch", "", "Branch of the repositories worked in, made where it is missing (default: each its ref, its checkout's branch or the forge's default)")
+	f.BoolVar(&noPush, "no-push", false, "Make the branch in the sandbox, or the host's checkout, alone; never on the forge")
 	f.StringVar(&author, "author", "", "Commit author, as Name <email>")
 	f.BoolVar(&shell, "shell", false, "Open a shell in the task's directory instead of running an agent")
 	f.StringVar(&agent, "agent", "", "Agent to run, when the sandbox has it")
 	c.MarkFlagsMutuallyExclusive("shell", "agent")
 	return c
+}
+
+// pickItem is one of the repositories offered: its name, the line it
+// shows, and whether it is picked to begin with.
+type pickItem struct {
+	value, label string
+	picked       bool
 }
 
 // repoItems are an index's repositories to pick from, aligned in columns,

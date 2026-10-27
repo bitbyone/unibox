@@ -441,6 +441,10 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 				return err
 			}
 			return o.manager.Run(ctx, req, o.input, o.output, o.log, nil)
+		case "repos":
+			if err := o.addTaskRepos(cmd, t); err != nil && !errors.Is(err, errCancelled) {
+				fmt.Fprintln(o.log, err)
+			}
 		case "rename":
 			alias, err := o.askText("Name of task "+t.ID, "Its ID takes the alias away", cmp.Or(t.Alias, t.ID), nil)
 			if err != nil {

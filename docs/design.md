@@ -521,12 +521,26 @@ beside mounted directories - a task's repositories are mounted or cloned
 each on its own (`Repository.Mounted`, `RepoInput.Clone`), and `decide`
 leaves those always cloned out of whether the rest are mounted; `on`
 has `task new` pick it to begin with; `off` is only there to pick. A task
-that exists keeps what it holds. A name works wherever a repository does,
+that exists keeps what it holds. `context` (unsaid: `always`) marks one a
+task reads: a shared branch and push leave it on its ref
+(`RepoInput.Context`). A directory of the host in the index is mounted.
+Per input, `Push` makes a work branch on the forge from its default, or
+pushes a mounted checkout's after it is switched; `Fork` makes a clone's
+branch in the sandbox alone from `Base` (`api.Repository.Base`, the
+prepare script cloning the base and switching), which a later
+preparation leaves as it is until the forge has it. A name works wherever a repository does,
 unless a directory of that name is here. `task new` picks at a terminal
-from `pickModel` (`pickui.go`), a list narrowed by typing, fuzzily
-(`fuzzy.go`, letters in order, side by side and at a word's start
-counting more), and runs `run --clone` with what was picked; the noun
-lists filter alike after `/`. `unibox repo add|rm|default` write the
+on one screen (`taskPickModel`, `tasknewui.go`): roles, the work branch,
+push per row and the task's name, with the forge - or the checkout -
+asked in the background which branches it has and its default, so each
+row shows what it gets and the name the task will have
+(`unibox.TaskID`, mounted repositories first as a task holds them, named
+after the first picked by hand and worked in; `run` names a task after
+its first repository worked in). `r` in the task list adds repositories
+to a task on the same screen (`AddRepositories`). Where a branch made in
+the sandbox started (`Base`) is no part of a task's identity.
+Lists filter fuzzily after `/` (`fuzzy.go`, letters in order, side by
+side and at a word's start counting more). `unibox repo add|rm|default` write the
 person's.
 
 ## Ports

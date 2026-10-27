@@ -15,28 +15,38 @@ import (
 
 // RepoInput is a repository a task is asked to hold. Clone has it cloned
 // from the forge even in a task whose directories are mounted. Always is
-// one the env has every new task take, not one the person asked for: the
-// task's name, a shared --branch and --push leave it be.
+// one the env has every new task take, not one the person asked for, which
+// leaves the task's name be. Context is one the task reads: a shared
+// --branch and --push leave it on its own branch. Push makes this one's
+// branch on the forge when it has none, or pushes a mounted checkout's;
+// Fork, a clone's branch the forge lacks is made in the sandbox alone, from
+// Base or else the forge's default branch. These are told apart by Name,
+// which an input that says any of them gives.
 type RepoInput struct {
-	Source, Branch, Name string
-	Clone, Always        bool
+	Source, Branch, Name, Base         string
+	Clone, Always, Context, Push, Fork bool
 }
 
-// alwaysNames are the names of the repositories a request takes because
-// its env has every new task take them.
-func (req Request) alwaysNames() map[string]bool {
+// names are the names of a request's repositories that say so.
+func (req Request) names(say func(RepoInput) bool) map[string]bool {
 	out := map[string]bool{}
 	for _, in := range req.Repositories {
-		if in.Always {
+		if say(in) {
 			out[in.Name] = true
 		}
 	}
 	return out
 }
 
+// contextNames are the repositories a task reads, which no branch of its
+// is pushed to.
+func (req Request) contextNames() map[string]bool {
+	return req.names(func(in RepoInput) bool { return in.Context })
+}
+
 // own leaves out of repos those the env has every new task take.
 func (req Request) own(repos []api.Repository) []api.Repository {
-	always := req.alwaysNames()
+	always := req.names(func(in RepoInput) bool { return in.Always })
 	out := []api.Repository{}
 	for _, r := range repos {
 		if !always[r.Name] {
@@ -171,7 +181,9 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 		if err != nil || len(cloned.Repositories) == 0 {
 			return repos, needs, err
 		}
-		cloned.Mount, cloned.Push, cloned.Branch = false, false, ""
+		// A shared --branch reaches what is cloned beside the directories,
+		// as it reaches them; Context keeps it from those only read.
+		cloned.Mount, cloned.Push = false, false
 		more, moreNeeds, err := ResolveRepositories(ctx, cloned)
 		if err != nil {
 			return nil, nil, err
@@ -188,9 +200,10 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 	names := map[string]bool{}
 	for _, in := range req.Repositories {
 		r := api.Repository{Name: in.Name, Branch: in.Branch, Author: req.Author}
-		if r.Branch == "" && !in.Always {
+		if r.Branch == "" && !in.Context {
 			r.Branch = req.Branch
 		}
+		r.Base = in.Base
 		_, statErr := os.Stat(in.Source)
 		local := statErr == nil
 		if local {
@@ -246,6 +259,13 @@ func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []
 				// lands: its default branch, bounded by the forge's
 				// protection of it.
 				if r.Branch, err = forgeDefaultBranch(ctx, r.URL); err != nil {
+					return nil, nil, err
+				}
+			}
+			// A branch made in the sandbox alone starts where the forge's
+			// work lands, unless told where.
+			if in.Fork && r.Base == "" {
+				if r.Base, err = forgeDefaultBranch(ctx, r.URL); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -406,7 +426,7 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, []api.N
 	names := map[string]bool{}
 	for _, in := range req.Repositories {
 		branch := in.Branch
-		if branch == "" {
+		if branch == "" && !in.Context {
 			branch = req.Branch
 		}
 		path, err := ExpandPath(in.Source)
@@ -504,4 +524,40 @@ func switchMounted(ctx context.Context, repos []api.Repository) error {
 func isDir(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()
+}
+
+// ForgeBranch asks a forge, with the host's own git and credentials, for a
+// repository's default branch and whether it has branch.
+func ForgeBranch(ctx context.Context, url, branch string) (defaultBranch string, has bool, err error) {
+	defaultBranch, tip, err := remoteRefs(ctx, ".", url, branch)
+	return defaultBranch, tip != "", err
+}
+
+// HostCheckout is what a task mounting a directory of the host takes from
+// it: the top of its checkout, its forge address and the branch it is on.
+func HostCheckout(ctx context.Context, dir string) (top, url, branch string, err error) {
+	path, err := ExpandPath(dir)
+	if err == nil {
+		path, err = filepath.Abs(path)
+	}
+	if err == nil {
+		path, err = filepath.EvalSymlinks(path)
+	}
+	if err != nil {
+		return "", "", "", err
+	}
+	if top, err = git(ctx, path, "rev-parse", "--show-toplevel"); err != nil {
+		return path, "", "", nil
+	}
+	if raw, err := git(ctx, top, "config", "--get", "remote.origin.url"); err == nil {
+		url, _ = CloneURL(raw)
+	}
+	branch, _ = git(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
+	return top, url, branch, nil
+}
+
+// HostHasBranch says whether a checkout of the host has branch.
+func HostHasBranch(ctx context.Context, top, branch string) bool {
+	_, err := git(ctx, top, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
 }

@@ -6,22 +6,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// The lists are drawn in the colours of the questions huh asks, its Charm
-// theme, so the walk and the lists read as one tool: titles and the cursor
-// in its indigo, what is on in its green, errors in its red. Keys are told
+// The lists are drawn beside the questions huh asks, in its Charm theme's
+// green for what is on and red for errors, with titles and the cursor in a
+// light blue. Keys are told
 // apart from what they do in a dark yellow. Each colour has a shade for a
 // light terminal too.
 var (
-	themeIndigo = lipgloss.AdaptiveColor{Light: "#5A56E0", Dark: "#7571F9"}
-	themeGreen  = lipgloss.AdaptiveColor{Light: "#02BA84", Dark: "#02BF87"}
-	themeRed    = lipgloss.AdaptiveColor{Light: "#FF4672", Dark: "#ED567A"}
-	themeDim    = lipgloss.AdaptiveColor{Light: "245", Dark: "243"}
-	themeKey    = lipgloss.AdaptiveColor{Light: "136", Dark: "178"}
+	themeBlue  = lipgloss.AdaptiveColor{Light: "#0A75C2", Dark: "#7CC4FA"}
+	themeGreen = lipgloss.AdaptiveColor{Light: "#02BA84", Dark: "#02BF87"}
+	themeRed   = lipgloss.AdaptiveColor{Light: "#FF4672", Dark: "#ED567A"}
+	themeDim   = lipgloss.AdaptiveColor{Light: "245", Dark: "243"}
+	themeKey   = lipgloss.AdaptiveColor{Light: "136", Dark: "178"}
 )
 
 var (
-	listTitle  = lipgloss.NewStyle().Foreground(themeIndigo).Bold(true)
-	listCursor = lipgloss.NewStyle().Foreground(themeIndigo).Bold(true)
+	listTitle  = lipgloss.NewStyle().Foreground(themeBlue).Bold(true)
+	listCursor = lipgloss.NewStyle().Foreground(themeBlue).Bold(true)
 	portOn     = lipgloss.NewStyle().Foreground(themeGreen).Bold(true)
 	portOff    = lipgloss.NewStyle().Faint(true)
 	portCursor = lipgloss.NewStyle().Bold(true)

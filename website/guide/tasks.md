@@ -37,8 +37,8 @@ An env can name the repositories its tasks use - the team's under
 started by picking them rather than typing addresses:
 
 ```sh
-unibox task new                     # pick them; type to filter, space picks
-unibox task new payments adrs       # or name them
+unibox task new                     # pick them on one screen
+unibox task new payments adrs --branch feat/pricing   # or name them
 unibox run adrs                     # a name works wherever a repository does
 unibox repo                         # the index: / filter, space default, a add
 ```
@@ -50,18 +50,42 @@ repos:
     ref: main
     default: always               # every new task takes it
     description: Architecture decisions
-  spec: {url: https://gitlab.example.com/biz/spec.git, default: on}
+  spec: {url: https://gitlab.example.com/biz/spec.git, default: on, context: true}
   payments: https://gitlab.example.com/x/payments.git
+  web: ~/code/web                 # a directory of yours: mounted, not cloned
 ```
 
 `default: always` puts the repository into every new task of the env -
 cloned beside your mounted checkout in `unibox run` too - so the agent
 always has the decisions and specifications at hand. `on` has it picked
 to begin with in `task new`, `off` (the default) only when picked. `ref`
-is the branch a task works on, else the forge's default. `task new`
-clones each picked repository. Yours win over the team's:
-`unibox repo add name url [--ref] [--default] [--every-env]`, `unibox repo
-default name always|on|off|-` and `unibox repo rm name` write them.
+is the branch a task works on, else the forge's default. A forge address
+is cloned; a directory of your machine (`/…`, `~/…`) is mounted, as
+`run` mounts one.
+
+A repository is worked in, or read: `context: true` - unsaid, true for
+one that says `always` - keeps it on its `ref`, and no branch of a task's
+is made or pushed there.
+
+`task new` shows them on one screen: `space` picks, `c` switches work and
+context, `b` types the branch the ones worked in get, `t` the task's name,
+`p` whether a row's branch is pushed, `/` filters, `enter` starts. Each row
+shows where it comes from (clone or mount), the branch it gets, `(new)`
+where that branch is made, and whether it is pushed; the task's name - the
+one typed, or the one it will be given - stands at the top, with
+`(exists; it is resumed)` when a task has it. A generated name follows the
+first repository you picked by hand and work in, not one picked to begin
+with or only read, so tasks on the same decisions stay apart. In
+`unibox task`, `r` adds repositories of the index to a task the same way,
+seen at once by an agent working in it. A new branch that is pushed
+is made on the forge from its default branch, or pushed from your
+checkout; one that is not is made in the sandbox's clone, or your
+checkout, alone. Named, `task new` takes `--branch`, `--task` and
+`--no-push`.
+
+Yours win over the team's: `unibox repo add name url|directory [--ref]
+[--default] [--context true|false] [--every-env]`, `unibox repo default
+name always|on|off|-` and `unibox repo rm name` write them.
 
 ## Mount or clone
 
@@ -107,7 +131,7 @@ a clone would miss, an env that changed since the sandbox was made.
 ## Come back to a task
 
 ```sh
-unibox task                      # pick a task: enter resumes, a another agent, s a shell
+unibox task                      # pick a task: enter resumes, a attaches another agent, r adds repositories, s a shell
 unibox task ls                   # every task, in every sandbox
 unibox task ls -s dev            # one sandbox's tasks
 unibox resume login              # its agent again

@@ -172,7 +172,7 @@ Without a task at a terminal, lists tasks to pick.
 
 ```
 unibox task [-s <sandbox>]
-unibox task new [repo...] [-e <env>] [-s <sandbox>] [--task <name>] [--agent <a> | --shell]
+unibox task new [repo...] [-e <env>] [-s <sandbox>] [--branch <b>] [--no-push] [--task <name>] [--agent <a> | --shell]
 unibox task ls [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
@@ -181,10 +181,15 @@ unibox task rename <task> [name] [--reset]
 unibox task rm <task>
 ```
 
-- `new` - a task on repositories of the env's index (`unibox repo`), each
-  cloned: picked at a terminal from a list filtered by typing, or named;
-  those that say `always` come along, and `on` ones are picked to begin
-  with. Then it runs as `run` does.
+- `new` - a task on repositories of the env's index (`unibox repo`), a
+  forge's cloned and a directory mounted. At a terminal one screen: `space`
+  pick, `c` work/context, `b` the branch of those worked in, `t` the task's
+  name, `p` push a row's branch, `/` filter, `enter` start; each row shows
+  the branch it gets, `(new)` where it is made, and whether it is pushed,
+  and the task's name stands at the top. Named, those that say `always`
+  come along; `--branch`, `--task` and `--no-push` say the rest. A context
+  repository keeps its ref and is never pushed to. Then it runs as `run`
+  does.
 - `ls` - prepared tasks, in every sandbox or with `-s` in one.
 - `check` - what a task needs before it can start; changes nothing. Takes
   `run`'s flags except `--shell` and `--agent`. Codes:
@@ -201,8 +206,9 @@ unibox task rm <task>
 - `rm` - remove a task after checking for running sessions and unpushed
   work. Mounted directories are unmounted, never deleted.
 
-List keys: `enter`/`r` resume, `a` another agent (`←` `→` or `h` `l`),
-`s` shell, `n` rename, `d` remove.
+List keys: `enter` resume, `a` attach another agent (`←` `→` or `h` `l`),
+`r` add repositories of the env's index (picked as in `task new`, seen at
+once by a running agent), `s` shell, `n` rename, `d` remove.
 
 ## Sandboxes
 
@@ -290,15 +296,18 @@ lack, and the hosts refused lately commented out, as a kit's
 ```
 unibox repo [-e <env>]
 unibox repo ls [-e <env>]
-unibox repo add <name> <url> [--ref <branch>] [--default always|on|off] [--description <text>] [-e <env> | --every-env]
+unibox repo add <name> <url|directory> [--ref <branch>] [--default always|on|off] [--context true|false] [--description <text>] [-e <env> | --every-env]
 unibox repo default <name> always|on|off|- [-e <env>]
 unibox repo rm <name> [-e <env> | --every-env]
 ```
 
 The repositories an env's tasks are given by name: the team's under
 `repos:` in its `unibox.yaml` files, yours in `config.yaml` for every env
-or one, over the team's. `always` has every new task take one, cloned
-beside what it mounts; `on` has `task new` pick it to begin with. A name
+or one, over the team's. A forge address is cloned, a directory of this
+machine mounted. `always` has every new task take one, cloned beside what
+it mounts; `on` has `task new` pick it to begin with. `context` - unsaid,
+true for `always` - is one a task reads: it keeps its ref and is never
+pushed to. A name
 works wherever `run`, `prepare`, `check` and `add-repo` take a repository.
 List keys: `/` filter, `n` new task with it, `space` off/on/always, `a`
 add, `d` remove yours.

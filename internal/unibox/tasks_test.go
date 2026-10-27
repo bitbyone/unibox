@@ -655,3 +655,41 @@ func TestACloneFollowsTheForgesRedirectOnceAndQuietly(t *testing.T) {
 		t.Fatalf("origin %q", got)
 	}
 }
+
+func TestABranchTheForgeLacksIsMadeInTheSandboxFromItsBaseAndNotPushed(t *testing.T) {
+	t.Parallel()
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Sandbox: "dev", Task: "local", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "feat/mine", Base: "main", Clone: true, Fork: true}}}
+	if _, err := m.Prepare(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	clone := filepath.Join(f.root, "dev", "work", "local", "payments")
+	if got := gitTest(t, clone, "branch", "--show-current"); got != "feat/mine" {
+		t.Fatal(got)
+	}
+	if out := gitTest(t, remote, "branch", "--list", "feat/mine"); out != "" {
+		t.Fatalf("the branch reached the forge: %s", out)
+	}
+	// Prepared again, the task keeps its own branch - asked for with no
+	// base too, as where a branch started is no part of a task.
+	if _, err := m.Prepare(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	again := req
+	again.Repositories = []RepoInput{{Source: url, Name: "payments", Branch: "feat/mine", Clone: true}}
+	if _, err := m.Prepare(ctx, again); err != nil {
+		t.Fatal(err)
+	}
+	// Without a base, a branch the forge lacks is refused, naming it.
+	req.Task, req.Repositories[0].Base, req.Repositories[0].Fork = "none", "", false
+	if _, err := m.Prepare(ctx, req); err == nil {
+		t.Fatal("a branch the forge lacks was taken without a base")
+	}
+}

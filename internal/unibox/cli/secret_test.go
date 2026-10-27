@@ -772,7 +772,7 @@ func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T
 		t.Fatal(err)
 	}
 	out, _, err := run(t, paths, "", "repo", "ls")
-	if err != nil || !strings.Contains(out, "adrs  main     always   the env's") || !strings.Contains(out, "api   develop  on       yours") {
+	if err != nil || !strings.Contains(out, "adrs  context  main     always   the env's") || !strings.Contains(out, "api   work     develop  on       yours") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	// Named, a repository of the index is its address; the one that says
@@ -804,12 +804,14 @@ func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T
 	if json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 2 || !check.Repositories[0].Mounted || check.Repositories[1].Mounted || check.Repositories[1].Name != "adrs" {
 		t.Fatalf("%s", out)
 	}
-	// task new offers them, those that say on or always picked.
+	// task new offers them, those that say on or always picked, then the
+	// branch of those worked in and the task's name.
 	t.Setenv("ACCESSIBLE", "1")
-	_, said, _ := runAt(t, paths, "\n", "task", "new")
-	if !strings.Contains(said, "Repositories for a new task in env team") || !strings.Contains(said, "always · Decisions") {
+	_, said, _ := runAt(t, paths, "\n\n\n", "task", "new")
+	if !strings.Contains(said, "Repositories for a new task in env team") || !strings.Contains(said, "always · Decisions") || !strings.Contains(said, "Branch of the repositories worked in") || !strings.Contains(said, "Task name") {
 		t.Fatalf("%s", said)
 	}
+	t.Setenv("ACCESSIBLE", "")
 	if _, _, err := run(t, paths, "", "task", "new", "nope"); err == nil || !strings.Contains(err.Error(), "names no repository nope") {
 		t.Fatalf("%v", err)
 	}
@@ -818,5 +820,30 @@ func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T
 	}
 	if _, _, err := run(t, paths, "", "repo", "rm", "api"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestADirectoryOfTheIndexStaysMountedBesideAnAddressThatIsCloned(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	notes := t.TempDir()
+	if _, _, err := run(t, paths, "", "repo", "add", "notes", notes, "--default", "always"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ := run(t, paths, "", "task", "check", "--branch", "main", "https://gitlab.example.com/x/raw.git", "--json")
+	var check api.Check
+	if err := json.Unmarshal([]byte(out), &check); err != nil || len(check.Repositories) != 2 {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, r := range check.Repositories {
+		if (r.Name == "notes") != r.Mounted {
+			t.Fatalf("%s", out)
+		}
 	}
 }

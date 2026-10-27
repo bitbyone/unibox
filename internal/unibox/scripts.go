@@ -23,24 +23,41 @@ func prepareScript(t api.Task) string {
 			continue
 		}
 		name, email, _ := AuthorParts(r.Author)
-		fmt.Fprintf(&b, "url=%s\nbranch=%s\ndir=%s\n", Quote(r.URL), Quote(r.Branch), Quote(dir))
+		fmt.Fprintf(&b, "url=%s\nbranch=%s\nbase=%s\ndir=%s\n", Quote(r.URL), Quote(r.Branch), Quote(r.Base), Quote(dir))
 		// A forge that redirects the URL - GitLab's without .git - has git
 		// warn on every request; the first one finds where it leads, and
 		// the rest go there.
 		b.WriteString(`given=$url
 errs="$dir.unibox-ls-remote"
-refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch" 2>"$errs") || true
+refs=$(git ls-remote --symref "$url" HEAD "refs/heads/$branch" ${base:+"refs/heads/$base"} 2>"$errs") || true
 grep -v '^warning: redirecting to ' "$errs" >&2 || true
 moved=$(sed -n 's/^warning: redirecting to //p' "$errs" | head -n 1)
 rm -f "$errs"
 [ -z "$moved" ] || url=${moved%/}
 tip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$branch" '$2 == ref {print $1}')
-[ -n "$tip" ] || { echo 'branch does not exist on the forge; push it first' >&2; exit 4; }
+head=$(printf '%s\n' "$refs" | sed -n 's|^ref: refs/heads/\(.*\)	HEAD$|\1|p')
+# A branch the forge lacks is the task's alone when it has a base: made in
+# the sandbox from it, and pushed by nobody but the agent.
+basetip=
+if [ -z "$tip" ] && [ -n "$base" ]; then
+  basetip=$(printf '%s\n' "$refs" | awk -v ref="refs/heads/$base" '$2 == ref {print $1}')
+  [ -n "$basetip" ] || { echo "$given has neither branch $branch nor $base to make it from${head:+ (its default branch is $head)}" >&2; exit 4; }
+fi
+[ -n "$tip" ] || [ -n "$basetip" ] || { echo "$given has no branch $branch${head:+ (its default branch is $head)}; push it first, or name a branch it has - for a repository of the env's index, its ref" >&2; exit 4; }
 if [ ! -d "$dir" ]; then
   tmp="$dir.unibox-clone"
   [ ! -e "$tmp" ] || { echo 'incomplete clone remains; inspect it in unibox sandbox shell and remove it before retrying' >&2; exit 4; }
-  git clone --filter=blob:none --single-branch --branch "$branch" -- "$url" "$tmp"
+  if [ -n "$tip" ]; then
+    git clone --filter=blob:none --single-branch --branch "$branch" -- "$url" "$tmp"
+  else
+    git clone --filter=blob:none --single-branch --branch "$base" -- "$url" "$tmp"
+    git -C "$tmp" switch --quiet -c "$branch"
+  fi
   mv "$tmp" "$dir"
+elif [ -z "$tip" ]; then
+  # The task's own branch, not on the forge: it is what the task has.
+  [ -d "$dir/.git" ] || { echo 'task directory is not a clone; inspect it in unibox sandbox shell' >&2; exit 4; }
+  [ "$(git -C "$dir" symbolic-ref --short HEAD)" = "$branch" ] || { echo 'task branch changed; restore it in unibox sandbox shell' >&2; exit 4; }
 else
   [ -d "$dir/.git" ] || { echo 'task directory is not a clone; inspect it in unibox sandbox shell' >&2; exit 4; }
   origin=$(git -C "$dir" remote get-url origin)

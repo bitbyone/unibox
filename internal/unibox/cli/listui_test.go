@@ -177,31 +177,3 @@ func TestAListIsFilteredAfterASlashAndActsOnWhatItLeaves(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
-
-func TestAPickIsNarrowedByWhatIsTypedAndPickedWithSpace(t *testing.T) {
-	t.Parallel()
-	m := pickModel{title: "repos", items: []pickItem{{value: "payments", label: "payments"}, {value: "adrs", label: "adrs  always", picked: true}, {value: "spec", label: "spec"}}}
-	var tm tea.Model = m
-	for _, k := range []tea.KeyMsg{
-		{Type: tea.KeyRunes, Runes: []rune("pa")}, {Type: tea.KeySpace}, // payments
-		{Type: tea.KeyEsc},                                             // clears the filter, does not leave
-		{Type: tea.KeyDown}, {Type: tea.KeyDown}, {Type: tea.KeySpace}, // spec
-		{Type: tea.KeyEnter},
-	} {
-		tm, _ = tm.Update(k)
-	}
-	got := tm.(pickModel)
-	picked := []string{}
-	for _, it := range got.items {
-		if it.picked {
-			picked = append(picked, it.value)
-		}
-	}
-	if !got.done || got.gaveUp || !slices.Equal(picked, []string{"payments", "adrs", "spec"}) {
-		t.Fatalf("%+v", got)
-	}
-	tm, _ = pickModel{items: m.items}.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if !tm.(pickModel).gaveUp {
-		t.Fatal("esc with nothing typed did not leave")
-	}
-}

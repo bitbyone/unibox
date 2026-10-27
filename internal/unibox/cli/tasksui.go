@@ -20,7 +20,7 @@ type taskRow struct {
 // taskAction is what a person chose to do with a task; the list ends for
 // it, as resuming a task takes the terminal.
 type taskAction struct {
-	kind  string // resume, shell, rename, remove
+	kind  string // resume, shell, repos, rename, remove
 	task  api.Task
 	agent string
 }
@@ -68,7 +68,7 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.agent = max(m.agent-1, 0)
 		case "right", "l":
 			m.agent = min(m.agent+1, len(row.agents)-1)
-		case "enter", "r":
+		case "enter":
 			return choose("resume", row.agents[m.agent])
 		case "esc", "q":
 			m.mode = tasksList
@@ -87,8 +87,10 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = max(m.cursor-1, 0)
 		case "down", "j":
 			m.cursor = min(m.cursor+1, len(m.rows)-1)
-		case "enter", "r":
+		case "enter":
 			return choose("resume", "")
+		case "r":
+			return choose("repos", "")
 		case "s":
 			return choose("shell", "")
 		case "n":
@@ -151,7 +153,7 @@ func (m tasksModel) View() string {
 	case tasksRemove:
 		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
 	default:
-		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter/r", "resume", "a", "another agent", "s", "shell", "n", "rename", "d", "remove", "q", "quit") + "\n")
+		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter", "resume", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit") + "\n")
 	}
 	return b.String()
 }
