@@ -22,6 +22,10 @@ type portsModel struct {
 	err     error
 	note    string
 	done    bool
+	// hostPort is being typed while asking: the host port to publish the
+	// named port under the cursor at, as port on name=HOST_PORT does.
+	asking   bool
+	hostPort string
 	// switchPort publishes or unpublishes a port and reads the ports anew,
 	// with the last line it would have said.
 	switchPort func(key string, on bool) ([]unibox.PortState, string, error)
@@ -44,6 +48,9 @@ func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = min(m.cursor, max(len(m.rows)-1, 0))
 		}
 	case tea.KeyMsg:
+		if m.asking {
+			return m.ask(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c", "q", "esc", "enter":
 			m.done = true
@@ -58,6 +65,46 @@ func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.turn(func(bool) bool { return true })
 		case " ", "x":
 			return m.turn(func(on bool) bool { return !on })
+		case "m":
+			if m.busy || len(m.rows) == 0 {
+				break
+			}
+			if !m.rows[m.cursor].Named {
+				m.err, m.note = nil, "a port no file names moves with unibox port on --map"
+				break
+			}
+			m.asking, m.hostPort, m.err, m.note = true, "", nil, ""
+		}
+	}
+	return m, nil
+}
+
+// ask takes the host port typed for the port under the cursor, and on
+// enter publishes the port there.
+func (m portsModel) ask(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.asking = false
+	case tea.KeyBackspace:
+		if m.hostPort != "" {
+			m.hostPort = m.hostPort[:len(m.hostPort)-1]
+		}
+	case tea.KeyEnter:
+		m.asking = false
+		if m.hostPort == "" {
+			return m, nil
+		}
+		key := m.rows[m.cursor].Name + "=" + m.hostPort
+		m.busy = true
+		return m, func() tea.Msg {
+			rows, note, err := m.switchPort(key, true)
+			return portsSwitched{rows, note, err}
+		}
+	case tea.KeyRunes:
+		for _, r := range msg.Runes {
+			if r >= '0' && r <= '9' && len(m.hostPort) < 5 {
+				m.hostPort += string(r)
+			}
 		}
 	}
 	return m, nil
@@ -112,6 +159,11 @@ func (m portsModel) View() string {
 		b.WriteString(strings.TrimRight(line, " ") + "\n")
 	}
 	b.WriteString("\n")
+	if m.asking {
+		fmt.Fprintf(&b, "host port for %s: %s_\n", m.rows[m.cursor].Name, m.hostPort)
+		b.WriteString(portHelp.Render("enter publish it there · esc cancel") + "\n")
+		return b.String()
+	}
 	switch {
 	case m.busy:
 		b.WriteString("switching...\n")
@@ -122,7 +174,7 @@ func (m portsModel) View() string {
 	default:
 		b.WriteString("\n")
 	}
-	b.WriteString(portHelp.Render("↑/↓ j/k move · ←/h off · →/l on · space switch · enter/q done") + "\n")
+	b.WriteString(portHelp.Render("↑/↓ j/k move · ←/h off · →/l on · space switch · m on another host port · enter/q done") + "\n")
 	return b.String()
 }
 

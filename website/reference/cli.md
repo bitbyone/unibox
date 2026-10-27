@@ -246,7 +246,8 @@ the next start goes back to the named ports in the files (see
 port; `--map` (repeatable) a mapping no file names, as
 `[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]`. `ls` lists ports, where
 each is named, and URLs. List keys: `←`/`h` off, `→`/`l` on, `space`
-switch, `enter` or `q` leave.
+switch, `m` on at a host port typed there (as `name=HOST_PORT`), `enter`
+or `q` leave.
 
 ### `unibox network`
 

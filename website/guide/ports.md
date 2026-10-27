@@ -11,7 +11,7 @@ unibox port on vite                  # a named port
 unibox port on vite=15173            # on another host port
 unibox port on --map 8080:3000       # a port no file names
 unibox port off vite
-unibox port                          # switch them with the arrow keys or h and l
+unibox port                          # switch them with the arrow keys or h and l, m for another host port
 ```
 
 Add `-s dev` for another sandbox than the default. The sandbox must be

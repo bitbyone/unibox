@@ -33,7 +33,8 @@ name, by name=HOST_PORT for a named port on another host port, or by
 files.
 
 Alone at a terminal, unibox port shows a running sandbox's ports to
-switch with the arrows or h and l.
+switch with the arrows or h and l, and m publishes a named one on a host
+port typed there, as name=HOST_PORT does.
 
 A mapping is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any
 free host port, 8080:3000 host port 8080.`, Example: "  unibox port -s dev\n  unibox port on vite\n  unibox port on vite=15173 -s dev\n  unibox port on --map 9090:9090\n  unibox port off vite"}
