@@ -864,6 +864,10 @@ removed.
   creates its parents as root, mode 755: the agent cannot write beside the
   repository. Inside it git works, a commit is the host's at once, and
   `.git/hooks` is writable - the risk the plan warns of.
+- **`sbx mount` needs a running sandbox** (0.49: `409 Conflict: sandbox
+  "x" is not running`), while `sbx exec` starts a stopped one first, and
+  sbx has no start of its own; Mount starts the sandbox with `sbx exec
+  <name> true` and mounts again.
 - **Mounts are kept across stop and start**, and a saved mount whose host
   path is gone fails the start until it is removed with `sbx umount` while
   stopped. Removing a task therefore unmounts before anything else, and

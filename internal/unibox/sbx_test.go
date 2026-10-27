@@ -121,6 +121,30 @@ esac
 	}
 }
 
+func TestAMountIntoAStoppedSandboxStartsItFirst(t *testing.T) {
+	bin, dir := t.TempDir(), t.TempDir()
+	running, log := filepath.Join(dir, "running"), filepath.Join(dir, "calls")
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
+echo "$*" >> `+Quote(log)+`
+case "$1" in
+exec) touch `+Quote(running)+` ;;
+mount)
+	if [ ! -e `+Quote(running)+` ]; then
+		echo 'error: mount: add allowed path: request failed: 409 Conflict: sandbox "dev" is not running' >&2
+		exit 1
+	fi ;;
+esac
+`))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := (&SBX{}).Mount(context.Background(), "dev", "/host/repo", "/work/t/repo"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(log)
+	if string(b) != "mount dev /host/repo:/work/t/repo\nexec dev true\nmount dev /host/repo:/work/t/repo\n" {
+		t.Fatalf("%s", b)
+	}
+}
+
 func TestASessionUsingTheSSHAgentTrustsAServerItMeetsFirst(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)

@@ -361,7 +361,16 @@ func (r *SBX) UnpublishPort(ctx context.Context, sandbox string, p api.Published
 // (sbx mount HOST:TARGET, checked: live, writable, kept across a stop). It
 // is idempotent in sbx, so a task prepared again mounts again harmlessly.
 func (r *SBX) Mount(ctx context.Context, sandbox, host, target string) error {
-	if err := runQuiet(hostCommand(ctx, "sbx", "mount", sandbox, host+":"+target)); err != nil {
+	mount := func() error { return runQuiet(hostCommand(ctx, "sbx", "mount", sandbox, host+":"+target)) }
+	err := mount()
+	// sbx mounts only into a running sandbox, and exec starts a stopped one.
+	if err != nil && strings.Contains(err.Error(), "is not running") {
+		if err := runQuiet(hostCommand(ctx, "sbx", "exec", sandbox, "true")); err != nil {
+			return fmt.Errorf("sbx did not start sandbox %s to mount %s into it: %w", sandbox, host, err)
+		}
+		err = mount()
+	}
+	if err != nil {
 		return fmt.Errorf("sbx did not mount %s at %s: %w", host, target, err)
 	}
 	return nil
