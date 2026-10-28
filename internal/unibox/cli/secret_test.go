@@ -27,7 +27,8 @@ func fakeSBX(t *testing.T) (log string) {
 	script := `#!/bin/sh
 echo "$*" >> ` + unibox.Quote(log) + `
 case "$1 $2" in
-"settings get") echo '{"value":false}' ;;
+"settings get")
+	if [ "$3" = feature.ssh ] && [ -f ` + unibox.Quote(filepath.Join(dir, "editor-ssh")) + ` ]; then echo '{"value":{"enabled":true}}'; else echo '{"value":false}'; fi ;;
 "version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.49.2) 1234abc" ;;
 "diagnose --format")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "policy-unchosen")) + ` ]; then echo '{"checks":[{"name":"Global network policy","status":"fail","message":"not initialized"}]}'; exit 1; fi
@@ -352,6 +353,27 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	// Again, everything is in place and only said.
 	if _, said, err = runAt(t, paths, "n\n", "init", repo); err != nil || !strings.Contains(said, "set up already") || !strings.Contains(said, "has every value it needs") || !strings.Contains(said, "sbx has every token") {
 		t.Fatalf("%v\n%s", err, said)
+	}
+}
+
+func TestInitTakesEditorsOverSSHThatSbxHasOnAlready(t *testing.T) {
+	log := fakeSBX(t)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "editor-ssh"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
+	// SSH agent: no; the arg; store the secrets; no sandbox yet - and no
+	// question about editors.
+	if _, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", repo); err != nil || strings.Contains(said, "Editors over SSH") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if cfg, _ := paths.LoadConfig(); func() bool { on, said := cfg.EditorSSH(); return !on || !said }() {
+		t.Fatal("editors over SSH were not taken from sbx")
+	}
+	if strings.Contains(calls(t, log), "settings set feature.ssh") {
+		t.Fatal("sbx's setting was set again")
 	}
 }
 

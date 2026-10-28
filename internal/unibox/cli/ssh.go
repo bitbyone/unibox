@@ -105,11 +105,24 @@ func (o *options) setEditorSSH(cmd *cobra.Command, on bool) error {
 	return o.working(what, func() error { return sbx.SetEditorSSH(cmd.Context(), on) })
 }
 
-// askEditorSSH is the question init asks once: whether editors and desktop
-// apps may reach sandboxes over SSH.
+// askEditorSSH is the question init asks once on a machine: whether
+// editors and desktop apps may reach sandboxes over SSH. It is sbx's own
+// setting, for every sandbox, so one sbx has on already was decided and is
+// only recorded.
 func (o *options) askEditorSSH(cmd *cobra.Command) error {
 	if _, said := o.manager.Config.EditorSSH(); said {
 		return nil
+	}
+	if sbx := o.manager.SBX; sbx.Present() {
+		if on, err := sbx.EditorSSH(cmd.Context()); err == nil && on {
+			cfg := o.manager.Config
+			cfg.EditorSSHOn = &on
+			if err := o.paths.SaveConfig(cfg); err != nil {
+				return err
+			}
+			o.manager.Config = cfg
+			return nil
+		}
 	}
 	choice, err := o.askPick("Editors over SSH", "VS Code, Cursor, Orca and other apps reach a sandbox as ssh <sandbox>.sbx. sbx serves it to your user alone, signed in to Docker, and adds the host entry to your SSH client's configuration. An editor's session is not unibox's: unibox config set stop_idle false keeps a sandbox running for it.", []pick{
 		{"yes", "Yes - editors connect over SSH"},
