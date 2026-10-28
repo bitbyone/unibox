@@ -184,6 +184,13 @@ about it. Keep command output short: pipe through `head`, `tail` or
   (`taskPickModel`): roles, work branch, push per row, task name.
   `instructions:` of the env and each repository become the task's
   `/work/<task>/AGENTS.md` (`CLAUDE.md` a link) before each session.
+  Every repository a task held is kept in `State.Recent` (`recent.go`),
+  the newest first: the picker searches them with `/`, lists them with
+  `r`, and `a` names one in the person's index for the env.
+- **`--rm` removes a task as `task rm` would**, after its session's lock
+  is let go and before an idle sandbox stops; with work the forge lacks it
+  stays and says so. unibox's own AGENTS.md and its CLAUDE.md link are no
+  such work.
 - **unibox 1 is set aside, not migrated.** Its `state.json` becomes
   `state.v1.json` with the old sandboxes named once; its config.yaml keys
   are read and dropped at the next write.

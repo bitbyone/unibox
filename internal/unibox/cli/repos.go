@@ -398,7 +398,7 @@ func (o *options) taskExists(name string) bool {
 // at a terminal or named, each cloned from its forge.
 func (o *options) taskNewCommand() *cobra.Command {
 	var sandbox, envFlag, task, agent, author, branch string
-	var shell, noPush bool
+	var shell, noPush, remove bool
 	c := &cobra.Command{Use: "new [repo|directory...]", Short: "Start a task on repositories of the env's index and your checkouts, picked or named", Long: `Start a task on repositories the env's index names (unibox repo ls) -
 each cloned from its forge, or mounted when the index names a directory -
 and on checkouts of yours named as directories (unibox task new .), each
@@ -410,14 +410,17 @@ own branch until one is typed.
 
 At a terminal without names, or with a directory, one screen offers them,
 the directories first and picked: space picks, c switches work and
-context, b types the branch, p whether a row's is pushed, t the task's
-name, / filters; each row shows where it comes from, the branch it gets
-and whether it is pushed; enter starts. Named, or without a terminal, the
+context, m mounts a checkout or clones it from its forge, b types the
+branch, p whether a row's is pushed, t the task's name, / searches; each
+row shows where it comes from, the branch it gets and whether it is
+pushed; enter starts. The repositories your tasks have held, beyond the
+index, are searched with / and listed with r, and a adds the one under the
+cursor to the index in your config.yaml. Named, or without a terminal, the
 task takes those named and every one that says always - with no index
 names, those that say on as well - with --branch and --task. The task then
 runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  unibox task new payments adrs --branch feat/pricing\n  unibox task new spec --task pricing --shell"}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
-		req := unibox.Request{Sandbox: sandbox, Env: envFlag, Task: task, Agent: agent, Author: author, Shell: shell}
+		req := unibox.Request{Sandbox: sandbox, Env: envFlag, Task: task, Agent: agent, Author: author, Shell: shell, Remove: remove}
 		o.defaultTarget(&req)
 		_, env, err := o.manager.Definition(req)
 		if err != nil {
@@ -437,7 +440,7 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 				return fmt.Errorf("%s is neither a directory nor a repository env %s names; unibox repo ls lists them", a, env.Name)
 			}
 		}
-		if len(env.Repos) == 0 && len(dirs) == 0 {
+		if len(env.Repos) == 0 && len(dirs) == 0 && !(len(args) == 0 && o.canAsk() && o.hasRecent()) {
 			return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:, or name a directory of yours: unibox task new .", env.Name)
 		}
 		rows := taskRows(cmd.Context(), env.Repos)
@@ -491,6 +494,7 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 	f.StringVar(&author, "author", "", "Commit author, as Name <email>")
 	f.BoolVar(&shell, "shell", false, "Open a shell in the task's directory instead of running an agent")
 	f.StringVar(&agent, "agent", "", "Agent to run, when the sandbox has it")
+	rmFlag(c, &remove)
 	c.MarkFlagsMutuallyExclusive("shell", "agent")
 	return c
 }

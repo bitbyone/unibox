@@ -184,3 +184,53 @@ func TestADirectoryNamedToANewTaskIsOfferedFirstAndMounted(t *testing.T) {
 		t.Fatal("a missing directory was taken")
 	}
 }
+
+func TestRecentRepositoriesAreSearchedShownWhenAskedAndNamedInTheIndex(t *testing.T) {
+	t.Parallel()
+	checkout := filepath.Join(t.TempDir(), "Billing")
+	for _, args := range [][]string{{"init", "-q", "-b", "trunk", checkout}, {"-C", checkout, "remote", "add", "origin", "https://forge.example.com/x/billing.git"}} {
+		if b, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, b)
+		}
+	}
+	top, _ := filepath.EvalSymlinks(checkout)
+	repos := map[string]unibox.IndexedRepo{"api": {URL: "https://forge.example.com/x/api.git", Default: unibox.RepoOn}}
+	index := taskRows(context.Background(), repos)
+	// One the index names already is not offered twice; a name the index
+	// has is not taken again.
+	recent := []unibox.RecentRepo{{Path: top}, {URL: "https://forge.example.com/x/api.git"}, {URL: "https://forge.example.com/y/api.git"}, {Path: filepath.Join(t.TempDir(), "gone")}}
+	rows := append(index, recentRows(context.Background(), recent, index, map[string]bool{"api": true})...)
+	if len(rows) != 3 || rows[1].name != "billing" || rows[1].top != top || rows[2].name != "api-2" {
+		t.Fatalf("%+v", rows)
+	}
+	var named []string
+	m := taskPickModel{env: "dev", rows: rows, existing: map[string]bool{}, name: func(name string, r unibox.IndexedRepo) (string, error) {
+		named = append(named, name+"="+r.URL)
+		return "for env dev", nil
+	}}
+	var tm tea.Model = m
+	if v := tm.View(); strings.Contains(v, "billing") || !strings.Contains(v, "r recent") {
+		t.Fatalf("recent shown before asked for:\n%s", v)
+	}
+	// A search finds it; picked, it stays in sight.
+	tm = taskKeys(tm, "/", "b", "i", "l", "enter", " ")
+	tm, _ = tm.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if v := tm.View(); !strings.Contains(v, "billing") || !strings.Contains(v, "mount  trunk") {
+		t.Fatalf("%s", v)
+	}
+	// m clones it from its forge instead, on the forge's default branch.
+	tm = taskKeys(tm, "j", "m")
+	in := tm.(taskPickModel).inputs()
+	if len(in) != 2 || in[1].Source != "https://forge.example.com/x/billing.git" || !in[1].Clone {
+		t.Fatalf("%+v", in)
+	}
+	tm = taskKeys(tm, "a")
+	if got := tm.(taskPickModel); len(named) != 1 || named[0] != "billing="+tildePath(top) || got.rows[1].recent || !strings.Contains(got.View(), "named billing for env dev") {
+		t.Fatalf("%v %s", named, got.View())
+	}
+	// r shows the rest.
+	tm = taskKeys(tm, "r")
+	if v := tm.View(); !strings.Contains(v, "api-2") {
+		t.Fatalf("%s", v)
+	}
+}

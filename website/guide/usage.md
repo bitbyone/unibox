@@ -54,7 +54,7 @@ $ unibox task new .
   [dim]•[/]  web       work     clone  [dim]default[/]                    The web front end
 
 [dim]3 picked[/]
-[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]p[/] push · [key]b[/] branch · [key]t[/] task name · [key]/[/] filter · [key]enter[/] start · [key]q[/] cancel
+[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]m[/] mount/clone · [key]p[/] push · [key]b[/] branch · [key]t[/] task name · [key]r[/] recent · [key]/[/] search · [key]enter[/] start · [key]q[/] cancel
 ```
 
 [Repository index](./repos) explains the roles and defaults.

@@ -138,13 +138,15 @@ $ unibox task
   [dim]•[/]  spec      [dim]context[/]  clone  [dim]default[/]             Product specification
 
 [dim]1 picked[/]
-[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]p[/] push · [key]b[/] branch · [key]/[/] filter · [key]enter[/] add them · [key]q[/] cancel
+[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]m[/] mount/clone · [key]p[/] push · [key]b[/] branch · [key]r[/] recent · [key]/[/] search · [key]enter[/] add them · [key]q[/] cancel
 adding 1 repositories to task login
 added web to task login at /work/login/web
 ```
 
 A running agent sees the new directory at once; the next session's
-`AGENTS.md` lists it.
+`AGENTS.md` lists it. Repositories your tasks have held before, beyond
+the index, are found with `/` or listed with `r` ([recent
+repositories](./repos#recent-repositories)).
 
 ## Rename and remove
 
@@ -160,6 +162,14 @@ $ unibox task rm pricing
   spec: clean, every commit on the forge, no stashes
   nothing outside the repositories
 removed task pricing-3f2a9c1e
+```
+
+A task meant to last one session alone is started with `--rm` (`run`,
+`task new`, `resume`): once the session ends it is removed as `task rm`
+removes it, and kept, saying why, while it holds anything the forge lacks.
+
+```sh
+unibox run --rm https://forge.example.com/team/payments.git
 ```
 
 Removal refuses while the task's own session runs, or while a clone holds

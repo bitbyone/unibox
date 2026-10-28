@@ -325,6 +325,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 			}
 		}
 		s.Sandboxes[b.Name] = box
+		noteRecent(s, added, time.Now())
 		return nil
 	})
 	return t, added, err
@@ -404,7 +405,14 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		return b, t, nil, nil, err
 	}
 	replaceTask(&b, t)
-	if err = m.saveBox(b); err != nil {
+	// A task's repositories are those the person works with, offered again
+	// beside the index the next time one is picked.
+	err = m.Paths.State(func(s *State) error {
+		s.Sandboxes[b.Name] = b
+		noteRecent(s, t.Repositories, time.Now())
+		return nil
+	})
+	if err != nil {
 		return b, t, nil, nil, err
 	}
 	success = true
@@ -446,7 +454,7 @@ func (m *Manager) recordRun(b api.Sandbox, t api.Task, agent string) (api.Run, *
 	return run, l, nil
 }
 
-func (m *Manager) finishRun(b api.Sandbox, run api.Run, lease, usage, taskLock *FileLock) {
+func (m *Manager) finishRun(b api.Sandbox, run api.Run, lease, usage, taskLock *FileLock, after func()) {
 	lease.Close()
 	usage.Close()
 	if taskLock != nil {
@@ -463,6 +471,15 @@ func (m *Manager) finishRun(b api.Sandbox, run api.Run, lease, usage, taskLock *
 	}); err != nil {
 		fmt.Fprintln(m.Log, "cannot update session record:", err)
 	}
+	if after != nil {
+		after()
+	}
+	m.stopIdle(b)
+}
+
+// stopIdle stops a sandbox no session uses any longer, when the person
+// has unibox do so.
+func (m *Manager) stopIdle(b api.Sandbox) {
 	if !m.Config.StopIdle() {
 		return
 	}
@@ -543,7 +560,20 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		taskLock.Close()
 		return err
 	}
-	defer m.finishRun(b, run, lease, usage, taskLock)
+	// A task asked to go goes once its session is over and its lock is
+	// let go, before an idle sandbox is stopped; one with work the forge
+	// lacks stays, and says so.
+	var after func()
+	if req.Remove {
+		after = func() {
+			if err := m.removeTask(context.WithoutCancel(ctx), b.Name, t.ID, false); err != nil {
+				fmt.Fprintf(m.Log, "task %s kept: %v; unibox task rm %s removes it once its work is safe\n", t.ID, err, t.ID)
+				return
+			}
+			fmt.Fprintf(m.Log, "removed task %s\n", t.ID)
+		}
+	}
+	defer m.finishRun(b, run, lease, usage, taskLock, after)
 	// What the task's agents are told is written before each session; with
 	// it, a session starts above the repositories, where AGENTS.md is.
 	instructions := ""
@@ -663,7 +693,7 @@ func (m *Manager) Shell(ctx context.Context, name string, in io.Reader, out, err
 		usage.Close()
 		return err
 	}
-	defer m.finishRun(b, run, lease, usage, nil)
+	defer m.finishRun(b, run, lease, usage, nil, nil)
 	return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Interactive: true, Input: in, Output: out, Error: errout}))
 }
 

@@ -45,6 +45,12 @@ func shellFlag(c *cobra.Command, r *unibox.Request) {
 	c.MarkFlagsMutuallyExclusive("shell", "agent")
 }
 
+// rmFlag lets a session's task go with it, for work that is not to
+// outlast it.
+func rmFlag(c *cobra.Command, remove *bool) {
+	c.Flags().BoolVar(remove, "rm", false, "Remove the task once the session ends, unless it holds uncommitted files or commits the forge lacks")
+}
+
 func taskFlags(c *cobra.Command, r *unibox.Request) {
 	f := c.Flags()
 	f.StringVarP(&r.Sandbox, "sandbox", "s", "", "Sandbox to work in (default: UNIBOX_SANDBOX, the context's, or the only one)")
@@ -174,6 +180,7 @@ func (o *options) taskCommand(name string) *cobra.Command {
 	c.MarkFlagsMutuallyExclusive("defaults", "only")
 	if name == "run" {
 		shellFlag(c, &req)
+		rmFlag(c, &req.Remove)
 	}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		extra := []string{}

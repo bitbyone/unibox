@@ -159,6 +159,7 @@ mounts, unless `--only`. Arguments after `--` go to the agent.
 | `-e`, `--env <env>` | env to create the sandbox from |
 | `-s`, `--sandbox <name>` | sandbox to work in |
 | `--shell` | a shell in the task's directory instead of the agent |
+| `--rm` | remove the task once the session ends, unless a clone holds uncommitted files, unpushed commits or stashes |
 | `--agent <name>` | `claude`, `codex`, `copilot` or `opencode`, when the sandbox has it (default: the task's last, else the env's) |
 | `--task <name>` | the task's name, unique across sandboxes (default: first repository and a digest) |
 | `--mount` | mount the host's directories (default for directories) |
@@ -174,7 +175,7 @@ mounts, unless `--only`. Arguments after `--` go to the agent.
 ### `unibox resume`
 
 ```
-unibox resume [task] [-- agent-args...] [--agent <name>] [--shell]
+unibox resume [task] [-- agent-args...] [--agent <name>] [--shell] [--rm]
 ```
 
 Runs a prepared task's agent again, or with `--shell` a shell, in its
@@ -185,7 +186,7 @@ Without a task at a terminal, lists tasks to pick.
 
 ```
 unibox task [-s <sandbox>]
-unibox task new [repo|directory...] [-e <env>] [-s <sandbox>] [--branch <b>] [--no-push] [--task <name>] [--agent <a> | --shell]
+unibox task new [repo|directory...] [-e <env>] [-s <sandbox>] [--branch <b>] [--no-push] [--task <name>] [--agent <a> | --shell] [--rm]
 unibox task ls [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
@@ -200,8 +201,10 @@ unibox task rm <task>
   as directories (`unibox task new .`): each is mounted, offered first and
   picked, on its own branch until `b` types one; one whose forge the index
   names takes that repository's place and name. At a terminal one screen: `space`
-  pick, `c` work/context, `b` the branch of those worked in, `t` the task's
-  name, `p` push a row's branch, `/` filter, `enter` start; each row shows
+  pick, `c` work/context, `m` mount or clone a checkout, `b` the branch of those
+  worked in, `t` the task's name, `p` push a row's branch, `/` search -
+  the repositories your tasks have held too - `r` show those recent ones,
+  `a` add the recent one under the cursor to the index, `enter` start; each row shows
   the branch it gets (`default` for the forge's default) and whether it is
   pushed, and the task's name stands at the top; nothing is asked of a
   forge while picking. As it starts, a branch that exists already in a

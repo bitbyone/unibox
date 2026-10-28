@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,19 +25,35 @@ import (
 // it: picked or not, worked in or read, its branch pushed or not. One that
 // is a directory of the host is mounted, and local holds it with what a
 // mount takes from it: the top of its checkout, its forge and its branch.
-// host is a directory named to task new rather than one of the index.
+// host is a directory named to task new rather than one of the index, and
+// recent one a task of the person's held, offered when asked for or
+// searched. clone has a checkout cloned from its forge rather than mounted.
 type taskRepo struct {
-	name                                string
-	repo                                unibox.IndexedRepo
-	picked, context, push, preset, host bool
-	local, top, origin, current         string
+	name                                               string
+	repo                                               unibox.IndexedRepo
+	picked, context, push, preset, host, recent, clone bool
+	local, top, origin, current                        string
+}
+
+// mounted says whether the task mounts the repository from the host.
+func (r taskRepo) mounted() bool { return r.local != "" && !r.clone }
+
+// cloneURL is the forge address the task clones the repository from.
+func (r taskRepo) cloneURL() string {
+	if r.local != "" {
+		return r.origin
+	}
+	return r.repo.URL
 }
 
 // about is what a row says of its repository.
 func (r taskRepo) about() string {
 	about := cmp.Or(r.repo.Description, r.repo.URL)
-	if r.host {
+	switch {
+	case r.host:
 		about = "your checkout, mounted from the host: " + tildePath(r.top)
+	case r.recent:
+		about = "recent · " + about
 	}
 	if r.repo.Default == unibox.RepoAlways {
 		about = "always · " + about
@@ -64,7 +83,12 @@ type taskPickModel struct {
 	editing      string
 	input        string
 	// existing are the tasks unibox has, which a name of theirs resumes.
-	existing      map[string]bool
+	existing map[string]bool
+	// showRecent offers the recent repositories beside the index; a filter
+	// searches them either way. name has one named in the env's index,
+	// saying where.
+	showRecent    bool
+	name          func(name string, r unibox.IndexedRepo) (string, error)
 	note          string
 	done, gaveUp  bool
 	width, height int
@@ -76,8 +100,26 @@ func (m taskPickModel) visible() []int {
 	texts := make([]string, len(m.rows))
 	for i, r := range m.rows {
 		texts[i] = r.name + " " + r.repo.Description
+		if r.recent {
+			texts[i] += " " + r.repo.URL
+		}
 	}
-	return fuzzyFilter(m.query, texts)
+	// A recent one picked stays in sight, so what the task takes is seen.
+	return slices.DeleteFunc(fuzzyFilter(m.query, texts), func(i int) bool {
+		r := m.rows[i]
+		return r.recent && !r.picked && !m.showRecent && m.query == ""
+	})
+}
+
+// recentCount is how many recent repositories are offered.
+func (m taskPickModel) recentCount() int {
+	n := 0
+	for _, r := range m.rows {
+		if r.recent {
+			n++
+		}
+	}
+	return n
 }
 
 // branchOf is the branch a repository gets, and whether it is the task's
@@ -86,8 +128,10 @@ func (m taskPickModel) branchOf(r taskRepo) (string, bool) {
 	switch {
 	case !r.context && m.branch != "":
 		return m.branch, true
-	case r.local != "":
+	case r.mounted():
 		return r.current, false
+	case r.local != "":
+		return "", false
 	}
 	return r.repo.Ref, false
 }
@@ -122,7 +166,7 @@ func (m taskPickModel) taskName() string {
 			continue
 		}
 		b, _ := m.branchOf(r)
-		if r.local != "" {
+		if r.mounted() {
 			if b == "" || r.top == "" {
 				return ""
 			}
@@ -131,7 +175,7 @@ func (m taskPickModel) taskName() string {
 		}
 		// One cloned on the forge's default branch is named by that, as
 		// unibox knows it here: not at all.
-		url, err := unibox.CloneURL(r.repo.URL)
+		url, err := unibox.CloneURL(r.cloneURL())
 		if err != nil {
 			return ""
 		}
@@ -257,6 +301,42 @@ func (m taskPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.rows[under].push = !m.rows[under].push
 		}
+	case "r":
+		m.showRecent, m.cursor = !m.showRecent, 0
+		if m.showRecent && m.recentCount() == 0 {
+			m.note = "no task of yours has held a repository the index does not name"
+		}
+	case "m":
+		if under >= 0 {
+			r := &m.rows[under]
+			switch {
+			case r.local == "":
+				m.note = r.name + " is no checkout of this machine, so it is cloned"
+			case r.origin == "":
+				m.note = r.name + " has no forge to clone it from, so it is mounted"
+			default:
+				r.clone = !r.clone
+			}
+		}
+	case "a":
+		if under >= 0 {
+			r := &m.rows[under]
+			if !r.recent || m.name == nil {
+				m.note = r.name + " is in the index already"
+				return m, nil
+			}
+			named := unibox.IndexedRepo{URL: r.repo.URL}
+			if r.top != "" {
+				named.URL = tildePath(r.top)
+			}
+			where, err := m.name(r.name, named)
+			if err != nil {
+				m.note = err.Error()
+				return m, nil
+			}
+			r.recent, r.repo.URL, r.repo.From = false, named.URL, unibox.FromYours
+			m.note = "named " + r.name + " " + where
+		}
 	case "b":
 		m.editing, m.input = "branch", m.branch
 	case "t":
@@ -329,6 +409,9 @@ func (m taskPickModel) View() string {
 		}
 		lines = append(lines, cursorMark()+"/"+m.query+typing+"  "+portHelp.Render(fmt.Sprintf("%d of %d", len(visible), len(m.rows))), "")
 	}
+	if n := m.recentCount(); n > 0 && m.showRecent {
+		lines = append(lines, portHelp.Render(fmt.Sprintf("  with %d recent repositories of your tasks; a adds one to the index", n)), "")
+	}
 	table := [][]string{{"", "REPO", "ROLE", "FROM", "BRANCH", "PUSH", "ABOUT"}}
 	for _, i := range visible {
 		r := m.rows[i]
@@ -341,7 +424,7 @@ func (m taskPickModel) View() string {
 			role = portOff.Render("context")
 		}
 		from := "clone"
-		if r.local != "" {
+		if r.mounted() {
 			from = "mount"
 		}
 		b, own := m.branchOf(r)
@@ -359,7 +442,9 @@ func (m taskPickModel) View() string {
 		}
 		table = append(table, []string{box, r.name, role, from, branch, push, about})
 	}
-	if len(visible) == 0 {
+	if len(visible) == 0 && m.recentCount() > 0 && !m.showRecent && m.query == "" {
+		lines = append(lines, portHelp.Render("  the index names nothing to add; r shows the repositories your tasks have held"))
+	} else if len(visible) == 0 {
 		lines = append(lines, portHelp.Render("  nothing matches"))
 	} else {
 		rows := strings.Split(strings.TrimSuffix(drawTable(table, m.cursor), "\n"), "\n")
@@ -387,11 +472,23 @@ func (m taskPickModel) View() string {
 	case m.filtering:
 		lines = append(lines, keyHelp("↑/↓", "move", "enter", "keep the filter", "esc", "clear it"))
 	default:
-		if m.adding != "" {
-			lines = append(lines, keyHelp("↑/↓ j/k", "move", "space", "pick", "c", "work/context", "p", "push", "b", "branch", "/", "filter", "enter", "add them", "q", "cancel"))
-		} else {
-			lines = append(lines, keyHelp("↑/↓ j/k", "move", "space", "pick", "c", "work/context", "p", "push", "b", "branch", "t", "task name", "/", "filter", "enter", "start", "q", "cancel"))
+		keys := []string{"↑/↓ j/k", "move", "space", "pick", "c", "work/context", "m", "mount/clone", "p", "push", "b", "branch"}
+		if m.adding == "" {
+			keys = append(keys, "t", "task name")
 		}
+		if m.recentCount() > 0 {
+			keys = append(keys, "r", "recent")
+			if under := m.visible(); m.cursor < len(under) && m.rows[under[m.cursor]].recent {
+				keys = append(keys, "a", "add to index")
+			}
+		}
+		keys = append(keys, "/", "search")
+		if m.adding != "" {
+			keys = append(keys, "enter", "add them", "q", "cancel")
+		} else {
+			keys = append(keys, "enter", "start", "q", "cancel")
+		}
+		lines = append(lines, keyHelp(keys...))
 	}
 	if m.width > 0 {
 		for i, l := range lines {
@@ -446,6 +543,72 @@ func taskRows(ctx context.Context, repos map[string]unibox.IndexedRepo) []taskRe
 	return rows
 }
 
+// recentRows are the repositories the person's tasks have held that no row
+// offers already, as a task would take them: a checkout still on the host
+// mounted, any other cloned from its forge. Each gets a name no row and no
+// repository of the index has.
+func recentRows(ctx context.Context, recent []unibox.RecentRepo, have []taskRepo, taken map[string]bool) []taskRepo {
+	rows := make([]taskRepo, len(recent))
+	var wg sync.WaitGroup
+	for i, rec := range recent {
+		if rec.Path == "" || !isDirectory(rec.Path) {
+			if url, err := unibox.CloneURL(rec.URL); err == nil {
+				rows[i] = taskRepo{name: repoNameOf(url), repo: unibox.IndexedRepo{URL: url}, recent: true, push: true}
+			}
+			continue
+		}
+		wg.Go(func() {
+			top, origin, current, err := unibox.HostCheckout(ctx, rec.Path)
+			if err != nil || !isDirectory(top) {
+				return
+			}
+			rows[i] = taskRepo{name: repoNameOf(top), repo: unibox.IndexedRepo{URL: tildePath(top)}, recent: true, push: origin != "", local: top, top: top, origin: origin, current: current}
+		})
+	}
+	wg.Wait()
+	names := maps.Clone(taken)
+	for _, r := range have {
+		names[r.name] = true
+	}
+	out := []taskRepo{}
+	for _, row := range rows {
+		if row.name == "" || slices.ContainsFunc(append(have, out...), func(r taskRepo) bool {
+			if row.top != "" {
+				return r.top == row.top
+			}
+			return r.local == "" && strings.TrimSuffix(r.cloneURL(), ".git") == strings.TrimSuffix(row.repo.URL, ".git")
+		}) {
+			continue
+		}
+		base := row.name
+		for n := 2; names[row.name]; n++ {
+			row.name = fmt.Sprintf("%s-%d", base, n)
+		}
+		names[row.name] = true
+		out = append(out, row)
+	}
+	return out
+}
+
+// repoNameOf is a name for a repository from its checkout or address, as
+// a task's directory and the index take one.
+func repoNameOf(source string) string {
+	base := strings.TrimSuffix(path.Base(filepath.ToSlash(source)), ".git")
+	name := strings.Trim(strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r - 'A' + 'a'
+		}
+		return '-'
+	}, base), "-")
+	if unibox.ValidName(name) != nil {
+		return "repo"
+	}
+	return name
+}
+
 // pickTask asks, at a terminal, which repositories of the env's index a new
 // task takes, which of them it works in, the branch those get and whether
 // it is pushed, and the task's name. In accessible mode the same are
@@ -456,7 +619,18 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 	if rows == nil {
 		rows = taskRows(ctx, env.Repos)
 	}
+	if recent, err := o.paths.RecentRepos(); err == nil {
+		taken := map[string]bool{}
+		for name := range env.Repos {
+			taken[name] = true
+		}
+		rows = append(rows, recentRows(ctx, recent, rows, taken)...)
+	}
 	m := taskPickModel{env: env.Name, branch: branch, rows: rows, existing: map[string]bool{}}
+	m.name = func(name string, r unibox.IndexedRepo) (string, error) {
+		scope := unibox.Scope{Env: env.Name}
+		return o.scopeText(scope), o.manager.SetRepo(scope, name, r)
+	}
 	if noPush {
 		for i := range m.rows {
 			m.rows[i].push = false
@@ -477,6 +651,10 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 		if len(m.rows) == 0 {
 			return m, fmt.Errorf("task %s holds every repository env %s names; unibox repo add names another", m.adding, env.Name)
 		}
+	}
+	// With nothing of the index left to offer, the recent ones are.
+	if !slices.ContainsFunc(m.rows, func(r taskRepo) bool { return !r.recent }) {
+		m.showRecent = true
 	}
 	if state, err := o.paths.ReadState(); err == nil {
 		for _, b := range state.Sandboxes {
@@ -547,7 +725,7 @@ func (m taskPickModel) inputs() []unibox.RepoInput {
 			continue
 		}
 		b, own := m.branchOf(r)
-		if r.local != "" {
+		if r.mounted() {
 			in := unibox.RepoInput{Source: r.local, Name: r.name, Context: r.context}
 			if own {
 				in.Branch, in.Push = b, r.push
@@ -555,7 +733,7 @@ func (m taskPickModel) inputs() []unibox.RepoInput {
 			out = append(out, in)
 			continue
 		}
-		in := unibox.RepoInput{Source: r.repo.URL, Name: r.name, Branch: b, Clone: true, Context: r.context}
+		in := unibox.RepoInput{Source: r.cloneURL(), Name: r.name, Branch: b, Clone: true, Context: r.context}
 		if own {
 			if r.push {
 				in.Push = true
@@ -580,6 +758,13 @@ func tildePath(p string) string {
 	return p
 }
 
+// hasRecent says whether a task of the person's has held a repository,
+// which the picker offers beside the index.
+func (o *options) hasRecent() bool {
+	recent, err := o.paths.RecentRepos()
+	return err == nil && len(recent) > 0
+}
+
 func isDirectory(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()
@@ -592,7 +777,7 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	if err != nil {
 		return err
 	}
-	if len(env.Repos) == 0 {
+	if len(env.Repos) == 0 && !o.hasRecent() {
 		return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:", env.Name)
 	}
 	picked, err := o.pickTask(cmd, env, &t, "", false, nil)
@@ -636,7 +821,7 @@ func (m taskPickModel) branchClashes(ctx context.Context) ([]string, error) {
 		}
 		asked++
 		go func() {
-			if r.local != "" {
+			if r.mounted() {
 				has := unibox.HostHasBranch(ctx, r.top, m.branch)
 				if !has && r.origin != "" {
 					var err error
@@ -647,7 +832,7 @@ func (m taskPickModel) branchClashes(ctx context.Context) ([]string, error) {
 				answers <- answer{r.name, has, nil}
 				return
 			}
-			has, err := unibox.RemoteHasBranch(ctx, r.repo.URL, m.branch)
+			has, err := unibox.RemoteHasBranch(ctx, r.cloneURL(), m.branch)
 			answers <- answer{r.name, has, err}
 		}()
 	}

@@ -87,6 +87,9 @@ type Request struct {
 	Shell bool
 	// Agent is the agent to run, rather than the task's or the env's.
 	Agent string
+	// Remove takes the task away once its session is over, unless it holds
+	// work the forge does not have.
+	Remove bool
 	// Mount mounts the selected directories of the host into the sandbox,
 	// Clone clones them in it instead; with neither, a task mounts when
 	// every source is a directory of the host, and clones otherwise.

@@ -275,11 +275,11 @@ func TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.finishRun(b, r1, l1, u1, nil)
+	m.finishRun(b, r1, l1, u1, nil, nil)
 	if f.stops != 0 {
 		t.Fatal("stopped while another session was alive")
 	}
-	m.finishRun(b, r2, l2, u2, nil)
+	m.finishRun(b, r2, l2, u2, nil, nil)
 	if f.stops != 1 {
 		t.Fatal("did not stop last session's sandbox")
 	}
@@ -859,5 +859,73 @@ func TestASandboxListsTheAgentsItsMixinsInstall(t *testing.T) {
 	}
 	if got := slices.Sorted(maps.Keys(b.Agents)); !slices.Contains(got, "codex") || !slices.Contains(got, "copilot") || b.Agents["codex"][0] != "codex" {
 		t.Fatalf("%v", b.Agents)
+	}
+}
+
+func TestRunWithRemoveTakesTheTaskAwayOnlyWhenItsWorkIsOnTheForge(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	adrs := "https://forge.invalid/arch/adrs.git"
+	f.remotes[url], f.remotes[adrs] = "file://"+remote, "file://"+remote
+	bin := t.TempDir()
+	// The agent leaves a file behind when told to, in the repository it
+	// works in; the task's AGENTS.md is unibox's and keeps nothing.
+	leave := filepath.Join(t.TempDir(), "leave")
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\n[ ! -e "+Quote(leave)+" ] || echo draft > payments/draft.txt\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	req := func(task string) Request {
+		return Request{Sandbox: "dev", Task: task, Remove: true, Author: "Person <person@example.com>", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}, {Source: adrs, Name: "adrs", Branch: "main", Context: true}}}
+	}
+	if err := m.Run(ctx, req("quick"), strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "dev", "work", "quick")); err == nil {
+		t.Fatal("a clean task stayed")
+	}
+	write(t, leave, "")
+	if err := m.Run(ctx, req("drafty"), strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := m.sandbox("dev")
+	if len(b.Tasks) != 1 || b.Tasks[0].ID != "drafty" {
+		t.Fatalf("%+v", b.Tasks)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "dev", "work", "drafty", "payments", "draft.txt")); err != nil {
+		t.Fatal("the draft of a task kept is gone")
+	}
+}
+
+func TestTheRepositoriesTasksHeldAreRecentTheNewestFirst(t *testing.T) {
+	t.Parallel()
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	adrs := "https://forge.invalid/arch/adrs.git"
+	f.remotes[url], f.remotes[adrs] = "file://"+remote, "file://"+remote
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "one", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "main"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := m.AddRepositories(ctx, Request{Task: "one", Repositories: []RepoInput{{Source: adrs, Name: "adrs", Branch: "main"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// A task gone leaves its repositories recent.
+	if err := m.Remove(ctx, "dev", "one", true); err != nil {
+		t.Fatal(err)
+	}
+	recent, err := m.Paths.RecentRepos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recent) != 2 || recent[0].URL != adrs || recent[1].URL != url {
+		t.Fatalf("%+v", recent)
 	}
 }

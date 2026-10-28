@@ -497,6 +497,7 @@ holds it. Without a task at a terminal, it lists the tasks to pick one.`, RunE: 
 		return o.manager.Run(cmd.Context(), req, o.input, o.output, o.log, args[1:])
 	}}
 	shellFlag(c, &req)
+	rmFlag(c, &req.Remove)
 	return c
 }
 

@@ -96,7 +96,7 @@ $ unibox task new
   [dim]•[/]  web       work     clone  feat/pricing  [ok]yes[/]   The web front end
 
 [dim]3 picked · branch feat/pricing in 1, pushed from 1[/]
-[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]p[/] push · [key]b[/] branch · [key]t[/] task name · [key]/[/] filter · [key]enter[/] start · [key]q[/] cancel
+[key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]m[/] mount/clone · [key]p[/] push · [key]b[/] branch · [key]t[/] task name · [key]r[/] recent · [key]/[/] search · [key]enter[/] start · [key]q[/] cancel
 ```
 
 - The branch typed applies to the repositories worked in. A pushed branch
@@ -108,6 +108,18 @@ $ unibox task new
 - Nothing is asked of a forge while you pick. As the task starts, unibox
   looks once, with git, whether the branch exists already in a repository
   worked in, and asks whether to work on it there.
+
+## Recent repositories
+
+Every repository a task of yours has held - a checkout mounted or cloned,
+or a forge's address - is remembered, the newest first, also after the
+task is gone. The screen does not list them beside the index: `/` searches
+them with it, by name or path, and `r` shows them all. A recent one is
+mounted when its checkout is still on this machine, else cloned; `m`
+switches a checkout between the two, cloning from its `origin`. `a` adds
+the one under the cursor to the env's index in your config.yaml, as
+`unibox repo add` would, where it is listed from then on. The task list's
+`r`, which adds repositories to a task, offers them alike.
 
 `unibox task new .` adds the current checkout as the first row, mounted
 and picked, on its own branch until a branch is typed. A checkout of a

@@ -276,6 +276,8 @@ type State struct {
 	// Mounted are the host directories unibox has mounted into a sandbox,
 	// each told once what that lets the agent do.
 	Mounted []string `json:"mounted,omitempty"`
+	// Recent are the repositories tasks have held, the newest first.
+	Recent []RecentRepo `json:"recent,omitempty"`
 }
 
 func freshState() State {
