@@ -236,7 +236,7 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 			now = "stopped"
 		}
 		urls := portURLs(p)
-		from := cmp.Or(p.From, "you")
+		from := cmp.Or(repoFrom(p.From), "yours")
 		if !p.Named {
 			from = "-"
 		}

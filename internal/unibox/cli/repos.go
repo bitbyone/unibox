@@ -20,7 +20,8 @@ import (
 // every env or one. A task takes those that say always, cloned beside what
 // it mounts; unibox task new offers the rest, those that say on picked.
 
-// repoFrom says where an indexed repository, or its default, comes from.
+// repoFrom says where an indexed repository, a port, or a default comes
+// from, as a person reads it.
 func repoFrom(from string) string {
 	return map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours, every env", unibox.FromYoursEnvRepo: "yours, this env repo", unibox.FromYours: "yours"}[from]
 }

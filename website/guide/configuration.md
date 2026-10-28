@@ -83,10 +83,10 @@ The lists show where each entry comes from: `FROM` in `unibox port ls` and
 
 ```term
 $ unibox port ls
-PORT      MAPPING    FROM  AT START    NOW  URL                    DESCRIPTION
-devtools  9222:9222  repo  off         off  -                      Chrome DevTools
-spring    8080:8080  repo  on          on   http://127.0.0.1:8080  the Spring Boot application
-vite      5173:5173  repo  on (yours)  off  -                      the Vite dev server
+PORT      MAPPING    FROM              AT START    NOW  URL                    DESCRIPTION
+devtools  9222:9222  the repository's  off         off  -                      Chrome DevTools
+spring    8080:8080  the repository's  on          on   http://127.0.0.1:8080  the Spring Boot application
+vite      5173:5173  the repository's  on (yours)  off  -                      the Vite dev server
 ```
 
 ## Applied when
