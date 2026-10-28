@@ -404,3 +404,19 @@ func TestAnEnvsOwnTokenIsKeptForEachOfItsSandboxes(t *testing.T) {
 		t.Fatalf("%v", b.Secrets)
 	}
 }
+
+func TestSBXSettingsInConfigAreSetBeforeASandboxStarts(t *testing.T) {
+	m, f := managerFixture(t)
+	on := true
+	m.Config.ClaudeRemoteControl = &on
+	if _, err := m.Create(context.Background(), Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := f.Setting(context.Background(), "claude.remoteControl"); v != "true" {
+		t.Fatalf("%v", f.calls)
+	}
+	// An unsaid setting is left to sbx.
+	if len(f.called("settings set")) != 1 {
+		t.Fatalf("%v", f.calls)
+	}
+}

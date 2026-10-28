@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -413,6 +415,9 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 	if err := m.SBX.Available(ctx); err != nil {
 		return err
 	}
+	if err := m.syncSBXSettings(ctx); err != nil {
+		return err
+	}
 	args, err := m.args(env)
 	if err != nil {
 		return err
@@ -781,4 +786,23 @@ func (m *Manager) installedAgents(ctx context.Context, b *api.Sandbox) {
 		}
 		b.Agents[a.ID] = append([]string{a.Command}, a.Args...)
 	}
+}
+
+// syncSBXSettings sets sbx's settings config.yaml says to what it says,
+// those that differ alone: the file may have been edited by hand.
+func (m *Manager) syncSBXSettings(ctx context.Context) error {
+	for _, key := range slices.Sorted(maps.Keys(SBXSettings)) {
+		said := *m.Config.SBXSetting(key)
+		if said == nil {
+			continue
+		}
+		want := strconv.FormatBool(*said)
+		if now, err := m.SBX.Setting(ctx, SBXSettings[key]); err == nil && now == want {
+			continue
+		}
+		if err := m.SBX.SetSetting(ctx, SBXSettings[key], want); err != nil {
+			return err
+		}
+	}
+	return nil
 }

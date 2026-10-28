@@ -794,9 +794,10 @@ ssh_agent: false
 ```
 
 unagit writes this file only through `unibox config set` and the commands,
-never by hand. `remember_host_commands` is a key of `unibox config` but
-not of this file: it is sbx's setting (`env.rememberHostCommands`), read
-and written through `sbx settings`, so sbx alone says what it is.
+never by hand. `remember_host_commands` and `claude_remote_control` are
+sbx's settings (`env.rememberHostCommands`, `claude.remoteControl`) the
+person may say here: unibox sets sbx to match before it creates or starts
+a sandbox, so the file can be edited by hand. Left out, sbx's own stand.
 
 ### Platforms and releases
 

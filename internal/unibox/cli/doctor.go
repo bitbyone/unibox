@@ -94,7 +94,9 @@ func (o *options) doctorCommand() *cobra.Command {
 				add("sbx", "for unibox", "pass", version+", new enough", "")
 			}
 			if remember, err := sbx.Setting(ctx, "env.rememberHostCommands"); err == nil {
-				if remember == "true" {
+				if said := o.manager.Config.RememberHostCommands; said != nil && *said && remember == "true" {
+					add("sbx", "host commands", "pass", "sbx runs an env's host commands again without asking, as config.yaml says", "")
+				} else if remember == "true" {
 					add("sbx", "host commands", "warn", "sbx runs an env's host commands again without asking", "unibox config set remember_host_commands false has it ask each time")
 					fix("config", "set", "remember_host_commands", "false")
 				} else {

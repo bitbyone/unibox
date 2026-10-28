@@ -150,8 +150,8 @@ func (o *options) configCommand() *cobra.Command {
 		cfg := o.manager.Config
 		var value any = cfg
 		switch {
-		case len(args) == 1 && sbxSettings[args[0]] != "":
-			v, err := o.manager.SBX.Setting(cmd.Context(), sbxSettings[args[0]])
+		case len(args) == 1 && unibox.SBXSettings[args[0]] != "":
+			v, err := o.manager.SBX.Setting(cmd.Context(), unibox.SBXSettings[args[0]])
 			if err != nil {
 				return err
 			}
@@ -198,10 +198,10 @@ func (o *options) configCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("%s must be true or false", key)
 			}
-			if err := o.manager.SBX.SetSetting(cmd.Context(), sbxSettings[key], strconv.FormatBool(v)); err != nil {
+			if err := o.manager.SBX.SetSetting(cmd.Context(), unibox.SBXSettings[key], strconv.FormatBool(v)); err != nil {
 				return err
 			}
-			return o.success("configuration updated")
+			*cfg.SBXSetting(key) = &v
 		case "default_env":
 			if _, ok := cfg.Envs[value]; !ok {
 				return fmt.Errorf("there is no env %s; unibox env ls lists them", value)
@@ -246,10 +246,10 @@ func (o *options) configCommand() *cobra.Command {
 		cfg := o.manager.Config
 		switch args[0] {
 		case "remember_host_commands", "claude_remote_control":
-			if err := o.manager.SBX.SetSetting(cmd.Context(), sbxSettings[args[0]], ""); err != nil {
+			if err := o.manager.SBX.SetSetting(cmd.Context(), unibox.SBXSettings[args[0]], ""); err != nil {
 				return err
 			}
-			return o.success("configuration updated")
+			*cfg.SBXSetting(args[0]) = nil
 		case "default_env":
 			cfg.DefaultEnv = ""
 		case "stop_idle":
@@ -279,13 +279,6 @@ func (o *options) configCommand() *cobra.Command {
 }
 
 const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh, remember_host_commands and claude_remote_control"
-
-// sbxSettings are the keys that are sbx's settings, which unibox keeps
-// nothing of and only reads and sets.
-var sbxSettings = map[string]string{
-	"remember_host_commands": "env.rememberHostCommands",
-	"claude_remote_control":  "claude.remoteControl",
-}
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {

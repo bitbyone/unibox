@@ -45,6 +45,7 @@ type fakeRuntime struct {
 	failCreate, failUnmount, keepMounted bool
 	unavailable                          error
 	sshAgent                             bool
+	settings                             map[string]string
 }
 
 func (f *fakeRuntime) record(call string) {
@@ -177,8 +178,24 @@ func (f *fakeRuntime) EnvPlan(_ context.Context, name, args string, files []stri
 	return "  1 to add · 0 to change · 0 to destroy\n", nil
 }
 
-func (f *fakeRuntime) Setting(context.Context, string) (string, error)  { return "false", nil }
-func (f *fakeRuntime) SetSetting(context.Context, string, string) error { return nil }
+func (f *fakeRuntime) Setting(_ context.Context, key string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if v, ok := f.settings[key]; ok {
+		return v, nil
+	}
+	return "false", nil
+}
+func (f *fakeRuntime) SetSetting(_ context.Context, key, value string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "settings set "+key+" "+value)
+	if f.settings == nil {
+		f.settings = map[string]string{}
+	}
+	f.settings[key] = value
+	return nil
+}
 
 func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	f.mu.Lock()
