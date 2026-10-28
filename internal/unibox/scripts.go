@@ -175,6 +175,10 @@ fi
 	for _, r := range t.Repositories {
 		b.WriteString(Quote(path.Join(t.Directory, r.Name)) + " ) ;;\n")
 	}
+	// What unibox writes before each session is its own, written again by
+	// the next; one the agent replaced is not.
+	b.WriteString(Quote(path.Join(t.Directory, "AGENTS.md")) + " ) head -n 1 \"$entry\" | grep -qF " + Quote(instructionsMark) + " || { echo 'AGENTS.md: not the one unibox writes; preserve it before removing' >&2; exit 4; } ;;\n")
+	b.WriteString(Quote(path.Join(t.Directory, "CLAUDE.md")) + " ) [ \"$(readlink -- \"$entry\")\" = AGENTS.md ] || { echo 'CLAUDE.md: not the link unibox makes; preserve it before removing' >&2; exit 4; } ;;\n")
 	b.WriteString("*) echo \"${entry##*/}: outside the task's repositories; preserve it before removing\" >&2; exit 4 ;;\nesac\ndone\nfi\necho '  nothing outside the repositories'\n")
 	return b.String()
 }
