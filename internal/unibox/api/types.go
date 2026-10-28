@@ -77,7 +77,10 @@ type Sandbox struct {
 	// port, or a spec switched on for the sandbox alone - and PortSwitches
 	// what was switched for it until it next starts; PortMaps the mapping
 	// a named port was switched on with in place of its own, as long.
-	Ports        map[string]string `json:"ports,omitempty"`
+	Ports map[string]string `json:"ports,omitempty"`
+	// Secrets are the commands unibox had sbx keep as this sandbox's own
+	// tokens, by service, as its env's config.yaml said them.
+	Secrets      map[string]string `json:"secrets,omitempty"`
 	PortSwitches map[string]bool   `json:"port_switches,omitempty"`
 	PortMaps     map[string]string `json:"port_maps,omitempty"`
 }

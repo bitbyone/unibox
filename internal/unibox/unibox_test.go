@@ -362,3 +362,45 @@ func TestATokenTwoEnvsSendToDifferentHostsIsTold(t *testing.T) {
 		t.Fatalf("%+v", clashes)
 	}
 }
+
+func TestAnEnvsOwnTokenIsKeptForEachOfItsSandboxes(t *testing.T) {
+	m, f := managerFixture(t)
+	called := func(want string) bool { return len(f.called(want)) > 0 }
+	ctx := context.Background()
+	setSecrets := func(s map[string]EnvSecret) {
+		ec := m.Config.Envs["dev"]
+		ec.Secrets = s
+		m.Config.Envs["dev"] = ec
+	}
+	setSecrets(map[string]EnvSecret{"copilot": {Command: "security find-generic-password -s copilot-2n -w"}})
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if !called("secret set copilot --sandbox dev --command security find-generic-password -s copilot-2n -w") {
+		t.Fatalf("%v", f.calls)
+	}
+	// A recreate takes a sandbox's own tokens away; the next start sets it
+	// again, as a changed command does.
+	f.mu.Lock()
+	f.secrets = nil
+	f.calls = nil
+	f.mu.Unlock()
+	setSecrets(map[string]EnvSecret{"copilot": {Command: "pass copilot-2n"}})
+	if err := m.SyncEnvSecrets(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if !called("secret set copilot --sandbox dev --command pass copilot-2n") {
+		t.Fatalf("%v", f.calls)
+	}
+	// Taken out of config.yaml, sbx forgets it for the sandbox.
+	setSecrets(nil)
+	if err := m.SyncEnvSecrets(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if !called("secret rm copilot --sandbox dev") {
+		t.Fatalf("%v", f.calls)
+	}
+	if b, _ := m.sandbox("dev"); len(b.Secrets) != 0 {
+		t.Fatalf("%v", b.Secrets)
+	}
+}

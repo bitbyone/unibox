@@ -17,11 +17,21 @@ type EnvConfig struct {
 	Repos map[string]IndexedRepo `yaml:"repos,omitempty" json:"repos,omitempty"`
 	// Instructions are the person's for this env's tasks' agents.
 	Instructions string `yaml:"instructions,omitempty" json:"instructions,omitempty"`
+	// Secrets are tokens this env's sandboxes take apart from every other
+	// sandbox's, by service: a command sbx runs on the host for the value,
+	// never the value. unibox has sbx keep each for every sandbox of the
+	// env, again after a recreate, which takes a sandbox's own away.
+	Secrets map[string]EnvSecret `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 	// Repo is the git repository the files are in, as init found them.
 	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
 	// Source is the address unibox cloned Repo from; a repository of the
 	// user's own has none, and is pulled only while it is clean.
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+}
+
+// EnvSecret is how an env's own token is read on the host.
+type EnvSecret struct {
+	Command string `yaml:"command" json:"command"`
 }
 
 // Env is an env with what its files say.
@@ -59,6 +69,11 @@ func (c Config) LoadEnv(name string) (Env, error) {
 			return Env{}, Fail(4, "env_not_found", "there is no env %s; add one with unibox env add %s <file.sbxenv.yaml>", name, name)
 		}
 		return Env{}, Fail(4, "env_not_found", "there is no env %s; the envs are %v, unibox env add adds one", name, known)
+	}
+	for service, s := range ec.Secrets {
+		if !ValidSecretName(service) || strings.TrimSpace(s.Command) == "" {
+			return Env{}, fmt.Errorf("env %s: secrets: %s needs a service name sbx takes and a command that prints the token; fix it in config.yaml", name, service)
+		}
 	}
 	sbx, err := ReadSBXEnv(ec.Files)
 	if err != nil {

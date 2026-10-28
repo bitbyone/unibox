@@ -33,6 +33,8 @@ envs:
       vite: {default: on}         # a team port, switched on for you
     repos:                        # yours for this env, over the team's
       adrs: {default: off}        # only switches a team's repository
+    secrets:                      # tokens of this env's sandboxes alone, read by a command
+      copilot: {command: security find-generic-password -s copilot-2n -w}
     instructions: |               # yours for this env's tasks' agents
       Use the staging database.
 ports:                            # yours, for every env

@@ -36,6 +36,10 @@ type Runtime interface {
 	SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error
 	SecretSetCustom(ctx context.Context, env, placeholder string, hosts []string, in io.Reader, out, errout io.Writer) error
 	SecretRemove(ctx context.Context, service, placeholder string) error
+	// SecretSetSandbox and SecretRemoveSandbox keep and forget a token of
+	// one sandbox's own, read by a command on the host.
+	SecretSetSandbox(ctx context.Context, service, sandbox, command string) error
+	SecretRemoveSandbox(ctx context.Context, service, sandbox string) error
 	Mount(ctx context.Context, sandbox, host, target string) error
 	Unmount(ctx context.Context, sandbox, host, target string) error
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)

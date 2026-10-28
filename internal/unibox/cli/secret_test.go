@@ -1115,3 +1115,29 @@ func TestTheContextsSandboxAndEnvGoTogether(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+func TestAnEnvsOwnTokenIsACommandInConfigYaml(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "set", "anthropic", "-e", "team", "--env-only"); err == nil || !strings.Contains(err.Error(), "give --command") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "set", "anthropic", "-e", "team", "--env-only", "--command", "pass anthropic-team"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Envs["team"].Secrets["anthropic"].Command != "pass anthropic-team" {
+		t.Fatalf("%+v", cfg.Envs["team"])
+	}
+	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team"); err != nil || !strings.Contains(out, "env team, config.yaml") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "secret", "rm", "anthropic", "-e", "team", "--env-only"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Envs["team"].Secrets != nil {
+		t.Fatalf("%+v", cfg.Envs["team"])
+	}
+}

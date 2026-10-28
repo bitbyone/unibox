@@ -397,6 +397,17 @@ func (r *SBX) SecretSetCustom(ctx context.Context, env, placeholder string, host
 	return nil
 }
 
+func (r *SBX) SecretSetSandbox(ctx context.Context, service, sandbox, command string) error {
+	if err := runQuiet(hostCommand(ctx, "sbx", "secret", "set", service, "--sandbox", sandbox, "--command", command)); err != nil {
+		return fmt.Errorf("sbx did not keep the %s token of sandbox %s; check the command in config.yaml prints it: %w", service, sandbox, err)
+	}
+	return nil
+}
+
+func (r *SBX) SecretRemoveSandbox(ctx context.Context, service, sandbox string) error {
+	return runQuiet(hostCommand(ctx, "sbx", "secret", "rm", service, "--sandbox", sandbox, "--force"))
+}
+
 // SecretRemove has sbx forget a service's global token, or with a
 // placeholder the custom secret of it.
 func (r *SBX) SecretRemove(ctx context.Context, service, placeholder string) error {

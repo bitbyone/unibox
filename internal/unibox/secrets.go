@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tobola/unibox/internal/unibox/api"
 	"io/fs"
 	"maps"
 	"net/url"
@@ -232,6 +233,11 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 				l.Stored, l.Scope = true, s.Scope
 			}
 		}
+		// The env's own, which unibox has sbx keep for each of its
+		// sandboxes, stands before a global one.
+		if c, ok := env.Config.Secrets[service]; ok && c.Command != "" {
+			l.Stored, l.Scope = true, "env "+env.Name+", config.yaml"
+		}
 		// A token kept the way a subscription's is, in a variable, stands
 		// for the service's.
 		for _, w := range guides[service].AllWays() {
@@ -371,4 +377,80 @@ func SecretClashes(needed map[string][]NeededSecret) []SecretClash {
 		}
 	}
 	return out
+}
+
+// syncSecrets has sbx keep, as the sandbox's own, each token its env's
+// config.yaml names a command for, and forget those it no longer names. A
+// recreate takes a sandbox's own tokens away, and a person may change a
+// command by hand, so each is set again when sbx lacks it for the sandbox
+// or the command is not the one set last.
+func (m *Manager) syncSecrets(ctx context.Context, b *api.Sandbox, env Env) error {
+	want := env.Config.Secrets
+	if len(want) == 0 && len(b.Secrets) == 0 {
+		return nil
+	}
+	have, err := m.SBX.Secrets(ctx)
+	if err != nil {
+		return err
+	}
+	kept := func(service string) bool {
+		return slices.ContainsFunc(have, func(s Secret) bool { return s.Type != "custom" && s.Name == service && s.Scope == b.Name })
+	}
+	for _, service := range slices.Sorted(maps.Keys(want)) {
+		command := want[service].Command
+		if kept(service) && b.Secrets[service] == command {
+			continue
+		}
+		if err := m.SBX.SecretSetSandbox(ctx, service, b.Name, command); err != nil {
+			return err
+		}
+		if b.Secrets == nil {
+			b.Secrets = map[string]string{}
+		}
+		b.Secrets[service] = command
+	}
+	for _, service := range slices.Sorted(maps.Keys(b.Secrets)) {
+		if _, still := want[service]; still {
+			continue
+		}
+		if kept(service) {
+			if err := m.SBX.SecretRemoveSandbox(ctx, service, b.Name); err != nil {
+				return err
+			}
+		}
+		delete(b.Secrets, service)
+	}
+	return nil
+}
+
+// SyncEnvSecrets applies an env's own tokens to every sandbox unibox made
+// from it that sbx still has, as config.yaml says them now.
+func (m *Manager) SyncEnvSecrets(ctx context.Context, envName string) error {
+	env, err := m.Config.LoadEnv(envName)
+	if err != nil {
+		return err
+	}
+	state, err := m.Paths.ReadState()
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(state.Sandboxes)) {
+		b := state.Sandboxes[name]
+		if b.Env != envName || b.State == "missing" || b.State == "creating" {
+			continue
+		}
+		guard, err := m.guard(name)
+		if err != nil {
+			return err
+		}
+		err = m.syncSecrets(ctx, &b, env)
+		if err == nil {
+			err = m.saveBox(b)
+		}
+		guard.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

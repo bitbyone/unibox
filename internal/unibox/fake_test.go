@@ -194,6 +194,23 @@ func (f *fakeRuntime) SecretSetCustom(_ context.Context, env, placeholder string
 	return nil
 }
 
+func (f *fakeRuntime) SecretSetSandbox(_ context.Context, service, sandbox, command string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("secret set " + service + " --sandbox " + sandbox + " --command " + command)
+	f.secrets = slices.DeleteFunc(f.secrets, func(s Secret) bool { return s.Name == service && s.Scope == sandbox })
+	f.secrets = append(f.secrets, Secret{Scope: sandbox, Type: "service", Name: service})
+	return nil
+}
+
+func (f *fakeRuntime) SecretRemoveSandbox(_ context.Context, service, sandbox string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("secret rm " + service + " --sandbox " + sandbox)
+	f.secrets = slices.DeleteFunc(f.secrets, func(s Secret) bool { return s.Name == service && s.Scope == sandbox })
+	return nil
+}
+
 func (f *fakeRuntime) SecretRemove(_ context.Context, service, placeholder string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

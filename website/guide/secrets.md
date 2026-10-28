@@ -113,6 +113,22 @@ subscription is signed in from Claude Code, with `/login`: Docker's Claude
 kit manages api.anthropic.com and keeps the sign-in through sbx's proxy.
 `unibox secret rm <service>` has sbx forget a service's token.
 
+## A token of one env's own
+
+Tokens are global: every sandbox takes the same. To give one env's
+sandboxes another - a second Copilot account for work, say - keep it as a
+command on your machine that prints it:
+
+```sh
+unibox secret set copilot -e my2n-dev --env-only --command 'security find-generic-password -s copilot-2n -w'
+unibox secret rm copilot -e my2n-dev --env-only       # the global one again
+```
+
+The command goes to `config.yaml`, under `envs.<env>.secrets`, where it
+can be edited by hand. unibox has sbx keep it as the token of each of the
+env's sandboxes, set again at every start: a recreate takes a sandbox's
+own tokens away, and a changed command is applied.
+
 ## One name, two hosts
 
 sbx keeps one token a service name. If two teams' kits both name a
