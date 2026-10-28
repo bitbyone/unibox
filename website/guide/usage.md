@@ -97,3 +97,13 @@ unibox env update       # pull the team's repository and see what changed
 
 Without a terminal, or with `--json`, every list prints as its `ls` does,
 so scripts get the same information.
+
+## Terms
+
+| Term | What it is |
+| --- | --- |
+| env | a sandbox as one or more sbxenv files of the team's repository describe it, under a name such as `dev` |
+| kit | what an env pulls in: an image, tools, network rules, the tokens it needs. sbx's format, the team's to write |
+| sandbox | a micro-VM sbx creates from an env. It keeps its disk until removed; unibox stops it when its last session ends |
+| task | a piece of work in a sandbox: repositories at `/work/<task>/<repo>`, a branch, the agent that works there. Several tasks share a sandbox |
+| agent | claude, codex, copilot or opencode, as the env's kit installs it |

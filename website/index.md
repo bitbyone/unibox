@@ -4,13 +4,16 @@ title: Introduction
 
 # Introduction
 
-unibox is a command-line companion to
-[Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`). sbx
-runs coding agents - Claude Code, Codex, Copilot, OpenCode - in micro-VMs
-on your machine, set up from sbxenv files and kits. unibox adds what the
-same work needs every day: tasks over several repositories, a list of the
-repositories a team works on, instructions for the agent, and interactive
-lists for the operations that repeat.
+[Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) runs
+coding agents - Claude Code, Codex, Copilot, OpenCode - in micro-VMs on
+your machine. A team describes its sandboxes once, as sbxenv files and
+kits in a repository, and each member creates a sandbox from them.
+
+unibox is a command-line companion to sbx for the work that follows:
+setting a person up from the team's repository, starting and resuming
+tasks over several repositories, telling the agent what it works on, and
+the operations that repeat every day. It adds no sandbox of its own and is
+optional for each person on the team.
 
 - **Interactive by default, scriptable when needed.** Each command alone
   at a terminal is a list acted on by keys; the same commands take
@@ -32,52 +35,103 @@ lists for the operations that repeat.
 - **Plain sbx underneath.** No sandbox format of its own, nothing sbx
   needs to know about, and optional for each person on a team.
 
-```term ~/code/api
-$ unibox run
-preparing task api-4c1d2e9a
-mounted /Users/jdoe/code/api at /work/api-4c1d2e9a/api in sandbox dev
-Cloning into '/work/api-4c1d2e9a/adrs.unibox-clone'...
+## sbx alone and with unibox
 
-[dim]... claude runs here, in /work/api-4c1d2e9a, until you leave it ...[/]
+The same operations, for a team whose repository describes one env,
+`dev`:
+
+| | sbx alone | with unibox |
+| --- | --- | --- |
+| First setup | `sbx login`, `sbx policy init`, `sbx secret set` for each token the kits need, `sbx env run sandboxes/dev.sbxenv.yaml --env-arg registryUser=jdoe` | `unibox init <repository>` |
+| Work on a checkout | the workspaces given when the sandbox is created; `sbx mount` adds directories later | `unibox run` in the checkout: a task of its own at `/work/<task>/api` |
+| Several pieces of work | side by side in the sandbox's workspaces, or a sandbox each | tasks in one sandbox, each with its repositories, branch and agent |
+| The team's other repositories | cloned by hand or by the agent | named in the team's index, taken by name or picked |
+| Back to work | `sbx run --name dev` | `unibox resume <task>`, or `unibox task` and `enter` |
+| A port | `sbx ports dev --publish 5173:5173` | `unibox port on vite`, named by the team |
+| A missing token | `sbx secret ls`, compared with what the kits ask | `unibox secret ls` says which the kits need and which are stored |
+| The env changed | `sbx env rm …`, then `sbx env run …` again | `unibox doctor` says so; `unibox sandbox recreate dev` brings the tasks back |
+
+## What belongs to whom
+
+| sbx | unibox |
+| --- | --- |
+| the micro-VM, its image and tools | tasks: repositories at `/work/<task>`, branches, sessions |
+| kits and sbxenv files, and their format | the repository index and the agent's instructions |
+| the proxy that puts tokens into requests | which tokens an env needs, and where each is made |
+| the secret store | interactive lists over sbx's operations |
+| the network policy and its enforcement | refused hosts, rules per sandbox, rules handed back to a kit |
+| publishing ports | named ports, on or off at start |
+| | checks of the whole setup (`unibox doctor`) |
+
+Both live in the team's repository, side by side:
+
+```
+agent-sandboxes/
+├── unibox.yaml              # unibox: ports, repositories, instructions for every env
+├── kits/                    # sbx
+│   └── java/java.yaml
+└── sandboxes/
+    ├── dev.sbxenv.yaml      # sbx: the env dev
+    └── dev.unibox.yaml      # unibox: the env dev alone
 ```
 
-## What unibox is not
+sbx does not read the `unibox.yaml` files. A team member without unibox
+uses the same repository with sbx alone and is limited by nothing in them.
 
-unibox is not a sandbox of its own. Every sandbox it uses is an ordinary
-sbx sandbox, created by sbx from the team's sbxenv files and kits, and
-unibox has no format of its own for one. What it keeps for itself - the
-team's ports, repositories and instructions - sits in `unibox.yaml` files
-beside the sbx files in the same repository; sbx never reads them.
+## A day
 
-Using it is optional. A team member who does not install unibox works with
-the same repository through sbx directly (`sbx env run`, `sbx run`), and
-is limited by nothing unibox adds. A team can adopt unibox one person at a
-time.
+```term ~/code/api
+$ unibox init https://github.com/acme/agent-sandboxes
+cloned https://github.com/acme/agent-sandboxes into /Users/jdoe/.local/share/unibox/repos/github.com/acme/agent-sandboxes
+[b]1/5 sbx[/]
+  installed and signed in
+[b]2/5 Envs[/]
+  env dev, sandboxes/dev.sbxenv.yaml: added
+[b]3/5 Values[/]
+env dev asks for values of your own, kept for it in vars.toml:
+[b]4/5 Secrets[/]
+  sbx has no token for anthropic, github of env dev
+[b]5/5 Sandboxes[/]
+creating sandbox dev from env dev
+[dim]... the questions of each step, answered ...[/]
+[ok]set up; start a task with unibox run <directory>, or unibox run --shell for a shell[/]
 
-## What it adds to sbx
+$ unibox run --branch fix/session-timeout
+preparing task api-4c1d2e9a
+mounted /Users/jdoe/code/api at /work/api-4c1d2e9a/api in sandbox dev
+[dim]... claude works in /work/api-4c1d2e9a, beside the team's decisions in adrs/ ...[/]
+sandbox dev stopped: no active sessions
 
-| | | |
-| --- | --- | --- |
-| [Setting up: init](/guide/init) | one command from the team's repository to a working sandbox | `unibox init <repository>` |
-| [Tasks](/guide/tasks) | a unit of work: repositories mounted or cloned at `/work/<task>`, a branch, an agent, resumable | `unibox run`, `unibox resume` |
-| [Interactive lists](/guide/interactive) | every noun alone at a terminal is a list acted on by keys | `unibox`, `unibox task` |
-| [Repository index](/guide/repos) | the repositories an env's tasks take by name, the team's and yours | `unibox repo`, `unibox task new` |
-| [Agent instructions](/guide/instructions) | what the agent is told of a task's repositories, written before each session | `unibox task instructions` |
-| [Team and personal configuration](/guide/configuration) | what the team sets in the repository and each person overrides | `config.yaml`, `vars.toml` |
-| [Sandboxes](/guide/sandboxes) | recreate after the env changed, resources as a share of the machine, defaults | `unibox sandbox` |
-| [Ports](/guide/ports) | named ports switched on and off while the sandbox runs | `unibox port` |
-| [Network](/guide/network) | what a sandbox was refused, rules per sandbox, rules handed back to a kit | `unibox network` |
-| [Secrets](/guide/secrets) | which tokens the env's kits need, and where each is made | `unibox secret` |
-| [Doctor](/guide/doctor) | what is missing or out of date, with the command that fixes it | `unibox doctor` |
+$ unibox task
+[blue]Tasks[/]
 
-## Terms
+  TASK                        SANDBOX  AGENT   STATE    SESSIONS  REPOSITORIES
+[blue]>[/] [b]api-4c1d2e9a                dev      claude  ready    0         api@fix/session-timeout, adrs@main[/]
+  pricing (pricing-3f2a9c1e)  dev      codex   ready    0         payments@feat/pricing, spec@default, adrs@main
 
-| Term | What it is |
-| --- | --- |
-| env | a sandbox as one or more sbxenv files of the team's repository describe it, under a name such as `dev` |
-| kit | what an env pulls in: an image, tools, network rules, the tokens it needs. sbx's format, the team's to write |
-| sandbox | a micro-VM sbx creates from an env. It keeps its disk until removed, and unibox stops it when its last session ends |
-| task | a piece of work in a sandbox: repositories at `/work/<task>/<repo>`, a branch, the agent that works there. Several tasks share a sandbox |
-| agent | claude, codex, copilot or opencode, as the env's kit installs it |
+[key]↑/↓ j/k[/] move · [key]enter[/] resume · [key]t[/] new task · [key]a[/] attach agent · [key]r[/] add repos · [key]s[/] shell · [key]n[/] rename · [key]d[/] remove · [key]q[/] quit
+```
 
-Next: [Installation](/guide/installation), then [Usage](/guide/usage).
+The init above leaves out its questions; [Setting up: init](/guide/init)
+shows each step.
+
+## The guide
+
+**Setting up.** [init](/guide/init) takes a person from the team's
+repository to a sandbox. [Doctor](/guide/doctor) checks the setup and
+names each fix. [Keeping the env current](/guide/updating) pulls the
+team's changes and says what they need.
+
+**Working.** [Tasks](/guide/tasks) are started, resumed, given another
+agent or repository, and removed. The [repository index](/guide/repos)
+holds what a task takes by name. [Agent instructions](/guide/instructions)
+tell the agent what it works on. [Interactive lists](/guide/interactive)
+cover every noun. [Team and personal configuration](/guide/configuration)
+says what the team sets and what each person overrides.
+
+**The sandbox.** [Sandboxes](/guide/sandboxes) are recreated, sized and
+chosen. [Ports](/guide/ports) are named and switched.
+[Network](/guide/network) shows what was refused and takes rules.
+[Secrets](/guide/secrets) are the tokens the kits need.
+
+Start with [Installation](/guide/installation), then [Usage](/guide/usage).
