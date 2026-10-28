@@ -459,6 +459,9 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 		if box.State != "running" && (len(b.PortSwitches) > 0 || len(b.PortMaps) > 0) {
 			b.PortSwitches, b.PortMaps = nil, nil
 		}
+		// A sandbox made before unibox looked for them lists only the
+		// kits' agents.
+		m.installedAgents(ctx, b)
 	}
 	if err = m.syncPorts(ctx, b, env); err != nil {
 		return err
@@ -511,6 +514,7 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 		return err
 	}
 	b.Agent, b.AgentCommand, b.Agents = m.agentOf(ctx, env)
+	m.installedAgents(ctx, b)
 	for i := range b.Tasks {
 		b.Tasks[i].State = "pending"
 	}
@@ -748,3 +752,27 @@ func (m *Manager) runActive(run api.Run) bool {
 	return false
 }
 func newRunID() string { return fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano()) }
+
+// installedAgents adds to a sandbox's agents those unibox knows whose
+// command it has: a mixin, as Docker's for Codex or Copilot, installs an
+// agent's CLI without being the kit sbx starts, so no kit names it.
+func (m *Manager) installedAgents(ctx context.Context, b *api.Sandbox) {
+	commands := []string{}
+	for _, a := range Agents {
+		commands = append(commands, a.Command)
+	}
+	out, err := guestOutput(ctx, m.SBX, b.Name, "sh", "-c", "for c in "+strings.Join(commands, " ")+"; do command -v \"$c\" >/dev/null 2>&1 && echo \"$c\"; done; true")
+	if err != nil {
+		return
+	}
+	for _, c := range strings.Fields(out) {
+		a := AgentFor([]string{c})
+		if _, known := b.Agents[a.ID]; known || a.ID == b.Agent {
+			continue
+		}
+		if b.Agents == nil {
+			b.Agents = map[string][]string{}
+		}
+		b.Agents[a.ID] = append([]string{a.Command}, a.Args...)
+	}
+}

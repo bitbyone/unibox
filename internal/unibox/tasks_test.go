@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -840,5 +842,22 @@ func TestASessionSbxCouldNotStartIsSaidSo(t *testing.T) {
 	err := m.Run(ctx, Request{Sandbox: "dev", Task: "pay", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}}}, strings.NewReader(""), io.Discard, io.Discard, nil)
 	if err == nil || !strings.Contains(err.Error(), "sbx could not start claude in sandbox dev") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestASandboxListsTheAgentsItsMixinsInstall(t *testing.T) {
+	m, _ := managerFixture(t)
+	bin := t.TempDir()
+	// Mixins such as Docker's for Codex and Copilot install the CLI alone.
+	for _, c := range []string{"codex", "copilot"} {
+		mustWriteExecutable(t, filepath.Join(bin, c), []byte("#!/bin/sh\n"))
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	b, err := m.Create(context.Background(), Request{Sandbox: "dev", Env: "dev"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := slices.Sorted(maps.Keys(b.Agents)); !slices.Contains(got, "codex") || !slices.Contains(got, "copilot") || b.Agents["codex"][0] != "codex" {
+		t.Fatalf("%v", b.Agents)
 	}
 }
