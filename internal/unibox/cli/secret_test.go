@@ -342,8 +342,9 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the one file is taken without asking; the arg; store
 	// the secrets; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n1\nperson\ny\n2\nn\ny\n", "init", repo)
-	if err != nil || !strings.Contains(said, "Work in env team and its sandbox") {
+	_, said, err := runAt(t, paths, "1\n1\nperson\ny\n2\nn\n", "init", repo)
+	// The only env is what commands take already, so nothing is asked.
+	if err != nil || strings.Contains(said, "as the current context") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	// Asked, the env is what commands work in; its sandbox once made.
@@ -800,13 +801,13 @@ func TestRememberingHostCommandsIsSbxsSetting(t *testing.T) {
 	if _, _, err := run(t, paths, "", "config", "set", "remember_host_commands", "yes"); err == nil {
 		t.Fatal("a value that is no bool went through")
 	}
-	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}} {
+	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}, {"config", "set", "claude_remote_control", "true"}} {
 		if _, _, err := run(t, paths, "", args...); err != nil {
 			t.Fatal(err)
 		}
 	}
 	calls, _ := os.ReadFile(log)
-	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") {
+	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") || !strings.Contains(string(calls), "settings set claude.remoteControl true\n") {
 		t.Fatalf("%s", calls)
 	}
 }

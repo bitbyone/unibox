@@ -442,12 +442,26 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			}
 		}
 		set := o.manager.Config.Context == (unibox.Context{})
-		if o.canAsk() {
+		target := "env " + use
+		if made := o.madeSandbox(use); made != "" {
+			target = "sandbox " + made + " (env " + use + ")"
+		}
+		same := o.defaultEnv() == use && (o.madeSandbox(use) == "" || o.defaultSandbox() == o.madeSandbox(use))
+		if o.canAsk() && !same {
+			current := "none"
+			if s, e := o.defaultSandbox(), o.defaultEnv(); s != "" {
+				current = "sandbox " + s + " (env " + e + ")"
+			} else if e != "" {
+				current = "env " + e
+			}
+			fmt.Fprintf(o.log, "  the current context is %s\n", current)
 			var err error
-			if set, err = o.askYes("Work in env "+use+" and its sandbox when a command is not told? (unibox context changes it)", true); err != nil {
+			if set, err = o.askYes("Use "+target+" as the current context for unibox commands?", true); err != nil {
 				return err
 			}
 		}
+		// What commands would take already is only written down, unasked.
+		set = set || same
 		if set {
 			if err := o.useContext("", use); err != nil {
 				return err

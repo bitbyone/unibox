@@ -403,6 +403,7 @@ unibox config unset <key>
 | `ssh_agent` | may sandboxes use your SSH agent; sbx is set to match ([Security](./security#your-ssh-agent)) |
 | `editor_ssh` | may editors and apps reach a sandbox as `ssh <sandbox>.sbx`; sbx is set to match and its daemon restarted |
 | `remember_host_commands` | sbx's `env.rememberHostCommands`: approving an env's host commands covers later runs (default `false`) |
+| `claude_remote_control` | sbx's `claude.remoteControl`: Claude Code's `/remote-control` works in sandboxes, so claude.ai and its app drive a session (default `false`) |
 
 ### `unibox herdr`
 

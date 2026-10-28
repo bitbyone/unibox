@@ -150,8 +150,8 @@ func (o *options) configCommand() *cobra.Command {
 		cfg := o.manager.Config
 		var value any = cfg
 		switch {
-		case len(args) == 1 && args[0] == "remember_host_commands":
-			v, err := o.manager.SBX.Setting(cmd.Context(), "env.rememberHostCommands")
+		case len(args) == 1 && sbxSettings[args[0]] != "":
+			v, err := o.manager.SBX.Setting(cmd.Context(), sbxSettings[args[0]])
 			if err != nil {
 				return err
 			}
@@ -186,16 +186,19 @@ func (o *options) configCommand() *cobra.Command {
                (sbx is set to match, its daemon restarted)
   remember_host_commands
                whether approving an env's host commands covers their later
-               runs too, rather than being asked each time (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
+               runs too, rather than being asked each time (sbx's setting)
+  claude_remote_control
+               whether Claude Code's /remote-control works in sandboxes, so
+               claude.ai and its app can drive a session (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		key, value := args[0], args[1]
 		switch key {
-		case "remember_host_commands":
+		case "remember_host_commands", "claude_remote_control":
 			v, err := strconv.ParseBool(value)
 			if err != nil {
 				return fmt.Errorf("%s must be true or false", key)
 			}
-			if err := o.manager.SBX.SetSetting(cmd.Context(), "env.rememberHostCommands", strconv.FormatBool(v)); err != nil {
+			if err := o.manager.SBX.SetSetting(cmd.Context(), sbxSettings[key], strconv.FormatBool(v)); err != nil {
 				return err
 			}
 			return o.success("configuration updated")
@@ -242,8 +245,8 @@ func (o *options) configCommand() *cobra.Command {
 	c.AddCommand(&cobra.Command{Use: "unset key", Args: cobra.ExactArgs(1), Short: "Forget a setting, back to its default", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		switch args[0] {
-		case "remember_host_commands":
-			if err := o.manager.SBX.SetSetting(cmd.Context(), "env.rememberHostCommands", ""); err != nil {
+		case "remember_host_commands", "claude_remote_control":
+			if err := o.manager.SBX.SetSetting(cmd.Context(), sbxSettings[args[0]], ""); err != nil {
 				return err
 			}
 			return o.success("configuration updated")
@@ -275,7 +278,14 @@ func (o *options) configCommand() *cobra.Command {
 	return c
 }
 
-const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh and remember_host_commands"
+const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh, remember_host_commands and claude_remote_control"
+
+// sbxSettings are the keys that are sbx's settings, which unibox keeps
+// nothing of and only reads and sets.
+var sbxSettings = map[string]string{
+	"remember_host_commands": "env.rememberHostCommands",
+	"claude_remote_control":  "claude.remoteControl",
+}
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {
