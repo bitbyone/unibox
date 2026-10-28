@@ -89,7 +89,7 @@ created from.
 ## Stop typing -s
 
 ```sh
-unibox context use -s dev-big     # commands now default to dev-big
+unibox context use -s dev-big     # commands now default to dev-big and its env
 unibox context                    # what commands would use, and why
 unibox context clear
 ```

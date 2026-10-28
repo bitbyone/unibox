@@ -380,8 +380,10 @@ unibox context use [-s <sandbox>] [-e <env>]
 unibox context clear
 ```
 
-Shows, sets or clears the default sandbox and env. List keys: `enter`
-use, `c` clear.
+Shows, sets or clears the default sandbox and env. They go together: a
+sandbox named alone brings the env it was made from, an env named alone
+its sandbox, or none until it has one. `init` asks to set the env it set
+up, and sets it without asking only where there is no context yet.
 
 ### `unibox config`
 

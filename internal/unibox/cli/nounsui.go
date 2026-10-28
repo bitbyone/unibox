@@ -171,9 +171,21 @@ func (o *options) contextUI(cmd *cobra.Command, leave func() error) error {
 			return "context cleared", err
 		}
 		flag, name, _ := strings.Cut(id, "=")
-		kind := map[string]string{"-s": "sandbox", "-e": "env"}[flag]
-		_, err := o.quietStep(cmd, "context", "use", flag, name)
-		return fmt.Sprintf("commands work in %s %s when not told", kind, name), err
+		if _, err := o.quietStep(cmd, "context", "use", flag, name); err != nil {
+			return "", err
+		}
+		if err := o.reloadConfig(); err != nil {
+			return "", err
+		}
+		ctx := o.manager.Config.Context
+		said := []string{}
+		if ctx.Sandbox != "" {
+			said = append(said, "sandbox "+ctx.Sandbox)
+		}
+		if ctx.Env != "" {
+			said = append(said, "env "+ctx.Env)
+		}
+		return "commands work in " + strings.Join(said, " and ") + " when not told", nil
 	}
 	return o.actList(cmd, build, act, leave)
 }

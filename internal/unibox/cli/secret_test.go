@@ -337,9 +337,13 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the one file is taken without asking; the arg; store
 	// the secrets; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n1\nperson\ny\n2\nn\n", "init", repo)
-	if err != nil {
+	_, said, err := runAt(t, paths, "1\n1\nperson\ny\n2\nn\ny\n", "init", repo)
+	if err != nil || !strings.Contains(said, "Work in env team and its sandbox") {
 		t.Fatalf("%v\n%s", err, said)
+	}
+	// Asked, the env is what commands work in; its sandbox once made.
+	if cfg, _ := paths.LoadConfig(); cfg.Context != (unibox.Context{Env: "team"}) {
+		t.Fatalf("%+v", cfg.Context)
 	}
 	cfg, _ := paths.LoadConfig()
 	if on, chosen := cfg.SSHAgent(); on || !chosen {
@@ -1060,5 +1064,28 @@ func TestANewTaskStopsWhereItsBranchExistsAlready(t *testing.T) {
 	}
 	if _, _, err := run(t, paths, "", "task", "new", "web", "--branch", "feat/x", "--no-push"); err == nil || !strings.Contains(err.Error(), "branch feat/x exists already in web") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestTheContextsSandboxAndEnvGoTogether(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["team"] = api.Sandbox{Name: "team", Env: "team"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A sandbox brings its env, an env its sandbox.
+	for _, args := range [][]string{{"-s", "team"}, {"-e", "team"}} {
+		if _, _, err := run(t, paths, "", append([]string{"context", "use"}, args...)...); err != nil {
+			t.Fatal(err)
+		}
+		if cfg, _ := paths.LoadConfig(); cfg.Context != (unibox.Context{Sandbox: "team", Env: "team"}) {
+			t.Fatalf("%v: %+v", args, cfg.Context)
+		}
 	}
 }

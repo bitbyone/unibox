@@ -430,6 +430,30 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			fmt.Fprintf(o.log, "  unibox run creates %s when it first needs it\n", sandbox)
 		}
 	}
+	// What was set up may be what the next commands work in: the env, the
+	// default one of several, and its sandbox once it is made. Asked, as
+	// a context of another team's would be left; without a terminal only a
+	// context not yet set is.
+	if len(envs) > 0 {
+		use := envs[0].Name
+		for _, env := range envs {
+			if env.Name == o.manager.Config.DefaultEnv {
+				use = env.Name
+			}
+		}
+		set := o.manager.Config.Context == (unibox.Context{})
+		if o.canAsk() {
+			var err error
+			if set, err = o.askYes("Work in env "+use+" and its sandbox when a command is not told? (unibox context changes it)", true); err != nil {
+				return err
+			}
+		}
+		if set {
+			if err := o.useContext("", use); err != nil {
+				return err
+			}
+		}
+	}
 	fmt.Fprintf(o.log, "\nset up; start a task with unibox run <directory>, or unibox run --shell for a shell\n")
 	return nil
 }

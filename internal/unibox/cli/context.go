@@ -87,27 +87,9 @@ env, the configuration's default_env before that).`, Example: "  unibox context 
 		if sandbox == "" && env == "" {
 			return fmt.Errorf("say what to use: -s <sandbox>, -e <env> or both")
 		}
-		cfg := o.manager.Config
-		if sandbox != "" {
-			state, err := o.paths.ReadState()
-			if err != nil {
-				return err
-			}
-			if _, ok := state.Sandboxes[sandbox]; !ok {
-				return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
-			}
-			cfg.Context.Sandbox = sandbox
-		}
-		if env != "" {
-			if _, ok := cfg.Envs[env]; !ok {
-				return fmt.Errorf("there is no env %s; unibox env ls lists them", env)
-			}
-			cfg.Context.Env = env
-		}
-		if err := o.paths.SaveConfig(cfg); err != nil {
+		if err := o.useContext(sandbox, env); err != nil {
 			return err
 		}
-		o.manager.Config = cfg
 		return show()
 	}}
 	use.Flags().StringVarP(&sandbox, "sandbox", "s", "", "Sandbox commands work in")
@@ -160,4 +142,47 @@ func (o *options) defaultTarget(r *unibox.Request) {
 	} else if e := o.defaultEnv(); e != "" {
 		r.Env = e
 	}
+}
+
+// useContext sets what commands work in when not told. The sandbox and the
+// env go together: a sandbox named alone brings the env it was made from,
+// an env named alone its sandbox, or none while it has none, so the two
+// never point at different envs.
+func (o *options) useContext(sandbox, env string) error {
+	// Read again: a step before may have saved what this one must keep.
+	cfg, err := o.paths.LoadConfig()
+	if err != nil {
+		return err
+	}
+	state, err := o.paths.ReadState()
+	if err != nil {
+		return err
+	}
+	if sandbox != "" {
+		b, ok := state.Sandboxes[sandbox]
+		if !ok {
+			return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
+		}
+		if _, known := cfg.Envs[b.Env]; env == "" && known {
+			env = b.Env
+		}
+	}
+	if env != "" {
+		if _, ok := cfg.Envs[env]; !ok {
+			return fmt.Errorf("there is no env %s; unibox env ls lists them", env)
+		}
+		if sandbox == "" {
+			if e, err := cfg.LoadEnv(env); err == nil {
+				if _, made := state.Sandboxes[e.SandboxName()]; made {
+					sandbox = e.SandboxName()
+				}
+			}
+		}
+	}
+	cfg.Context = unibox.Context{Sandbox: sandbox, Env: env}
+	if err := o.paths.SaveConfig(cfg); err != nil {
+		return err
+	}
+	o.manager.Config = cfg
+	return nil
 }
