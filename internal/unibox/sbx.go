@@ -301,6 +301,9 @@ type KitCredential struct {
 	Service     string `json:"service"`
 	Description string `json:"description"`
 	Optional    bool   `json:"optional"`
+	// OAuth is there when the token may instead come from signing in with
+	// a subscription, which sbx keeps as it would a token.
+	OAuth json.RawMessage `json:"oauth"`
 	// APIKey says the hosts the proxy puts the token into requests for.
 	APIKey struct {
 		Inject []struct {
@@ -308,6 +311,10 @@ type KitCredential struct {
 		} `json:"inject"`
 	} `json:"apiKey"`
 }
+
+// SignsIn says the service may be signed in to with a subscription rather
+// than given a token.
+func (c KitCredential) SignsIn() bool { return len(c.OAuth) > 0 && string(c.OAuth) != "null" }
 
 // Domains are the hosts the kit has the token sent to.
 func (c KitCredential) Domains() []string {
@@ -381,6 +388,18 @@ func (r *SBX) SecretSet(ctx context.Context, service, command string, in io.Read
 			return fmt.Errorf("sbx did not store the %s token", service)
 		}
 		return fmt.Errorf("sbx did not store the %s token: %w", service, err)
+	}
+	return nil
+}
+
+// SecretSignIn has sbx sign the person in to a service with their
+// subscription, in the browser, and keep the sign-in as the service's
+// token; nothing of it passes through unibox.
+func (r *SBX) SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error {
+	cmd := hostCommand(ctx, "sbx", "secret", "set", service, "--oauth")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sbx did not sign you in to %s", service)
 	}
 	return nil
 }

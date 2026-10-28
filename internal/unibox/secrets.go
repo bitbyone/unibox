@@ -38,6 +38,8 @@ type NeededSecret struct {
 	// bindings name.
 	Kits   []string `json:"kits,omitempty"`
 	Stored bool     `json:"stored"`
+	// SignIn says a subscription's sign-in may stand for the token.
+	SignIn bool `json:"sign_in,omitempty"`
 	// Domains are the hosts the kits have the token sent to.
 	Domains []string `json:"domains,omitempty"`
 	// Scope is where the token is stored: global, or a sandbox's name.
@@ -180,6 +182,7 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 			}
 			l.Optional = l.Optional && c.Optional
 			l.Kits = append(l.Kits, kitName(k.Source))
+			l.SignIn = l.SignIn || c.SignsIn()
 			for _, d := range c.Domains() {
 				if !slices.Contains(l.Domains, d) {
 					l.Domains = append(l.Domains, d)
@@ -340,3 +343,15 @@ func SecretClashes(needed map[string][]NeededSecret) []SecretClash {
 	}
 	return out
 }
+
+// hostSignIn are the services sbx signs in to from the host, in the
+// browser; sbx 0.49 does so for openai alone. Another service's agent signs
+// in itself at its first start, and sbx keeps that sign-in.
+var hostSignIn = map[string]bool{"openai": true}
+
+// SignsInFromHost says sbx signs the person in to the service from here.
+func (s NeededSecret) SignsInFromHost() bool { return s.SignIn && hostSignIn[s.Service] }
+
+// AgentSignsIn says nothing need be stored for the service now: its agent
+// signs in at its first start.
+func (s NeededSecret) AgentSignsIn() bool { return s.SignIn && !hostSignIn[s.Service] && !s.Stored }

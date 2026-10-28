@@ -200,6 +200,8 @@ func (o *options) doctorCommand() *cobra.Command {
 					switch {
 					case l.Stored:
 						add(area, "secret "+l.Service, "pass", "stored ("+l.Scope+")", "")
+					case l.AgentSignsIn():
+						add(area, "secret "+l.Service, "pass", "the agent signs in at its first start", "")
 					case l.Optional:
 						add(area, "secret "+l.Service, "warn", cmp.Or(l.Description, "optional, and not stored"), "unibox secret set -e "+name+" "+l.Service)
 					default:

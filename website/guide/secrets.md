@@ -92,6 +92,23 @@ A rotated token is then picked up without storing it again. sbx runs the
 command from a temporary directory with no terminal, so use a program on
 your `PATH` or an absolute path, never one inside a mounted repository.
 
+## Signing in with a subscription
+
+A kit may let its service be signed in to with a subscription instead of a
+token - Claude's, ChatGPT's for Codex. unibox then asks which:
+
+```term
+$ unibox secret set openai
+openai: OpenAI API access
+[blue]?[/] [b]The openai token[/]  Sign in with my subscription
+[dim](sbx signs you in, in the browser)[/]
+sbx has stored openai
+```
+
+sbx 0.49 signs in to `openai` from the host. Another service's agent signs
+in itself at its first start, with `/login`, and sbx keeps that sign-in:
+`unibox secret ls` says `sign-in` for it, and nothing is asked before.
+
 ## One name, two hosts
 
 sbx keeps one token a service name. If two teams' kits both name a

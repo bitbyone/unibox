@@ -186,6 +186,10 @@ func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	return slices.Clone(f.secrets), nil
 }
 
+func (f *fakeRuntime) SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error {
+	return f.SecretSet(ctx, service, "", in, out, errout)
+}
+
 func (f *fakeRuntime) SecretSet(_ context.Context, service, command string, _ io.Reader, _, _ io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

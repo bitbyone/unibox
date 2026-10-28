@@ -33,6 +33,7 @@ type Runtime interface {
 	KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error)
 	Secrets(ctx context.Context) ([]Secret, error)
 	SecretSet(ctx context.Context, service, command string, in io.Reader, out, errout io.Writer) error
+	SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error
 	Mount(ctx context.Context, sandbox, host, target string) error
 	Unmount(ctx context.Context, sandbox, host, target string) error
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)

@@ -40,7 +40,8 @@ case "$1 $2" in
 "ls --json") cat ` + unibox.Quote(filepath.Join(dir, "boxes")) + ` 2>/dev/null || echo '[]' ;;
 "policy log") echo '{"allowed":[],"blocked":[{"host":"pypi.org","reason":"no rule","count":3,"last_seen":"2025-01-01T10:00:00Z"},{"host":"x.org.dev.docker.internal","count":1}]}' ;;
 "policy ls") echo '{"rules":[{"id":"1","name":"kit:team","applies_to":"all","decision":"allow","resource_type":"network","resources":["gitlab.example.com"],"status":"active","provenance":{"created_via":"provisioned"}},{"id":"2","applies_to":"sandbox:dev","decision":"deny","resource_type":"network","resources":["ads.example.com"],"status":"active","editable":true,"provenance":{"created_via":"added"}},{"id":"3","applies_to":"all","decision":"allow","resource_type":"filesystem:read","resources":["/"]}]}' ;;
-"kit inspect") echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}' ;;
+"kit inspect")
+	if [ -f ` + unibox.Quote(filepath.Join(dir, "kit-oauth")) + ` ]; then echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","oauth":{"tokenEndpoint":"x"}},{"service":"openai","oauth":{"tokenEndpoint":"x"}}]}'; else echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}'; fi ;;
 "secret ls")
 	printf '['; sep=''
 	[ -f ` + unibox.Quote(secrets) + ` ] && while read -r n; do printf '%s{"scope":"global","type":"service","name":"%s"}' "$sep" "$n"; sep=,; done < ` + unibox.Quote(secrets) + `
@@ -385,6 +386,29 @@ func TestInitTakesEditorsOverSSHThatSbxHasOnAlready(t *testing.T) {
 	}
 	if strings.Contains(calls(t, log), "settings set feature.ssh") {
 		t.Fatal("sbx's setting was set again")
+	}
+}
+
+func TestASubscriptionsSignInStandsForAToken(t *testing.T) {
+	log := fakeSBX(t)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "kit-oauth"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
+	// SSH agent and editors: no; the arg; store the tokens; openai signed
+	// in; gitlab's token; no sandbox. Claude's agent signs in itself.
+	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n1\nn\n", "init", repo)
+	if err != nil || !strings.Contains(said, "anthropic: the agent signs in at its first start") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	c := calls(t, log)
+	if !strings.Contains(c, "secret set openai --oauth\n") || strings.Contains(c, "secret set anthropic") {
+		t.Fatalf("%s", c)
+	}
+	if out, _, err := run(t, paths, "", "secret", "ls"); err != nil || !strings.Contains(out, "sign-in") {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }
 
