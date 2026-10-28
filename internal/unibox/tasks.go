@@ -587,6 +587,10 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		if code < 0 {
 			code = 128
 		}
+		if code == 125 {
+			// sbx 0.50 says so when it could not run the command at all.
+			return &Failure{code, "exec_failed", fmt.Sprintf("sbx could not start %s in sandbox %s; unibox doctor says what is wrong", agent, b.Name)}
+		}
 		return &Failure{code, "agent_exit", fmt.Sprintf("agent exited with status %d", code)}
 	}
 	return err

@@ -19,7 +19,7 @@ $ unibox doctor
   [ok]✓[/] Daemon                 healthy
   [ok]✓[/] Authentication         authenticated
   [ok]✓[/] Global network policy  initialized
-  [ok]✓[/] for unibox             0.49.2, new enough
+  [ok]✓[/] for unibox             0.50.0, new enough
   [ok]✓[/] SSH agent              not forwarded, as you chose
 
 [b]Env dev[/]

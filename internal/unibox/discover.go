@@ -64,7 +64,7 @@ func SBXEnvsIn(dir string) ([]string, error) {
 
 // RepoRoot is the top of the git repository dir is in, or "" outside one.
 func RepoRoot(ctx context.Context, dir string) string {
-	c := hostCommand(ctx, "git", "-C", dir, "rev-parse", "--show-toplevel")
+	c := hostCommand(ctx, "git", append(gitGuard(ctx, dir), "-C", dir, "rev-parse", "--show-toplevel")...)
 	b, err := c.Output()
 	if err != nil {
 		return ""

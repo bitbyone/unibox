@@ -167,7 +167,7 @@ func userGit(ctx context.Context, ask bool, args ...string) *exec.Cmd {
 }
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	b, err := commandOutput(hostCommand(ctx, "git", append([]string{"-C", dir}, args...)...))
+	b, err := commandOutput(hostCommand(ctx, "git", append(append(gitGuard(ctx, dir), "-C", dir), args...)...))
 	return strings.TrimSpace(string(b)), err
 }
 

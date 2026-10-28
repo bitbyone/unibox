@@ -4,7 +4,7 @@
 
 - macOS, Linux or Windows
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`)
-  0.49.2 or newer; `unibox init` signs it in to Docker if it is not
+  0.50.0 or newer; `unibox init` signs it in to Docker if it is not
 - git
 - the address of your team's repository of sbxenv files and kits
 

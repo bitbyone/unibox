@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -342,5 +344,51 @@ func TestAMountedContextCheckoutKeepsItsBranchAndOneWithoutAForgeIsNotPushed(t *
 	}
 	if got := gitTest(t, alone, "branch", "--show-current"); got != "main" {
 		t.Fatalf("the checkout was switched to %s", got)
+	}
+}
+
+func TestGitOnTheHostRunsNothingAMountedRepositoryConfigures(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("the programs are shell scripts")
+	}
+	ctx := context.Background()
+	dir, marks := t.TempDir(), t.TempDir()
+	program := func(name string) string {
+		p := filepath.Join(marks, name+".sh")
+		mustWriteExecutable(t, p, []byte("#!/bin/sh\ntouch "+Quote(filepath.Join(marks, name))+"\ncat\n"))
+		return p
+	}
+	hooks := filepath.Join(dir, ".git", "hooks")
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"commit", "-q", "--allow-empty", "-m", "first"},
+		// What an agent could leave in a mounted checkout's .git.
+		{"config", "core.fsmonitor", program("fsmonitor")},
+		{"config", "filter.evil.clean", program("filter")},
+		{"config", "credential.helper", "!" + program("helper")},
+		{"config", "core.hooksPath", hooks}} {
+		if b, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, b)
+		}
+	}
+	mustWriteExecutable(t, filepath.Join(hooks, "post-checkout"), []byte("#!/bin/sh\ntouch "+Quote(filepath.Join(marks, "hook"))+"\n"))
+	write(t, filepath.Join(dir, ".gitattributes"), "* filter=evil\n")
+	write(t, filepath.Join(dir, "file"), "changed\n")
+	// The person's own git runs them, as the checks below rely on.
+	if b, err := exec.Command("git", "-C", dir, "checkout", "-q", "-b", "plain").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, b)
+	}
+	if _, err := os.Stat(filepath.Join(marks, "hook")); err != nil {
+		t.Fatal("the hook did not run for git itself")
+	}
+	for _, name := range []string{"fsmonitor", "filter", "helper", "hook"} {
+		_ = os.Remove(filepath.Join(marks, name))
+	}
+	for _, args := range [][]string{{"status", "--porcelain"}, {"add", "file"}, {"checkout", "-q", "-b", "other"}, {"config", "--get", "remote.origin.url"}} {
+		_, _ = git(ctx, dir, args...)
+	}
+	for _, name := range []string{"fsmonitor", "filter", "helper", "hook"} {
+		if _, err := os.Stat(filepath.Join(marks, name)); err == nil {
+			t.Errorf("unibox's git ran the repository's %s", name)
+		}
 	}
 }

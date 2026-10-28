@@ -20,8 +20,10 @@ kits now say all of that, and it is gone. [From unibox 1](#from-unibox-1)
 says what went and why; [sbx-pivot.md](sbx-pivot.md) is the plan of the
 change, with what each phase actually did.
 
-Checked against sbx 0.49.2 on macOS (Apple Silicon), the oldest release
-unibox accepts (`MinSBXVersion`). It builds without cgo for Linux, macOS
+Checked against sbx 0.49.2 on macOS (Apple Silicon); the oldest release
+unibox accepts (`MinSBXVersion`) is 0.50.0, whose kit-declared host mounts
+the teams' kits use and which stops sbx's own host git from running what a
+workspace's .git configures. It builds without cgo for Linux, macOS
 and Windows on amd64 and arm64 ([Platforms](#platforms-and-releases)). What sbx was found to do, with when and
 how, is in [What was verified about sbx](#what-was-verified-about-sbx);
 some of it was checked against 0.47 for unibox 1 and is kept because the
@@ -588,6 +590,14 @@ copied into Copilot's file at each start, is what the kits say. That is
 the team's kit's to do, not unibox's. A
 `CLAUDE.md` linked to `AGENTS.md` in one directory is read by Copilot once.
 
+The git unibox runs on the host takes `-c` over every key of the
+repository's own configuration that names a program (`gitGuard` in
+repos.go): a mounted checkout's `.git` is the agent's to write, and unibox
+runs git there unasked - reading a branch, checking one on the forge. The
+keys are listed with `git config --local --includes --name-only`, which
+runs nothing; hooks, fsmonitor, askpass and the ext transport are off
+always. sbx 0.50 did the same for its own host git.
+
 `unibox task instructions` reads in the running sandbox, never starting
 one, the files each agent's documentation says it reads (Copilot's
 `/help`, Claude's and Codex's memory files; `agentInstructionFiles`), from
@@ -687,8 +697,8 @@ as init runs its steps; one needing a value or a choice (an arg, the SSH
 agent yes or no) stays a hint:
 
 - **sbx**: installed; its own `sbx diagnose` (details that may name the
-  user's account left out); a version of at least `MinSBXVersion` (0.49.2,
-  the one checked), an older one a failure; `env.rememberHostCommands`
+  user's account left out); a version of at least `MinSBXVersion` (0.50.0),
+  an older one a failure; `env.rememberHostCommands`
   (on is a warning: sbx would run an env's host commands again without
   asking); the SSH agent against the user's decision.
 - **each env**: its files read; each required arg given, and an arg set

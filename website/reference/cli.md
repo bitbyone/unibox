@@ -64,7 +64,7 @@ Running it again adds only what is new.
 unibox doctor [-e <env>] [-i]
 ```
 
-Checks sbx (installed, `sbx diagnose`, version 0.49.2 or newer, host
+Checks sbx (installed, `sbx diagnose`, version 0.50.0 or newer, host
 commands setting, SSH agent), `vars.toml`, each env (files, args,
 `sbx env plan`, secrets, drift, cloned repository behind), and each
 sandbox (still in sbx, mounts). Names the fix for each finding. `-e`

@@ -224,7 +224,7 @@ func envArgs(verb, name, args string, files []string) []string {
 
 // MinSBXVersion is the oldest sbx unibox was checked against: sbxenv
 // files, args files, kit args and mounts as unibox uses them.
-const MinSBXVersion = "0.49.2"
+const MinSBXVersion = "0.50.0"
 
 var semver = regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
 

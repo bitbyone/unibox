@@ -29,7 +29,7 @@ echo "$*" >> ` + unibox.Quote(log) + `
 case "$1 $2" in
 "settings get")
 	if [ "$3" = feature.ssh ] && [ -f ` + unibox.Quote(filepath.Join(dir, "editor-ssh")) + ` ]; then echo '{"value":{"enabled":true}}'; else echo '{"value":false}'; fi ;;
-"version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.49.2) 1234abc" ;;
+"version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.50.0) 1234abc" ;;
 "diagnose --format")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "policy-unchosen")) + ` ]; then echo '{"checks":[{"name":"Global network policy","status":"fail","message":"not initialized"}]}'; exit 1; fi
 	echo '{"checks":[]}' ;;
@@ -272,7 +272,7 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	}
 	// An env is planned only once its args are given.
 	out, _, _ := run(t, paths, "", "doctor")
-	if !strings.Contains(out, "0.49.2") || !strings.Contains(out, "sbx asks before an env's host commands run") || strings.Contains(calls(t, log), "env plan") {
+	if !strings.Contains(out, "0.50.0") || !strings.Contains(out, "sbx asks before an env's host commands run") || strings.Contains(calls(t, log), "env plan") {
 		t.Fatalf("%s", out)
 	}
 	if _, _, err := run(t, paths, "", "var", "set", "-e", "team", "user", "me"); err != nil {

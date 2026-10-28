@@ -823,3 +823,22 @@ repos:
 		t.Fatalf("%s %v", b, err)
 	}
 }
+
+func TestASessionSbxCouldNotStartIsSaidSo(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	bin := t.TempDir()
+	// sbx exec exits 125 when it cannot run the command at all.
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nexit 125\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	err := m.Run(ctx, Request{Sandbox: "dev", Task: "pay", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}}}, strings.NewReader(""), io.Discard, io.Discard, nil)
+	if err == nil || !strings.Contains(err.Error(), "sbx could not start claude in sandbox dev") {
+		t.Fatalf("%v", err)
+	}
+}

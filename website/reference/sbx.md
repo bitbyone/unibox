@@ -2,7 +2,7 @@
 
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) does the
 work: each sandbox is a micro-VM with its own kernel, Docker Engine and
-disk, persistent until removed. unibox needs **sbx 0.49.2 or newer**,
+disk, persistent until removed. unibox needs **sbx 0.50.0 or newer**,
 verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 
 ## Commands unibox runs

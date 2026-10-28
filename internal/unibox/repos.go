@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/tobola/unibox/internal/unibox/api"
 )
@@ -113,19 +115,82 @@ func (req *Request) decide() {
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
-	c := hostCommand(ctx, "git", append([]string{"-C", dir}, args...)...)
+	c := hostCommand(ctx, "git", append(append(gitGuard(ctx, dir), "-C", dir), args...)...)
 	// git on the host acts as the person, with their SSH agent, but never
 	// asks on the terminal: a password prompt there would take the keys of
-	// whatever unibox draws, and outlive it.
-	c.Env = append(c.Env, "GIT_TERMINAL_PROMPT=0")
+	// whatever unibox draws, and outlive it. The ssh it runs is the
+	// person's, never one a repository's core.sshCommand names.
+	c.Env = append(c.Env, "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND="+cmp.Or(os.Getenv("GIT_SSH_COMMAND"), "ssh -o BatchMode=yes"))
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		c.Env = append(c.Env, "SSH_AUTH_SOCK="+sock)
 	}
-	if os.Getenv("GIT_SSH_COMMAND") == "" {
-		c.Env = append(c.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
-	}
 	b, err := commandOutput(c)
 	return strings.TrimSpace(string(b)), err
+}
+
+var (
+	gitGuards   = map[string][]string{}
+	gitGuardsMu sync.Mutex
+)
+
+// gitGuard are the options every git unibox runs on the host takes over
+// what a repository's own configuration says. A mounted checkout's .git is
+// the agent's to write, and git runs what its configuration names - hooks,
+// an fsmonitor, a filter, a credential helper, a pack program - as the
+// person, outside the sandbox, at a command unibox runs without being
+// asked. So none of it runs: the repository's keys are read, which runs
+// nothing, and each that names a program is set to none, or to git's own.
+// sbx 0.50 does the same for the git it runs.
+func gitGuard(ctx context.Context, dir string) []string {
+	gitGuardsMu.Lock()
+	defer gitGuardsMu.Unlock()
+	if args, ok := gitGuards[dir]; ok {
+		return args
+	}
+	args := []string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.DevNull, "-c", "protocol.ext.allow=never",
+		"-c", "core.askPass=", "-c", "core.gitProxy=", "-c", "core.alternateRefsCommand="}
+	out, err := hostCommand(ctx, "git", "-C", dir, "config", "--local", "--includes", "--name-only", "--list").Output()
+	if err != nil {
+		// No repository there, or none git reads: nothing of its own to set.
+		gitGuards[dir] = args
+		return args
+	}
+	helpers := false
+	for _, key := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		k := strings.ToLower(key)
+		section, _, _ := strings.Cut(k, ".")
+		last := k[strings.LastIndex(k, ".")+1:]
+		switch {
+		case section == "credential" && last == "helper":
+			// An empty helper takes away every one named before it, the
+			// person's own with the repository's; theirs come back below.
+			args = append(args, "-c", key+"=")
+			helpers = true
+		case section == "remote" && last == "uploadpack":
+			args = append(args, "-c", key+"=git-upload-pack")
+		case section == "remote" && last == "receivepack":
+			args = append(args, "-c", key+"=git-receive-pack")
+		case section == "filter" && (last == "clean" || last == "smudge" || last == "process"):
+			args = append(args, "-c", key+"=", "-c", k[:strings.LastIndex(k, ".")]+".required=false")
+		case section == "diff" && (last == "external" || last == "command" || last == "textconv"),
+			section == "merge" && last == "driver",
+			section == "gpg" && last == "program",
+			section == "remote" && last == "vcs",
+			k == "core.pager", k == "core.editor", k == "sequence.editor", k == "core.sshcommand":
+			args = append(args, "-c", key+"=")
+		}
+	}
+	if helpers {
+		if out, err := hostCommand(ctx, "git", "config", "--global", "--get-all", "credential.helper").Output(); err == nil {
+			for _, h := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				if h != "" {
+					args = append(args, "-c", "credential.helper="+h)
+				}
+			}
+		}
+	}
+	gitGuards[dir] = args
+	return args
 }
 
 func CloneURL(raw string) (string, error) {

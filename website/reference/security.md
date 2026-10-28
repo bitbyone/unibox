@@ -59,6 +59,11 @@ run git all the time.
   carries objects and refs, not config or hooks.
 - unibox writes nothing into a host `.git`; a mount's author and hook come
   from the sandbox's global git config.
+- The git unibox runs on your machine - to read a checkout's branch and
+  origin, switch or push its branch, check a branch on the forge - runs
+  nothing a repository's configuration names: no hook, fsmonitor, filter,
+  pack program, or credential helper but your own. Your own git, your
+  editor and your prompt still do; that is what the warning above is for.
 
 ## The forge is the boundary
 

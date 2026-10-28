@@ -39,7 +39,7 @@ proxy replaces. unibox never reads them.
 
 ## Install
 
-Needs git and Docker Sandboxes 0.49.2 or later; `unibox init` signs you in
+Needs git and Docker Sandboxes 0.50.0 or later; `unibox init` signs you in
 to sbx. Runs on Linux, macOS and Windows.
 
 With Homebrew, from the tap in this repository; it builds the release on
