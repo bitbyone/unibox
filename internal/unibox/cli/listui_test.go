@@ -127,7 +127,7 @@ func TestNounsAloneListWithoutATerminal(t *testing.T) {
 		{[]string{"env"}, "dev (default)"},
 		{[]string{"var"}, "Your user name"},
 		{[]string{"var", "-g"}, "NAME"},
-		{[]string{"context"}, "env      dev"},
+		{[]string{"context"}, "commands work in env dev"},
 	} {
 		if out, _, err := run(t, paths, "", c.args...); err != nil || !strings.Contains(out, c.want) {
 			t.Fatalf("%v: %v %q", c.args, err, out)

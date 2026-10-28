@@ -13,11 +13,13 @@ import (
 )
 
 // What a command works on is its argument; the env or sandbox it works in
-// is a flag. Left out, it is taken from UNIBOX_ENV or UNIBOX_SANDBOX, then
-// from unibox context use, then from there being only one.
+// is a flag. Left out, the sandbox is taken from UNIBOX_SANDBOX, then from
+// unibox context use, then from there being only one; the env from
+// UNIBOX_ENV, then from that sandbox, then from default_env, then from
+// there being only one.
 
 func envFlag(c *cobra.Command, e *string) {
-	c.Flags().StringVarP(e, "env", "e", "", "Env a new sandbox is created from (default: UNIBOX_ENV, the context's, or the only one)")
+	c.Flags().StringVarP(e, "env", "e", "", "Env (default: UNIBOX_ENV, the sandbox's, default_env, or the only one)")
 }
 
 func sandboxFlag(c *cobra.Command, s *string) {
@@ -25,18 +27,71 @@ func sandboxFlag(c *cobra.Command, s *string) {
 }
 
 // defaultSandbox is the sandbox a command works in when it is not told,
-// or "" when none can be said.
+// or "" when none can be said: UNIBOX_SANDBOX, the context's, the sandbox
+// of the context's env once it is made, or the only one.
 func (o *options) defaultSandbox() string {
-	if s := os.Getenv("UNIBOX_SANDBOX"); s != "" {
+	if s := o.chosenSandbox(); s != "" {
 		return s
 	}
-	if s := o.manager.Config.Context.Sandbox; s != "" {
-		return s
+	if o.manager.Config.Context.Env != "" {
+		// An env chosen before its sandbox was made has none yet; another
+		// env's sandbox is not it.
+		return ""
 	}
 	if state, err := o.paths.ReadState(); err == nil && len(state.Sandboxes) == 1 {
 		for name := range state.Sandboxes {
 			return name
 		}
+	}
+	return ""
+}
+
+// chosenSandbox is the sandbox the person chose to work in: UNIBOX_SANDBOX,
+// the context's, or that of the context's env once it is made.
+func (o *options) chosenSandbox() string {
+	if s := os.Getenv("UNIBOX_SANDBOX"); s != "" {
+		return s
+	}
+	ctx := o.manager.Config.Context
+	if ctx.Sandbox != "" {
+		return ctx.Sandbox
+	}
+	if ctx.Env != "" {
+		return o.madeSandbox(ctx.Env)
+	}
+	return ""
+}
+
+// madeSandbox is an env's sandbox if unibox has made it, else "".
+func (o *options) madeSandbox(env string) string {
+	ec, ok := o.manager.Config.Envs[env]
+	if !ok {
+		return ""
+	}
+	name := ec.Name
+	if name == "" {
+		sbx, err := unibox.ReadSBXEnv(ec.Files)
+		if err != nil {
+			return ""
+		}
+		name = sbx.SandboxName(env)
+	}
+	if state, err := o.paths.ReadState(); err == nil {
+		if _, made := state.Sandboxes[name]; made {
+			return name
+		}
+	}
+	return ""
+}
+
+// sandboxEnv is the env a sandbox was made from, if it is still an env.
+func (o *options) sandboxEnv(sandbox string) string {
+	state, err := o.paths.ReadState()
+	if err != nil {
+		return ""
+	}
+	if _, known := o.manager.Config.Envs[state.Sandboxes[sandbox].Env]; known {
+		return state.Sandboxes[sandbox].Env
 	}
 	return ""
 }
@@ -66,26 +121,27 @@ func orNoneOf(names []string, hint string) string {
 // are not told, as kubectl keeps its context.
 func (o *options) contextCommand() *cobra.Command {
 	show := func() error {
-		c := o.manager.Config.Context
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "context": c, "sandbox": o.defaultSandbox(), "env": o.defaultEnv()})
+			return o.write(map[string]any{"api_version": api.Version, "context": o.manager.Config.Context, "sandbox": o.defaultSandbox(), "env": o.defaultEnv()})
 		}
-		fmt.Fprintf(o.output, "sandbox  %s\nenv      %s\n", describe(c.Sandbox, o.defaultSandbox(), "UNIBOX_SANDBOX"), describe(c.Env, o.defaultEnv(), "UNIBOX_ENV"))
+		fmt.Fprintln(o.output, o.contextText())
 		return nil
 	}
-	c := &cobra.Command{Use: "context", Args: cobra.NoArgs, Short: "Show or set the sandbox and env commands work in when not told", Long: `Commands take the sandbox they work in as -s and the env a new one is
-created from as -e. Left out, it comes from UNIBOX_SANDBOX or UNIBOX_ENV,
-then from the context set here, then from there being only one (for an
-env, the configuration's default_env before that).`, Example: "  unibox context use -s dev\n  unibox context\n  unibox context clear", RunE: func(cmd *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: "context", Args: cobra.NoArgs, Short: "Show or set the sandbox commands work in when not told", Long: `Commands take the sandbox they work in as -s and the env as -e. Left
+out, the sandbox comes from UNIBOX_SANDBOX, then from the context set here,
+then from there being only one; the env from UNIBOX_ENV, then from that
+sandbox, then from default_env, then from there being only one. The context
+is a sandbox, or an env whose sandbox is not made yet, which becomes its
+sandbox once it is.`, Example: "  unibox context use -s dev\n  unibox context\n  unibox context clear", RunE: func(cmd *cobra.Command, args []string) error {
 		if !o.interactive || o.json {
 			return show()
 		}
 		return o.contextUI(cmd, show)
 	}}
 	var sandbox, env string
-	use := &cobra.Command{Use: "use", Args: cobra.NoArgs, Short: "Set the context's sandbox, env or both", RunE: func(cmd *cobra.Command, args []string) error {
+	use := &cobra.Command{Use: "use", Args: cobra.NoArgs, Short: "Set the sandbox commands work in, or an env whose sandbox is to be made", RunE: func(cmd *cobra.Command, args []string) error {
 		if sandbox == "" && env == "" {
-			return fmt.Errorf("say what to use: -s <sandbox>, -e <env> or both")
+			return fmt.Errorf("say what to use: -s <sandbox>, or -e <env> for its sandbox")
 		}
 		if err := o.useContext(sandbox, env); err != nil {
 			return err
@@ -93,7 +149,8 @@ env, the configuration's default_env before that).`, Example: "  unibox context 
 		return show()
 	}}
 	use.Flags().StringVarP(&sandbox, "sandbox", "s", "", "Sandbox commands work in")
-	use.Flags().StringVarP(&env, "env", "e", "", "Env new sandboxes are created from")
+	use.Flags().StringVarP(&env, "env", "e", "", "Env whose sandbox commands work in, made or to be made")
+	use.MarkFlagsMutuallyExclusive("sandbox", "env")
 	c.AddCommand(use)
 	c.AddCommand(&cobra.Command{Use: "clear", Args: cobra.NoArgs, Short: "Forget the context", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
@@ -107,17 +164,26 @@ env, the configuration's default_env before that).`, Example: "  unibox context 
 	return c
 }
 
-// describe says what a command works in when not told, and why.
-func describe(set, effective, env string) string {
+// contextText says what commands work in when not told, and why.
+func (o *options) contextText() string {
+	sandbox, env := o.defaultSandbox(), o.defaultEnv()
+	why := ""
 	switch {
-	case effective == "":
-		return "-"
-	case os.Getenv(env) != "":
-		return effective + " (" + env + ")"
-	case set != "":
-		return effective
+	case os.Getenv("UNIBOX_SANDBOX") != "":
+		why = " (UNIBOX_SANDBOX)"
+	case sandbox != "" && o.chosenSandbox() == "":
+		why = " (the only one)"
 	}
-	return effective + " (the only one)"
+	if sandbox == "" && env == "" {
+		return "commands work in what they are told; unibox context use -s <sandbox> sets one"
+	}
+	if sandbox == "" {
+		return "commands work in env " + env + ", whose sandbox is not made yet"
+	}
+	if env == "" {
+		return "commands work in sandbox " + sandbox + why
+	}
+	return "commands work in sandbox " + sandbox + why + ", of env " + env
 }
 
 // forgetContext takes a removed sandbox out of the context.
@@ -144,42 +210,36 @@ func (o *options) defaultTarget(r *unibox.Request) {
 	}
 }
 
-// useContext sets what commands work in when not told. The sandbox and the
-// env go together: a sandbox named alone brings the env it was made from,
-// an env named alone its sandbox, or none while it has none, so the two
-// never point at different envs.
+// useContext sets what commands work in when not told: a sandbox, or an
+// env, which is its sandbox once that is made and until then the env
+// alone. The env of a sandbox is the one it was made from, so the context
+// never names two.
 func (o *options) useContext(sandbox, env string) error {
 	// Read again: a step before may have saved what this one must keep.
 	cfg, err := o.paths.LoadConfig()
 	if err != nil {
 		return err
 	}
-	state, err := o.paths.ReadState()
-	if err != nil {
-		return err
-	}
-	if sandbox != "" {
-		b, ok := state.Sandboxes[sandbox]
-		if !ok {
+	o.manager.Config = cfg
+	switch {
+	case sandbox != "":
+		state, err := o.paths.ReadState()
+		if err != nil {
+			return err
+		}
+		if _, ok := state.Sandboxes[sandbox]; !ok {
 			return fmt.Errorf("sandbox %s not found; unibox sandbox ls lists them", sandbox)
 		}
-		if _, known := cfg.Envs[b.Env]; env == "" && known {
-			env = b.Env
-		}
-	}
-	if env != "" {
+		cfg.Context = unibox.Context{Sandbox: sandbox}
+	case env != "":
 		if _, ok := cfg.Envs[env]; !ok {
 			return fmt.Errorf("there is no env %s; unibox env ls lists them", env)
 		}
-		if sandbox == "" {
-			if e, err := cfg.LoadEnv(env); err == nil {
-				if _, made := state.Sandboxes[e.SandboxName()]; made {
-					sandbox = e.SandboxName()
-				}
-			}
+		cfg.Context = unibox.Context{Env: env}
+		if made := o.madeSandbox(env); made != "" {
+			cfg.Context = unibox.Context{Sandbox: made}
 		}
 	}
-	cfg.Context = unibox.Context{Sandbox: sandbox, Env: env}
 	if err := o.paths.SaveConfig(cfg); err != nil {
 		return err
 	}

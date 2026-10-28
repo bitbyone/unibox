@@ -380,10 +380,12 @@ unibox context use [-s <sandbox>] [-e <env>]
 unibox context clear
 ```
 
-Shows, sets or clears the default sandbox and env. They go together: a
-sandbox named alone brings the env it was made from, an env named alone
-its sandbox, or none until it has one. `init` asks to set the env it set
-up, and sets it without asking only where there is no context yet.
+Shows, sets or clears the sandbox commands work in when not told. The env
+they work in is that sandbox's; `-e` names an env whose sandbox is not made
+yet, which stands until it is. The list has one row a sandbox, with its
+env, and one an env with no sandbox. Without `-e`, the env is
+`UNIBOX_ENV`, the sandbox's, `default_env`, or the only one. `init` asks to
+set what it set up, and sets it without asking only where nothing is set.
 
 ### `unibox config`
 

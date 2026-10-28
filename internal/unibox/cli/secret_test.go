@@ -1079,13 +1079,27 @@ func TestTheContextsSandboxAndEnvGoTogether(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// A sandbox brings its env, an env its sandbox.
+	// The context is a sandbox, whose env commands take; an env names its
+	// sandbox once made, and stands for it until then.
 	for _, args := range [][]string{{"-s", "team"}, {"-e", "team"}} {
-		if _, _, err := run(t, paths, "", append([]string{"context", "use"}, args...)...); err != nil {
-			t.Fatal(err)
+		out, _, err := run(t, paths, "", append([]string{"context", "use"}, args...)...)
+		if err != nil || !strings.Contains(out, "commands work in sandbox team, of env team") {
+			t.Fatalf("%v: %v\n%s", args, err, out)
 		}
-		if cfg, _ := paths.LoadConfig(); cfg.Context != (unibox.Context{Sandbox: "team", Env: "team"}) {
+		if cfg, _ := paths.LoadConfig(); cfg.Context != (unibox.Context{Sandbox: "team"}) {
 			t.Fatalf("%v: %+v", args, cfg.Context)
 		}
+	}
+	if err := paths.State(func(s *unibox.State) error {
+		delete(s.Sandboxes, "team")
+		s.Sandboxes["other"] = api.Sandbox{Name: "other", Env: "gone"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Another env's only sandbox is not taken for one not made yet.
+	out, _, err := run(t, paths, "", "context", "use", "-e", "team")
+	if err != nil || !strings.Contains(out, "commands work in env team, whose sandbox is not made yet") {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }

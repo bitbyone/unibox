@@ -144,23 +144,34 @@ func (o *options) contextUI(cmd *cobra.Command, leave func() error) error {
 		if err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: "context: what commands work in when not told", header: []string{"", "KIND", "NAME"}, ownLeave: true, actions: []listAction{
+		m := listModel{title: "context: the sandbox commands work in when not told", header: []string{"", "SANDBOX", "ENV"}, ownLeave: true, actions: []listAction{
 			{key: "enter", name: "use", help: "use"},
 			{key: "c", name: "clear", help: "clear", any: true},
 		}}
-		add := func(kind, name, current string) {
-			mark := " "
-			if name == current {
-				mark, name = portOn.Render("●"), portOn.Render(name)
+		// One row a sandbox, with its env, and one an env whose sandbox is
+		// not made yet: picking one picks both.
+		current, currentEnv := o.defaultSandbox(), o.manager.Config.Context.Env
+		mark := func(on bool, cells ...string) []string {
+			if !on {
+				return append([]string{" "}, cells...)
 			}
-			m.rows = append(m.rows, []string{mark, kind, name})
+			for i := range cells {
+				cells[i] = portOn.Render(cells[i])
+			}
+			return append([]string{portOn.Render("●")}, cells...)
 		}
+		made := map[string]bool{}
 		for _, name := range sorted(state.Sandboxes) {
-			add("sandbox", name, o.defaultSandbox())
+			env := state.Sandboxes[name].Env
+			made[env] = true
+			m.rows = append(m.rows, mark(name == current, name, cmp.Or(env, "-")))
 			m.ids = append(m.ids, "-s="+name)
 		}
 		for _, name := range sorted(o.manager.Config.Envs) {
-			add("env", name, o.defaultEnv())
+			if made[name] {
+				continue
+			}
+			m.rows = append(m.rows, mark(current == "" && name == currentEnv, portHelp.Render("not made yet"), name))
 			m.ids = append(m.ids, "-e="+name)
 		}
 		return m, nil
@@ -177,15 +188,7 @@ func (o *options) contextUI(cmd *cobra.Command, leave func() error) error {
 		if err := o.reloadConfig(); err != nil {
 			return "", err
 		}
-		ctx := o.manager.Config.Context
-		said := []string{}
-		if ctx.Sandbox != "" {
-			said = append(said, "sandbox "+ctx.Sandbox)
-		}
-		if ctx.Env != "" {
-			said = append(said, "env "+ctx.Env)
-		}
-		return "commands work in " + strings.Join(said, " and ") + " when not told", nil
+		return o.contextText(), nil
 	}
 	return o.actList(cmd, build, act, leave)
 }

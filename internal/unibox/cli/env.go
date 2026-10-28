@@ -372,8 +372,23 @@ func firstArg(args []string) string {
 // UNIBOX_ENV, the context, the configuration's default, or the only one.
 func (o *options) defaultEnv() string {
 	cfg := o.manager.Config
-	for _, e := range []string{os.Getenv("UNIBOX_ENV"), cfg.Context.Env, cfg.DefaultEnv} {
+	// The env of the sandbox commands work in, so the two never differ;
+	// then the context's env whose sandbox is to be made, the default.
+	if e := os.Getenv("UNIBOX_ENV"); e != "" {
+		return e
+	}
+	if s := o.chosenSandbox(); s != "" {
+		if e := o.sandboxEnv(s); e != "" {
+			return e
+		}
+	}
+	for _, e := range []string{cfg.Context.Env, cfg.DefaultEnv} {
 		if e != "" {
+			return e
+		}
+	}
+	if s := o.defaultSandbox(); s != "" {
+		if e := o.sandboxEnv(s); e != "" {
 			return e
 		}
 	}
