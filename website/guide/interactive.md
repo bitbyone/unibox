@@ -1,8 +1,7 @@
 # Interactive Lists
 
 Run a unibox command without arguments at a terminal and it opens a list
-of what it names. Pick a row, press a key; the keys are shown under the
-list. A key runs the same command you would type, so nothing differs
+of what it names. Each list hints its keys under it. A key runs the same command you would type, so nothing differs
 between the list and the command line.
 
 ```term

@@ -99,19 +99,18 @@ $ unibox task new
 [key]↑/↓ j/k[/] move · [key]space[/] pick · [key]c[/] work/context · [key]p[/] push · [key]b[/] branch · [key]t[/] task name · [key]/[/] filter · [key]enter[/] start · [key]q[/] cancel
 ```
 
-- `b` types the branch the repositories worked in get. A pushed branch
+- The branch typed applies to the repositories worked in. A pushed branch
   that is missing is made on the forge from its default branch; one not
   pushed is made in the sandbox's clone, or your checkout, alone.
 - A context repository keeps its `ref` whatever the branch.
-- `t` types the task's name. A generated one follows the first repository
-  you picked by hand and work in, so two tasks on the same decisions stay
-  apart; `(exists; it is resumed)` says a task has the name already.
+- A generated task name follows the first repository you picked by hand
+  and work in, so two tasks on the same decisions stay apart.
 - Nothing is asked of a forge while you pick. As the task starts, unibox
   looks once, with git, whether the branch exists already in a repository
   worked in, and asks whether to work on it there.
 
 `unibox task new .` adds the current checkout as the first row, mounted
-and picked, on its own branch until `b` types one. A checkout of a
+and picked, on its own branch until a branch is typed. A checkout of a
 repository the index clones takes that row's place and name.
 
 Named, without the screen, `task new` takes those named and the `always`

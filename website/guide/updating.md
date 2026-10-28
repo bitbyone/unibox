@@ -41,7 +41,7 @@ unibox var ls                 # what the env asks for, and what you set
 unibox var set user jdoe      # for the default env
 unibox var set -g user jdoe   # for every env that asks for it
 unibox var rm user
-unibox var                    # a list: enter sets, a adds, d removes
+unibox var                    # the same as a list
 ```
 
 Values are kept in `~/.config/unibox/vars.toml`. An env's own value wins
@@ -56,5 +56,5 @@ unibox env ls                 # the envs and their files
 unibox env show dev           # what dev's files declare, and what you set
 unibox config set default_env dev
 unibox env rm dev             # forget it; files and sandbox stay
-unibox env                    # a list: enter shows, space makes default, u updates, c creates a sandbox
+unibox env                    # the same as a list
 ```

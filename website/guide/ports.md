@@ -13,7 +13,7 @@ unibox port on vite                  # a named port
 unibox port on vite=15173            # on another host port
 unibox port on --map 8080:3000       # a port no file names
 unibox port off vite
-unibox port                          # switch them with the arrow keys or h and l, m for another host port
+unibox port                          # the same as a list
 ```
 
 ```term
@@ -59,8 +59,8 @@ A port with `default: off` is published only by `unibox port on`. A
 change is applied at the next `run`, `resume`, `sandbox shell` or
 `port on|off`.
 
-Whether a port is on at start is also set for you by a command, or `d`
-in the `unibox port` list, which marks such a port `(yours)`:
+Whether a port is on at start is also set for you by a command, or in the
+`unibox port` list, which marks such a port `(yours)`:
 
 ```sh
 unibox port default spring on       # on at each start of the env's sandboxes

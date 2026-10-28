@@ -87,7 +87,7 @@ branch_not_pushed: api push the selected branch first (or pass --push)
 ## Come back to a task
 
 ```sh
-unibox task                      # the list: enter resumes
+unibox task                      # the same as a list
 unibox task ls                   # every task in every sandbox
 unibox resume login              # its agent again
 unibox resume login --shell      # a shell beside it, also while the agent runs
@@ -100,7 +100,7 @@ repositories on the same branches resumes the task it made before.
 ## Another agent on the same task
 
 `--agent` resumes a task with another agent the sandbox has; the task
-keeps it from then on. In the list, `a` asks which:
+keeps it from then on. The task list offers the same:
 
 ```term
 $ unibox task
@@ -122,7 +122,7 @@ same directories.
 unibox task add-repo login ~/code/web     # a directory, an address or an index name
 ```
 
-In the list, `r` offers the index's repositories the task does not hold,
+The task list offers the index's repositories the task does not hold,
 on the screen [`task new`](./repos#task-new) uses:
 
 ```term

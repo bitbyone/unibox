@@ -9,7 +9,7 @@ share of the machine, and defaults so that most commands need no name.
 ## See and use them
 
 ```sh
-unibox sandbox                  # pick one: enter its tasks, s shell, p ports, t stop, c recreate, d remove
+unibox sandbox                  # the same as a list
 unibox sandbox ls               # every sandbox and its state
 unibox sandbox shell dev        # a shell in it
 unibox sandbox inspect dev      # what unibox records about it

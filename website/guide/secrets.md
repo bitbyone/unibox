@@ -27,7 +27,7 @@ unibox secret set               # sbx asks for each missing token
 unibox secret set --all         # the optional ones too
 unibox secret set github        # one, by name
 unibox secret set copilot -g    # open the page where a new one is made first
-unibox secret                   # a list: enter stores, g generates, c stores a command
+unibox secret                   # the same as a list
 ```
 
 sbx asks on your terminal; the value goes from your keyboard to sbx and

@@ -52,7 +52,7 @@ sbx's default hosts.
 ```sh
 unibox network deny gist.github.com  # even if the env allows it
 unibox network rm jitpack.io         # remove your rule
-unibox network                       # a list: a allows, n denies, d removes, x exports
+unibox network                       # the same as a list
 ```
 
 ## Hand rules over to the env
@@ -80,7 +80,7 @@ unibox network export -s dev
 Merge it into the network-policy entry of one of the env's kits (a kit
 has one), then `unibox sandbox recreate dev` applies the kit and `unibox
 network rm` takes your own rules away. A kit's host is any protocol, so a
-udp rule is marked. In the `unibox network` list, `x` does the same.
+udp rule is marked. The `unibox network` list does the same.
 
 ## Hosts
 
