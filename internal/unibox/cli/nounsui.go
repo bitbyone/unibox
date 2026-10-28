@@ -90,7 +90,7 @@ func (o *options) envUI(cmd *cobra.Command, leave func() error) error {
 			return listModel{}, err
 		}
 		cfg := o.manager.Config
-		m := listModel{title: "envs", header: []string{"ENV", "SANDBOX", "FILES"}, actions: []listAction{
+		m := listModel{title: "envs", header: []string{"ENV", "SANDBOX", "FILES", "REPO"}, actions: []listAction{
 			{key: "enter", name: "show", help: "show"},
 			{key: " ", name: "default", help: "make default"},
 			{key: "u", name: "update", help: "update"},
@@ -105,7 +105,7 @@ func (o *options) envUI(cmd *cobra.Command, leave func() error) error {
 			if e, err := cfg.LoadEnv(name); err == nil {
 				sandbox = e.SandboxName()
 			}
-			m.rows = append(m.rows, []string{mark, sandbox, strconv.Itoa(len(cfg.Envs[name].Files))})
+			m.rows = append(m.rows, []string{mark, sandbox, strconv.Itoa(len(cfg.Envs[name].Files)), envRepoText(cfg.Envs[name])})
 			m.ids = append(m.ids, name)
 		}
 		return m, nil

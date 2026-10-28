@@ -162,7 +162,7 @@ func relative(root, file string) string {
 
 // envFor is the env made of file: the one there is, else one added under
 // the name the file suggests, or under name when it is given.
-func (o *options) envFor(ctx context.Context, root, file, name string) (env string, added bool, err error) {
+func (o *options) envFor(ctx context.Context, root, file, name, sandbox string) (env string, added bool, err error) {
 	if env, ok := o.manager.Config.EnvOf(file); ok {
 		return env, false, nil
 	}
@@ -173,10 +173,37 @@ func (o *options) envFor(ctx context.Context, root, file, name string) (env stri
 	if err := unibox.ValidName(name); err != nil {
 		return "", false, unibox.Fail(4, "env_name", "%s cannot name the env of %s: %v; add it with unibox env add <env> %s", name, relative(root, file), err, file)
 	}
-	if _, err = o.addEnv(ctx, name, []string{file}, nil, false); err != nil {
+	var rename *string
+	if sandbox != "" {
+		rename = &sandbox
+	} else if sbx, err := unibox.ReadSBXEnv([]string{file}); err == nil {
+		// Two teams may name their sandboxes alike; the second gets a
+		// name of the person's, which the env keeps.
+		if other := o.sandboxOwner(sbx.SandboxName(name), name); other != "" {
+			return "", false, unibox.Fail(4, "sandbox_name", "sandbox %s is env %s's; add %s under another sandbox name with unibox env add %s %s --name <sandbox>", sbx.SandboxName(name), other, relative(root, file), name, file)
+		}
+	}
+	if _, err = o.addEnv(ctx, name, []string{file}, rename, false); err != nil {
 		return "", false, err
 	}
 	return name, true, nil
+}
+
+// sandboxOwner is the env other than env whose sandbox is named sandbox,
+// by its files or as unibox made it; "" when none.
+func (o *options) sandboxOwner(sandbox, env string) string {
+	cfg := o.manager.Config
+	for _, other := range sorted(cfg.Envs) {
+		if e, err := cfg.LoadEnv(other); err == nil && other != env && e.SandboxName() == sandbox {
+			return other
+		}
+	}
+	if state, err := o.paths.ReadState(); err == nil {
+		if b, ok := state.Sandboxes[sandbox]; ok && b.Env != "" && b.Env != env {
+			return b.Env
+		}
+	}
+	return ""
 }
 
 // setVars keeps the values of --var for every env of names that asks for
@@ -235,7 +262,7 @@ func (o *options) initQuietly(cmd *cobra.Command, root string, named, vars []str
 	}
 	names := []string{}
 	for _, f := range found {
-		name, _, err := o.envFor(ctx, root, f, "")
+		name, _, err := o.envFor(ctx, root, f, "", "")
 		if err != nil {
 			return err
 		}
@@ -453,21 +480,39 @@ func (o *options) walkEnvs(cmd *cobra.Command, root string, named []string) ([]s
 	defaultBefore := cfg.DefaultEnv
 	names := []string{}
 	for _, f := range picked {
-		name, added, err := o.envFor(ctx, root, f, "")
+		name, added, err := o.envFor(ctx, root, f, "", "")
 		var failure *unibox.Failure
+		// Another team's env may take this one's name, and then its
+		// sandbox's: each is asked in turn, and the env keeps the answers.
+		envName := unibox.EnvNameFor(f)
 		if errors.As(err, &failure) && failure.Code == "env_name" {
 			why := "Its file's name makes no env name"
-			if _, taken := o.manager.Config.Envs[unibox.EnvNameFor(f)]; taken {
-				why = "Env " + unibox.EnvNameFor(f) + " names other files"
+			if _, taken := o.manager.Config.Envs[envName]; taken {
+				why = "Env " + envName + " names other files"
 			}
-			name, err = o.askText("Env name for "+relative(root, f), why+"; what commands call it, as in unibox run -e <name>.", "", func(s string) error {
+			envName, err = o.askText("Env name for "+relative(root, f), why+"; what commands call it, as in unibox run -e <name>.", "", func(s string) error {
 				if _, taken := o.manager.Config.Envs[s]; taken {
 					return fmt.Errorf("env %s exists already", s)
 				}
 				return unibox.ValidName(s)
 			})
 			if err == nil {
-				name, added, err = o.envFor(ctx, root, f, name)
+				name, added, err = o.envFor(ctx, root, f, envName, "")
+			}
+		}
+		if errors.As(err, &failure) && failure.Code == "sandbox_name" && o.canAsk() {
+			var sandbox string
+			sandbox, err = o.askText("Sandbox name for env "+envName, failure.Message+". The env keeps the name you give.", "", func(s string) error {
+				if err := unibox.ValidName(s); err != nil {
+					return err
+				}
+				if other := o.sandboxOwner(s, envName); other != "" {
+					return fmt.Errorf("sandbox %s is env %s's", s, other)
+				}
+				return nil
+			})
+			if err == nil {
+				name, added, err = o.envFor(ctx, root, f, envName, sandbox)
 			}
 		}
 		if err != nil {

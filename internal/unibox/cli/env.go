@@ -94,7 +94,7 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 			return nil
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "ENV\tSANDBOX\tFILES")
+		fmt.Fprintln(w, "ENV\tSANDBOX\tFILES\tREPO")
 		for _, name := range sorted(cfg.Envs) {
 			mark, sandbox := name, "?"
 			if name == cfg.DefaultEnv {
@@ -103,7 +103,7 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 			if e, err := cfg.LoadEnv(name); err == nil {
 				sandbox = e.SandboxName()
 			}
-			fmt.Fprintf(w, "%s\t%s\t%d\n", mark, sandbox, len(cfg.Envs[name].Files))
+			fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", mark, sandbox, len(cfg.Envs[name].Files), envRepoText(cfg.Envs[name]))
 		}
 		return w.Flush()
 	}})
@@ -393,4 +393,17 @@ func (o *options) envName(flag string) (string, error) {
 		return e, nil
 	}
 	return "", fmt.Errorf("no env chosen; pass one (%s), or add one with unibox env add <name> <file.sbxenv.yaml>", orNoneOf(sorted(o.manager.Config.Envs), "unibox env ls lists them"))
+}
+
+// envRepoText is the repository an env's files are in, as a person knows
+// it: its forge address, else the checkout's path.
+func envRepoText(ec unibox.EnvConfig) string {
+	key := unibox.EnvRepoKey(ec)
+	if key == "" {
+		return "-"
+	}
+	if filepath.IsAbs(key) {
+		return tildePath(key)
+	}
+	return key
 }

@@ -448,6 +448,42 @@ func TestInitWithoutInputSetsUpEveryFileOrFails(t *testing.T) {
 	}
 }
 
+func TestASecondTeamsSandboxOfTheSameNameIsNamedByThePerson(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	first, _ := teamRepo(t)
+	if _, _, err := run(t, paths, "", "init", first, "--file", "sandboxes/dev.sbxenv.yaml", "--var", "user=me"); err != nil {
+		t.Fatal(err)
+	}
+	// Another team's env names its sandbox dev too.
+	second := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", second).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	file := filepath.Join(second, "sandboxes", "web.sbxenv.yaml")
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("name: dev\nagent: shell\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Without a terminal init says how; at one it asks the env's name, then
+	// the sandbox's, and the env keeps both.
+	if _, _, err := run(t, paths, "", "init", second, "--no-input"); err == nil || !strings.Contains(err.Error(), "unibox env add <env>") {
+		t.Fatalf("%v", err)
+	}
+	t.Setenv("ACCESSIBLE", "1")
+	if _, said, err := runAt(t, paths, "1\n1\nweb\nweb-dev\nn\n", "init", second); err != nil || !strings.Contains(said, "Sandbox name for env web") || !strings.Contains(said, "env web, sandboxes/web.sbxenv.yaml: added") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Envs["web"].Name != "web-dev" {
+		t.Fatalf("%+v", cfg.Envs["web"])
+	}
+	if _, _, err := run(t, paths, "", "init", second, "--no-input"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir(), Data: t.TempDir()}

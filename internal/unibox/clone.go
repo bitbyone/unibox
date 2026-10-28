@@ -31,24 +31,54 @@ func IsGitURL(s string) bool {
 
 // ReposDir is where unibox clones the repositories init is given by
 // address, one directory per host and path.
-func (p Paths) ReposDir() string { return filepath.Join(cmp.Or(p.Data, p.Config), "repos") }
-
-// CloneDir is where the repository at address is cloned:
-// <repos>/<host>/<path>, without .git.
-func (p Paths) CloneDir(address string) (string, error) {
-	host, path := "", ""
+// addressParts are the host of a git address and the repository's path on
+// it, without .git: one repository whether it is given over https or ssh.
+func addressParts(address string) (host, path string, err error) {
 	if m := scpLike.FindStringSubmatch(address); m != nil && !strings.Contains(address, "://") {
 		host, path = m[1], m[2]
 	} else {
 		u, err := url.Parse(address)
 		if err != nil {
-			return "", fmt.Errorf("cannot read %s as a git address: %w", address, err)
+			return "", "", fmt.Errorf("cannot read %s as a git address: %w", address, err)
 		}
 		host, path = cmp.Or(u.Hostname(), "local"), u.Path
 	}
 	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")
 	if path == "" {
-		return "", fmt.Errorf("%s names no repository", address)
+		return "", "", fmt.Errorf("%s names no repository", address)
+	}
+	return host, path, nil
+}
+
+// EnvRepoKey names the repository an env's files are in, as config.yaml's
+// env_repos are keyed: its host and path, whether unibox cloned it or the
+// person's own checkout has it as its origin, else the checkout's path.
+// "" for an env of no repository.
+func EnvRepoKey(ec EnvConfig) string {
+	for _, address := range []string{ec.Source, envRepoOrigin(ec.Repo)} {
+		if host, path, err := addressParts(address); address != "" && err == nil && host != "local" {
+			return strings.ToLower(host) + "/" + path
+		}
+	}
+	return ec.Repo
+}
+
+func envRepoOrigin(repo string) string {
+	if repo == "" {
+		return ""
+	}
+	origin, _ := git(context.Background(), repo, "config", "--get", "remote.origin.url")
+	return origin
+}
+
+func (p Paths) ReposDir() string { return filepath.Join(cmp.Or(p.Data, p.Config), "repos") }
+
+// CloneDir is where the repository at address is cloned:
+// <repos>/<host>/<path>, without .git.
+func (p Paths) CloneDir(address string) (string, error) {
+	host, path, err := addressParts(address)
+	if err != nil {
+		return "", err
 	}
 	parts := append([]string{p.ReposDir(), host}, strings.Split(path, "/")...)
 	// file:///C:/x names a drive, kept as a directory C.
