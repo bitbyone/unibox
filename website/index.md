@@ -10,8 +10,27 @@ runs coding agents - Claude Code, Codex, Copilot, OpenCode - in micro-VMs
 on your machine, set up from sbxenv files and kits. unibox adds what the
 same work needs every day: tasks over several repositories, a list of the
 repositories a team works on, instructions for the agent, and interactive
-lists for the operations that repeat. Its aim is to keep those operations
-short and the steps between them few.
+lists for the operations that repeat.
+
+- **Interactive by default, scriptable when needed.** Each command alone
+  at a terminal is a list acted on by keys; the same commands take
+  arguments, `--json` and `--yes`, and print plain lines without a
+  terminal.
+- **One command to set up.** `unibox init` takes a person from the team's
+  repository to a working sandbox: sign-in, their own values, the tokens
+  the kits need with the page that makes each, the sandbox itself.
+- **Daily work in few steps.** A task is started in a checkout with
+  `unibox run`, or picked on one screen with `unibox task new`, and
+  resumed by name. Several tasks share a sandbox, and a task holds several
+  repositories, mounted or cloned.
+- **The team's defaults, each person's overrides.** The repositories a
+  team works on, the agent's instructions, ports and resources are set in
+  the team's repository; each person adds or overrides their own.
+- **Problems named with their fix.** `unibox doctor` checks sbx, the env,
+  values, tokens and sandboxes, names the command that fixes each problem,
+  and with `-i` runs it.
+- **Plain sbx underneath.** No sandbox format of its own, nothing sbx
+  needs to know about, and optional for each person on a team.
 
 ```term ~/code/api
 $ unibox run
