@@ -9,6 +9,19 @@ unibox is a command-line companion to
 works with the sandboxes a team already describes for sbx, and makes the
 everyday work with them shorter.
 
+## Why use it
+
+- You set up from the team's repository in one command, without reading
+  its kits.
+- You keep several pieces of work in one sandbox and return to each by
+  name, with the agent you choose.
+- The agent is told which repositories it works in and what the team
+  expects of them.
+- Every command is a list at the terminal, and plain output with `--json`
+  for scripts.
+- Nothing is locked in: the sandbox is plain sbx, and you can stop using
+  unibox at any time.
+
 ## A team's sbx environment
 
 Let's assume this sbx environment: a team keeps its sandbox in a
@@ -106,19 +119,5 @@ agent-sandboxes/
 
 sbx ignores them. A member without unibox uses the repository with sbx
 alone, as before.
-
-## Why use it
-
-- You set up from the team's repository in one command, without reading
-  its kits.
-- You keep several pieces of work in one sandbox and return to each by
-  name, with the agent you choose.
-- The agent is told which repositories it works in and what the team
-  expects of them.
-- Every command is a list at the terminal, and plain output with `--json`
-  for scripts.
-- `unibox doctor` names what is wrong and the command that fixes it.
-- Nothing is locked in: the sandbox is plain sbx, and you can stop using
-  unibox at any time.
 
 Next: [Installation](/guide/installation), [Usage](/guide/usage).
