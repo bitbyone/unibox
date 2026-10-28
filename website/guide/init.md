@@ -103,6 +103,22 @@ $ unibox init
 [ok]set up; start a task with unibox run <directory>, or unibox run --shell for a shell[/]
 ```
 
+## Several teams
+
+Run `init` once for each team's repository. The envs live side by side,
+and `unibox env ls` says which repository each comes from:
+
+```term
+$ unibox env ls
+ENV            SANDBOX  FILES  REPO
+dev (default)  dev      1      github.com/acme/agent-sandboxes
+web            web-dev  1      gitlab.example.org/web/agent-sandboxes
+```
+
+When a second team's env or sandbox has a name taken already, `init` asks
+for another, and the env keeps it. Without a terminal it names the command
+that does the same: `unibox env add web <file> --name web-dev`.
+
 ## Without a terminal
 
 With `--no-input`, or without a terminal, `init` asks nothing. What it

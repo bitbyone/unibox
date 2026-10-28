@@ -68,6 +68,20 @@ A rotated token is then picked up without storing it again. sbx runs the
 command from a temporary directory with no terminal, so use a program on
 your `PATH` or an absolute path, never one inside a mounted repository.
 
+## One name, two hosts
+
+sbx keeps one token a service name. If two teams' kits both name a
+service `gitlab` for different GitLab servers, the token stored is sent to
+both. `unibox doctor` says so:
+
+```term
+$ unibox doctor
+[dim]...[/]
+[b]Tokens[/]
+  [warn]![/] secret gitlab  env dev sends it to gitlab.acme.com; env web sends it to gitlab.example.org; sbx keeps one token for all of them
+                  [dim]→ have one team's kit name its service apart, such as gitlab-<team>[/]
+```
+
 ## Signing an agent in
 
 The agent's login is one of the env's secrets, named by its kit -
