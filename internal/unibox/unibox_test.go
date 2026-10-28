@@ -3,6 +3,7 @@ package unibox
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -337,5 +338,27 @@ func TestNeededSecretsAreTheKitsCredentialsAndTheEnvsBindings(t *testing.T) {
 	logins, err = m.NeededSecrets(context.Background(), env, "")
 	if err != nil || !logins[0].Stored || logins[0].Scope != env.SandboxName() || len(logins[0].Kits) != 1 {
 		t.Fatalf("%v %+v", err, logins)
+	}
+}
+
+func TestATokenTwoEnvsSendToDifferentHostsIsTold(t *testing.T) {
+	t.Parallel()
+	var kit Kit
+	// The shape sbx kit inspect --json gives a kit's credentials in.
+	if err := json.Unmarshal([]byte(`{"credentials":[{"service":"gitlab","apiKey":{"inject":[{"domain":"gitlab.acme.com"},{"domain":"gitlab.acme.com"}]}}]}`), &kit); err != nil {
+		t.Fatal(err)
+	}
+	acme := kit.Credentials[0].Domains()
+	if !slices.Equal(acme, []string{"gitlab.acme.com"}) {
+		t.Fatalf("%v", acme)
+	}
+	needed := map[string][]NeededSecret{
+		"dev": {{Service: "gitlab", Domains: acme}, {Service: "github", Domains: []string{"github.com"}}},
+		"web": {{Service: "gitlab", Domains: []string{"gitlab.other.org"}}, {Service: "github", Domains: []string{"github.com"}}},
+		"ops": {{Service: "gitlab"}},
+	}
+	clashes := SecretClashes(needed)
+	if len(clashes) != 1 || clashes[0].Service != "gitlab" || len(clashes[0].Hosts) != 2 || clashes[0].Hosts["web"][0] != "gitlab.other.org" {
+		t.Fatalf("%+v", clashes)
 	}
 }

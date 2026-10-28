@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -143,6 +145,7 @@ func (o *options) doctorCommand() *cobra.Command {
 		}
 		state, _ := o.paths.ReadState()
 		behind := map[string]int{}
+		needed := map[string][]unibox.NeededSecret{}
 		for _, name := range names {
 			area := "Env " + name
 			env, err := o.manager.Config.LoadEnv(name)
@@ -192,6 +195,7 @@ func (o *options) doctorCommand() *cobra.Command {
 				if err != nil {
 					add(area, "secrets", "warn", err.Error(), "")
 				}
+				needed[name] = secrets
 				for _, l := range secrets {
 					switch {
 					case l.Stored:
@@ -230,6 +234,13 @@ func (o *options) doctorCommand() *cobra.Command {
 					}
 				}
 			}
+		}
+		for _, c := range unibox.SecretClashes(needed) {
+			said := []string{}
+			for _, env := range slices.Sorted(maps.Keys(c.Hosts)) {
+				said = append(said, "env "+env+" sends it to "+strings.Join(c.Hosts[env], ", "))
+			}
+			add("Tokens", "secret "+c.Service, "warn", strings.Join(said, "; ")+"; sbx keeps one token for all of them", "have one team's kit name its service apart, such as "+c.Service+"-<team>")
 		}
 		if sbxOK {
 			boxes, err := o.manager.List(ctx)

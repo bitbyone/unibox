@@ -301,6 +301,23 @@ type KitCredential struct {
 	Service     string `json:"service"`
 	Description string `json:"description"`
 	Optional    bool   `json:"optional"`
+	// APIKey says the hosts the proxy puts the token into requests for.
+	APIKey struct {
+		Inject []struct {
+			Domain string `json:"domain"`
+		} `json:"inject"`
+	} `json:"apiKey"`
+}
+
+// Domains are the hosts the kit has the token sent to.
+func (c KitCredential) Domains() []string {
+	out := []string{}
+	for _, in := range c.APIKey.Inject {
+		if in.Domain != "" && !slices.Contains(out, in.Domain) {
+			out = append(out, in.Domain)
+		}
+	}
+	return out
 }
 
 // KitInspect reads a kit as sbx resolves it: a registry reference or a

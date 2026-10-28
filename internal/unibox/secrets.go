@@ -38,6 +38,8 @@ type NeededSecret struct {
 	// bindings name.
 	Kits   []string `json:"kits,omitempty"`
 	Stored bool     `json:"stored"`
+	// Domains are the hosts the kits have the token sent to.
+	Domains []string `json:"domains,omitempty"`
 	// Scope is where the token is stored: global, or a sandbox's name.
 	Scope string `json:"scope,omitempty"`
 	// Page is where the token is made, and Hint what to make there.
@@ -139,6 +141,11 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 			}
 			l.Optional = l.Optional && c.Optional
 			l.Kits = append(l.Kits, kitName(k.Source))
+			for _, d := range c.Domains() {
+				if !slices.Contains(l.Domains, d) {
+					l.Domains = append(l.Domains, d)
+				}
+			}
 		}
 	}
 	for _, service := range env.SBX.Bindings {
@@ -256,4 +263,41 @@ func (m *Manager) kitCacheFile(key, dir string) (string, func(string) bool) {
 		}
 	}
 	return filepath.Join(m.Paths.Cache, "kits", hex.EncodeToString(h.Sum(nil))+".json"), fresh
+}
+
+// SecretClash is a service envs need a token for at different hosts. sbx
+// keeps one token a service, so whichever is stored is sent to the hosts of
+// every env that names the service: one team's token to another's forge.
+type SecretClash struct {
+	Service string
+	// Hosts are each env's hosts for the service.
+	Hosts map[string][]string
+}
+
+// SecretClashes are the services the envs' kits send to different hosts,
+// by name; an env whose kits name no host for a service says nothing.
+func SecretClashes(needed map[string][]NeededSecret) []SecretClash {
+	hosts := map[string]map[string][]string{}
+	for env, secrets := range needed {
+		for _, s := range secrets {
+			if len(s.Domains) == 0 {
+				continue
+			}
+			if hosts[s.Service] == nil {
+				hosts[s.Service] = map[string][]string{}
+			}
+			hosts[s.Service][env] = slices.Sorted(slices.Values(s.Domains))
+		}
+	}
+	out := []SecretClash{}
+	for _, service := range slices.Sorted(maps.Keys(hosts)) {
+		seen := map[string]bool{}
+		for _, h := range hosts[service] {
+			seen[strings.Join(h, ",")] = true
+		}
+		if len(seen) > 1 {
+			out = append(out, SecretClash{Service: service, Hosts: hosts[service]})
+		}
+	}
+	return out
 }
