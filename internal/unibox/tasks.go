@@ -565,17 +565,6 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		env = append(env, "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+a.CoAuthor)
 	}
 	env = append(env, m.sshEnv()...)
-	tokenSetup := ""
-	if a.TokenEnv != "" {
-		if secrets, err := m.SBX.Secrets(ctx); err == nil {
-			for _, s := range secrets {
-				if s.Type == "custom" && s.Env == a.TokenEnv && (s.Scope == "global" || s.Scope == b.Name) {
-					env = append(env, a.TokenEnv+"="+s.Placeholder)
-					tokenSetup = a.TokenSetup
-				}
-			}
-		}
-	}
 	args = withEnv(env, args)
 	if a.Trust != nil && a.Config != "" {
 		dirs := []string{"/work", t.Directory}
@@ -586,7 +575,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 			fmt.Fprintf(errout, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
 		}
 	}
-	script := told + tokenSetup + sessionScript(run.ID, args)
+	script := told + sessionScript(run.ID, args)
 	if a.Setup != "" {
 		script = "(\n" + a.Setup + ") || echo 'unibox: preparing " + a.ID + " failed; it may ask whether to trust the directory' >&2\n" + script
 	}

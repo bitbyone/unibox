@@ -69,10 +69,13 @@ type TokenWay struct {
 	// SignIn has sbx sign the person in with their subscription, in the
 	// browser, rather than ask for a token.
 	SignIn bool `yaml:"sign_in"`
+	// Agent says the agent signs in itself, in the sandbox, as Claude
+	// does with a subscription (/login); sbx keeps the sign-in, and
+	// nothing is stored now.
+	Agent bool `yaml:"agent"`
 	// Env, Placeholder and Hosts keep the token as a custom secret: the
 	// sandbox sees Placeholder in Env, and the proxy replaces it on
-	// requests to Hosts. Claude takes its subscription's token so, in
-	// CLAUDE_CODE_OAUTH_TOKEN, and sends it as a bearer token.
+	// requests to Hosts.
 	Env         string   `yaml:"env"`
 	Placeholder string   `yaml:"placeholder"`
 	Hosts       []string `yaml:"hosts"`
@@ -103,12 +106,11 @@ func githubTokenPage(name, description string, permissions ...string) string {
 
 // knownTokenGuides are the services unibox knows the page of without the
 // team saying it: GitHub's, which sbx's own kits ask for.
-// ClaudeTokenEnv is where Claude Code takes a subscription's token from.
-const ClaudeTokenEnv = "CLAUDE_CODE_OAUTH_TOKEN"
-
 var knownTokenGuides = map[string]TokenGuide{
 	"anthropic": {Ways: []TokenWay{
-		{Name: "Claude subscription", Command: "claude setup-token", Env: ClaudeTokenEnv, Placeholder: "sk-ant-oat01-unibox0claude0proxy0managed", Hosts: []string{"api.anthropic.com"}, Hint: "a long-lived token of your Claude subscription"},
+		// Docker's Claude kit manages api.anthropic.com and drops any other
+		// credential there, so a subscription signs in inside Claude.
+		{Name: "Claude subscription", Agent: true, Hint: "Claude Code signs in with your subscription itself: run /login in it the first time it starts; sbx keeps the sign-in"},
 		{Name: "API key", Hint: "an Anthropic API key"},
 	}},
 	"openai": {Ways: []TokenWay{

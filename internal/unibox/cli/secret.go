@@ -138,6 +138,10 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 					return err
 				}
 			}
+			if way.Agent {
+				// Nothing is stored: the agent signs in, and sbx keeps that.
+				continue
+			}
 			set := func() error {
 				return o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log)
 			}
@@ -153,6 +157,9 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 				return tokenNotStored{err}
 			}
 			stored = append(stored, service)
+		}
+		if len(stored) == 0 {
+			return o.success("sbx stored no token; the agents sign in themselves when they first start")
 		}
 		return o.success(fmt.Sprintf("sbx has stored %s", strings.Join(stored, ", ")))
 	}}
@@ -262,7 +269,7 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 		fmt.Fprintf(o.log, "  %s\n", way.Hint)
 	}
 	switch {
-	case way.SignIn:
+	case way.SignIn, way.Agent:
 		return way, nil
 	case way.Command != "":
 		// unibox runs nothing for a token: what the command prints is the

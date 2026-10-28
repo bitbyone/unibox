@@ -842,27 +842,3 @@ func TestASessionSbxCouldNotStartIsSaidSo(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
-
-func TestClaudeIsGivenThePlaceholderOfItsSubscriptionsToken(t *testing.T) {
-	remote, _ := remoteFixture(t)
-	m, f := managerFixture(t)
-	url := "https://forge.invalid/team/payments.git"
-	f.remotes[url] = "file://" + remote
-	bin, seen := t.TempDir(), filepath.Join(t.TempDir(), "env")
-	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nenv > "+Quote(seen)+"\n"))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	ctx := context.Background()
-	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
-		t.Fatal(err)
-	}
-	// Stored after the sandbox was made, so sbx set no variable in it.
-	if err := f.SecretSetCustom(ctx, ClaudeTokenEnv, "sk-ant-oat01-placeholder", []string{"api.anthropic.com"}, nil, nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.Run(ctx, Request{Sandbox: "dev", Task: "pay", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}}}, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(seen); !strings.Contains(string(b), ClaudeTokenEnv+"=sk-ant-oat01-placeholder\n") {
-		t.Fatalf("%s", b)
-	}
-}

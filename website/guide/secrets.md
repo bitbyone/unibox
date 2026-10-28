@@ -100,23 +100,18 @@ For Claude and Codex unibox asks which you have:
 $ unibox secret set anthropic openai
 anthropic: Anthropic API access (API key or claude.ai OAuth)
 [blue]?[/] [b]The anthropic token[/]  Claude subscription
-  a long-lived token of your Claude subscription
-  run claude setup-token in another terminal, then paste the token it prints here
-[dim](sbx's prompt for the value)[/]
-openai: OpenAI API access
+  Claude Code signs in with your subscription itself: run /login in it the first time it starts; sbx keeps the sign-in
+openai: OpenAI API access (API key or ChatGPT OAuth)
 [blue]?[/] [b]The openai token[/]  ChatGPT subscription
   sbx signs you in with your ChatGPT account, in the browser
-sbx has stored anthropic, openai
+sbx has stored openai
 ```
 
 An API key is typed at sbx's prompt. A ChatGPT subscription is signed in
 by `sbx secret set openai --oauth`, which unibox runs. A Claude
-subscription's token, printed by `claude setup-token`, is kept as a custom
-secret: Claude sees a placeholder in `CLAUDE_CODE_OAUTH_TOKEN`, which unibox
-gives each Claude session, and the proxy puts the token in its place on
-requests to api.anthropic.com. `unibox secret ls` shows it stored for
-`anthropic`; `unibox secret rm anthropic` takes it away with the service's
-key.
+subscription is signed in from Claude Code, with `/login`: Docker's Claude
+kit manages api.anthropic.com and keeps the sign-in through sbx's proxy.
+`unibox secret rm <service>` has sbx forget a service's token.
 
 ## One name, two hosts
 

@@ -19,13 +19,7 @@ type Agent struct {
 	Setup string
 	// Env is set for the agent's process.
 	Env []string
-	// TokenEnv is the variable the agent takes a subscription's token
-	// from, which a custom secret of sbx fills with its placeholder. A
-	// sandbox made before the secret lacks it, so each session is given it.
-	TokenEnv string
-	// TokenSetup runs before a session given TokenEnv: what the agent's own
-	// settings would put before the token, taken away.
-	TokenSetup string
+
 	// Trust is merged into Config before every session, naming the
 	// directories the session works in, so the agent does not stop to ask
 	// whether to trust what unibox prepared.
@@ -55,7 +49,7 @@ func copilotTrust(dirs []string) map[string]any {
 var Agents = []Agent{
 	// The kit's image fixes each agent's version, so none updates itself,
 	// and unibox's commit hook says the co-author, so no agent's own byline.
-	{ID: "claude", Command: "claude", Args: []string{"--dangerously-skip-permissions"}, CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust, TokenEnv: ClaudeTokenEnv, TokenSetup: claudeTokenSetup},
+	{ID: "claude", Command: "claude", Args: []string{"--dangerously-skip-permissions"}, CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust},
 	{ID: "codex", Command: "codex", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup},
 	{ID: "copilot", Command: "copilot", Args: []string{"--yolo"}, CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust},
 	{ID: "opencode", Command: "opencode", CoAuthor: "opencode <noreply@opencode.ai>"},
@@ -85,17 +79,3 @@ func FindAgent(id string) Agent {
 	}
 	return Agent{ID: id, Command: id}
 }
-
-// claudeTokenSetup takes apiKeyHelper out of Claude's settings, which
-// Docker's kit writes at create and Claude puts before
-// CLAUDE_CODE_OAUTH_TOKEN, sending the helper's API key in place of the
-// subscription's token. node is in Claude's image; jq does where it is not.
-const claudeTokenSetup = `f="$HOME/.claude/settings.json"
-if [ -f "$f" ] && grep -q '"apiKeyHelper"' "$f"; then
-  if command -v node >/dev/null; then
-    node -e 'const fs=require("fs"),f=process.argv[1],j=JSON.parse(fs.readFileSync(f,"utf8"));delete j.apiKeyHelper;fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' "$f"
-  elif command -v jq >/dev/null; then
-    jq 'del(.apiKeyHelper)' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-  fi
-fi
-`

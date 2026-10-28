@@ -410,20 +410,17 @@ func TestAnAgentsTokenIsASubscriptionsOrAnAPIKey(t *testing.T) {
 	// SSH agent and editors: no; the arg; store the tokens: Claude's of
 	// the subscription, Codex's by signing in, gitlab's typed; no sandbox.
 	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n1\n1\nn\ny\n", "init", repo)
-	if err != nil || !strings.Contains(said, "run claude setup-token in another terminal, then paste the token it prints here") {
+	if err != nil || !strings.Contains(said, "run /login in it the first time it starts") {
 		t.Fatalf("%v\n%s", err, said)
 	}
-	// Claude's subscription token is a custom secret in the variable
-	// Claude takes it from, which stands for the anthropic service.
+	// Claude's subscription signs in inside Claude: nothing is stored for
+	// it; Codex's is signed in by sbx.
 	c := calls(t, log)
-	if !strings.Contains(c, "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN --placeholder sk-ant-oat01-") || !strings.Contains(c, "--host api.anthropic.com") || strings.Contains(c, "secret set anthropic") || !strings.Contains(c, "secret set openai --oauth\n") {
+	if strings.Contains(c, "secret set anthropic") || strings.Contains(c, "set-custom") || !strings.Contains(c, "secret set openai --oauth\n") {
 		t.Fatalf("%s", c)
 	}
-	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team"); err != nil || !strings.Contains(out, "global, Claude subscription") {
-		t.Fatalf("%v\n%s", err, out)
-	}
-	// unibox secret rm takes it away as the service's.
-	if _, _, err := run(t, paths, "", "secret", "rm", "anthropic", "-e", "team"); err != nil || !strings.Contains(calls(t, log), "secret rm --placeholder sk-ant-oat01-") {
+	// unibox secret rm has sbx forget a service's token.
+	if _, _, err := run(t, paths, "", "secret", "rm", "openai", "-e", "team"); err != nil || !strings.Contains(calls(t, log), "secret rm openai --force") {
 		t.Fatalf("%v\n%s", err, calls(t, log))
 	}
 	// An API key is typed at sbx's prompt.
