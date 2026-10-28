@@ -806,3 +806,9 @@ func (m *Manager) syncSBXSettings(ctx context.Context) error {
 	}
 	return nil
 }
+
+// EnvAgents are the agents an env's sandbox may run, by unibox's names.
+func (m *Manager) EnvAgents(ctx context.Context, env Env) []string {
+	_, _, all := m.agentOf(ctx, env)
+	return slices.Sorted(maps.Keys(all))
+}

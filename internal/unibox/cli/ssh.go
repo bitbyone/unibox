@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"strconv"
+
+	"github.com/tobola/unibox/internal/unibox"
+
 	"fmt"
 	"os"
 	"time"
@@ -162,4 +166,28 @@ func (o *options) waiting(what string, do func() error) error {
 		case <-tick.C:
 		}
 	}
+}
+
+// askSBXSetting is a question init asks once on a machine about one of
+// sbx's settings, unless config.yaml already says it; the answer is kept
+// there and sbx set to match.
+func (o *options) askSBXSetting(cmd *cobra.Command, key, title, description string, options []pick, preset string) error {
+	if *o.manager.Config.SBXSetting(key) != nil {
+		return nil
+	}
+	choice, err := o.askPick(title, description, options, preset)
+	if err != nil {
+		return err
+	}
+	v := choice == "yes"
+	if err := o.manager.SBX.SetSetting(cmd.Context(), unibox.SBXSettings[key], strconv.FormatBool(v)); err != nil {
+		return err
+	}
+	cfg := o.manager.Config
+	*cfg.SBXSetting(key) = &v
+	if err := o.paths.SaveConfig(cfg); err != nil {
+		return err
+	}
+	o.manager.Config = cfg
+	return nil
 }

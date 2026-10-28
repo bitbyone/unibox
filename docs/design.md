@@ -487,7 +487,9 @@ replaces.
 - **Prepared before every session.** unibox knows four agents by their
   command (`agents.go`) and answers what each would otherwise stop to
   ask: claude's `hasTrustDialogAccepted` for `/work`, the task and its
-  repositories, and `bypassPermissionsModeAccepted`, merged into
+  repositories, `bypassPermissionsModeAccepted` and
+  `hasSeenAutoDefaultNudge` (unibox runs it bypassing permissions, so an
+  offer of auto mode as the default is moot), merged into
   `~/.claude.json`, as sbx's own claude kit seeds; copilot's
   `trusted_folders` in `~/.copilot/config.json`, added to; codex's
   `trust_level = "trusted"` for `/work`'s task directories in its
@@ -797,7 +799,9 @@ unagit writes this file only through `unibox config set` and the commands,
 never by hand. `remember_host_commands` and `claude_remote_control` are
 sbx's settings (`env.rememberHostCommands`, `claude.remoteControl`) the
 person may say here: unibox sets sbx to match before it creates or starts
-a sandbox, so the file can be edited by hand. Left out, sbx's own stand.
+a sandbox, so the file can be edited by hand. Left out, sbx's own stand. init asks
+for `remember_host_commands` after editors over SSH, and for
+`claude_remote_control` once an env it sets up runs claude.
 
 ### Platforms and releases
 

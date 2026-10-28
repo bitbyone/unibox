@@ -27,12 +27,14 @@ cloned https://github.com/acme/agent-sandboxes into /Users/jdoe/.local/share/uni
 [b]1/5 sbx[/]
 [blue]?[/] [b]SSH agent in sandboxes[/]  No - agents reach git through the services' tokens alone (recommended)
 [blue]?[/] [b]Editors over SSH[/]  Yes - editors connect over SSH
+[blue]?[/] [b]Host commands[/]  No - ask each time (recommended)
   installed and signed in
 [blue]?[/] [b]The network policy every sandbox starts from[/]  balanced - the AI services and package registries of typical development (recommended)
 
 [b]2/5 Envs[/]
 [blue]?[/] [b]Envs to set up[/]  [ok]✓[/] sandboxes/dev.sbxenv.yaml
   env dev, sandboxes/dev.sbxenv.yaml: added
+[blue]?[/] [b]Claude remote control[/]  Yes - allow /remote-control
 
 [b]3/5 Values[/]
 env dev asks for values of your own, kept for it in vars.toml:
@@ -58,14 +60,16 @@ creating sandbox dev from env dev
 ```
 
 1. **sbx** - checks that sbx is installed and signed in to Docker, and
-   offers `sbx login` when it is not. Then two questions of yours: whether
+   offers `sbx login` when it is not. Then three questions of yours: whether
    sandboxes may use your SSH agent (sbx forwards it by default, which lets
-   an agent sign with every key you have), and whether editors such as VS
-   Code or Cursor may reach a sandbox over SSH. Once per machine it asks
+   an agent sign with every key you have), whether editors such as VS
+   Code or Cursor may reach a sandbox over SSH, and whether sbx may run an
+   env's host commands you approved once again without asking. Once per machine it asks
    for the [network policy](./network) every sandbox starts from.
 2. **Envs** - offers every sbxenv file of the repository. Each one picked
    becomes an env, named as the file names its sandbox. With several, one
-   becomes the default.
+   becomes the default. When an env runs Claude Code, it asks whether its
+   `/remote-control` may work in sandboxes.
 3. **Values** - asks for the args the env declares for each person, such
    as a registry user name, by the description the team wrote. They go to
    `~/.config/unibox/vars.toml`, never into the team's repository.

@@ -33,7 +33,9 @@ func claudeTrust(dirs []string) map[string]any {
 	for _, d := range dirs {
 		projects[d] = map[string]any{"hasTrustDialogAccepted": true}
 	}
-	return map[string]any{"bypassPermissionsModeAccepted": true, "projects": projects}
+	// unibox runs claude bypassing permissions, so its offer to make auto
+	// mode the default would change nothing a session does.
+	return map[string]any{"bypassPermissionsModeAccepted": true, "hasSeenAutoDefaultNudge": true, "projects": projects}
 }
 
 // copilotTrust names the directories in copilot's trusted_folders, a list

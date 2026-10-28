@@ -328,6 +328,12 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	if err := o.askEditorSSH(cmd); err != nil {
 		return err
 	}
+	if err := o.askSBXSetting(cmd, "remember_host_commands", "Host commands", "An env may run commands on this computer, which sbx shows you to approve when a sandbox is created. It can remember an approval and run the same commands again without asking.", []pick{
+		{"no", "No - ask each time (recommended)"},
+		{"yes", "Yes - remember what I approved"},
+	}, "no"); err != nil {
+		return err
+	}
 	if err := sbx.Available(ctx); err != nil {
 		return err
 	}
@@ -353,6 +359,23 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			return err
 		}
 		envs = append(envs, env)
+	}
+	claude := false
+	if err = o.working("reading which agents the envs run", func() error {
+		for _, env := range envs {
+			claude = claude || slices.Contains(o.manager.EnvAgents(ctx, env), "claude")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if claude {
+		if err := o.askSBXSetting(cmd, "claude_remote_control", "Claude remote control", "Claude Code's /remote-control lets claude.ai and the Claude app drive a session in a sandbox. Claude signs that channel in with a session token of its own, not your credentials.", []pick{
+			{"yes", "Yes - allow /remote-control"},
+			{"no", "No"},
+		}, "yes"); err != nil {
+			return err
+		}
 	}
 
 	o.walkStep(3, "Values")
