@@ -20,6 +20,8 @@ own, and each team member may use it or not.
 
 ## sbx alone and with unibox
 
+Setting up:
+
 ::: code-group
 
 ```sh [sbx]
@@ -28,13 +30,26 @@ sbx policy init balanced
 sbx secret set anthropic
 sbx secret set github
 sbx env run sandboxes/dev.sbxenv.yaml --env-arg registryUser=jdoe
-sbx ports dev --publish 5173:5173
 ```
 
 ```sh [unibox]
 unibox init https://github.com/acme/agent-sandboxes
-unibox run
-unibox port on vite
+```
+
+:::
+
+After the team changed the env:
+
+::: code-group
+
+```sh [sbx]
+sbx env rm sandboxes/dev.sbxenv.yaml --env-arg registryUser=jdoe
+sbx env run sandboxes/dev.sbxenv.yaml --env-arg registryUser=jdoe
+# then clone or mount each repository again
+```
+
+```sh [unibox]
+unibox sandbox recreate dev    # its tasks come back
 ```
 
 :::
