@@ -378,10 +378,6 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 		missing := []string{}
 		for _, l := range secrets {
-			if l.AgentSignsIn() && !l.Optional {
-				fmt.Fprintf(o.log, "  %s: the agent signs in at its first start, or unibox secret set -e %s %s stores a token\n", l.Service, env.Name, l.Service)
-				continue
-			}
 			if !l.Stored && !l.Optional {
 				missing = append(missing, l.Service)
 			}

@@ -164,10 +164,10 @@ func TestSettingATokenOffersThePageWhereANewOneIsMade(t *testing.T) {
 	}
 	// A service whose page is not known goes straight to sbx, and cannot
 	// be generated.
-	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic"); err != nil {
+	if _, _, err := runAt(t, paths, "", "secret", "set", "npm"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic", "--generate"); err == nil || !strings.Contains(err.Error(), "knows no way") {
+	if _, _, err := runAt(t, paths, "", "secret", "set", "npm", "--generate"); err == nil || !strings.Contains(err.Error(), "knows no way") {
 		t.Fatalf("%v", err)
 	}
 	if out, _, err := run(t, paths, "", "secret", "ls", "--json"); err != nil || !strings.Contains(out, `"page": "`+page+`"`) {
@@ -178,7 +178,7 @@ func TestSettingATokenOffersThePageWhereANewOneIsMade(t *testing.T) {
 	if err := os.WriteFile(unibox.TeamFile(file), []byte("secrets:\n  anthropic:\n    ways:\n      - {name: Claude subscription, command: claude setup-token}\n      - {name: API key, page: https://console.example.com/keys}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, said, err := runAt(t, paths, "2\n", "secret", "set", "anthropic"); err != nil || !strings.Contains(said, "Claude subscription") || !strings.Contains(said, "run claude setup-token in another terminal") {
+	if _, said, err := runAt(t, paths, "1\n", "secret", "set", "anthropic"); err != nil || !strings.Contains(said, "Claude subscription") || !strings.Contains(said, "run claude setup-token in another terminal") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if strings.Contains(calls(t, log), "setup-token") {
@@ -337,7 +337,7 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the one file is taken without asking; the arg; store
 	// the secrets; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n1\nperson\ny\nn\n", "init", repo)
+	_, said, err := runAt(t, paths, "1\n1\nperson\ny\n2\nn\n", "init", repo)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -378,7 +378,7 @@ func TestInitTakesEditorsOverSSHThatSbxHasOnAlready(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the arg; store the secrets; no sandbox yet - and no
 	// question about editors.
-	if _, said, err := runAt(t, paths, "1\nperson\ny\nn\n", "init", repo); err != nil || strings.Contains(said, "Editors over SSH") {
+	if _, said, err := runAt(t, paths, "1\nperson\ny\n2\nn\n", "init", repo); err != nil || strings.Contains(said, "Editors over SSH") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if cfg, _ := paths.LoadConfig(); func() bool { on, said := cfg.EditorSSH(); return !on || !said }() {
@@ -389,7 +389,7 @@ func TestInitTakesEditorsOverSSHThatSbxHasOnAlready(t *testing.T) {
 	}
 }
 
-func TestASubscriptionsSignInStandsForAToken(t *testing.T) {
+func TestAnAgentsTokenIsASubscriptionsOrAnAPIKey(t *testing.T) {
 	log := fakeSBX(t)
 	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "kit-oauth"), nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -397,18 +397,19 @@ func TestASubscriptionsSignInStandsForAToken(t *testing.T) {
 	t.Setenv("ACCESSIBLE", "1")
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
-	// SSH agent and editors: no; the arg; store the tokens; openai signed
-	// in; gitlab's token; no sandbox. Claude's agent signs in itself.
-	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n1\nn\n", "init", repo)
-	if err != nil || !strings.Contains(said, "anthropic: the agent signs in at its first start") {
+	// SSH agent and editors: no; the arg; store the tokens: Claude's of
+	// the subscription, Codex's by signing in, gitlab's typed; no sandbox.
+	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n1\n1\nn\n", "init", repo)
+	if err != nil || !strings.Contains(said, "run claude setup-token in another terminal, then paste the token it prints here") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	c := calls(t, log)
-	if !strings.Contains(c, "secret set openai --oauth\n") || strings.Contains(c, "secret set anthropic") {
+	if !strings.Contains(c, "secret set anthropic\n") || !strings.Contains(c, "secret set openai --oauth\n") || strings.Contains(c, "setup-token") {
 		t.Fatalf("%s", c)
 	}
-	if out, _, err := run(t, paths, "", "secret", "ls"); err != nil || !strings.Contains(out, "sign-in") {
-		t.Fatalf("%v\n%s", err, out)
+	// An API key is typed at sbx's prompt.
+	if _, _, err := runAt(t, paths, "2\n", "secret", "set", "openai"); err != nil || !strings.Contains(calls(t, log), "secret set openai\n") {
+		t.Fatalf("%v\n%s", err, calls(t, log))
 	}
 }
 
@@ -802,7 +803,7 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	}
 	// SSH agent: no; the arg; store the secrets; no sandbox yet. The walk
 	// asks nothing of ports.
-	_, said, err := runAt(t, paths, "1\n2\nperson\ny\nn\n", "init", filepath.Dir(filepath.Dir(file)))
+	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n2\nn\n", "init", filepath.Dir(filepath.Dir(file)))
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}

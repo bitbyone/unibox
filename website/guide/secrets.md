@@ -92,22 +92,25 @@ A rotated token is then picked up without storing it again. sbx runs the
 command from a temporary directory with no terminal, so use a program on
 your `PATH` or an absolute path, never one inside a mounted repository.
 
-## Signing in with a subscription
+## A subscription or an API key
 
-A kit may let its service be signed in to with a subscription instead of a
-token - Claude's, ChatGPT's for Codex. unibox then asks which:
+For Claude and Codex unibox asks which you have:
 
 ```term
-$ unibox secret set openai
+$ unibox secret set anthropic openai
+anthropic: Anthropic API access (API key or claude.ai OAuth)
+[blue]?[/] [b]The anthropic token[/]  Claude subscription
+  a token of your Claude subscription
+  run claude setup-token in another terminal, then paste the token it prints here
+[dim](sbx's prompt for the value)[/]
 openai: OpenAI API access
-[blue]?[/] [b]The openai token[/]  Sign in with my subscription
-[dim](sbx signs you in, in the browser)[/]
-sbx has stored openai
+[blue]?[/] [b]The openai token[/]  ChatGPT subscription
+  sbx signs you in with your ChatGPT account, in the browser
+sbx has stored anthropic, openai
 ```
 
-sbx 0.49 signs in to `openai` from the host. Another service's agent signs
-in itself at its first start, with `/login`, and sbx keeps that sign-in:
-`unibox secret ls` says `sign-in` for it, and nothing is asked before.
+An API key is typed at sbx's prompt. A ChatGPT subscription is signed in
+by `sbx secret set openai --oauth`, which unibox runs.
 
 ## One name, two hosts
 

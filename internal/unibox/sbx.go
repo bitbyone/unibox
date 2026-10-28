@@ -301,9 +301,6 @@ type KitCredential struct {
 	Service     string `json:"service"`
 	Description string `json:"description"`
 	Optional    bool   `json:"optional"`
-	// OAuth is there when the token may instead come from signing in with
-	// a subscription, which sbx keeps as it would a token.
-	OAuth json.RawMessage `json:"oauth"`
 	// APIKey says the hosts the proxy puts the token into requests for.
 	APIKey struct {
 		Inject []struct {
@@ -311,10 +308,6 @@ type KitCredential struct {
 		} `json:"inject"`
 	} `json:"apiKey"`
 }
-
-// SignsIn says the service may be signed in to with a subscription rather
-// than given a token.
-func (c KitCredential) SignsIn() bool { return len(c.OAuth) > 0 && string(c.OAuth) != "null" }
 
 // Domains are the hosts the kit has the token sent to.
 func (c KitCredential) Domains() []string {

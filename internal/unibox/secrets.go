@@ -38,8 +38,6 @@ type NeededSecret struct {
 	// bindings name.
 	Kits   []string `json:"kits,omitempty"`
 	Stored bool     `json:"stored"`
-	// SignIn says a subscription's sign-in may stand for the token.
-	SignIn bool `json:"sign_in,omitempty"`
 	// Domains are the hosts the kits have the token sent to.
 	Domains []string `json:"domains,omitempty"`
 	// Scope is where the token is stored: global, or a sandbox's name.
@@ -68,6 +66,9 @@ type TokenWay struct {
 	Page    string `yaml:"page"`
 	Command string `yaml:"command"`
 	Hint    string `yaml:"hint"`
+	// SignIn has sbx sign the person in with their subscription, in the
+	// browser, rather than ask for a token.
+	SignIn bool `yaml:"sign_in"`
 }
 
 // AllWays are the ways a guide offers, a guide of one page or command as
@@ -96,6 +97,14 @@ func githubTokenPage(name, description string, permissions ...string) string {
 // knownTokenGuides are the services unibox knows the page of without the
 // team saying it: GitHub's, which sbx's own kits ask for.
 var knownTokenGuides = map[string]TokenGuide{
+	"anthropic": {Ways: []TokenWay{
+		{Name: "Claude subscription", Command: "claude setup-token", Hint: "a token of your Claude subscription"},
+		{Name: "API key", Hint: "an Anthropic API key"},
+	}},
+	"openai": {Ways: []TokenWay{
+		{Name: "ChatGPT subscription", SignIn: true, Hint: "sbx signs you in with your ChatGPT account, in the browser"},
+		{Name: "API key", Hint: "an OpenAI API key"},
+	}},
 	"copilot": {
 		Page: githubTokenPage("unibox copilot", "Copilot requests from unibox's sandboxes", "user_copilot_requests=read"),
 		Hint: "a fine-grained token with Copilot Requests read-only and access to no repository",
@@ -125,8 +134,8 @@ func TokenGuides(sbxenvFiles []string) (map[string]TokenGuide, error) {
 				}
 			}
 			for _, w := range g.Ways {
-				if w.Name == "" || w.Page == "" && w.Command == "" {
-					return fmt.Errorf("%s: secret %s: each of its ways needs a name, and a page or a command", name, service)
+				if w.Name == "" {
+					return fmt.Errorf("%s: secret %s: each of its ways needs a name", name, service)
 				}
 			}
 			was := out[service]
@@ -182,7 +191,6 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 			}
 			l.Optional = l.Optional && c.Optional
 			l.Kits = append(l.Kits, kitName(k.Source))
-			l.SignIn = l.SignIn || c.SignsIn()
 			for _, d := range c.Domains() {
 				if !slices.Contains(l.Domains, d) {
 					l.Domains = append(l.Domains, d)
@@ -343,15 +351,3 @@ func SecretClashes(needed map[string][]NeededSecret) []SecretClash {
 	}
 	return out
 }
-
-// hostSignIn are the services sbx signs in to from the host, in the
-// browser; sbx 0.49 does so for openai alone. Another service's agent signs
-// in itself at its first start, and sbx keeps that sign-in.
-var hostSignIn = map[string]bool{"openai": true}
-
-// SignsInFromHost says sbx signs the person in to the service from here.
-func (s NeededSecret) SignsInFromHost() bool { return s.SignIn && hostSignIn[s.Service] }
-
-// AgentSignsIn says nothing need be stored for the service now: its agent
-// signs in at its first start.
-func (s NeededSecret) AgentSignsIn() bool { return s.SignIn && !hostSignIn[s.Service] && !s.Stored }

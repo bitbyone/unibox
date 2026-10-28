@@ -77,11 +77,8 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 			if l.Stored {
 				stored = l.Scope
 			}
-			switch {
-			case l.Optional:
+			if l.Optional {
 				needed = "optional"
-			case l.AgentSignsIn():
-				needed = "sign-in"
 			}
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", l.Service, stored, needed, cmp.Or(l.Description, strings.Join(l.Kits, ", "), "the env's bindings"))
 		}
@@ -97,7 +94,7 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 		services := args
 		if len(services) == 0 {
 			for _, l := range list {
-				if !l.Stored && (!l.Optional || all) && !l.AgentSignsIn() {
+				if !l.Stored && (!l.Optional || all) {
 					services = append(services, l.Service)
 				}
 			}
@@ -135,37 +132,22 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 			} else if o.canAsk() && command == "" {
 				fmt.Fprintf(o.log, "%s: %s\n", service, cmp.Or(list[i].Description, "the token for "+service))
 			}
-			// A subscription's sign-in may stand for the token: sbx signs in
-			// to some from here, and another's agent at its first start.
-			if i >= 0 && list[i].SignIn && command == "" && !generate && o.canAsk() {
-				choice, err := o.askPick("The "+service+" token", "Sign in with a subscription, or give a token such as an API key.", []pick{{"signin", "Sign in with my subscription"}, {"token", "I have a token, or make one"}}, "signin")
-				if err != nil {
-					return err
-				}
-				if choice == "signin" {
-					if !list[i].SignsInFromHost() {
-						fmt.Fprintf(o.log, "  the agent signs in itself at its first start, with /login; sbx keeps the sign-in, and nothing is stored now\n")
-						continue
-					}
-					if err := o.manager.SBX.SecretSignIn(cmd.Context(), service, o.input, o.output, o.log); err != nil {
-						return tokenNotStored{err}
-					}
-					stored = append(stored, service)
-					continue
-				}
-			}
+			signIn := false
 			if command == "" && o.canAsk() {
-				if err := o.offerTokenPage(service, guide, generate); err != nil {
+				if signIn, err = o.offerTokenPage(service, guide, generate); err != nil {
 					return err
 				}
 			}
-			if err := o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log); err != nil {
+			set := func() error {
+				return o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log)
+			}
+			if signIn {
+				set = func() error { return o.manager.SBX.SecretSignIn(cmd.Context(), service, o.input, o.output, o.log) }
+			}
+			if err := set(); err != nil {
 				return tokenNotStored{err}
 			}
 			stored = append(stored, service)
-		}
-		if len(stored) == 0 {
-			return o.success("sbx stored no token; the agents sign in at their first start")
 		}
 		return o.success(fmt.Sprintf("sbx has stored %s", strings.Join(stored, ", ")))
 	}}
@@ -198,20 +180,22 @@ func (e tokenNotStored) Error() string {
 
 func (e tokenNotStored) Unwrap() error { return e.err }
 
-// offerTokenPage asks, before sbx asks for a token, whether the person has
-// one or makes a new one, each way the team or unibox knows: a page opened
-// in the browser, or a command to run here, such as one that prints a
-// subscription's token. A service with no way goes straight to sbx.
-func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) error {
+// offerTokenPage asks, before sbx asks for a token, how the person gives
+// it: each way the team or unibox knows - a subscription's token a command
+// prints, a sign-in sbx does in the browser, a key made on a page - or, for
+// a token made one way, whether they have one already. It says whether sbx
+// is to sign them in rather than ask for the token. A service with no way
+// goes straight to sbx.
+func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) (signIn bool, err error) {
 	ways := guide.AllWays()
 	if len(ways) == 0 {
 		if generate {
-			return fmt.Errorf("unibox knows no way the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
+			return false, fmt.Errorf("unibox knows no way the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
 		}
-		return nil
+		return false, nil
 	}
 	picks := []pick{}
-	if !generate {
+	if len(guide.Ways) == 0 && !generate {
 		picks = append(picks, pick{"have", "I have a token"})
 	}
 	for i, w := range ways {
@@ -221,10 +205,10 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 	if len(picks) > 1 {
 		choice, err := o.askPick("The "+service+" token", guide.Hint, picks, picks[0].value)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if choice == "have" {
-			return nil
+			return false, nil
 		}
 		i, _ := strconv.Atoi(choice)
 		way = ways[i]
@@ -232,18 +216,21 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 	if way.Hint != "" {
 		fmt.Fprintf(o.log, "  %s\n", way.Hint)
 	}
-	if way.Command != "" {
-		// unibox runs nothing for the token: what the command prints is the
+	switch {
+	case way.SignIn:
+		return true, nil
+	case way.Command != "":
+		// unibox runs nothing for a token: what the command prints is the
 		// person's to paste, and goes to sbx alone.
 		fmt.Fprintf(o.log, "  run %s in another terminal, then paste the token it prints here\n", way.Command)
-		return nil
+	case way.Page != "":
+		if err := openPage(way.Page); err != nil {
+			fmt.Fprintf(o.log, "  make it at %s, then paste it here\n", way.Page)
+		} else {
+			fmt.Fprintf(o.log, "  the browser opens %s; make the token there, then paste it here\n", way.Page)
+		}
 	}
-	if err := openPage(way.Page); err != nil {
-		fmt.Fprintf(o.log, "  make it at %s, then paste it here\n", way.Page)
-	} else {
-		fmt.Fprintf(o.log, "  the browser opens %s; make the token there, then paste it here\n", way.Page)
-	}
-	return nil
+	return false, nil
 }
 
 // openPage opens a web address in the person's browser. A browser that
