@@ -28,6 +28,9 @@ type Manager struct {
 	// sbx secret set talk to directly.
 	In       io.Reader
 	Out, Err io.Writer
+	// ApproveEnv has sbx apply an env's plan without asking, which the
+	// person says with --yes to sandbox create and recreate.
+	ApproveEnv bool
 	// kits are the kits read so far, by reference and args: reading one
 	// from a registry takes seconds, and a list drawn again after each
 	// action asks for the same ones.
@@ -494,7 +497,7 @@ func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[
 		return err
 	}
 	fmt.Fprintf(m.Log, "creating sandbox %s from env %s\n", b.Name, env.Name)
-	if err := m.SBX.EnvCreate(ctx, b.Name, file, files, m.In, m.Out, m.Err); err != nil {
+	if err := m.SBX.EnvCreate(ctx, b.Name, file, files, m.ApproveEnv, m.In, m.Out, m.Err); err != nil {
 		return err
 	}
 	box, ok, err := m.findBox(ctx, *b)

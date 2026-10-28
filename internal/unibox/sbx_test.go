@@ -29,7 +29,7 @@ func TestSBXCreatesFromTheEnvAndPassesNoHostSecret(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "fake-ssh-socket")
 	r := &SBX{}
 	ctx := context.Background()
-	if err := r.EnvCreate(ctx, "dev", "/tmp/args", []string{"a.sbxenv.yaml", "b.sbxenv.yaml"}, nil, io.Discard, io.Discard); err != nil {
+	if err := r.EnvCreate(ctx, "dev", "/tmp/args", []string{"a.sbxenv.yaml", "b.sbxenv.yaml"}, true, nil, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.EnvRemove(ctx, "dev", "", []string{"a.sbxenv.yaml"}, io.Discard); err != nil {
@@ -45,7 +45,7 @@ func TestSBXCreatesFromTheEnvAndPassesNoHostSecret(t *testing.T) {
 			t.Errorf("leaked %s", bad)
 		}
 	}
-	want := "env\ncreate\n--name\ndev\n--env-args-file\n/tmp/args\na.sbxenv.yaml\nb.sbxenv.yaml\n" +
+	want := "env\ncreate\n--name\ndev\n--env-args-file\n/tmp/args\na.sbxenv.yaml\nb.sbxenv.yaml\n--force\n" +
 		"env\nrm\n--name\ndev\na.sbxenv.yaml\n--force\n" +
 		"mount\ndev\n/host/x:/work/t/x\n"
 	if string(argv) != want {

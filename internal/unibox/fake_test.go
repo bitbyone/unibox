@@ -102,7 +102,7 @@ func (f *fakeRuntime) setState(name, state string) {
 	}
 }
 
-func (f *fakeRuntime) EnvCreate(_ context.Context, name, args string, files []string, _ io.Reader, _, _ io.Writer) error {
+func (f *fakeRuntime) EnvCreate(_ context.Context, name, args string, files []string, _ bool, _ io.Reader, _, _ io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.record("env create " + name + " " + strings.Join(files, " "))

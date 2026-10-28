@@ -543,6 +543,8 @@ again from the forge. What the sandbox held outside its tasks is lost.`, RunE: f
 		if err := o.confirm("Recreate sandbox " + name + " and discard what it holds outside its tasks?"); err != nil {
 			return err
 		}
+		// Asked for by name with --yes, sbx's plan is approved as well.
+		o.manager.ApproveEnv = o.yes
 		if err := o.manager.Recreate(cmd.Context(), name); err != nil {
 			return err
 		}

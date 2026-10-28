@@ -28,7 +28,7 @@ type Runtime interface {
 	Exec(ctx context.Context, name string, c Command) *exec.Cmd
 	Stop(ctx context.Context, name string) error
 	Remove(ctx context.Context, name string) error
-	EnvCreate(ctx context.Context, name, args string, files []string, in io.Reader, out, errout io.Writer) error
+	EnvCreate(ctx context.Context, name, args string, files []string, approve bool, in io.Reader, out, errout io.Writer) error
 	EnvRemove(ctx context.Context, name, args string, files []string, log io.Writer) error
 	KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error)
 	Secrets(ctx context.Context) ([]Secret, error)

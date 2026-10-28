@@ -199,8 +199,13 @@ func (r *SBX) Stop(ctx context.Context, name string) error {
 // EnvCreate creates a sandbox from sbxenv files with sbx env create, on the
 // user's terminal: sbx asks there what it needs to, and runs the files'
 // host commands. args is the file of the person's args, or empty.
-func (r *SBX) EnvCreate(ctx context.Context, name, args string, files []string, in io.Reader, out, errout io.Writer) error {
-	cmd := hostCommand(ctx, "sbx", envArgs("create", name, args, files)...)
+func (r *SBX) EnvCreate(ctx context.Context, name, args string, files []string, approve bool, in io.Reader, out, errout io.Writer) error {
+	argv := envArgs("create", name, args, files)
+	if approve {
+		// The person said yes before sbx asked: its plan is applied.
+		argv = append(argv, "--force")
+	}
+	cmd := hostCommand(ctx, "sbx", argv...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("sbx env create did not create sandbox %s; see what it said above, then retry: %w", name, err)

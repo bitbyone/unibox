@@ -328,6 +328,7 @@ written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Exam
 				return err
 			}
 		}
+		o.manager.ApproveEnv = o.yes
 		b, err := o.manager.Create(cmd.Context(), req, adopt)
 		if err != nil {
 			return err

@@ -46,6 +46,10 @@ mounted /Users/jdoe/code/api at /work/login/api in sandbox dev again
 sandbox recreated
 ```
 
+With `--yes` sbx applies the env's plan without asking; with
+`unibox config set remember_host_commands true`, sbx's own setting, it
+does not ask again for host commands it was shown before.
+
 This removes the sandbox and creates it again from the env as it is now.
 Tasks come back: mounts are mounted again, clones are cloned again from the
 forge. Anything else in the sandbox, such as installed packages or Docker
