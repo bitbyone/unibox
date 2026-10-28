@@ -121,6 +121,7 @@ env repo's over the global one. A value starting with
 unibox secret [-e <env>]
 unibox secret ls [-e <env>]
 unibox secret set [service...] [-e <env>] [--all] [-g] [--command <cmd>]
+unibox secret rm <service...> [-e <env>]
 ```
 
 The tokens an env needs, kept by sbx. `ls` lists them and whether sbx has

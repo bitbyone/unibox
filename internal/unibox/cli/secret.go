@@ -132,17 +132,22 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 			} else if o.canAsk() && command == "" {
 				fmt.Fprintf(o.log, "%s: %s\n", service, cmp.Or(list[i].Description, "the token for "+service))
 			}
-			signIn := false
+			var way unibox.TokenWay
 			if command == "" && o.canAsk() {
-				if signIn, err = o.offerTokenPage(service, guide, generate); err != nil {
+				if way, err = o.offerTokenPage(service, guide, generate); err != nil {
 					return err
 				}
 			}
 			set := func() error {
 				return o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log)
 			}
-			if signIn {
+			switch {
+			case way.SignIn:
 				set = func() error { return o.manager.SBX.SecretSignIn(cmd.Context(), service, o.input, o.output, o.log) }
+			case way.Env != "":
+				set = func() error {
+					return o.manager.SBX.SecretSetCustom(cmd.Context(), way.Env, way.Placeholder, way.Hosts, o.input, o.output, o.log)
+				}
 			}
 			if err := set(); err != nil {
 				return tokenNotStored{err}
@@ -155,6 +160,46 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 	set.Flags().BoolVar(&all, "all", false, "Ask for the optional tokens too")
 	set.Flags().BoolVarP(&generate, "generate", "g", false, "Open the page where a new token is made, then ask for it")
 	c.AddCommand(set)
+	c.AddCommand(&cobra.Command{Use: "rm service...", Args: cobra.MinimumNArgs(1), Short: "Have sbx forget a service's global token, however it was stored", RunE: func(cmd *cobra.Command, args []string) error {
+		env, _, err := needed(cmd)
+		if err != nil {
+			return err
+		}
+		guides, err := unibox.TokenGuides(env.Config.Files)
+		if err != nil {
+			return err
+		}
+		secrets, err := o.manager.SBX.Secrets(cmd.Context())
+		if err != nil {
+			return err
+		}
+		removed := []string{}
+		for _, service := range args {
+			for _, s := range secrets {
+				if s.Scope != "global" {
+					continue
+				}
+				switch {
+				case s.Type != "custom" && s.Name == service:
+					err = o.manager.SBX.SecretRemove(cmd.Context(), service, "")
+				case s.Type == "custom" && slices.ContainsFunc(guides[service].AllWays(), func(w unibox.TokenWay) bool { return w.Env != "" && w.Env == s.Env }):
+					// A subscription's token kept in a variable is the
+					// service's too.
+					err = o.manager.SBX.SecretRemove(cmd.Context(), "", s.Placeholder)
+				default:
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				removed = append(removed, service)
+			}
+		}
+		if len(removed) == 0 {
+			return o.success("sbx has no global token of " + strings.Join(args, ", "))
+		}
+		return o.success("sbx forgot the tokens of " + strings.Join(slices.Compact(removed), ", "))
+	}})
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		ls := func() error { return o.runStep(cmd, append([]string{"secret", "ls"}, envArgs(envFlag)...)...) }
@@ -186,13 +231,13 @@ func (e tokenNotStored) Unwrap() error { return e.err }
 // a token made one way, whether they have one already. It says whether sbx
 // is to sign them in rather than ask for the token. A service with no way
 // goes straight to sbx.
-func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) (signIn bool, err error) {
+func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) (way unibox.TokenWay, err error) {
 	ways := guide.AllWays()
 	if len(ways) == 0 {
 		if generate {
-			return false, fmt.Errorf("unibox knows no way the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
+			return way, fmt.Errorf("unibox knows no way the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
 		}
-		return false, nil
+		return way, nil
 	}
 	picks := []pick{}
 	if len(guide.Ways) == 0 && !generate {
@@ -201,14 +246,14 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 	for i, w := range ways {
 		picks = append(picks, pick{strconv.Itoa(i), w.Name})
 	}
-	way := ways[0]
+	way = ways[0]
 	if len(picks) > 1 {
 		choice, err := o.askPick("The "+service+" token", guide.Hint, picks, picks[0].value)
 		if err != nil {
-			return false, err
+			return way, err
 		}
 		if choice == "have" {
-			return false, nil
+			return unibox.TokenWay{}, nil
 		}
 		i, _ := strconv.Atoi(choice)
 		way = ways[i]
@@ -218,7 +263,7 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 	}
 	switch {
 	case way.SignIn:
-		return true, nil
+		return way, nil
 	case way.Command != "":
 		// unibox runs nothing for a token: what the command prints is the
 		// person's to paste, and goes to sbx alone.
@@ -230,7 +275,7 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 			fmt.Fprintf(o.log, "  the browser opens %s; make the token there, then paste it here\n", way.Page)
 		}
 	}
-	return false, nil
+	return way, nil
 }
 
 // openPage opens a web address in the person's browser. A browser that

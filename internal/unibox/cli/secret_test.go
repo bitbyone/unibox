@@ -43,9 +43,14 @@ case "$1 $2" in
 "kit inspect")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "kit-oauth")) + ` ]; then echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","oauth":{"tokenEndpoint":"x"}},{"service":"openai","oauth":{"tokenEndpoint":"x"}}]}'; else echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}'; fi ;;
 "secret ls")
-	printf '['; sep=''
+	printf '{"secrets":['; sep=''
 	[ -f ` + unibox.Quote(secrets) + ` ] && while read -r n; do printf '%s{"scope":"global","type":"service","name":"%s"}' "$sep" "$n"; sep=,; done < ` + unibox.Quote(secrets) + `
-	echo ']' ;;
+	printf '],"custom_secrets":['; sep=''
+	[ -f ` + unibox.Quote(secrets+".custom") + ` ] && while read -r e p; do printf '%s{"scope":"global","env":"%s","placeholder":"%s"}' "$sep" "$e" "$p"; sep=,; done < ` + unibox.Quote(secrets+".custom") + `
+	echo ']}' ;;
+"secret set-custom")
+	if [ -f ` + unibox.Quote(filepath.Join(dir, "secret-fails")) + ` ]; then echo "error: secret entry cancelled" >&2; exit 1; fi
+	echo "$4 $6" >> ` + unibox.Quote(secrets+".custom") + ` ;;
 "secret set")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "secret-fails")) + ` ]; then echo "error: secret entry cancelled" >&2; exit 1; fi
 	echo "$3" >> ` + unibox.Quote(secrets) + ` ;;
@@ -201,11 +206,11 @@ func TestATokenSbxDidNotStoreSaysHowToGoOn(t *testing.T) {
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// sbx has said why on the terminal; its exit status is not repeated.
-	_, _, err := runAt(t, paths, "1\n2\nperson\ny\n", "init", repo)
+	_, _, err := runAt(t, paths, "1\n2\nperson\ny\n2\n", "init", repo)
 	if err == nil || err.Error() != "sbx did not store the anthropic token; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing" {
 		t.Fatalf("%v", err)
 	}
-	if _, _, err = runAt(t, paths, "", "secret", "set", "anthropic"); err == nil || err.Error() != "sbx did not store the anthropic token; run unibox secret to set the tokens still missing" {
+	if _, _, err = runAt(t, paths, "2\n", "secret", "set", "anthropic"); err == nil || err.Error() != "sbx did not store the anthropic token; run unibox secret to set the tokens still missing" {
 		t.Fatalf("%v", err)
 	}
 }
@@ -403,13 +408,22 @@ func TestAnAgentsTokenIsASubscriptionsOrAnAPIKey(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent and editors: no; the arg; store the tokens: Claude's of
 	// the subscription, Codex's by signing in, gitlab's typed; no sandbox.
-	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n1\n1\nn\n", "init", repo)
+	_, said, err := runAt(t, paths, "1\n2\nperson\ny\n1\n1\nn\ny\n", "init", repo)
 	if err != nil || !strings.Contains(said, "run claude setup-token in another terminal, then paste the token it prints here") {
 		t.Fatalf("%v\n%s", err, said)
 	}
+	// Claude's subscription token is a custom secret in the variable
+	// Claude takes it from, which stands for the anthropic service.
 	c := calls(t, log)
-	if !strings.Contains(c, "secret set anthropic\n") || !strings.Contains(c, "secret set openai --oauth\n") || strings.Contains(c, "setup-token") {
+	if !strings.Contains(c, "secret set-custom --env CLAUDE_CODE_OAUTH_TOKEN --placeholder sk-ant-oat01-") || !strings.Contains(c, "--host api.anthropic.com") || strings.Contains(c, "secret set anthropic") || !strings.Contains(c, "secret set openai --oauth\n") {
 		t.Fatalf("%s", c)
+	}
+	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team"); err != nil || !strings.Contains(out, "global, Claude subscription") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// unibox secret rm takes it away as the service's.
+	if _, _, err := run(t, paths, "", "secret", "rm", "anthropic", "-e", "team"); err != nil || !strings.Contains(calls(t, log), "secret rm --placeholder sk-ant-oat01-") {
+		t.Fatalf("%v\n%s", err, calls(t, log))
 	}
 	// An API key is typed at sbx's prompt.
 	if _, _, err := runAt(t, paths, "2\n", "secret", "set", "openai"); err != nil || !strings.Contains(calls(t, log), "secret set openai\n") {

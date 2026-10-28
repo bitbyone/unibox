@@ -186,6 +186,21 @@ func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	return slices.Clone(f.secrets), nil
 }
 
+func (f *fakeRuntime) SecretSetCustom(_ context.Context, env, placeholder string, _ []string, _ io.Reader, _, _ io.Writer) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("secret set-custom " + env)
+	f.secrets = append(f.secrets, Secret{Scope: "global", Type: "custom", Env: env, Placeholder: placeholder})
+	return nil
+}
+
+func (f *fakeRuntime) SecretRemove(_ context.Context, service, placeholder string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("secret rm " + service + placeholder)
+	return nil
+}
+
 func (f *fakeRuntime) SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error {
 	return f.SecretSet(ctx, service, "", in, out, errout)
 }

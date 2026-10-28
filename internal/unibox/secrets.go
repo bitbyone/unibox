@@ -69,6 +69,13 @@ type TokenWay struct {
 	// SignIn has sbx sign the person in with their subscription, in the
 	// browser, rather than ask for a token.
 	SignIn bool `yaml:"sign_in"`
+	// Env, Placeholder and Hosts keep the token as a custom secret: the
+	// sandbox sees Placeholder in Env, and the proxy replaces it on
+	// requests to Hosts. Claude takes its subscription's token so, in
+	// CLAUDE_CODE_OAUTH_TOKEN, and sends it as a bearer token.
+	Env         string   `yaml:"env"`
+	Placeholder string   `yaml:"placeholder"`
+	Hosts       []string `yaml:"hosts"`
 }
 
 // AllWays are the ways a guide offers, a guide of one page or command as
@@ -96,9 +103,12 @@ func githubTokenPage(name, description string, permissions ...string) string {
 
 // knownTokenGuides are the services unibox knows the page of without the
 // team saying it: GitHub's, which sbx's own kits ask for.
+// ClaudeTokenEnv is where Claude Code takes a subscription's token from.
+const ClaudeTokenEnv = "CLAUDE_CODE_OAUTH_TOKEN"
+
 var knownTokenGuides = map[string]TokenGuide{
 	"anthropic": {Ways: []TokenWay{
-		{Name: "Claude subscription", Command: "claude setup-token", Hint: "a token of your Claude subscription"},
+		{Name: "Claude subscription", Command: "claude setup-token", Env: ClaudeTokenEnv, Placeholder: "sk-ant-oat01-unibox0claude0proxy0managed", Hosts: []string{"api.anthropic.com"}, Hint: "a long-lived token of your Claude subscription"},
 		{Name: "API key", Hint: "an Anthropic API key"},
 	}},
 	"openai": {Ways: []TokenWay{
@@ -213,11 +223,20 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 		l := *byService[service]
 		l.Page, l.Hint = guides[service].Page, guides[service].Hint
 		for _, s := range secrets {
-			if s.Name != service {
+			if s.Scope != "global" && (sandbox == "" || s.Scope != sandbox) {
 				continue
 			}
-			if s.Scope == "global" || sandbox != "" && s.Scope == sandbox {
+			if s.Type != "custom" && s.Name == service {
 				l.Stored, l.Scope = true, s.Scope
+			}
+		}
+		// A token kept the way a subscription's is, in a variable, stands
+		// for the service's.
+		for _, w := range guides[service].AllWays() {
+			for _, s := range secrets {
+				if !l.Stored && w.Env != "" && s.Type == "custom" && s.Env == w.Env && (s.Scope == "global" || s.Scope == sandbox) {
+					l.Stored, l.Scope = true, s.Scope+", "+w.Name
+				}
 			}
 		}
 		out = append(out, l)

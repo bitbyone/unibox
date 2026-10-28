@@ -565,6 +565,15 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		env = append(env, "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+a.CoAuthor)
 	}
 	env = append(env, m.sshEnv()...)
+	if a.TokenEnv != "" {
+		if secrets, err := m.SBX.Secrets(ctx); err == nil {
+			for _, s := range secrets {
+				if s.Type == "custom" && s.Env == a.TokenEnv && (s.Scope == "global" || s.Scope == b.Name) {
+					env = append(env, a.TokenEnv+"="+s.Placeholder)
+				}
+			}
+		}
+	}
 	args = withEnv(env, args)
 	if a.Trust != nil && a.Config != "" {
 		dirs := []string{"/work", t.Directory}

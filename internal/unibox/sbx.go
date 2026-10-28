@@ -347,6 +347,10 @@ type Secret struct {
 	Scope string `json:"scope"`
 	Type  string `json:"type"`
 	Name  string `json:"name"`
+	// Env and Placeholder are a custom secret's: the variable a sandbox
+	// sees and the placeholder in it, which the proxy replaces.
+	Env         string `json:"env,omitempty"`
+	Placeholder string `json:"placeholder,omitempty"`
 }
 
 func (r *SBX) Secrets(ctx context.Context) ([]Secret, error) {
@@ -358,7 +362,44 @@ func (r *SBX) Secrets(ctx context.Context) ([]Secret, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse sbx secret list; update sbx: %w", err)
 	}
+	// Custom secrets are listed apart, by the variable and placeholder.
+	var custom struct {
+		Custom []Secret `json:"custom_secrets"`
+	}
+	if json.Unmarshal(b, &custom) == nil {
+		for _, c := range custom.Custom {
+			c.Type = "custom"
+			list = append(list, c)
+		}
+	}
 	return list, nil
+}
+
+// SecretSetCustom has sbx ask on the terminal for a token it keeps as a
+// custom secret: the sandbox sees placeholder in env, and the proxy puts
+// the token in its place on requests to hosts. The value goes to sbx
+// alone.
+func (r *SBX) SecretSetCustom(ctx context.Context, env, placeholder string, hosts []string, in io.Reader, out, errout io.Writer) error {
+	args := []string{"secret", "set-custom", "--env", env, "--placeholder", placeholder}
+	for _, h := range hosts {
+		args = append(args, "--host", h)
+	}
+	cmd := hostCommand(ctx, "sbx", args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sbx did not store the token for %s", env)
+	}
+	return nil
+}
+
+// SecretRemove has sbx forget a service's global token, or with a
+// placeholder the custom secret of it.
+func (r *SBX) SecretRemove(ctx context.Context, service, placeholder string) error {
+	args := []string{"secret", "rm", service, "--force"}
+	if placeholder != "" {
+		args = []string{"secret", "rm", "--placeholder", placeholder, "--force"}
+	}
+	return runQuiet(hostCommand(ctx, "sbx", args...))
 }
 
 // SecretSet has sbx ask the person for a service's token on their own

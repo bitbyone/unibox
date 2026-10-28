@@ -34,6 +34,8 @@ type Runtime interface {
 	Secrets(ctx context.Context) ([]Secret, error)
 	SecretSet(ctx context.Context, service, command string, in io.Reader, out, errout io.Writer) error
 	SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error
+	SecretSetCustom(ctx context.Context, env, placeholder string, hosts []string, in io.Reader, out, errout io.Writer) error
+	SecretRemove(ctx context.Context, service, placeholder string) error
 	Mount(ctx context.Context, sandbox, host, target string) error
 	Unmount(ctx context.Context, sandbox, host, target string) error
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)
