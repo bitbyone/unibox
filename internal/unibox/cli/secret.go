@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -171,31 +172,49 @@ func (e tokenNotStored) Error() string {
 func (e tokenNotStored) Unwrap() error { return e.err }
 
 // offerTokenPage asks, before sbx asks for a token, whether the person has
-// one or makes a new one, and for a new one opens the page where it is
-// made. A service whose page unibox does not know goes straight to sbx.
+// one or makes a new one, each way the team or unibox knows: a page opened
+// in the browser, or a command to run here, such as one that prints a
+// subscription's token. A service with no way goes straight to sbx.
 func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) error {
-	if guide.Page == "" {
+	ways := guide.AllWays()
+	if len(ways) == 0 {
 		if generate {
-			return fmt.Errorf("unibox knows no page where the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
+			return fmt.Errorf("unibox knows no way the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
 		}
 		return nil
 	}
+	picks := []pick{}
 	if !generate {
-		choice, err := o.askPick("The "+service+" token", guide.Hint, []pick{{"have", "I have a token"}, {"generate", "Generate a new token"}}, "have")
+		picks = append(picks, pick{"have", "I have a token"})
+	}
+	for i, w := range ways {
+		picks = append(picks, pick{strconv.Itoa(i), w.Name})
+	}
+	way := ways[0]
+	if len(picks) > 1 {
+		choice, err := o.askPick("The "+service+" token", guide.Hint, picks, picks[0].value)
 		if err != nil {
 			return err
 		}
-		if choice != "generate" {
+		if choice == "have" {
 			return nil
 		}
+		i, _ := strconv.Atoi(choice)
+		way = ways[i]
 	}
-	if guide.Hint != "" {
-		fmt.Fprintf(o.log, "  %s\n", guide.Hint)
+	if way.Hint != "" {
+		fmt.Fprintf(o.log, "  %s\n", way.Hint)
 	}
-	if err := openPage(guide.Page); err != nil {
-		fmt.Fprintf(o.log, "  make it at %s, then paste it here\n", guide.Page)
+	if way.Command != "" {
+		// unibox runs nothing for the token: what the command prints is the
+		// person's to paste, and goes to sbx alone.
+		fmt.Fprintf(o.log, "  run %s in another terminal, then paste the token it prints here\n", way.Command)
+		return nil
+	}
+	if err := openPage(way.Page); err != nil {
+		fmt.Fprintf(o.log, "  make it at %s, then paste it here\n", way.Page)
 	} else {
-		fmt.Fprintf(o.log, "  the browser opens %s; make the token there, then paste it here\n", guide.Page)
+		fmt.Fprintf(o.log, "  the browser opens %s; make the token there, then paste it here\n", way.Page)
 	}
 	return nil
 }

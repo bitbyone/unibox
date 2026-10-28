@@ -166,11 +166,22 @@ func TestSettingATokenOffersThePageWhereANewOneIsMade(t *testing.T) {
 	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic", "--generate"); err == nil || !strings.Contains(err.Error(), "knows no page") {
+	if _, _, err := runAt(t, paths, "", "secret", "set", "anthropic", "--generate"); err == nil || !strings.Contains(err.Error(), "knows no way") {
 		t.Fatalf("%v", err)
 	}
 	if out, _, err := run(t, paths, "", "secret", "ls", "--json"); err != nil || !strings.Contains(out, `"page": "`+page+`"`) {
 		t.Fatalf("%v\n%s", err, out)
+	}
+	// A token made more ways than one asks which; a subscription's is a
+	// command the person runs, which unibox only names.
+	if err := os.WriteFile(unibox.TeamFile(file), []byte("secrets:\n  anthropic:\n    ways:\n      - {name: Claude subscription, command: claude setup-token}\n      - {name: API key, page: https://console.example.com/keys}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, said, err := runAt(t, paths, "2\n", "secret", "set", "anthropic"); err != nil || !strings.Contains(said, "Claude subscription") || !strings.Contains(said, "run claude setup-token in another terminal") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if strings.Contains(calls(t, log), "setup-token") {
+		t.Fatal("unibox ran the command")
 	}
 	if err := os.WriteFile(unibox.TeamFile(file), []byte("secrets:\n  gitlab: {page: gitlab.example.com}\n"), 0o600); err != nil {
 		t.Fatal(err)

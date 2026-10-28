@@ -116,6 +116,10 @@ secrets:                        # where a service's token is made, for unibox se
   gitlab:
     page: https://gitlab.example.com/-/user_settings/personal_access_tokens?name=unibox&scopes=read_repository
     hint: a personal access token with read_repository
+  anthropic:
+    ways:                         # several ways; unibox asks which
+      - {name: Claude subscription, command: claude setup-token, hint: prints a token to paste}
+      - {name: API key, page: https://platform.claude.com/settings/keys}
 resources:                      # what the env's sandboxes start from
   cpus: 50%
   memory: 16g

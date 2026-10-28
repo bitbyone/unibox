@@ -48,10 +48,36 @@ type NeededSecret struct {
 }
 
 // TokenGuide says where a service's token is made - a page a browser
-// opens, filled in as far as the service allows - and what to make there.
+// opens, filled in as far as the service allows - and what to make there;
+// or, for a service whose token is made more ways than one, each way.
 type TokenGuide struct {
 	Page string `yaml:"page"`
 	Hint string `yaml:"hint"`
+	// Command is what the person runs on the host for the token, such as
+	// claude setup-token, which prints it; unibox only names it.
+	Command string     `yaml:"command"`
+	Ways    []TokenWay `yaml:"ways"`
+}
+
+// TokenWay is one way a token is made: a subscription's token a command
+// prints, or an API key made on a page.
+type TokenWay struct {
+	Name    string `yaml:"name"`
+	Page    string `yaml:"page"`
+	Command string `yaml:"command"`
+	Hint    string `yaml:"hint"`
+}
+
+// AllWays are the ways a guide offers, a guide of one page or command as
+// one way; none when it names neither.
+func (g TokenGuide) AllWays() []TokenWay {
+	if len(g.Ways) > 0 {
+		return g.Ways
+	}
+	if g.Page == "" && g.Command == "" {
+		return nil
+	}
+	return []TokenWay{{Name: "Generate a new token", Page: g.Page, Command: g.Command, Hint: g.Hint}}
 }
 
 // githubTokenPage is GitHub's page for a fine-grained token, filled in by
@@ -88,13 +114,26 @@ func TokenGuides(sbxenvFiles []string) (map[string]TokenGuide, error) {
 			if !ValidSecretName(service) {
 				return fmt.Errorf("%s: secret %q is no service name sbx takes; use letters, digits and dashes", name, service)
 			}
-			if g.Page != "" {
-				if u, err := url.Parse(g.Page); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-					return fmt.Errorf("%s: secret %s: page %q is no web address; give one starting with https://", name, service, g.Page)
+			for _, w := range append([]TokenWay{{Page: g.Page}}, g.Ways...) {
+				if w.Page == "" {
+					continue
+				}
+				if u, err := url.Parse(w.Page); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+					return fmt.Errorf("%s: secret %s: page %q is no web address; give one starting with https://", name, service, w.Page)
+				}
+			}
+			for _, w := range g.Ways {
+				if w.Name == "" || w.Page == "" && w.Command == "" {
+					return fmt.Errorf("%s: secret %s: each of its ways needs a name, and a page or a command", name, service)
 				}
 			}
 			was := out[service]
-			out[service] = TokenGuide{Page: cmp.Or(g.Page, was.Page), Hint: cmp.Or(g.Hint, was.Hint)}
+			if len(g.Ways) > 0 {
+				// Ways the team names replace what was said before.
+				out[service] = TokenGuide{Hint: cmp.Or(g.Hint, was.Hint), Ways: g.Ways}
+				continue
+			}
+			out[service] = TokenGuide{Page: cmp.Or(g.Page, was.Page), Hint: cmp.Or(g.Hint, was.Hint), Command: cmp.Or(g.Command, was.Command)}
 		}
 		return nil
 	})

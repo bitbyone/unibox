@@ -56,6 +56,30 @@ secrets:
     hint: a GitLab token with read_repository and write_repository, nothing else
 ```
 
+A token made more ways than one lists them under `ways:`, and unibox asks
+which. A way with a `command` names what to run on your machine; unibox
+runs nothing itself, and you paste what the command prints at sbx's
+prompt:
+
+```yaml
+secrets:
+  anthropic:
+    ways:
+      - name: Claude subscription
+        command: claude setup-token
+        hint: it signs you in and prints a token
+      - name: API key
+        page: https://platform.claude.com/settings/keys
+```
+
+```term
+$ unibox secret set anthropic
+[blue]?[/] [b]The anthropic token[/]  Claude subscription
+  it signs you in and prints a token
+  run claude setup-token in another terminal, then paste the token it prints here
+[dim](sbx's prompt for the value)[/]
+```
+
 To keep a token in another store, give sbx a command it runs on the host
 whenever it needs the value:
 
