@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -158,7 +159,7 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 		return o.success(fmt.Sprintf("repository %s of env %s is %s, %s", args[0], name, r.Default, cmp.Or(repoFrom(r.DefaultFrom), "as nothing says otherwise")))
 	}}
 	def.Flags().BoolVar(&defEnvRepo, "env-repo", false, "Say it for every env of the env's repository")
-	c.AddCommand(ls, addCmd, rm, def)
+	c.AddCommand(ls, addCmd, rm, def, o.repoRecentCommand(&envFlag))
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		if o.json || !o.interactive {
 			return o.runStep(cmd, append([]string{"repo", "ls"}, envArgs(envFlag)...)...)
@@ -169,6 +170,80 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 		}
 		return o.repoUI(cmd, name)
 	}
+	return c
+}
+
+// repoRecentCommand lists the repositories tasks have held beyond the
+// index, which task new and adding to a task offer, and forgets them.
+func (o *options) repoRecentCommand(envFlag *string) *cobra.Command {
+	var all bool
+	// The env is the one asked for, or every env with --all.
+	envOf := func() (string, error) {
+		if all {
+			if *envFlag != "" {
+				return "", fmt.Errorf("-e and --all do not mix; give one")
+			}
+			return "", nil
+		}
+		return o.envName(*envFlag)
+	}
+	c := &cobra.Command{Use: "recent", Args: cobra.NoArgs, Short: "List the repositories your tasks in an env's sandboxes have held, newest first", Long: `List the repositories your tasks in sandboxes of an env have held - a
+checkout mounted or cloned, or a forge's address - the newest first, also
+after the task is gone. unibox task new and adding to a task offer them
+beside the env's index: / searches them, r lists them, a adds one to the
+index and d forgets it. Those of another env are not offered, as its
+sandboxes may reach neither the forge nor the secrets they need.`, Example: "  unibox repo recent\n  unibox repo recent --all\n  unibox repo recent rm ~/code/old-prototype", RunE: func(cmd *cobra.Command, args []string) error {
+		env, err := envOf()
+		if err != nil {
+			return err
+		}
+		recent, err := o.paths.RecentRepos(env)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "env": env, "recent": recent})
+		}
+		if len(recent) == 0 {
+			fmt.Fprintln(o.output, "no task has held a repository yet")
+			return nil
+		}
+		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ENV\tUSED\tSOURCE\tURL")
+		for _, r := range recent {
+			used := "-"
+			if !r.Used.IsZero() {
+				used = r.Used.Local().Format("2006-01-02 15:04")
+			}
+			source, url := "-", cmp.Or(r.URL, "-")
+			if r.Path != "" {
+				source = tildePath(r.Path)
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Env, used, source, url)
+		}
+		return w.Flush()
+	}}
+	c.Flags().BoolVar(&all, "all", false, "List those of every env")
+	rm := &cobra.Command{Use: "rm path|url...", Args: cobra.MinimumNArgs(1), Short: "Forget recent repositories, by their path or address", RunE: func(cmd *cobra.Command, args []string) error {
+		env, err := envOf()
+		if err != nil {
+			return err
+		}
+		for _, a := range args {
+			source := a
+			if p, err := unibox.ExpandPath(a); err == nil && isDirectory(p) {
+				if abs, err := filepath.Abs(p); err == nil {
+					source = abs
+				}
+			}
+			if err := o.paths.ForgetRecent(env, source); err != nil {
+				return err
+			}
+		}
+		return o.success(fmt.Sprintf("forgot %s", strings.Join(args, ", ")))
+	}}
+	rm.Flags().BoolVar(&all, "all", false, "Forget them for every env")
+	c.AddCommand(rm)
 	return c
 }
 
@@ -440,7 +515,7 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 				return fmt.Errorf("%s is neither a directory nor a repository env %s names; unibox repo ls lists them", a, env.Name)
 			}
 		}
-		if len(env.Repos) == 0 && len(dirs) == 0 && !(len(args) == 0 && o.canAsk() && o.hasRecent()) {
+		if len(env.Repos) == 0 && len(dirs) == 0 && !(len(args) == 0 && o.canAsk() && o.hasRecent(env.Name)) {
 			return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:, or name a directory of yours: unibox task new .", env.Name)
 		}
 		rows := taskRows(cmd.Context(), env.Repos)

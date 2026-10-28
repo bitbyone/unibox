@@ -335,6 +335,8 @@ unibox repo ls [-e <env>]
 unibox repo add <name> <url|directory> [--ref <branch>] [--default always|on|off] [--context true|false] [--description <text>] [-e <env> | --every-env | --env-repo]
 unibox repo default <name> always|on|off|- [-e <env>] [--env-repo]
 unibox repo rm <name> [-e <env> | --every-env | --env-repo]
+unibox repo recent [-e <env> | --all]
+unibox repo recent rm <path|url>... [-e <env> | --all]
 ```
 
 The repositories an env's tasks are given by name: the team's under
@@ -351,7 +353,10 @@ wherever `run`, `prepare`, `check` and `add-repo` take a repository.
 `default` writes your say for the env, or with `--env-repo` its
 repository's envs, into `config.yaml`, over the team's; `-` takes it back. `rm` forgets one of yours; the team's stay.
 List keys: `/` filter, `n` new task with it, `space` off/on/always, `a`
-add, `d` remove yours.
+add, `d` remove yours. `recent` lists the repositories your tasks in the
+env's sandboxes have held, the newest first, which `task new` and adding
+to a task offer beside the index (`--all`: every env's); `recent rm`
+forgets them by path or address.
 
 ### `unibox prune`
 

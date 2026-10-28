@@ -33,6 +33,8 @@ type taskRepo struct {
 	repo                                               unibox.IndexedRepo
 	picked, context, push, preset, host, recent, clone bool
 	local, top, origin, current                        string
+	// source is a recent one's path or address, as it was recorded.
+	source string
 }
 
 // mounted says whether the task mounts the repository from the host.
@@ -89,6 +91,7 @@ type taskPickModel struct {
 	// saying where.
 	showRecent    bool
 	name          func(name string, r unibox.IndexedRepo) (string, error)
+	forget        func(source string) error
 	note          string
 	done, gaveUp  bool
 	width, height int
@@ -337,6 +340,21 @@ func (m taskPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.recent, r.repo.URL, r.repo.From = false, named.URL, unibox.FromYours
 			m.note = "named " + r.name + " " + where
 		}
+	case "d":
+		if under >= 0 {
+			r := m.rows[under]
+			if !r.recent || m.forget == nil {
+				m.note = r.name + " is the index's; unibox repo rm forgets one of yours"
+				return m, nil
+			}
+			if err := m.forget(r.source); err != nil {
+				m.note = err.Error()
+				return m, nil
+			}
+			m.rows = slices.Delete(m.rows, under, under+1)
+			m.cursor = min(m.cursor, max(len(m.visible())-1, 0))
+			m.note = "forgot " + r.name
+		}
 	case "b":
 		m.editing, m.input = "branch", m.branch
 	case "t":
@@ -479,7 +497,7 @@ func (m taskPickModel) View() string {
 		if m.recentCount() > 0 {
 			keys = append(keys, "r", "recent")
 			if under := m.visible(); m.cursor < len(under) && m.rows[under[m.cursor]].recent {
-				keys = append(keys, "a", "add to index")
+				keys = append(keys, "a", "add to index", "d", "forget")
 			}
 		}
 		keys = append(keys, "/", "search")
@@ -553,7 +571,7 @@ func recentRows(ctx context.Context, recent []unibox.RecentRepo, have []taskRepo
 	for i, rec := range recent {
 		if rec.Path == "" || !isDirectory(rec.Path) {
 			if url, err := unibox.CloneURL(rec.URL); err == nil {
-				rows[i] = taskRepo{name: repoNameOf(url), repo: unibox.IndexedRepo{URL: url}, recent: true, push: true}
+				rows[i] = taskRepo{name: repoNameOf(url), repo: unibox.IndexedRepo{URL: url}, recent: true, push: true, source: rec.Source()}
 			}
 			continue
 		}
@@ -562,7 +580,7 @@ func recentRows(ctx context.Context, recent []unibox.RecentRepo, have []taskRepo
 			if err != nil || !isDirectory(top) {
 				return
 			}
-			rows[i] = taskRepo{name: repoNameOf(top), repo: unibox.IndexedRepo{URL: tildePath(top)}, recent: true, push: origin != "", local: top, top: top, origin: origin, current: current}
+			rows[i] = taskRepo{name: repoNameOf(top), repo: unibox.IndexedRepo{URL: tildePath(top)}, recent: true, push: origin != "", local: top, top: top, origin: origin, current: current, source: rec.Source()}
 		})
 	}
 	wg.Wait()
@@ -619,7 +637,7 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 	if rows == nil {
 		rows = taskRows(ctx, env.Repos)
 	}
-	if recent, err := o.paths.RecentRepos(); err == nil {
+	if recent, err := o.paths.RecentRepos(env.Name); err == nil {
 		taken := map[string]bool{}
 		for name := range env.Repos {
 			taken[name] = true
@@ -631,6 +649,7 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 		scope := unibox.Scope{Env: env.Name}
 		return o.scopeText(scope), o.manager.SetRepo(scope, name, r)
 	}
+	m.forget = func(source string) error { return o.paths.ForgetRecent(env.Name, source) }
 	if noPush {
 		for i := range m.rows {
 			m.rows[i].push = false
@@ -758,10 +777,10 @@ func tildePath(p string) string {
 	return p
 }
 
-// hasRecent says whether a task of the person's has held a repository,
-// which the picker offers beside the index.
-func (o *options) hasRecent() bool {
-	recent, err := o.paths.RecentRepos()
+// hasRecent says whether a task of the person's in a sandbox of env has
+// held a repository, which the picker offers beside the index.
+func (o *options) hasRecent(env string) bool {
+	recent, err := o.paths.RecentRepos(env)
 	return err == nil && len(recent) > 0
 }
 
@@ -777,7 +796,7 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	if err != nil {
 		return err
 	}
-	if len(env.Repos) == 0 && !o.hasRecent() {
+	if len(env.Repos) == 0 && !o.hasRecent(env.Name) {
 		return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:", env.Name)
 	}
 	picked, err := o.pickTask(cmd, env, &t, "", false, nil)

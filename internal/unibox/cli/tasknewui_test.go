@@ -233,4 +233,12 @@ func TestRecentRepositoriesAreSearchedShownWhenAskedAndNamedInTheIndex(t *testin
 	if v := tm.View(); !strings.Contains(v, "api-2") {
 		t.Fatalf("%s", v)
 	}
+	// d forgets a recent one; one of the index stays.
+	var forgot []string
+	got := tm.(taskPickModel)
+	got.forget = func(source string) error { forgot = append(forgot, source); return nil }
+	tm = taskKeys(got, "j", "j", "d", "k", "d")
+	if v := tm.View(); len(forgot) != 1 || forgot[0] != "https://forge.example.com/y/api.git" || strings.Contains(v, "api-2") || !strings.Contains(v, "is the index's") {
+		t.Fatalf("%v\n%s", forgot, v)
+	}
 }

@@ -358,3 +358,38 @@ func TestSeveralRepositoriesAreNamedWithRepo(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoRecentListsAnEnvsAloneAndForgetsThem(t *testing.T) {
+	t.Parallel()
+	paths := cliFixture(t)
+	checkout := t.TempDir()
+	err := paths.State(func(s *unibox.State) error {
+		s.Recent = []unibox.RecentRepo{
+			{Env: "dev", Path: checkout, URL: "https://forge.example.com/x/web.git"},
+			{Env: "dev", URL: "https://forge.example.com/x/api.git"},
+			{Env: "ops", URL: "https://forge.example.com/ops/infra.git"},
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "repo", "recent")
+	if err != nil || !strings.Contains(out, "x/web.git") || !strings.Contains(out, "x/api.git") || strings.Contains(out, "infra") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "repo", "recent", "--all"); err != nil || !strings.Contains(out, "infra") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// A checkout is forgotten by its path, as typed; one never recorded is
+	// said to be no recent one.
+	if _, _, err = run(t, paths, "", "repo", "recent", "rm", checkout, "https://forge.example.com/x/api.git"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = run(t, paths, "", "repo", "recent", "rm", "https://forge.example.com/ops/infra.git"); err == nil || !strings.Contains(err.Error(), "no recent repository") {
+		t.Fatalf("%v", err)
+	}
+	if out, _, err = run(t, paths, "", "repo", "recent", "--all"); err != nil || strings.Contains(out, "x/") || !strings.Contains(out, "infra") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}

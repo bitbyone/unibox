@@ -112,13 +112,24 @@ $ unibox task new
 ## Recent repositories
 
 Every repository a task of yours has held - a checkout mounted or cloned,
-or a forge's address - is remembered, the newest first, also after the
-task is gone. The screen does not list them beside the index: `/` searches
+or a forge's address - is remembered with the env of the task's sandbox,
+the newest first, also after the task is gone. Only the env's own are
+offered: a sandbox of another env may reach neither the forge nor the
+secrets they need. The screen does not list them beside the index: `/` searches
 them with it, by name or path, and `r` shows them all. A recent one is
 mounted when its checkout is still on this machine, else cloned; `m`
 switches a checkout between the two, cloning from its `origin`. `a` adds
 the one under the cursor to the env's index in your config.yaml, as
-`unibox repo add` would, where it is listed from then on. The task list's
+`unibox repo add` would, where it is listed from then on, and `d`
+forgets it.
+
+```sh
+unibox repo recent                 # this env's, the newest first
+unibox repo recent --all           # every env's
+unibox repo recent rm ~/code/old   # forget one, by its path or address
+```
+
+One a task holds now stays recent while the task does. The task list's
 `r`, which adds repositories to a task, offers them alike.
 
 `unibox task new .` adds the current checkout as the first row, mounted

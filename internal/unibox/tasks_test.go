@@ -921,11 +921,21 @@ func TestTheRepositoriesTasksHeldAreRecentTheNewestFirst(t *testing.T) {
 	if err := m.Remove(ctx, "dev", "one", true); err != nil {
 		t.Fatal(err)
 	}
-	recent, err := m.Paths.RecentRepos()
+	recent, err := m.Paths.RecentRepos("dev")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(recent) != 2 || recent[0].URL != adrs || recent[1].URL != url {
+	if len(recent) != 2 || recent[0].URL != adrs || recent[1].URL != url || recent[0].Env != "dev" {
+		t.Fatalf("%+v", recent)
+	}
+	// Those of another env's sandboxes are not this env's.
+	if other, err := m.Paths.RecentRepos("ops"); err != nil || len(other) != 0 {
+		t.Fatalf("%v %+v", err, other)
+	}
+	if err := m.Paths.ForgetRecent("dev", adrs); err != nil {
+		t.Fatal(err)
+	}
+	if recent, _ = m.Paths.RecentRepos(""); len(recent) != 1 || recent[0].URL != url {
 		t.Fatalf("%+v", recent)
 	}
 }

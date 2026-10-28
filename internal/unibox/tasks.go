@@ -325,7 +325,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 			}
 		}
 		s.Sandboxes[b.Name] = box
-		noteRecent(s, added, time.Now())
+		noteRecent(s, b.Env, added, time.Now())
 		return nil
 	})
 	return t, added, err
@@ -409,7 +409,7 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 	// beside the index the next time one is picked.
 	err = m.Paths.State(func(s *State) error {
 		s.Sandboxes[b.Name] = b
-		noteRecent(s, t.Repositories, time.Now())
+		noteRecent(s, b.Env, t.Repositories, time.Now())
 		return nil
 	})
 	if err != nil {
