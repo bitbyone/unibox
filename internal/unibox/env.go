@@ -37,7 +37,7 @@ type Env struct {
 	// the team's and the person's.
 	Repos map[string]IndexedRepo
 	// Instructions are what the env's tasks' agents are told, the team's
-	// files' first and the person's last.
+	// files' first, then the person's from the widest scope to the env.
 	Instructions []string
 }
 
@@ -64,7 +64,7 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
-	ports, err := envPorts(ec, c.Ports)
+	ports, err := envPorts(ec, c)
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
@@ -72,7 +72,7 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
-	repos, err := envRepos(ec, c.Repos)
+	repos, err := envRepos(ec, c)
 	if err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
@@ -83,13 +83,17 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	}); err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
-	instructions = slices.DeleteFunc(append(instructions, c.Instructions, ec.Instructions), func(s string) bool { return strings.TrimSpace(s) == "" })
+	for _, layer := range c.yourLayers(ec) {
+		instructions = append(instructions, layer.Instructions)
+	}
+	instructions = slices.DeleteFunc(instructions, func(s string) bool { return strings.TrimSpace(s) == "" })
 	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources, Repos: repos, Instructions: instructions}, nil
 }
 
 // ValidEnvConfig checks what an env says before it is kept: a name, files
-// that read and ports that parse over the person's for every env.
-func ValidEnvConfig(name string, ec EnvConfig, global map[string]Port) error {
+// that read and ports that parse under what the person says for more envs
+// than this one in c.
+func ValidEnvConfig(name string, ec EnvConfig, c Config) error {
 	if err := ValidName(name); err != nil {
 		return err
 	}
@@ -107,6 +111,6 @@ func ValidEnvConfig(name string, ec EnvConfig, global map[string]Port) error {
 	if _, err := ReadSBXEnv(ec.Files); err != nil {
 		return err
 	}
-	_, err := envPorts(ec, global)
+	_, err := envPorts(ec, c)
 	return err
 }

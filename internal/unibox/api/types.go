@@ -99,7 +99,8 @@ type Port struct {
 	Port        string `json:"port"`
 	Description string `json:"description,omitempty"`
 	Team        bool   `json:"team,omitempty"`
-	// From is where the port is named: repo, env, yours-all or yours.
+	// From is where the port is named: repo, env, yours-all, yours-env-repo
+	// or yours.
 	From    string `json:"from,omitempty"`
 	Default bool   `json:"default"`
 	// DefaultYours says your config.yaml decides Default.

@@ -88,6 +88,8 @@ func resourceFrom(values unibox.EnvValues, env unibox.Env, b api.Sandbox, r stri
 		return " (its own)"
 	case unibox.ResourceOfEnv:
 		return " (env " + b.Env + "'s)"
+	case unibox.ResourceOfEnvRepo:
+		return " (its env repo's)"
 	case unibox.ResourceOfAll:
 		return " (every env's)"
 	case unibox.ResourceOfTeam:

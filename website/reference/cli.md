@@ -103,14 +103,16 @@ sandbox, `d` forget.
 ### `unibox var`
 
 ```
-unibox var [-e <env> | -g]
-unibox var ls [-e <env> | -g]
-unibox var set <name> <value> [-e <env> | -g]
-unibox var rm <name> [-e <env> | -g]
+unibox var [-e <env> | -g] [--env-repo]
+unibox var ls [-e <env> | -g] [--env-repo]
+unibox var set <name> <value> [-e <env> | -g] [--env-repo]
+unibox var rm <name> [-e <env> | -g] [--env-repo]
 ```
 
 Your values for an env's args, in `vars.toml`. `-g`/`--global` is for
-every env declaring the arg; an env's own value wins. A value starting with
+every env declaring the arg, `--env-repo` for every env of the env's
+repository that declares it; an env's own value wins over both, and the
+env repo's over the global one. A value starting with
 `secret:` is refused. List keys: `enter` set, `a` add, `d` remove.
 
 ### `unibox secret`
@@ -282,7 +284,7 @@ unibox port [-s <sandbox>]
 unibox port ls [-s <sandbox>]
 unibox port on [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
 unibox port off [name[=host_port]...] [--map <mapping>...] [-s <sandbox>]
-unibox port default <name> on|off|- [-e <env>]
+unibox port default <name> on|off|- [-e <env>] [--env-repo]
 ```
 
 Publishes a running sandbox's ports on the host's loopback until it stops;
@@ -294,7 +296,8 @@ each is named, and URLs. List keys: `←`/`h` off, `→`/`l` on, `space`
 switch, `m` on at a host port typed there (as `name=HOST_PORT`), `d` on
 or off at each start, for you (as `port default`), `enter` or `q` leave.
 `default` writes whether a named port is on at start into your
-`config.yaml` under the env; `-` takes it back to the team's.
+`config.yaml` under the env, or with `--env-repo` for every env of its
+repository; `-` takes it back to the team's.
 
 ### `unibox network`
 
@@ -325,14 +328,15 @@ lack, and the hosts refused lately commented out, as a kit's
 ```
 unibox repo [-e <env>]
 unibox repo ls [-e <env>]
-unibox repo add <name> <url|directory> [--ref <branch>] [--default always|on|off] [--context true|false] [--description <text>] [-e <env> | --every-env]
-unibox repo default <name> always|on|off|- [-e <env>]
-unibox repo rm <name> [-e <env> | --every-env]
+unibox repo add <name> <url|directory> [--ref <branch>] [--default always|on|off] [--context true|false] [--description <text>] [-e <env> | --every-env | --env-repo]
+unibox repo default <name> always|on|off|- [-e <env>] [--env-repo]
+unibox repo rm <name> [-e <env> | --every-env | --env-repo]
 ```
 
 The repositories an env's tasks are given by name: the team's under
-`repos:` in its `unibox.yaml` files, yours in `config.yaml` for every env
-or one, over the team's. A forge address is cloned, a directory of this
+`repos:` in its `unibox.yaml` files, yours in `config.yaml` for every env,
+for every env of the env's repository (`--env-repo`) or for one, over the
+team's. A forge address is cloned, a directory of this
 machine mounted. `--ref` is the branch a task works on (default: the
 forge's default branch). `always` has every new task take one, cloned
 beside what it mounts; `on` has `task new` pick it to begin with, and
@@ -340,8 +344,8 @@ beside what it mounts; `on` has `task new` pick it to begin with, and
 when picked or named. `context` - unsaid, true for `always` - is one a
 task reads: it keeps its ref and is never pushed to. A name works
 wherever `run`, `prepare`, `check` and `add-repo` take a repository.
-`default` writes your say for the env into `config.yaml`, over the
-team's; `-` takes it back. `rm` forgets one of yours; the team's stay.
+`default` writes your say for the env, or with `--env-repo` its
+repository's envs, into `config.yaml`, over the team's; `-` takes it back. `rm` forgets one of yours; the team's stay.
 List keys: `/` filter, `n` new task with it, `space` off/on/always, `a`
 add, `d` remove yours.
 

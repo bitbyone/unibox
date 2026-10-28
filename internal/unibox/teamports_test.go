@@ -3,6 +3,7 @@ package unibox
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -39,14 +40,14 @@ func TestTheTeamsPortsAreReadBesideTheSbxenvFilesAndThePersonsWin(t *testing.T) 
 	if len(team) != 2 || team["web"] != (TeamPort{Spec: "8000:3000", Description: "The dev server", From: FromEnv}) || team["db"] != (TeamPort{Spec: "5432", From: FromEnv}) {
 		t.Fatalf("%+v", team)
 	}
-	ports, err := envPorts(EnvConfig{Files: []string{base, dev}, Ports: map[string]Port{"db": {Default: true}, "web": {Spec: "8001:3000"}, "mine": {Spec: "9000"}}}, nil)
+	ports, err := envPorts(EnvConfig{Files: []string{base, dev}, Ports: map[string]Port{"db": {Default: true}, "web": {Spec: "8001:3000"}, "mine": {Spec: "9000"}}}, Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ports["db"] != (Port{Spec: "5432", Default: true, Team: true, From: FromEnv, DefaultFrom: FromYours}) || ports["web"] != (Port{Spec: "8001:3000", Description: "The dev server", Team: true, From: FromEnv, DefaultFrom: FromYours}) || ports["mine"] != (Port{Spec: "9000", From: FromYours, DefaultFrom: FromYours}) {
 		t.Fatalf("%+v", ports)
 	}
-	if _, err := envPorts(EnvConfig{Files: []string{alone}, Ports: map[string]Port{"db": {Default: true}}}, nil); err == nil || !strings.Contains(err.Error(), "names no such port") {
+	if _, err := envPorts(EnvConfig{Files: []string{alone}, Ports: map[string]Port{"db": {Default: true}}}, Config{}); err == nil || !strings.Contains(err.Error(), "names no such port") {
 		t.Fatalf("%v", err)
 	}
 	for text, want := range map[string]string{
@@ -105,7 +106,7 @@ func TestPortsAreLayeredFromTheRepositoryToThePersonsEnv(t *testing.T) {
 		t.Fatalf("%+v", team)
 	}
 	global := map[string]Port{"spring": {Default: true}, "devtools": {Spec: "19222:9222", Default: true}, "absent": {Default: true}, "extra": {Spec: "7000", Default: true}}
-	ports, err := envPorts(EnvConfig{Files: []string{dev}, Ports: map[string]Port{"devtools": {Default: false}}}, global)
+	ports, err := envPorts(EnvConfig{Files: []string{dev}, Ports: map[string]Port{"devtools": {Default: false}}}, Config{Ports: global})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestPortsAreLayeredFromTheRepositoryToThePersonsEnv(t *testing.T) {
 		t.Fatal("a switch for every env named a port the env does not have")
 	}
 	// Another env of the repository has the repository's ports, off.
-	ports, err = envPorts(EnvConfig{Files: []string{ci}}, nil)
+	ports, err = envPorts(EnvConfig{Files: []string{ci}}, Config{})
 	if err != nil || len(ports) != 3 || ports["vite"].Default || ports["vite"].Spec != "5173" {
 		t.Fatalf("%v %+v", err, ports)
 	}
@@ -132,7 +133,7 @@ func TestAPortOfOnesOwnKeepsItsMappingWhenItsDefaultIsSetOrTakenBack(t *testing.
 		t.Fatal(err)
 	}
 	off := false
-	if err := m.SetPortDefault("dev", "api", &off); err != nil {
+	if err := m.SetPortDefault(Scope{Env: "dev"}, "api", &off); err != nil {
 		t.Fatal(err)
 	}
 	if p := m.Config.Envs["dev"].Ports["api"]; p != (Port{Spec: "9000:9000"}) {
@@ -140,10 +141,54 @@ func TestAPortOfOnesOwnKeepsItsMappingWhenItsDefaultIsSetOrTakenBack(t *testing.
 	}
 	// Nothing beneath it says otherwise, so taking it back is on, as the
 	// port written alone is.
-	if err := m.SetPortDefault("dev", "api", nil); err != nil {
+	if err := m.SetPortDefault(Scope{Env: "dev"}, "api", nil); err != nil {
 		t.Fatal(err)
 	}
 	if c, _ := m.Paths.LoadConfig(); c.Envs["dev"].Ports["api"] != (Port{Spec: "9000:9000", Default: true}) {
 		t.Fatalf("%+v", c.Envs["dev"].Ports)
+	}
+}
+
+func TestWhatAPersonSaysForAnEnvRepoComesBetweenEveryEnvAndTheEnv(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	c := m.Config
+	dev := c.Envs["dev"]
+	other := dev
+	dev.Source = "https://github.com/team/envs.git"
+	dev.Ports = map[string]Port{"api": {Spec: "6000", Default: false}}
+	dev.Repos = map[string]IndexedRepo{"spec": {URL: "https://github.com/me/spec-mine.git"}}
+	dev.Instructions = "env"
+	c.Envs = map[string]EnvConfig{"dev": dev, "other": other}
+	c.Ports = map[string]Port{"web": {Spec: "3000", Default: true}}
+	c.Repos = map[string]IndexedRepo{"notes": {URL: "https://github.com/me/notes.git"}}
+	c.Instructions = "all"
+	c.EnvRepos = map[string]EnvRepoConfig{"github.com/team/envs": {
+		Ports:        map[string]Port{"web": {Spec: "4000", Default: true}, "api": {Spec: "5000", Default: true}, "absent": {Default: true}},
+		Repos:        map[string]IndexedRepo{"notes": {URL: "https://github.com/team/notes.git"}, "spec": {URL: "https://github.com/team/spec.git", Default: RepoOn}, "gone": {Default: RepoOn}},
+		Instructions: "repo",
+	}}
+	env, err := c.LoadEnv("dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.Ports["web"] != (Port{Spec: "4000", Default: true, From: FromYoursAll, DefaultFrom: FromYoursEnvRepo}) || env.Ports["api"] != (Port{Spec: "6000", From: FromYoursEnvRepo, DefaultFrom: FromYours}) || len(env.Ports) != 2 {
+		t.Fatalf("%+v", env.Ports)
+	}
+	if env.Repos["notes"].URL != "https://github.com/team/notes.git" || env.Repos["notes"].From != FromYoursAll || env.Repos["spec"] != (IndexedRepo{URL: "https://github.com/me/spec-mine.git", Default: RepoOn, From: FromYoursEnvRepo, DefaultFrom: FromYoursEnvRepo}) || len(env.Repos) != 2 {
+		t.Fatalf("%+v", env.Repos)
+	}
+	if !slices.Equal(env.Instructions, []string{"all", "repo", "env"}) {
+		t.Fatalf("%q", env.Instructions)
+	}
+	// An env of no repository has the person's for every env alone.
+	env, err = c.LoadEnv("other")
+	if err != nil || env.Ports["web"].Spec != "3000" || env.Repos["notes"].URL != "https://github.com/me/notes.git" || !slices.Equal(env.Instructions, []string{"all"}) {
+		t.Fatalf("%v %+v %+v %q", err, env.Ports, env.Repos, env.Instructions)
+	}
+	// What is said for an env repo is checked as config.yaml loads.
+	write(t, filepath.Join(m.Paths.Config, "config.yaml"), "env_repos:\n  github.com/team/envs:\n    ports:\n      Web: '3000'\n")
+	if _, err := m.Paths.LoadConfig(); err == nil || !strings.Contains(err.Error(), "env_repos.github.com/team/envs.ports") {
+		t.Fatalf("%v", err)
 	}
 }

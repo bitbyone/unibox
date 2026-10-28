@@ -860,6 +860,70 @@ func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T
 	}
 }
 
+func TestWhatIsSaidForAnEnvRepoReachesItsEnvsAndAnEnvOfNoneRefusesIt(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	root := filepath.Dir(filepath.Dir(file))
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "git@gitlab.example.com:team/envs.git"}} {
+		if b, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, b)
+		}
+	}
+	if err := os.WriteFile(unibox.TeamFile(file), []byte("ports:\n  api: {port: '8080:8080'}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "env", "add", "team", file); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "env", "add", "plain", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "repo", "add", "notes", "https://github.com/me/notes.git", "--env-repo", "-e", "team")
+	if err != nil || !strings.Contains(out, "for every env of gitlab.example.com/team/envs") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); !strings.Contains(string(cfg), "env_repos:\n    gitlab.example.com/team/envs:\n        repos:\n            notes: https://github.com/me/notes.git") {
+		t.Fatalf("%s", cfg)
+	}
+	if out, _, err = run(t, paths, "", "repo", "ls", "-e", "team"); err != nil || !strings.Contains(out, "yours, this env repo") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "repo", "ls", "-e", "plain"); err != nil || strings.Contains(out, "notes") {
+		t.Fatalf("an env of another repository has it: %v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "port", "default", "api", "on", "--env-repo", "-e", "team"); err != nil || !strings.Contains(out, "by your config.yaml") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "env", "show", "team"); err != nil || !strings.Contains(out, "port api 8080:8080, the env's, on at start (yours)") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// A value for the env repo, under the env's own.
+	for _, args := range [][]string{{"var", "set", "user", "team-wide", "--env-repo", "-e", "team"}, {"var", "set", "user", "mine", "-e", "team"}} {
+		if _, _, err := run(t, paths, "", args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, _, err = run(t, paths, "", "var", "ls", "-e", "team"); err != nil || !strings.Contains(out, "mine") || !strings.Contains(out, "yours") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "var", "rm", "user", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err = run(t, paths, "", "var", "ls", "-e", "team"); err != nil || !strings.Contains(out, "team-wide") || !strings.Contains(out, "env-repo") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// An env of no repository has no env repo to say anything for.
+	for _, args := range [][]string{{"repo", "add", "x", "https://github.com/me/x.git", "--env-repo", "-e", "plain"}, {"port", "default", "api", "on", "--env-repo", "-e", "plain"}, {"var", "set", "user", "x", "--env-repo", "-e", "plain"}} {
+		if _, _, err := run(t, paths, "", args...); err == nil || !strings.Contains(err.Error(), "env plain has its files in no repository") {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	if _, _, err := run(t, paths, "", "repo", "add", "x", "https://github.com/me/x.git", "--env-repo", "--every-env"); err == nil {
+		t.Fatal("--env-repo and --every-env were taken together")
+	}
+}
+
 func TestADirectoryOfTheIndexStaysMountedBesideAnAddressThatIsCloned(t *testing.T) {
 	fakeSBX(t)
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}

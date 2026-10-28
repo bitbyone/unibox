@@ -61,11 +61,43 @@ type TeamPort struct {
 
 // Where a port is named, from the team's repository to the person's env.
 const (
-	FromRepo     = "repo"
-	FromEnv      = "env"
-	FromYoursAll = "yours-all"
-	FromYours    = "yours"
+	FromRepo         = "repo"
+	FromEnv          = "env"
+	FromYoursAll     = "yours-all"
+	FromYoursEnvRepo = "yours-env-repo"
+	FromYours        = "yours"
 )
+
+// IsYours says whether a layer is the person's config.yaml rather than a
+// team's file.
+func IsYours(from string) bool {
+	return from == FromYoursAll || from == FromYoursEnvRepo || from == FromYours
+}
+
+// yourLayer is one scope of the person's config.yaml as an env gets it.
+type yourLayer struct {
+	from string
+	EnvRepoConfig
+}
+
+// yourLayers are the scopes of the person's config.yaml an env gets, from
+// the widest: every env, every env of the repository its files are in,
+// and the env as ec says it.
+func (c Config) yourLayers(ec EnvConfig) []yourLayer {
+	var repo EnvRepoConfig
+	// Finding an env's repository may ask git, so it is looked for only
+	// when the person says something for one.
+	if len(c.EnvRepos) > 0 {
+		if key := EnvRepoKey(ec); key != "" {
+			repo = c.EnvRepos[key]
+		}
+	}
+	return []yourLayer{
+		{FromYoursAll, EnvRepoConfig{Ports: c.Ports, Repos: c.Repos, Instructions: c.Instructions}},
+		{FromYoursEnvRepo, repo},
+		{FromYours, EnvRepoConfig{Ports: ec.Ports, Repos: ec.Repos, Instructions: ec.Instructions}},
+	}
+}
 
 func (p *TeamPort) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
@@ -177,11 +209,12 @@ func ReadTeamPorts(sbxenvFiles []string) (map[string]TeamPort, error) {
 }
 
 // envPorts are an env's ports as a sandbox gets them, each layer over the
-// one before: the repository's, the env's file's, the person's for every
-// env and the person's for this one. A person's port with no spec only
-// switches a port of its name on or off; one for every env that this env
-// does not have is left out, as other envs may.
-func envPorts(ec EnvConfig, global map[string]Port) (map[string]Port, error) {
+// one before: the repository's, the env's file's, then the person's for
+// every env, for every env of its repository and for this one. A person's
+// port with no spec only switches a port of its name on or off; one said
+// for more envs than this that this env does not have is left out, as
+// other envs may.
+func envPorts(ec EnvConfig, c Config) (map[string]Port, error) {
 	team, err := ReadTeamPorts(ec.Files)
 	if err != nil {
 		return nil, err
@@ -190,14 +223,11 @@ func envPorts(ec EnvConfig, global map[string]Port) (map[string]Port, error) {
 	for k, v := range team {
 		out[k] = Port{Spec: v.Spec, Default: v.Default, Description: v.Description, Team: true, From: v.From, DefaultFrom: v.From}
 	}
-	for _, layer := range []struct {
-		ports map[string]Port
-		from  string
-	}{{global, FromYoursAll}, {ec.Ports, FromYours}} {
-		for k, v := range layer.ports {
+	for _, layer := range c.yourLayers(ec) {
+		for k, v := range layer.Ports {
 			p, known := out[k]
 			if v.Spec == "" && !known {
-				if layer.from == FromYoursAll {
+				if layer.from != FromYours {
 					continue
 				}
 				return nil, fmt.Errorf("port %s says only whether it is on, and the env names no such port; take it out of the env's ports: in your config.yaml", k)

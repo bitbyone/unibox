@@ -37,8 +37,9 @@ the same repository and is limited by nothing in them.
 | `~/.config/unibox/config.yaml` | your envs, ports, repositories, instructions, network rules, settings | `unibox repo`, `port`, `network`, `config`, `init`; or by hand |
 | sbx's secret store | tokens | `unibox secret set`, through sbx |
 
-Every key of `config.yaml` may be given for every env at the top, or for
-one env under `envs.<env>`:
+Every key of `config.yaml` may be given for every env at the top, for
+every env of one env repository under `env_repos.<repo>` - its host and
+path, as `unibox env ls` shows it - or for one env under `envs.<env>`:
 
 ```yaml
 ports:
@@ -47,6 +48,12 @@ repos:
   notes: https://github.com/jdoe/notes.git
 instructions: |
   Answer in English, briefly.
+env_repos:
+  github.com/acme/agent-envs:          # every env of one team's repository
+    repos:
+      payments-spec: https://github.com/acme/payments-spec.git
+    instructions: |
+      Tickets are in Jira project PAY.
 envs:
   dev:
     ports:
@@ -62,12 +69,14 @@ Later wins, entry by entry:
 1. `unibox.yaml` at the repository's root
 2. `<env>.unibox.yaml` beside the env's sbxenv file
 3. your top-level keys in `config.yaml`
-4. your `envs.<env>` keys
+4. your `env_repos.<repo>` keys, for the repository the env's files are in
+5. your `envs.<env>` keys
 
 A port or repository is merged key by key: naming only `default` keeps
 the team's address and description. The env's instructions are not
 replaced but joined, in the same order. Resources come from the team's
-files, then `vars.toml`.
+files, then `vars.toml`, whose `[env_repos."<repo>"]` tables sit the same
+way between `[args]` and `[envs.<env>]`.
 
 The lists show where each entry comes from: `FROM` in `unibox port ls` and
 `unibox repo ls`, `(yours)` beside a default you set over the team's.

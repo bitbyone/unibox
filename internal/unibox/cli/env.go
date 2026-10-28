@@ -296,12 +296,12 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 		}
 		for _, p := range sorted(e.Ports) {
 			port := e.Ports[p]
-			from := map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours for every env"}[port.From]
+			from := map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours for every env", unibox.FromYoursEnvRepo: "yours for its env repo"}[port.From]
 			if from == "" {
 				from = "yours"
 			}
 			at := map[bool]string{true: "on", false: "off"}[port.Default] + " at start"
-			if port.From != port.DefaultFrom && (port.DefaultFrom == unibox.FromYours || port.DefaultFrom == unibox.FromYoursAll) {
+			if port.From != port.DefaultFrom && unibox.IsYours(port.DefaultFrom) {
 				at += " (yours)"
 			}
 			about := ""
@@ -343,7 +343,7 @@ func (o *options) addEnv(ctx context.Context, name string, files []string, renam
 	if rename != nil {
 		ec.Name = *rename
 	}
-	if err := unibox.ValidEnvConfig(name, ec, cfg.Ports); err != nil {
+	if err := unibox.ValidEnvConfig(name, ec, cfg); err != nil {
 		return unibox.Env{}, err
 	}
 	cfg.Envs = maps.Clone(cfg.Envs)

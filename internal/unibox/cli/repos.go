@@ -22,7 +22,7 @@ import (
 
 // repoFrom says where an indexed repository, or its default, comes from.
 func repoFrom(from string) string {
-	return map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours, every env", unibox.FromYours: "yours"}[from]
+	return map[string]string{unibox.FromRepo: "the repository's", unibox.FromEnv: "the env's", unibox.FromYoursAll: "yours, every env", unibox.FromYoursEnvRepo: "yours, this env repo", unibox.FromYours: "yours"}[from]
 }
 
 // repoRole says whether a task works in a repository or reads it.
@@ -36,7 +36,7 @@ func repoRole(r unibox.IndexedRepo) string {
 // repoDefaultText is a repository's default, marked when it is the
 // person's say over the team's.
 func repoDefaultText(r unibox.IndexedRepo) string {
-	if (r.DefaultFrom == unibox.FromYours || r.DefaultFrom == unibox.FromYoursAll) && r.From != r.DefaultFrom {
+	if unibox.IsYours(r.DefaultFrom) && r.From != r.DefaultFrom {
 		return r.Default + " (yours)"
 	}
 	return r.Default
@@ -49,8 +49,8 @@ address with the branch a task works on and a default: always, every new
 task of the env takes it, cloned beside what it mounts - architecture
 decisions, a business specification; on, picked to begin with in unibox
 task new; off, there to be picked. The team names them under repos: in its
-unibox.yaml files, you in config.yaml, for every env or one, over the
-team's.
+unibox.yaml files, you in config.yaml, for every env, for every env of
+one env repository (--env-repo) or for one, over the team's.
 
 unibox task new picks from them, and run, prepare and --repo take a name
 for its address. Alone at a terminal, unibox repo lists them to filter
@@ -85,10 +85,10 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 		return w.Flush()
 	}}
 	var add unibox.IndexedRepo
-	var everyEnv bool
+	var everyEnv, addEnvRepo bool
 	var contextFlag string
 	addCmd := &cobra.Command{Use: "add name url|directory", Args: cobra.ExactArgs(2), Short: "Name a repository of yours, a forge's to clone or a directory to mount, for the env or every env", RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := o.repoScope(envFlag, everyEnv)
+		scope, err := o.repoScope(envFlag, everyEnv, addEnvRepo)
 		if err != nil {
 			return err
 		}
@@ -107,28 +107,33 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 			add.Context = &on
 		}
 		add.URL = args[1]
-		if err := o.manager.SetRepo(env, args[0], add); err != nil {
+		if err := o.manager.SetRepo(scope, args[0], add); err != nil {
 			return err
 		}
-		return o.success(fmt.Sprintf("repository %s is named %s", args[0], scopeText(env)))
+		return o.success(fmt.Sprintf("repository %s is named %s", args[0], o.scopeText(scope)))
 	}}
 	addCmd.Flags().StringVar(&add.Ref, "ref", "", "Branch a task works on (default: the forge's default branch)")
 	addCmd.Flags().StringVar(&add.Default, "default", "", "always, on or off (default off)")
 	addCmd.Flags().StringVar(&add.Description, "description", "", "What it is, shown where it is picked")
 	addCmd.Flags().StringVar(&contextFlag, "context", "", "true for one a task reads and keeps on its ref (default: true when always)")
 	addCmd.Flags().BoolVar(&everyEnv, "every-env", false, "Name it for every env rather than this one")
-	var rmEvery bool
+	addCmd.Flags().BoolVar(&addEnvRepo, "env-repo", false, "Name it for every env of this env's repository")
+	addCmd.MarkFlagsMutuallyExclusive("every-env", "env-repo")
+	var rmEvery, rmEnvRepo bool
 	rm := &cobra.Command{Use: "rm name", Args: cobra.ExactArgs(1), Short: "Forget a repository of yours", RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := o.repoScope(envFlag, rmEvery)
+		scope, err := o.repoScope(envFlag, rmEvery, rmEnvRepo)
 		if err != nil {
 			return err
 		}
-		if err := o.manager.RemoveRepo(env, args[0]); err != nil {
+		if err := o.manager.RemoveRepo(scope, args[0]); err != nil {
 			return err
 		}
-		return o.success(fmt.Sprintf("forgot repository %s %s", args[0], scopeText(env)))
+		return o.success(fmt.Sprintf("forgot repository %s %s", args[0], o.scopeText(scope)))
 	}}
 	rm.Flags().BoolVar(&rmEvery, "every-env", false, "Forget the one named for every env")
+	rm.Flags().BoolVar(&rmEnvRepo, "env-repo", false, "Forget the one named for every env of this env's repository")
+	rm.MarkFlagsMutuallyExclusive("every-env", "env-repo")
+	var defEnvRepo bool
 	def := &cobra.Command{Use: "default name always|on|off|-", Args: cobra.ExactArgs(2), Short: "Say whether a new task takes a repository, has it picked, or neither, for you", RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := o.envName(envFlag)
 		if err != nil {
@@ -141,7 +146,7 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 				return fmt.Errorf("say always, on, off, or - to take your say back, not %s", args[1])
 			}
 		}
-		if err := o.manager.SetRepoDefault(name, args[0], d); err != nil {
+		if err := o.manager.SetRepoDefault(unibox.Scope{Env: name, EnvRepo: defEnvRepo}, args[0], d); err != nil {
 			return err
 		}
 		env, err := o.manager.Config.LoadEnv(name)
@@ -151,6 +156,7 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 		r := env.Repos[args[0]]
 		return o.success(fmt.Sprintf("repository %s of env %s is %s, %s", args[0], name, r.Default, cmp.Or(repoFrom(r.DefaultFrom), "as nothing says otherwise")))
 	}}
+	def.Flags().BoolVar(&defEnvRepo, "env-repo", false, "Say it for every env of the env's repository")
 	c.AddCommand(ls, addCmd, rm, def)
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		if o.json || !o.interactive {
@@ -165,23 +171,27 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 	return c
 }
 
-// repoScope is the env a repository of the person's is named for, "" for
-// every env.
-func (o *options) repoScope(envFlag string, every bool) (string, error) {
+// repoScope is where a repository of the person's is named: for every
+// env, for every env of the env's repository, or for the env.
+func (o *options) repoScope(envFlag string, every, envRepo bool) (unibox.Scope, error) {
 	if every {
 		if envFlag != "" {
-			return "", fmt.Errorf("-e and --every-env do not mix; give one")
+			return unibox.Scope{}, fmt.Errorf("-e and --every-env do not mix; give one")
 		}
-		return "", nil
+		return unibox.Scope{}, nil
 	}
-	return o.envName(envFlag)
+	env, err := o.envName(envFlag)
+	return unibox.Scope{Env: env, EnvRepo: envRepo}, err
 }
 
-func scopeText(env string) string {
-	if env == "" {
+func (o *options) scopeText(s unibox.Scope) string {
+	switch {
+	case s.Env == "":
 		return "for every env"
+	case s.EnvRepo:
+		return "for every env of " + envRepoText(o.manager.Config.Envs[s.Env])
 	}
-	return "for env " + env
+	return "for env " + s.Env
 }
 
 // repoUI is unibox repo at a terminal: an env's repositories, to filter,
@@ -237,8 +247,11 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 				return "", err
 			}
 			args := []string{"repo", "rm", name, "-e", envName}
-			if env.Repos[name].From == unibox.FromYoursAll {
+			switch env.Repos[name].From {
+			case unibox.FromYoursAll:
 				args = []string{"repo", "rm", name, "--every-env"}
+			case unibox.FromYoursEnvRepo:
+				args = append(args, "--env-repo")
 			}
 			return o.quietStep(cmd, args...)
 		case "add":
@@ -263,7 +276,11 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 			if err != nil {
 				return "", err
 			}
-			scope, err := o.askPick("For which envs", "", []pick{{"env", "env " + envName}, {"every", "every env"}}, "env")
+			scopes := []pick{{"env", "env " + envName}}
+			if ec := o.manager.Config.Envs[envName]; unibox.EnvRepoKey(ec) != "" {
+				scopes = append(scopes, pick{"env-repo", "every env of " + envRepoText(ec)})
+			}
+			scope, err := o.askPick("For which envs", "", append(scopes, pick{"every", "every env"}), "env")
 			if err != nil {
 				return "", err
 			}
@@ -271,9 +288,12 @@ func (o *options) repoUI(cmd *cobra.Command, envName string) error {
 			if ref != "" {
 				args = append(args, "--ref", ref)
 			}
-			if scope == "every" {
+			switch scope {
+			case "every":
 				args = append(args, "--every-env")
-			} else {
+			case "env-repo":
+				args = append(args, "--env-repo", "-e", envName)
+			default:
 				args = append(args, "-e", envName)
 			}
 			return o.quietStep(cmd, args...)

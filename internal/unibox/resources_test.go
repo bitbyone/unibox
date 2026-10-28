@@ -103,6 +103,40 @@ func TestArgsAndResourcesForEveryEnvAreKeptAndAnEnvsOwnWin(t *testing.T) {
 	}
 }
 
+func TestValuesForAnEnvRepoComeBetweenEveryEnvsAndTheEnvsOwn(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	const key = "github.com/team/envs"
+	v := EnvValues{
+		Args:             map[string]string{"user": "everyone", "mirror": "all"},
+		EnvRepos:         map[string]map[string]string{key: {"user": "team", "mirror": "team"}},
+		Envs:             map[string]map[string]string{"dev": {"user": "me"}},
+		Resources:        Resources{CPUs: "1", Memory: "1g"},
+		EnvRepoResources: map[string]Resources{key: {CPUs: "2", Memory: "2g"}},
+		EnvResources:     map[string]Resources{"dev": {Memory: "3g"}},
+	}
+	if err := m.Paths.SaveEnvValues(v); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.Paths.LoadEnvValues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := Env{Name: "dev", Config: EnvConfig{Source: "https://github.com/team/envs.git"}}
+	env.SBX.Args = map[string]EnvArg{"user": {}, "mirror": {}}
+	if args := got.ArgsFor(env); args["user"] != "me" || args["mirror"] != "team" {
+		t.Fatalf("%v", args)
+	}
+	if r := got.ResourcesFor(env, ""); r != (Resources{CPUs: "2", Memory: "3g"}) || got.ResourceFrom(env, "", "cpus") != ResourceOfEnvRepo {
+		t.Fatalf("%+v", r)
+	}
+	// An env of another repository, or of none, is not given them.
+	other := Env{Name: "ci", SBX: env.SBX}
+	if args := got.ArgsFor(other); args["mirror"] != "all" || got.ResourcesFor(other, "") != v.Resources {
+		t.Fatalf("%v", args)
+	}
+}
+
 func TestResourcesReachSbxInAFileGivenLastAndAChangeIsTold(t *testing.T) {
 	t.Parallel()
 	m, f := managerFixture(t)

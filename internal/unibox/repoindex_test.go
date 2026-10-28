@@ -54,13 +54,13 @@ func TestAPersonsReposAreWrittenAndASwitchThatChangesNothingDropped(t *testing.T
 	m, _ := managerFixture(t)
 	sandboxes := filepath.Dir(m.Config.Envs["dev"].Files[0])
 	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "repos:\n  adrs: {url: https://gitlab.example.com/arch/adrs.git, default: on}\n")
-	if err := m.SetRepo("", "notes", IndexedRepo{URL: "https://github.com/me/notes.git", Default: RepoAlways}); err != nil {
+	if err := m.SetRepo(Scope{}, "notes", IndexedRepo{URL: "https://github.com/me/notes.git", Default: RepoAlways}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetRepo("dev", "api", IndexedRepo{URL: "https://gitlab.example.com/x/api.git", Ref: "main"}); err != nil {
+	if err := m.SetRepo(Scope{Env: "dev"}, "api", IndexedRepo{URL: "https://gitlab.example.com/x/api.git", Ref: "main"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetRepoDefault("dev", "adrs", RepoAlways); err != nil {
+	if err := m.SetRepoDefault(Scope{Env: "dev"}, "adrs", RepoAlways); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(m.Paths.Config, "config.yaml"))
@@ -70,33 +70,33 @@ func TestAPersonsReposAreWrittenAndASwitchThatChangesNothingDropped(t *testing.T
 		}
 	}
 	// Back to what the team says, the switch goes.
-	if err := m.SetRepoDefault("dev", "adrs", RepoOn); err != nil {
+	if err := m.SetRepoDefault(Scope{Env: "dev"}, "adrs", RepoOn); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := m.Config.Envs["dev"].Repos["adrs"]; ok {
 		t.Fatalf("%+v", m.Config.Envs["dev"].Repos)
 	}
-	if err := m.RemoveRepo("dev", "adrs"); err == nil || !strings.Contains(err.Error(), "one of the team's stays") {
+	if err := m.RemoveRepo(Scope{Env: "dev"}, "adrs"); err == nil || !strings.Contains(err.Error(), "one of the team's stays") {
 		t.Fatalf("%v", err)
 	}
-	if err := m.RemoveRepo("dev", "api"); err != nil {
+	if err := m.RemoveRepo(Scope{Env: "dev"}, "api"); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetRepoDefault("dev", "nope", RepoOn); err == nil {
+	if err := m.SetRepoDefault(Scope{Env: "dev"}, "nope", RepoOn); err == nil {
 		t.Fatal("a switch for no repository was written")
 	}
-	if err := m.SetRepo("dev", "bad", IndexedRepo{URL: "not a forge"}); err == nil {
+	if err := m.SetRepo(Scope{Env: "dev"}, "bad", IndexedRepo{URL: "not a forge"}); err == nil {
 		t.Fatal("a repository with no forge address was written")
 	}
 	// A switch for one env goes with the repository of every env it
 	// switched.
-	if err := m.SetRepo("", "gone", IndexedRepo{URL: "https://github.com/me/gone.git"}); err != nil {
+	if err := m.SetRepo(Scope{}, "gone", IndexedRepo{URL: "https://github.com/me/gone.git"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetRepoDefault("dev", "gone", RepoOn); err != nil {
+	if err := m.SetRepoDefault(Scope{Env: "dev"}, "gone", RepoOn); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.RemoveRepo("", "gone"); err != nil {
+	if err := m.RemoveRepo(Scope{}, "gone"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := m.Config.Envs["dev"].Repos["gone"]; ok {
@@ -105,5 +105,60 @@ func TestAPersonsReposAreWrittenAndASwitchThatChangesNothingDropped(t *testing.T
 	env, err := m.Config.LoadEnv("dev")
 	if err != nil || env.Repos["notes"].Default != RepoAlways || env.Repos["adrs"].Default != RepoOn || len(env.Repos) != 2 {
 		t.Fatalf("%+v %v", env.Repos, err)
+	}
+}
+
+func TestAPersonsReposAndPortsAreWrittenForEveryEnvOfAnEnvRepo(t *testing.T) {
+	t.Parallel()
+	m, _ := managerFixture(t)
+	sandboxes := filepath.Dir(m.Config.Envs["dev"].Files[0])
+	write(t, filepath.Join(sandboxes, "dev.unibox.yaml"), "ports:\n  vite: {port: 5173}\nrepos:\n  adrs: {url: https://gitlab.example.com/arch/adrs.git}\n")
+	scope := Scope{Env: "dev", EnvRepo: true}
+	if err := m.SetRepo(scope, "notes", IndexedRepo{URL: "https://github.com/me/notes.git"}); err == nil || !strings.Contains(err.Error(), "in no repository") {
+		t.Fatalf("an env of no repository took it: %v", err)
+	}
+	ec := m.Config.Envs["dev"]
+	ec.Source = "https://GitHub.com/team/envs.git"
+	m.Config.Envs["dev"] = ec
+	if err := m.Paths.SaveConfig(m.Config); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRepo(scope, "notes", IndexedRepo{URL: "https://github.com/me/notes.git"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRepoDefault(scope, "adrs", RepoAlways); err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	if err := m.SetPortDefault(scope, "vite", &on); err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Paths.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := c.EnvRepos["github.com/team/envs"]
+	if mine.Repos["notes"].URL != "https://github.com/me/notes.git" || mine.Repos["adrs"] != (IndexedRepo{Default: RepoAlways}) || mine.Ports["vite"] != (Port{Default: true}) || len(c.Envs["dev"].Repos) != 0 || len(c.Repos) != 0 {
+		t.Fatalf("%+v", c)
+	}
+	env, err := c.LoadEnv("dev")
+	if err != nil || env.Repos["adrs"].DefaultFrom != FromYoursEnvRepo || env.Repos["notes"].From != FromYoursEnvRepo || env.Ports["vite"].DefaultFrom != FromYoursEnvRepo {
+		t.Fatalf("%v %+v %+v", err, env.Repos, env.Ports)
+	}
+	// Back to what the team says, and with nothing left, the env repo goes.
+	if err := m.SetPortDefault(scope, "vite", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRepoDefault(scope, "adrs", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RemoveRepo(scope, "notes"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RemoveRepo(scope, "notes"); err == nil || !strings.Contains(err.Error(), "for the env repo github.com/team/envs") {
+		t.Fatalf("%v", err)
+	}
+	if c, _ := m.Paths.LoadConfig(); c.EnvRepos != nil {
+		t.Fatalf("%+v", c.EnvRepos)
 	}
 }

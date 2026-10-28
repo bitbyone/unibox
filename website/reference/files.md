@@ -41,6 +41,12 @@ repos:                            # yours, for every env
   notes: {url: https://github.com/me/notes.git, default: always}
 instructions: |                   # yours for every task's agents
   Answer in Czech.
+env_repos:                        # yours for every env of one env repository:
+  github.com/acme/agent-envs:     # its host and path, or a checkout's path
+    repos:                        # ports, repos and instructions, as above
+      spec: https://github.com/acme/spec.git
+    instructions: |
+      Tickets are in Jira project ACME.
 sandboxes:                        # unibox network rules
   dev:
     network:
@@ -56,7 +62,8 @@ editor_ssh: true
 ```
 
 Edit it through `unibox env`, `config`, `context`, `network`, `port
-default` and `repo`. `instructions:` is written by hand, and `ports:` may
+default` and `repo` (`--env-repo` for `env_repos:`). `instructions:` is
+written by hand, and `ports:` may
 be ([Ports](/guide/ports#named-ports)): a port is its mapping alone, on
 at each start, or `{port, default}`. A repository takes the keys of the
 team's (below); one of yours that says only `default` switches the
@@ -68,12 +75,18 @@ team's of its name.
 [args]                          # every env that declares them (var set -g)
 user = 'jdoe'
 
-[envs.dev.args]                 # one env, wins over [args]
+[env_repos."github.com/acme/agent-envs".args]   # every env of one env repository (var set --env-repo)
+user = 'jdoe-acme'
+
+[envs.dev.args]                 # one env, wins over both
 user = 'john'
 
 [resources]                     # every env, by hand
 cpus = '100%'
 memory = '75%'
+
+[env_repos."github.com/acme/agent-envs".resources]   # every env of one env repository, by hand
+cpus = '50%'
 
 [envs.dev.resources]            # one env, by hand
 memory = '16g'
@@ -125,9 +138,9 @@ repository is its address alone, or the keys above; an address that starts
 with `/`, `~` or `.` is a directory of the host, mounted rather than
 cloned. A task's `AGENTS.md` gathers the `instructions:` of the
 repository's `unibox.yaml`, then the env's file, then yours in
-`config.yaml` for every env and for the env, then each of its
-repositories'. Tokens themselves are in none of these files; they are in
-sbx's store. See [Repository index](/guide/repos) and
+`config.yaml` for every env, for its env repository and for the env, then
+each of its repositories'. Tokens themselves are in none of these files;
+they are in sbx's store. See [Repository index](/guide/repos) and
 [Ports](/guide/ports#named-ports).
 
 ## In the sandbox

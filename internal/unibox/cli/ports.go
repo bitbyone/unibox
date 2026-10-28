@@ -24,10 +24,11 @@ func (o *options) portCommand() *cobra.Command {
 	c := &cobra.Command{Use: "port", Short: "Switch a running sandbox's ports, and list them", Long: `A port is published on the host's loopback. The ports are named in files,
 by hand: the team's in unibox.yaml at the root of its repository and in
 the unibox file beside an env's sbxenv file (dev.unibox.yaml beside
-dev.sbxenv.yaml), yours in ~/.config/unibox/config.yaml, for every env or
-for one, each over the one before. What a port says as default is
-whether a sandbox starts with it published; port default name on|off
-writes yours for the env, and - takes it back.
+dev.sbxenv.yaml), yours in ~/.config/unibox/config.yaml, for every env,
+for every env of one env repository or for one, each over the one
+before. What a port says as default is whether a sandbox starts with it
+published; port default name on|off writes yours for the env, or with
+--env-repo for every env of its repository, and - takes it back.
 
 on and off switch a running sandbox's ports for as long as it runs: by
 name, by name=HOST_PORT for a named port on another host port, or by
@@ -77,10 +78,12 @@ free host port, 8080:3000 host port 8080.`, Example: "  unibox port -s dev\n  un
 	}}
 	sandboxFlag(ls, &sandbox)
 	var envFlagValue string
+	var envRepo bool
 	def := &cobra.Command{Use: "default name on|off|-", Args: cobra.ExactArgs(2), Short: "Say whether a port of an env is on at each start, for you", Long: `Writes into your config.yaml, under the env, whether a named port is
 published at each start of its sandboxes, over what the team's files say;
-- takes your say back. A running sandbox keeps its ports until it next
-starts, or unibox port on|off switches them now.`, Example: "  unibox port default spring on\n  unibox port default vite off -e dev\n  unibox port default spring -", RunE: func(cmd *cobra.Command, args []string) error {
+- takes your say back. With --env-repo it is written for every env of the
+env's repository instead, under each env's own. A running sandbox keeps
+its ports until it next starts, or unibox port on|off switches them now.`, Example: "  unibox port default spring on\n  unibox port default vite off -e dev\n  unibox port default vite off --env-repo\n  unibox port default spring -", RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := o.envName(envFlagValue)
 		if err != nil {
 			return err
@@ -94,12 +97,13 @@ starts, or unibox port on|off switches them now.`, Example: "  unibox port defau
 		default:
 			return fmt.Errorf("say on, off, or - to take your say back, not %s", args[1])
 		}
-		if err := o.manager.SetPortDefault(env, args[0], on); err != nil {
+		if err := o.manager.SetPortDefault(unibox.Scope{Env: env, EnvRepo: envRepo}, args[0], on); err != nil {
 			return err
 		}
 		return o.success(portDefaultSaid(o.manager, env, args[0]))
 	}}
 	def.Flags().StringVarP(&envFlagValue, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
+	def.Flags().BoolVar(&envRepo, "env-repo", false, "Say it for every env of the env's repository")
 	c.AddCommand(turn(true), turn(false), ls, def)
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
@@ -154,7 +158,7 @@ func (o *options) portsUI(cmd *cobra.Command, name string) error {
 		if err != nil {
 			return nil, "", err
 		}
-		if err := o.manager.SetPortDefault(b.Env, key, &on); err != nil {
+		if err := o.manager.SetPortDefault(unibox.Scope{Env: b.Env}, key, &on); err != nil {
 			return nil, "", err
 		}
 		ports, _, err := o.manager.SandboxPorts(ctx, name)
@@ -179,7 +183,7 @@ func portDefaultSaid(m *unibox.Manager, env, port string) string {
 	p := e.Ports[port]
 	state := map[bool]string{true: "on", false: "off"}[p.Default]
 	whose := "as the env's files say"
-	if p.DefaultFrom == unibox.FromYours || p.DefaultFrom == unibox.FromYoursAll {
+	if unibox.IsYours(p.DefaultFrom) {
 		whose = "by your config.yaml"
 	}
 	return fmt.Sprintf("port %s is %s at each start of env %s's sandboxes, %s", port, state, env, whose)

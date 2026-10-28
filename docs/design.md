@@ -398,6 +398,15 @@ docs/sandboxes.md.
   sbxenv file of `sandboxOptions` alone, last, which sbx's merge lets
   win. They are part of the fingerprint only when set, so a sandbox made
   before keeps its own.
+- **A person's say has three scopes**: every env, every env of one env
+  repository, and one env, each over the one before and all over the
+  team's files. Someone working with several teams wants instructions,
+  repositories or values that make sense for one team's envs alone; the
+  middle scope is `env_repos.<key>` in config.yaml and
+  `[env_repos."<key>"]` in vars.toml, keyed by `EnvRepoKey` - the host
+  and path of `source` or the checkout's origin, else its path - so
+  every clone of a repository shares it. An env of no repository has no
+  such scope, and `--env-repo` refuses it.
 - **A kit's own required arg** (`2n-artifactory` has one) is read with
   `--kit-arg` from the env's values, or `sbx kit inspect` could not read
   the kit; one neither the person nor the env gives is a placeholder, as

@@ -179,12 +179,21 @@ func (o *options) contextUI(cmd *cobra.Command, leave func() error) error {
 }
 
 // varUI is unibox var at a terminal: the args an env asks for, or the
-// values for every env with --global, to set and remove.
-func (o *options) varUI(cmd *cobra.Command, envName string, global bool, leave func() error) error {
+// values for every env with --global or for every env of its repository
+// with --env-repo, to set and remove.
+func (o *options) varUI(cmd *cobra.Command, envName string, global, envRepo bool, leave func() error) error {
 	scope := []string{"-e", envName}
 	title := "args env " + envName + " asks for"
-	if global {
+	repoKey := ""
+	switch {
+	case global:
 		scope, title = []string{"-g"}, "your values for every env"
+	case envRepo:
+		var err error
+		if repoKey, err = o.manager.Config.EnvRepoOf(envName); err != nil {
+			return err
+		}
+		scope, title = []string{"-e", envName, "--env-repo"}, "your values for every env of "+envRepoText(o.manager.Config.Envs[envName])
 	}
 	values := map[string]string{}
 	build := func() (listModel, error) {
@@ -198,12 +207,16 @@ func (o *options) varUI(cmd *cobra.Command, envName string, global bool, leave f
 			{key: "d", name: "rm", help: "remove", confirm: "remove your value of %s?"},
 		}}
 		clear(values)
-		if global {
+		if global || envRepo {
+			mine := v.Args
+			if envRepo {
+				mine = v.EnvRepos[repoKey]
+			}
 			m.header = []string{"NAME", "VALUE"}
-			for _, name := range sorted(v.Args) {
-				m.rows = append(m.rows, []string{name, v.Args[name]})
+			for _, name := range sorted(mine) {
+				m.rows = append(m.rows, []string{name, mine[name]})
 				m.ids = append(m.ids, name)
-				values[name] = v.Args[name]
+				values[name] = mine[name]
 			}
 			return m, nil
 		}
@@ -212,12 +225,14 @@ func (o *options) varUI(cmd *cobra.Command, envName string, global bool, leave f
 			return listModel{}, err
 		}
 		m.header = []string{"NAME", "VALUE", "FROM", "FOR"}
-		mine := v.Envs[e.Name]
+		mine, ofRepo := v.Envs[e.Name], envRepoValues(v, e)
 		for _, name := range sorted(e.SBX.Args) {
 			a := e.SBX.Args[name]
 			from, value := portErr.Render("missing"), ""
 			if s, ok := mine[name]; ok {
 				from, value = portOn.Render("yours"), s
+			} else if s, ok := ofRepo[name]; ok {
+				from, value = "env-repo", s
 			} else if s, ok := v.Args[name]; ok {
 				from, value = "global", s
 			} else if a.Default != nil {

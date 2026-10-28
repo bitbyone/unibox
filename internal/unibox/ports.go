@@ -305,7 +305,7 @@ func (m *Manager) SandboxPorts(ctx context.Context, name string) ([]PortState, b
 	}
 	out := []PortState{}
 	add := func(name string, p Port, named bool) {
-		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, DefaultYours: p.DefaultFrom == FromYours || p.DefaultFrom == FromYoursAll, Named: named}
+		s := PortState{Name: name, Spec: p.Spec, Description: p.Description, Team: p.Team, From: p.From, Default: p.Default, DefaultYours: IsYours(p.DefaultFrom), Named: named}
 		spec := p.Spec
 		if w, on := want[name]; on {
 			spec, s.Spec, s.On = w, w, true
@@ -346,38 +346,56 @@ func (p PortSpec) withHost(port int) string {
 	return s
 }
 
-// SwitchPorts turns a running sandbox's ports on or off for as long as it
-// runs: by the env's name, by name=HOST_PORT for one of them on another
-// host port, or, for a port the env does not name, by its spec. The next
-// start of the sandbox goes back to the env's defaults.
 // SetPortDefault has a port of an env on or off at each start of its
-// sandboxes, in the person's config.yaml under the env; with neither, the
-// person's say for the env is taken back, leaving what the layers under it
-// say. A port the person names only to switch is dropped once the layers
-// under it say the same, so config.yaml keeps no switch that does nothing.
-func (m *Manager) SetPortDefault(envName, port string, on *bool) error {
+// sandboxes, in the person's config.yaml under the env, or with EnvRepo
+// under every env of its repository; with neither, the person's say there
+// is taken back, leaving what the layers under it say. A port the person
+// names only to switch is dropped once the layers under it say the same,
+// so config.yaml keeps no switch that does nothing.
+func (m *Manager) SetPortDefault(s Scope, port string, on *bool) error {
 	c, err := m.Paths.LoadConfig()
 	if err != nil {
 		return err
 	}
-	ec, ok := c.Envs[envName]
+	ec, ok := c.Envs[s.Env]
 	if !ok {
-		return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", envName)
+		return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", s.Env)
 	}
-	ports, err := envPorts(ec, c.Ports)
+	key := ""
+	if s.EnvRepo {
+		if key, err = c.EnvRepoOf(s.Env); err != nil {
+			return err
+		}
+	}
+	ports, err := envPorts(ec, c)
 	if err != nil {
 		return err
 	}
 	if _, named := ports[port]; !named {
-		return fmt.Errorf("env %s has no port %s; unibox port ls lists them", envName, port)
+		return fmt.Errorf("env %s has no port %s; unibox port ls lists them", s.Env, port)
 	}
-	mine := ec.Ports[port]
-	ec.Ports = maps.Clone(ec.Ports)
-	if ec.Ports == nil {
-		ec.Ports = map[string]Port{}
+	c.Envs, c.EnvRepos = maps.Clone(c.Envs), maps.Clone(c.EnvRepos)
+	er := c.EnvRepos[key]
+	scoped := ec.Ports
+	if s.EnvRepo {
+		scoped = er.Ports
 	}
-	delete(ec.Ports, port)
-	under, err := envPorts(ec, c.Ports)
+	mine := scoped[port]
+	scoped = without(scoped, port)
+	if scoped == nil {
+		scoped = map[string]Port{}
+	}
+	// What the layers beneath say is what is left with the port taken out
+	// of this scope and those over it.
+	lowerEnv, lower := ec, c
+	lowerEnv.Ports = without(ec.Ports, port)
+	if s.EnvRepo {
+		lowerRepo := er
+		lowerRepo.Ports = scoped
+		lower.EnvRepos = maps.Clone(c.EnvRepos)
+		lower.setEnvRepo(key, lowerRepo)
+	}
+	under, err := envPorts(lowerEnv, lower)
 	if err != nil {
 		return err
 	}
@@ -388,23 +406,33 @@ func (m *Manager) SetPortDefault(envName, port string, on *bool) error {
 		// A port of the person's own mapping keeps it; with no default
 		// written, the format reads it as on, so the one beneath is written.
 		mine.Default = !below || beneath.Default
-		ec.Ports[port] = mine
+		scoped[port] = mine
 	case below && mine.Spec == "" && beneath.Default == *on:
 	default:
 		mine.Default = *on
-		ec.Ports[port] = mine
+		scoped[port] = mine
 	}
-	if len(ec.Ports) == 0 {
-		ec.Ports = nil
+	if len(scoped) == 0 {
+		scoped = nil
 	}
-	c.Envs[envName] = ec
+	if s.EnvRepo {
+		er.Ports = scoped
+		c.setEnvRepo(key, er)
+	} else {
+		ec.Ports = scoped
+		c.Envs[s.Env] = ec
+	}
 	if err = m.Paths.SaveConfig(c); err != nil {
 		return err
 	}
-	m.Config.Envs = c.Envs
+	m.Config.Envs, m.Config.EnvRepos = c.Envs, c.EnvRepos
 	return nil
 }
 
+// SwitchPorts turns a running sandbox's ports on or off for as long as it
+// runs: by the env's name, by name=HOST_PORT for one of them on another
+// host port, or, for a port the env does not name, by its spec. The next
+// start of the sandbox goes back to the env's defaults.
 func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[string]bool) error {
 	guard, err := m.guard(name)
 	if err != nil {

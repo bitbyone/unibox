@@ -59,6 +59,10 @@ type Config struct {
 	// Instructions are the person's for every task's agents, after the
 	// team's and before each env's own.
 	Instructions string `yaml:"instructions,omitempty" json:"instructions,omitempty"`
+	// EnvRepos are the person's for every env of one env repository, by
+	// its EnvRepoKey: a person working with several teams says there what
+	// makes sense only for one team's envs.
+	EnvRepos map[string]EnvRepoConfig `yaml:"env_repos,omitempty" json:"env_repos,omitempty"`
 	// Sandboxes are what the person keeps for one sandbox, by its name.
 	Sandboxes map[string]SandboxConfig `yaml:"sandboxes,omitempty" json:"sandboxes,omitempty"`
 
@@ -67,6 +71,59 @@ type Config struct {
 	Environments   string                   `yaml:"environments,omitempty" json:"-"`
 	DefaultRuntime string                   `yaml:"default_runtime,omitempty" json:"-"`
 	Runtimes       map[string]legacyRuntime `yaml:"runtimes,omitempty" json:"-"`
+}
+
+// EnvRepoConfig is what the person says for every env of one env
+// repository, over what they say for every env and under each env's own.
+type EnvRepoConfig struct {
+	Ports        map[string]Port        `yaml:"ports,omitempty" json:"ports,omitempty"`
+	Repos        map[string]IndexedRepo `yaml:"repos,omitempty" json:"repos,omitempty"`
+	Instructions string                 `yaml:"instructions,omitempty" json:"instructions,omitempty"`
+}
+
+func (e EnvRepoConfig) empty() bool {
+	return len(e.Ports) == 0 && len(e.Repos) == 0 && e.Instructions == ""
+}
+
+// Scope is where in config.yaml a person's say is written: with Env ""
+// for every env, else for that env, or with EnvRepo for every env of the
+// repository the env's files are in.
+type Scope struct {
+	Env     string
+	EnvRepo bool
+}
+
+// EnvRepoOf is the key of env_repos for an env's repository; an env whose
+// files are in no repository has none.
+func (c Config) EnvRepoOf(env string) (string, error) {
+	ec, ok := c.Envs[env]
+	if !ok {
+		return "", Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", env)
+	}
+	key := EnvRepoKey(ec)
+	if key == "" {
+		return "", fmt.Errorf("env %s has its files in no repository, so there is no env repo to say it for; say it for env %s alone, or for every env", env, env)
+	}
+	return key, nil
+}
+
+// validateEnvRepos checks env_repos as the keys for every env are checked:
+// a repository to key them by, ports that parse and repositories' names.
+func validateEnvRepos(repos map[string]EnvRepoConfig) error {
+	for _, key := range sortedKeys(repos) {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("env_repos: an entry names no repository; key it by the repository's host and path, such as github.com/team/envs")
+		}
+		if err := validatePorts(repos[key].Ports); err != nil {
+			return fmt.Errorf("env_repos.%s.ports: %w", key, err)
+		}
+		for name := range repos[key].Repos {
+			if err := ValidName(name); err != nil {
+				return fmt.Errorf("env_repos.%s.repos: repository %q: %w", key, name, err)
+			}
+		}
+	}
+	return nil
 }
 
 type Context struct {
@@ -145,6 +202,9 @@ func (p Paths) LoadConfig() (Config, error) {
 	if err = validatePorts(c.Ports); err != nil {
 		return c, fmt.Errorf("invalid unibox configuration: ports: %w", err)
 	}
+	if err = validateEnvRepos(c.EnvRepos); err != nil {
+		return c, fmt.Errorf("invalid unibox configuration: %w", err)
+	}
 	for name, s := range c.Sandboxes {
 		for _, r := range s.Network {
 			if err = r.Validate(); err != nil {
@@ -191,6 +251,9 @@ func AtomicWrite(path string, b []byte, mode os.FileMode) error {
 }
 
 func (p Paths) SaveConfig(c Config) error {
+	if err := validateEnvRepos(c.EnvRepos); err != nil {
+		return fmt.Errorf("cannot write config.yaml: %w", err)
+	}
 	b, err := yaml.Marshal(c)
 	if err != nil {
 		return err

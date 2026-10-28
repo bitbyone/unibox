@@ -16,22 +16,31 @@ import (
 // for, which sbx env create takes as an --env-args-file.
 func (o *options) varCommand() *cobra.Command {
 	var envFlag string
-	var global bool
+	var global, envRepo bool
 	c := &cobra.Command{Use: "var", Short: "Keep your own values for the args an env asks for", Long: `An sbxenv file shared by a team declares args each person sets for
 themselves - a user name, a mirror. The values are yours, kept in
 ~/.config/unibox/vars.toml - with --global for every env that declares the
-arg, or for one env, which wins - and passed to sbx env create as an args
-file. A sandbox is not created while a required one is missing. No secret
-belongs here; store tokens with unibox secret.`}
+arg, with --env-repo for every env of the env's repository, or for one
+env, each winning over the one before - and passed to sbx env create as an
+args file. A sandbox is not created while a required one is missing. No
+secret belongs here; store tokens with unibox secret.`}
 	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
 	c.PersistentFlags().BoolVarP(&global, "global", "g", false, "For every env that declares the arg, rather than one env")
+	c.PersistentFlags().BoolVar(&envRepo, "env-repo", false, "For every env of the env's repository that declares the arg")
 	c.MarkFlagsMutuallyExclusive("env", "global")
+	c.MarkFlagsMutuallyExclusive("env-repo", "global")
 	env := func() (unibox.Env, error) {
 		name, err := o.envName(envFlag)
 		if err != nil {
 			return unibox.Env{}, err
 		}
 		return o.manager.Config.LoadEnv(name)
+	}
+	// repoOf is the env repo of the env, as vars.toml keys its values, and
+	// how a person knows it.
+	repoOf := func(e unibox.Env) (string, string, error) {
+		key, err := o.manager.Config.EnvRepoOf(e.Name)
+		return key, envRepoText(e.Config), err
 	}
 	c.AddCommand(&cobra.Command{Use: "set name value", Args: cobra.ExactArgs(2), Short: "Set a value", RunE: func(cmd *cobra.Command, args []string) error {
 		if global {
@@ -58,12 +67,27 @@ belongs here; store tokens with unibox secret.`}
 		if _, err = e.SBX.CheckArgs(map[string]string{args[0]: args[1]}); err != nil {
 			return err
 		}
-		if _, declared := e.SBX.Args[args[0]]; !declared {
+		// A value for every env of the repository may be for another of them.
+		if _, declared := e.SBX.Args[args[0]]; !declared && !envRepo {
 			fmt.Fprintf(o.log, "env %s declares no arg %s; it is kept, but sbx is not given it\n", e.Name, args[0])
 		}
 		v, err := o.paths.LoadEnvValues()
 		if err != nil {
 			return err
+		}
+		if envRepo {
+			key, text, err := repoOf(e)
+			if err != nil {
+				return err
+			}
+			if v.EnvRepos[key] == nil {
+				v.EnvRepos[key] = map[string]string{}
+			}
+			v.EnvRepos[key][args[0]] = args[1]
+			if err = o.paths.SaveEnvValues(v); err != nil {
+				return err
+			}
+			return o.success(fmt.Sprintf("set %s for every env of %s that declares it", args[0], text))
 		}
 		if v.Envs[e.Name] == nil {
 			v.Envs[e.Name] = map[string]string{}
@@ -97,6 +121,24 @@ belongs here; store tokens with unibox secret.`}
 		if err != nil {
 			return err
 		}
+		if envRepo {
+			e, err := env()
+			if err != nil {
+				return err
+			}
+			key, text, err := repoOf(e)
+			if err != nil {
+				return err
+			}
+			if _, ok := v.EnvRepos[key][args[0]]; !ok {
+				return fmt.Errorf("you have no value for %s for every env of %s; unibox var ls -e %s says where its value comes from", args[0], text, e.Name)
+			}
+			delete(v.EnvRepos[key], args[0])
+			if err = o.paths.SaveEnvValues(v); err != nil {
+				return err
+			}
+			return o.success(fmt.Sprintf("removed %s for every env of %s", args[0], text))
+		}
 		if _, ok := v.Envs[name][args[0]]; !ok {
 			return fmt.Errorf("env %s has no value of yours for %s", name, args[0])
 		}
@@ -111,13 +153,26 @@ belongs here; store tokens with unibox secret.`}
 		if err != nil {
 			return err
 		}
-		if global {
+		if global || envRepo {
+			values, from, out := v.Args, "global", map[string]any{"api_version": api.Version, "file": o.paths.VarsFile()}
+			if envRepo {
+				e, err := env()
+				if err != nil {
+					return err
+				}
+				key, _, err := repoOf(e)
+				if err != nil {
+					return err
+				}
+				values, from, out["env_repo"] = v.EnvRepos[key], "env-repo", key
+			}
 			rows := []map[string]string{}
-			for _, name := range sorted(v.Args) {
-				rows = append(rows, map[string]string{"name": name, "value": v.Args[name], "from": "global"})
+			for _, name := range sorted(values) {
+				rows = append(rows, map[string]string{"name": name, "value": values[name], "from": from})
 			}
 			if o.json {
-				return o.write(map[string]any{"api_version": api.Version, "file": o.paths.VarsFile(), "args": rows})
+				out["args"] = rows
+				return o.write(out)
 			}
 			w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
 			fmt.Fprintln(w, "NAME\tVALUE")
@@ -130,13 +185,15 @@ belongs here; store tokens with unibox secret.`}
 		if err != nil {
 			return err
 		}
-		mine := v.Envs[e.Name]
+		mine, ofRepo := v.Envs[e.Name], envRepoValues(v, e)
 		rows := []map[string]string{}
 		for _, name := range sorted(e.SBX.Args) {
 			a := e.SBX.Args[name]
 			from, value := "missing", ""
 			if s, ok := mine[name]; ok {
 				from, value = "yours", s
+			} else if s, ok := ofRepo[name]; ok {
+				from, value = "env-repo", s
 			} else if s, ok := v.Args[name]; ok {
 				from, value = "global", s
 			} else if a.Default != nil {
@@ -168,7 +225,7 @@ belongs here; store tokens with unibox secret.`}
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		if !o.interactive || o.json {
-			return o.runStep(cmd, append([]string{"var", "ls"}, varScope(envFlag, global)...)...)
+			return o.runStep(cmd, append([]string{"var", "ls"}, varScope(envFlag, global, envRepo)...)...)
 		}
 		name := ""
 		if !global {
@@ -177,16 +234,29 @@ belongs here; store tokens with unibox secret.`}
 				return err
 			}
 		}
-		return o.varUI(cmd, name, global, func() error {
-			return o.runStep(cmd, append([]string{"var", "ls"}, varScope(name, global)...)...)
+		return o.varUI(cmd, name, global, envRepo, func() error {
+			return o.runStep(cmd, append([]string{"var", "ls"}, varScope(name, global, envRepo)...)...)
 		})
 	}
 	return c
 }
 
-func varScope(env string, global bool) []string {
+// envRepoValues are the person's values for every env of an env's
+// repository.
+func envRepoValues(v unibox.EnvValues, e unibox.Env) map[string]string {
+	// Finding the repository may ask git; there is no need without values.
+	if len(v.EnvRepos) == 0 {
+		return nil
+	}
+	return v.EnvRepos[unibox.EnvRepoKey(e.Config)]
+}
+
+func varScope(env string, global, envRepo bool) []string {
 	if global {
 		return []string{"-g"}
+	}
+	if envRepo {
+		return append(envArgs(env), "--env-repo")
 	}
 	return envArgs(env)
 }

@@ -165,9 +165,9 @@ func validRepo(name string, r IndexedRepo, known bool) error {
 func layerRepos(out map[string]IndexedRepo, layer map[string]IndexedRepo, from string) error {
 	for name, r := range layer {
 		was, known := out[name]
-		// A switch for every env skips an env without the repository, as
-		// another env may have it.
-		if r.URL == "" && !known && from == FromYoursAll {
+		// A switch said for more envs than this skips an env without the
+		// repository, as another env may have it.
+		if r.URL == "" && !known && (from == FromYoursAll || from == FromYoursEnvRepo) {
 			continue
 		}
 		if err := validRepo(name, r, known); err != nil {
@@ -200,9 +200,9 @@ func layerRepos(out map[string]IndexedRepo, layer map[string]IndexedRepo, from s
 }
 
 // envRepos are an env's repositories, each layer over the one before: the
-// repository's unibox.yaml, the env's file's, the person's for every env
-// and the person's for this one.
-func envRepos(ec EnvConfig, global map[string]IndexedRepo) (map[string]IndexedRepo, error) {
+// repository's unibox.yaml, the env's file's, then the person's for every
+// env, for every env of its repository and for this one.
+func envRepos(ec EnvConfig, c Config) (map[string]IndexedRepo, error) {
 	out := map[string]IndexedRepo{}
 	err := readTeamFiles(ec.Files, func(name, from string, doc teamDoc) error {
 		if err := layerRepos(out, doc.Repos, from); err != nil {
@@ -213,11 +213,8 @@ func envRepos(ec EnvConfig, global map[string]IndexedRepo) (map[string]IndexedRe
 	if err != nil {
 		return nil, err
 	}
-	for _, layer := range []struct {
-		repos map[string]IndexedRepo
-		from  string
-	}{{global, FromYoursAll}, {ec.Repos, FromYours}} {
-		if err := layerRepos(out, layer.repos, layer.from); err != nil {
+	for _, layer := range c.yourLayers(ec) {
+		if err := layerRepos(out, layer.Repos, layer.from); err != nil {
 			return nil, fmt.Errorf("config.yaml: %w", err)
 		}
 	}
@@ -230,14 +227,13 @@ func envRepos(ec EnvConfig, global map[string]IndexedRepo) (map[string]IndexedRe
 	return out, nil
 }
 
-// SetRepo writes a repository of the person's into config.yaml: for one env,
-// or with env "" for every env. A field r leaves out is kept from what the
-// person had.
-func (m *Manager) SetRepo(env, name string, r IndexedRepo) error {
+// SetRepo writes a repository of the person's into config.yaml, in the
+// scope s says. A field r leaves out is kept from what the person had.
+func (m *Manager) SetRepo(s Scope, name string, r IndexedRepo) error {
 	if p := r.LocalPath(); p != "" && !isDir(p) {
 		return fmt.Errorf("repository %s: %s is no directory of this machine", name, r.URL)
 	}
-	return m.updateRepos(env, func(_ Config, repos map[string]IndexedRepo) error {
+	return m.updateRepos(s, func(_ Config, _ string, repos map[string]IndexedRepo) error {
 		was := repos[name]
 		if r.URL == "" {
 			r.URL = was.URL
@@ -262,59 +258,74 @@ func (m *Manager) SetRepo(env, name string, r IndexedRepo) error {
 	})
 }
 
-// RemoveRepo takes a repository of the person's out of config.yaml, for
-// one env or with env "" for every env. One of the team's is not the
-// person's to remove; off keeps it from being picked.
-func (m *Manager) RemoveRepo(env, name string) error {
-	return m.updateRepos(env, func(c Config, repos map[string]IndexedRepo) error {
-		if env == "" {
-			// A switch of the person's for one env goes with the
-			// repository it switched, where the team names none.
-			for e, ec := range c.Envs {
-				if mine, ok := ec.Repos[name]; !ok || mine.URL != "" {
-					continue
-				}
-				team, err := envRepos(EnvConfig{Files: ec.Files}, nil)
-				if err != nil {
-					return err
-				}
-				if _, named := team[name]; !named {
-					ec.Repos = maps.Clone(ec.Repos)
-					delete(ec.Repos, name)
-					c.Envs[e] = ec
-				}
-			}
-		}
+// RemoveRepo takes a repository of the person's out of config.yaml, in
+// the scope s says. One of the team's is not the person's to remove; off
+// keeps it from being picked.
+func (m *Manager) RemoveRepo(s Scope, name string) error {
+	return m.updateRepos(s, func(c Config, key string, repos map[string]IndexedRepo) error {
 		if _, ok := repos[name]; !ok {
-			if env == "" {
+			switch {
+			case s.Env == "":
 				return fmt.Errorf("your config.yaml names no repository %s for every env; unibox repo ls says where each comes from", name)
+			case s.EnvRepo:
+				return fmt.Errorf("your config.yaml names no repository %s for the env repo %s; unibox repo ls says where each comes from", name, key)
 			}
-			return fmt.Errorf("your config.yaml names no repository %s for env %s; one of the team's stays, and unibox repo default %s off keeps it unpicked", name, env, name)
+			return fmt.Errorf("your config.yaml names no repository %s for env %s; one of the team's stays, and unibox repo default %s off keeps it unpicked", name, s.Env, name)
 		}
 		delete(repos, name)
+		if s.Env != "" && !s.EnvRepo {
+			return nil
+		}
+		// A switch of the person's for one env goes with the repository it
+		// switched, where nothing beneath it names one any longer.
+		after := c
+		after.EnvRepos = maps.Clone(c.EnvRepos)
+		after.setRepos(s, key, repos)
+		for e, ec := range c.Envs {
+			if mine, ok := ec.Repos[name]; !ok || mine.URL != "" {
+				continue
+			}
+			ec.Repos = maps.Clone(ec.Repos)
+			delete(ec.Repos, name)
+			beneath, err := envRepos(ec, after)
+			if err != nil {
+				return err
+			}
+			if _, named := beneath[name]; !named {
+				c.Envs[e] = ec
+			}
+		}
 		return nil
 	})
 }
 
 // SetRepoDefault has a repository of an env always taken, picked to begin
-// with or not, for the person; "" takes their say back. A switch that says
-// what the layers beneath say is dropped.
-func (m *Manager) SetRepoDefault(env, name, def string) error {
-	if env == "" {
+// with or not, for the person, for the env or every env of its repository;
+// "" takes their say back. A switch that says what the layers beneath say
+// is dropped.
+func (m *Manager) SetRepoDefault(s Scope, name, def string) error {
+	if s.Env == "" {
 		return fmt.Errorf("say the env whose repository %s to switch", name)
 	}
-	return m.updateRepos(env, func(c Config, repos map[string]IndexedRepo) error {
-		ec := c.Envs[env]
-		ec.Repos = maps.Clone(repos)
+	return m.updateRepos(s, func(c Config, key string, repos map[string]IndexedRepo) error {
+		// What the layers beneath say is what is left with the name taken
+		// out of this scope and those over it.
+		ec := c.Envs[s.Env]
+		ec.Repos = maps.Clone(ec.Repos)
 		delete(ec.Repos, name)
-		under, err := envRepos(ec, c.Repos)
+		lower := c
+		if s.EnvRepo {
+			lower.EnvRepos = maps.Clone(c.EnvRepos)
+			lower.setRepos(s, key, without(repos, name))
+		}
+		under, err := envRepos(ec, lower)
 		if err != nil {
 			return err
 		}
 		beneath, known := under[name]
 		mine, had := repos[name]
 		if !known && !had {
-			return fmt.Errorf("env %s has no repository %s; unibox repo ls lists them", env, name)
+			return fmt.Errorf("env %s has no repository %s; unibox repo ls lists them", s.Env, name)
 		}
 		switch {
 		case def == "" && mine.URL == "":
@@ -332,40 +343,82 @@ func (m *Manager) SetRepoDefault(env, name, def string) error {
 	})
 }
 
-// updateRepos changes the person's repositories in config.yaml, for one env
-// or for every env, and checks the env's index still reads.
-func (m *Manager) updateRepos(env string, change func(Config, map[string]IndexedRepo) error) error {
+func without[V any](m map[string]V, name string) map[string]V {
+	m = maps.Clone(m)
+	delete(m, name)
+	return m
+}
+
+// setRepos makes repos the person's repositories in the scope s says; key
+// is the env repo's, for that scope.
+func (c *Config) setRepos(s Scope, key string, repos map[string]IndexedRepo) {
+	if len(repos) == 0 {
+		repos = nil
+	}
+	switch {
+	case s.Env == "":
+		c.Repos = repos
+	case s.EnvRepo:
+		er := c.EnvRepos[key]
+		er.Repos = repos
+		c.setEnvRepo(key, er)
+	default:
+		ec := c.Envs[s.Env]
+		ec.Repos = repos
+		c.Envs[s.Env] = ec
+	}
+}
+
+// setEnvRepo keeps what the person says for an env repo, and forgets the
+// env repo once they say nothing for it. The map is written in place.
+func (c *Config) setEnvRepo(key string, er EnvRepoConfig) {
+	if er.empty() {
+		delete(c.EnvRepos, key)
+		if len(c.EnvRepos) == 0 {
+			c.EnvRepos = nil
+		}
+		return
+	}
+	if c.EnvRepos == nil {
+		c.EnvRepos = map[string]EnvRepoConfig{}
+	}
+	c.EnvRepos[key] = er
+}
+
+// updateRepos changes the person's repositories in config.yaml in the
+// scope s says, and checks every env's index still reads. change is given
+// the env repo's key for that scope.
+func (m *Manager) updateRepos(s Scope, change func(c Config, key string, repos map[string]IndexedRepo) error) error {
 	c, err := m.Paths.LoadConfig()
 	if err != nil {
 		return err
 	}
 	c.Envs = maps.Clone(c.Envs)
-	repos := c.Repos
-	ec, ok := c.Envs[env]
-	if env != "" {
+	c.EnvRepos = maps.Clone(c.EnvRepos)
+	repos, key := c.Repos, ""
+	if s.Env != "" {
+		ec, ok := c.Envs[s.Env]
 		if !ok {
-			return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", env)
+			return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", s.Env)
 		}
 		repos = ec.Repos
+		if s.EnvRepo {
+			if key, err = c.EnvRepoOf(s.Env); err != nil {
+				return err
+			}
+			repos = c.EnvRepos[key].Repos
+		}
 	}
 	repos = maps.Clone(repos)
 	if repos == nil {
 		repos = map[string]IndexedRepo{}
 	}
-	if err := change(c, repos); err != nil {
+	if err := change(c, key, repos); err != nil {
 		return err
 	}
-	if len(repos) == 0 {
-		repos = nil
-	}
-	if env == "" {
-		c.Repos = repos
-	} else {
-		ec.Repos = repos
-		c.Envs[env] = ec
-	}
+	c.setRepos(s, key, repos)
 	for name, e := range c.Envs {
-		if _, err := envRepos(e, c.Repos); err != nil {
+		if _, err := envRepos(e, c); err != nil {
 			return fmt.Errorf("env %s: %w", name, err)
 		}
 	}

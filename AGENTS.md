@@ -83,7 +83,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
   the person's alike (`[resources]`, by hand), over a default the team
   may give in its unibox.yaml files (`resources:`): shares are resolved
   on the host at each create and handed to sbx in a last sbxenv file of
-  `sandboxOptions` alone (`resources.go`).
+  `sandboxOptions` alone (`resources.go`). Between every env and one env
+  sits every env of one env repository (`env_repos`, by `EnvRepoKey`),
+  in config.yaml and vars.toml alike.
 - **One client of sbx, behind an interface.** `Runtime` in `runtime.go`
   is what the manager asks of sbx; `sbx.go` is the only implementation,
   `fake_test.go` the tests'. It is there for tests, not for another
