@@ -230,7 +230,7 @@
 .vp-doc table { display: table; width: 100%; }
 .vp-doc tr:nth-child(2n) { background: transparent; }
 .vp-doc th { background: var(--vp-c-bg-soft); font-weight: 500; }
-.vp-doc td code { white-space: nowrap; }
+.vp-doc td code { white-space: normal; overflow-wrap: anywhere; }
 
 /* The outline: a rule before it, "On this page" in capitals with its icon. */
 @media (min-width: 1280px) {
