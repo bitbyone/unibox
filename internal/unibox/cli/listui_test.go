@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func listKeys(m listModel, ks ...string) listModel {
@@ -175,5 +176,31 @@ func TestAListIsFilteredAfterASlashAndActsOnWhatItLeaves(t *testing.T) {
 	tm, _ = tm.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if got := tm.(listModel); got.done || got.query != "" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestKeysWiderThanTheTerminalWrapBetweenKeysAndNoneIsLost(t *testing.T) {
+	t.Parallel()
+	pairs := []string{"↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit"}
+	lines := helpLines(40, pairs...)
+	if len(lines) < 3 {
+		t.Fatalf("%q", lines)
+	}
+	all := ""
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > 39 {
+			t.Fatalf("%d wide: %q", w, l)
+		}
+		all += ansi.Strip(l) + " · "
+	}
+	for i := 0; i < len(pairs); i += 2 {
+		if !strings.Contains(all, pairs[i]+" "+pairs[i+1]+" · ") {
+			t.Fatalf("%s lost from %q", pairs[i], all)
+		}
+	}
+	// A list leaves its rows the room the keys do not take.
+	m := listModel{title: "t", header: []string{"A"}, rows: [][]string{{"x"}}, ids: []string{"x"}, actions: []listAction{{key: "enter", name: "a", help: "a long action of the list"}, {key: "g", name: "b", help: "another long action"}}, width: 30, height: 20}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "q quit") || !strings.Contains(v, "g another long action") {
+		t.Fatalf("%s", v)
 	}
 }

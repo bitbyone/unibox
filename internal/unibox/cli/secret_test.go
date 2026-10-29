@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -1275,5 +1276,68 @@ func TestSecretAllShowsEveryTokenAndTheSandboxesThatTakeIt(t *testing.T) {
 	}
 	if out, _, err = run(t, paths, "", "secret", "ls", "-a", "--json"); err != nil || !strings.Contains(out, `"used_by": [`) {
 		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+func TestTheOverviewsActionsStoreAndForgetATokenWhereItIsKept(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "secrets"), []byte("anthropic\nnpm\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["team"] = api.Sandbox{Name: "team", Env: "team", State: "running"}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The missing gitlab token goes to the sandbox that needs it, read by
+	// a command: the third place offered, the second way.
+	var out, said bytes.Buffer
+	o := &options{paths: paths, input: strings.NewReader("3\n2\npass gitlab-team\n"), output: &out, log: &said}
+	root := o.root()
+	root.SetArgs([]string{"secret", "ls", "--all"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	uses, _, err := o.manager.SecretOverview(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	find := func(id string) unibox.SecretUse {
+		t.Helper()
+		for _, u := range uses {
+			if useID(u) == id {
+				return u
+			}
+		}
+		t.Fatalf("no %s in %+v", id, uses)
+		return unibox.SecretUse{}
+	}
+	if err := o.storeUse(root, find("gitlab (kept nowhere)")); err != nil {
+		t.Fatalf("%v\n%s", err, said.String())
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Sandboxes["team"].Secrets["gitlab"].Command != "pass gitlab-team" {
+		t.Fatalf("%+v", cfg.Sandboxes)
+	}
+	if note, err := o.forgetUse(root, find("npm (global)")); err != nil || !strings.Contains(calls(t, log), "secret rm npm --force") || !strings.Contains(note, "forgot") {
+		t.Fatalf("%v %q", err, note)
+	}
+	if uses, _, err = o.manager.SecretOverview(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.forgetUse(root, find("gitlab (sandbox team)")); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Sandboxes != nil {
+		t.Fatalf("%+v", cfg.Sandboxes)
+	}
+	if note, _ := o.forgetUse(root, unibox.SecretUse{Service: "gitlab"}); !strings.Contains(note, "kept nowhere") {
+		t.Fatalf("%q", note)
 	}
 }

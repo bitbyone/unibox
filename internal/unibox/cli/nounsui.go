@@ -394,28 +394,7 @@ func (o *options) moveSecret(cmd *cobra.Command, env unibox.Env, sandbox, servic
 		}
 		return "", nil
 	}
-	how, err := o.askPick("How the "+service+" token of "+to+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[to]+" is kept", "", []pick{
-		{"keychain", "typed in; it goes into " + unibox.KeychainName()},
-		{"command", "a command on this machine that prints it"},
-	}, "keychain")
-	if err != nil {
-		return "", err
-	}
-	args := append([]string{"secret", "set", service}, scopeArgs(to)...)
-	if how == "command" {
-		command, err := o.askText("The command sbx runs on the host for the "+service+" token", "A keychain read, say; it prints the token", "", func(s string) error {
-			if strings.TrimSpace(s) == "" {
-				return fmt.Errorf("say the command")
-			}
-			return nil
-		})
-		if err != nil {
-			return "", err
-		}
-		args = append(args, "--command", command)
-	}
-	// The keychain's program asks on the terminal, so the step has it.
-	if err := o.runStep(cmd, args...); err != nil {
+	if err := o.setInScope(cmd, env, sandbox, service, to); err != nil {
 		return "", err
 	}
 	if current != "global" {
@@ -425,4 +404,31 @@ func (o *options) moveSecret(cmd *cobra.Command, env unibox.Env, sandbox, servic
 		}
 	}
 	return "", nil
+}
+
+// setInScope keeps a token of an env's or a sandbox's own, typed into the
+// keychain or read by a command, as the person picks.
+func (o *options) setInScope(cmd *cobra.Command, env unibox.Env, sandbox, service, scope string) error {
+	how, err := o.askPick("How the "+service+" token of "+scope+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[scope]+" is kept", "", []pick{
+		{"keychain", "typed in; it goes into " + unibox.KeychainName()},
+		{"command", "a command on this machine that prints it"},
+	}, "keychain")
+	if err != nil {
+		return err
+	}
+	args := []string{"secret", "set", service, "--scope", scope, "-e", env.Name, "-s", sandbox}
+	if how == "command" {
+		command, err := o.askText("The command sbx runs on the host for the "+service+" token", "A keychain read, say; it prints the token", "", func(s string) error {
+			if strings.TrimSpace(s) == "" {
+				return fmt.Errorf("say the command")
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		args = append(args, "--command", command)
+	}
+	// The keychain's program asks on the terminal, so the step has it.
+	return o.runStep(cmd, args...)
 }

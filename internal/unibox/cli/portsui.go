@@ -31,6 +31,8 @@ type portsModel struct {
 	// setDefault has a named port on or off at each start, for the person,
 	// and reads the ports anew.
 	setDefault func(key string, on bool) ([]unibox.PortState, string, error)
+	// width is the terminal's, which the keys are wrapped to.
+	width int
 }
 
 type portsSwitched struct {
@@ -43,6 +45,8 @@ func (m portsModel) Init() tea.Cmd { return nil }
 
 func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
 	case portsSwitched:
 		m.busy, m.err, m.note = false, msg.err, msg.note
 		if msg.err == nil {
@@ -170,7 +174,7 @@ func (m portsModel) View() string {
 	b.WriteString("\n")
 	if m.asking {
 		fmt.Fprintf(&b, "host port for %s: %s_\n", m.rows[m.cursor].Name, m.hostPort)
-		b.WriteString(keyHelp("enter", "publish it there", "esc", "cancel") + "\n")
+		b.WriteString(strings.Join(helpLines(m.width, "enter", "publish it there", "esc", "cancel"), "\n") + "\n")
 		return b.String()
 	}
 	switch {
@@ -183,7 +187,7 @@ func (m portsModel) View() string {
 	default:
 		b.WriteString("\n")
 	}
-	b.WriteString(keyHelp("↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done") + "\n")
+	b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done"), "\n") + "\n")
 	return b.String()
 }
 

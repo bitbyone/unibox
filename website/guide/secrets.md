@@ -172,7 +172,11 @@ npm        global            sbx       -
 ```
 
 A sandbox an env would make and has not yet is named with `(not made)`.
-`--json` gives the same for a program.
+At a terminal the overview is a list to act in: `enter` stores the token
+under the cursor again - one kept nowhere where you pick, global, the
+env's or a sandbox's - `s` moves it for one of the sandboxes that take it,
+and `d` forgets it, asking first. Without a terminal, or with `--json`,
+it is printed.
 
 ## One name, two hosts
 

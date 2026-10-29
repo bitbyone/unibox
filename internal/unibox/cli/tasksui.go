@@ -40,11 +40,17 @@ type tasksModel struct {
 	agent  int
 	chosen *taskAction
 	done   bool
+	// width is the terminal's, which the keys are wrapped to.
+	width int
 }
 
 func (m tasksModel) Init() tea.Cmd { return nil }
 
 func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = size.Width
+		return m, nil
+	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok || len(m.rows) == 0 {
 		if ok {
@@ -151,11 +157,11 @@ func (m tasksModel) View() string {
 			agents = append(agents, a)
 		}
 		fmt.Fprintf(&b, "Resume %s with %s\n", cmp.Or(row.Alias, row.ID), strings.Join(agents, ""))
-		b.WriteString(keyHelp("←/→ h/l", "agent", "enter", "resume", "esc", "back") + "\n")
+		b.WriteString(strings.Join(helpLines(m.width, "←/→ h/l", "agent", "enter", "resume", "esc", "back"), "\n") + "\n")
 	case tasksRemove:
 		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
 	default:
-		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit") + "\n")
+		b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit"), "\n") + "\n")
 	}
 	return b.String()
 }

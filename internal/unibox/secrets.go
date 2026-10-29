@@ -646,6 +646,8 @@ type SecretUse struct {
 	// marked "(not made)"; Needed whether any of them must have it.
 	UsedBy []string `json:"used_by"`
 	Needed bool     `json:"needed,omitempty"`
+	// Placeholder is a variable's, by which sbx forgets it.
+	Placeholder string `json:"placeholder,omitempty"`
 }
 
 // SecretOverview is every token kept, global, an env's or a sandbox's,
@@ -682,9 +684,9 @@ func (m *Manager) SecretOverview(ctx context.Context) (out []SecretUse, skipped 
 	for _, s := range have {
 		switch {
 		case s.Type == "custom" && s.Scope == "global":
-			row("global", s.Env, "variable")
+			row("global", s.Env, "variable").Placeholder = s.Placeholder
 		case s.Type == "custom":
-			row("sbx sandbox "+s.Scope, s.Env, "variable")
+			row("sbx sandbox "+s.Scope, s.Env, "variable").Placeholder = s.Placeholder
 		case s.Scope == "global":
 			row("global", s.Name, "sbx")
 		case !ours[s.Scope+"\x00"+s.Name]:

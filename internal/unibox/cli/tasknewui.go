@@ -430,6 +430,32 @@ func (m taskPickModel) View() string {
 	if n := m.recentCount(); n > 0 && m.showRecent {
 		lines = append(lines, portHelp.Render(fmt.Sprintf("  with %d recent repositories of your tasks; a adds one to the index", n)), "")
 	}
+	// The keys are known first, as the rows get the room they leave.
+	var help []string
+	switch {
+	case m.editing != "":
+		help = helpLines(m.width, "enter", "keep it", "esc", "leave it as it was")
+	case m.filtering:
+		help = helpLines(m.width, "↑/↓", "move", "enter", "keep the filter", "esc", "clear it")
+	default:
+		keys := []string{"↑/↓ j/k", "move", "space", "pick", "c", "work/context", "m", "mount/clone", "p", "push", "b", "branch"}
+		if m.adding == "" {
+			keys = append(keys, "t", "task name")
+		}
+		if m.recentCount() > 0 {
+			keys = append(keys, "r", "recent")
+			if m.cursor < len(visible) && m.rows[visible[m.cursor]].recent {
+				keys = append(keys, "a", "add to index", "d", "forget")
+			}
+		}
+		keys = append(keys, "/", "search")
+		if m.adding != "" {
+			keys = append(keys, "enter", "add them", "q", "cancel")
+		} else {
+			keys = append(keys, "enter", "start", "q", "cancel")
+		}
+		help = helpLines(m.width, keys...)
+	}
 	table := [][]string{{"", "REPO", "ROLE", "FROM", "BRANCH", "PUSH", "ABOUT"}}
 	for _, i := range visible {
 		r := m.rows[i]
@@ -468,7 +494,7 @@ func (m taskPickModel) View() string {
 		rows := strings.Split(strings.TrimSuffix(drawTable(table, m.cursor), "\n"), "\n")
 		body := rows[1:]
 		if m.height > 0 {
-			room := max(m.height-len(lines)-6, 1)
+			room := max(m.height-len(lines)-5-len(help), 1)
 			if room < len(body) {
 				first := min(max(m.cursor-room/2, 0), len(body)-room)
 				body = body[first : first+room]
@@ -484,30 +510,7 @@ func (m taskPickModel) View() string {
 	if m.note != "" {
 		lines = append(lines, portErr.Render(m.note))
 	}
-	switch {
-	case m.editing != "":
-		lines = append(lines, keyHelp("enter", "keep it", "esc", "leave it as it was"))
-	case m.filtering:
-		lines = append(lines, keyHelp("↑/↓", "move", "enter", "keep the filter", "esc", "clear it"))
-	default:
-		keys := []string{"↑/↓ j/k", "move", "space", "pick", "c", "work/context", "m", "mount/clone", "p", "push", "b", "branch"}
-		if m.adding == "" {
-			keys = append(keys, "t", "task name")
-		}
-		if m.recentCount() > 0 {
-			keys = append(keys, "r", "recent")
-			if under := m.visible(); m.cursor < len(under) && m.rows[under[m.cursor]].recent {
-				keys = append(keys, "a", "add to index", "d", "forget")
-			}
-		}
-		keys = append(keys, "/", "search")
-		if m.adding != "" {
-			keys = append(keys, "enter", "add them", "q", "cancel")
-		} else {
-			keys = append(keys, "enter", "start", "q", "cancel")
-		}
-		lines = append(lines, keyHelp(keys...))
-	}
+	lines = append(lines, help...)
 	if m.width > 0 {
 		for i, l := range lines {
 			lines[i] = ansi.Truncate(l, m.width-1, "…")

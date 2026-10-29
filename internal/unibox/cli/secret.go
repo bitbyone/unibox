@@ -263,7 +263,13 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	c.Flags().BoolVarP(&overview, "all", "a", false, "Every token kept, global, an env's or a sandbox's, and the sandboxes that take each")
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		if overview {
-			return o.runStep(cmd, "secret", "ls", "--all")
+			if envFlag != "" || sandboxFlag != "" {
+				return fmt.Errorf("--all lists every env's and sandbox's tokens; leave out -e and -s")
+			}
+			if !o.interactive || o.json {
+				return o.runStep(cmd, "secret", "ls", "--all")
+			}
+			return o.secretAllUI(cmd)
 		}
 		ls := func() error { return o.runStep(cmd, append([]string{"secret", "ls"}, envArgs(envFlag)...)...) }
 		if !o.interactive || o.json {

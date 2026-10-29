@@ -164,7 +164,7 @@ func (m listModel) View() string {
 	case m.pending != nil:
 		foot = []string{fmt.Sprintf(m.pending.confirm+" [y/N]", m.id())}
 	case m.filtering:
-		foot = []string{keyHelp("↑/↓", "move", "enter", "keep the filter", "esc", "clear it")}
+		foot = helpLines(m.width, "↑/↓", "move", "enter", "keep the filter", "esc", "clear it")
 	default:
 		if m.note != "" {
 			foot = strings.Split(m.note, "\n")
@@ -173,7 +173,7 @@ func (m listModel) View() string {
 		for _, a := range m.actions {
 			help = append(help, displayKey(a.key), a.help)
 		}
-		foot = append(foot, keyHelp(append(help, "q", "quit")...))
+		foot = append(foot, helpLines(m.width, append(help, "q", "quit")...)...)
 	}
 	lines := []string{listTitle.Render(m.title), ""}
 	visible := m.visible()

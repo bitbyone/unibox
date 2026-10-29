@@ -42,3 +42,28 @@ func keyHelp(pairs ...string) string {
 	}
 	return strings.Join(parts, portHelp.Render(" · "))
 }
+
+// helpLines are a list's keys as keyHelp draws them, wrapped between two
+// keys where the terminal is narrower: a line longer than the terminal is
+// cut, and the keys at its end would be lost. width 0 is a terminal that
+// has not said its width.
+func helpLines(width int, pairs ...string) []string {
+	if width <= 0 {
+		return []string{keyHelp(pairs...)}
+	}
+	sep := portHelp.Render(" · ")
+	room := width - 1
+	lines, line := []string{}, ""
+	for i := 0; i+1 < len(pairs); i += 2 {
+		part := keyHelp(pairs[i], pairs[i+1])
+		switch {
+		case line == "":
+			line = part
+		case lipgloss.Width(line+sep+part) <= room:
+			line += sep + part
+		default:
+			lines, line = append(lines, line), part
+		}
+	}
+	return append(lines, line)
+}

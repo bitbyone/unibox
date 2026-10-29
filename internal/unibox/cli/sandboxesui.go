@@ -24,11 +24,17 @@ type sandboxesModel struct {
 	confirm string
 	chosen  *sandboxAction
 	done    bool
+	// width is the terminal's, which the keys are wrapped to.
+	width int
 }
 
 func (m sandboxesModel) Init() tea.Cmd { return nil }
 
 func (m sandboxesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = size.Width
+		return m, nil
+	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return m, nil
@@ -100,7 +106,7 @@ func (m sandboxesModel) View() string {
 	case "remove":
 		fmt.Fprintf(&b, "Remove sandbox %s? [y/N]\n", name)
 	default:
-		b.WriteString(keyHelp("↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit") + "\n")
+		b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit"), "\n") + "\n")
 	}
 	return b.String()
 }
