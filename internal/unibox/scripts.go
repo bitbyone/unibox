@@ -217,11 +217,29 @@ rm -f "$cfg.new" "$cfg.unibox" "$cfg.tail"
 `
 
 func sessionScript(id string, args []string) string {
-	s := "set -u\nmkdir -p /var/lib/unibox/runs\nborn=$(awk '{print $22}' /proc/$$/stat)\nprintf '%s %s\\n' \"$$\" \"$born\" > " + Quote("/var/lib/unibox/runs/"+id) + "\ntrap " + Quote("rm -f "+Quote("/var/lib/unibox/runs/"+id)) + " EXIT\n"
+	return sessionStart(id) + quoteArgs(args) + "\nexit $?\n"
+}
+
+// resumeScript is sessionScript for an agent that continues its last
+// conversation in dir, by resumed, when the test had says it had one
+// there, and starts afresh by args when it had none.
+func resumeScript(id, dir, had, agent string, args, resumed []string) string {
+	return sessionStart(id) + "dir=" + Quote(dir) + "\nif " + had + "; then\n" +
+		"echo " + Quote("unibox: "+agent+" continues its last conversation here; unibox resume --new starts afresh") + " >&2\n" +
+		quoteArgs(resumed) + "\nelse\n" + quoteArgs(args) + "\nfi\nexit $?\n"
+}
+
+// sessionStart records the session's process, gone with it.
+func sessionStart(id string) string {
+	return "set -u\nmkdir -p /var/lib/unibox/runs\nborn=$(awk '{print $22}' /proc/$$/stat)\nprintf '%s %s\\n' \"$$\" \"$born\" > " + Quote("/var/lib/unibox/runs/"+id) + "\ntrap " + Quote("rm -f "+Quote("/var/lib/unibox/runs/"+id)) + " EXIT\n"
+}
+
+func quoteArgs(args []string) string {
+	s := ""
 	for _, arg := range args {
 		s += Quote(arg) + " "
 	}
-	return s + "\nexit $?\n"
+	return s
 }
 
 // mountedDir is where unibox keeps, in the guest, what a mounted repository

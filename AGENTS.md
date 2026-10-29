@@ -123,6 +123,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
   `trusted_folders`, codex's config.toml. What unibox writes into an
   agent's own file sits between markers or is merged, never over the
   user's settings. An agent unibox does not know is still run.
+  An agent with `Resume` and `HadSession` (claude, codex) continues its
+  last conversation in the session's directory when it had one there,
+  tested in the guest before it starts; `--new` starts it afresh.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
 - **init starts from the team's repository** (`cli/init.go`): the

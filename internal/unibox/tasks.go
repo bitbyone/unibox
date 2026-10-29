@@ -588,7 +588,11 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", told + sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
 	a := FindAgent(agent)
-	args := append(command, extra...)
+	args := append(slices.Clone(command), extra...)
+	var resumed []string
+	if a.Resume != nil && a.HadSession != "" && !req.New {
+		resumed = append(a.Resume(command), extra...)
+	}
 	env := slices.Clone(a.Env)
 	if a.CoAuthor != "" {
 		name, _, _ := strings.Cut(a.CoAuthor, " <")
@@ -596,6 +600,9 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	}
 	env = append(env, m.sshEnv()...)
 	args = withEnv(env, args)
+	if resumed != nil {
+		resumed = withEnv(env, resumed)
+	}
 	if a.Trust != nil && a.Config != "" {
 		dirs := []string{"/work", t.Directory}
 		for _, repo := range t.Repositories {
@@ -606,6 +613,9 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		}
 	}
 	script := told + sessionScript(run.ID, args)
+	if resumed != nil {
+		script = told + resumeScript(run.ID, dir, a.HadSession, a.ID, args, resumed)
+	}
 	if a.Setup != "" {
 		script = "(\n" + a.Setup + ") || echo 'unibox: preparing " + a.ID + " failed; it may ask whether to trust the directory' >&2\n" + script
 	}

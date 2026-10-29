@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -937,5 +938,63 @@ func TestTheRepositoriesTasksHeldAreRecentTheNewestFirst(t *testing.T) {
 	}
 	if recent, _ = m.Paths.RecentRepos(""); len(recent) != 1 || recent[0].URL != url {
 		t.Fatalf("%+v", recent)
+	}
+}
+
+func TestResumeContinuesTheAgentsLastConversationInTheTask(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	bin, seen := t.TempDir(), filepath.Join(t.TempDir(), "agent")
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nprintf '%s|%s\\n' \"$*\" \"$HOME\" > "+Quote(seen)+"\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	run := func(req Request) (args, home string) {
+		t.Helper()
+		if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(seen)
+		args, home, _ = strings.Cut(strings.TrimSpace(string(b)), "|")
+		return args, home
+	}
+	// The first session has nothing to continue.
+	args, home := run(Request{Sandbox: "dev", Task: "pricing", Author: "Person <person@example.com>", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}}})
+	if strings.Contains(args, "--continue") {
+		t.Fatalf("%q", args)
+	}
+	// Once claude has a conversation of the session's directory, the next
+	// continues it, unless asked to start afresh.
+	// The fake runs the guest's /work in a directory of its own.
+	dir := filepath.Join(f.root, "dev", "work", "pricing", "payments")
+	conversations := filepath.Join(home, ".claude", "projects", regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(dir, "-"))
+	write(t, filepath.Join(conversations, "s.jsonl"), "{}\n")
+	if args, _ = run(Request{Task: "pricing"}); args != "--dangerously-skip-permissions --continue" {
+		t.Fatalf("%q", args)
+	}
+	if args, _ = run(Request{Task: "pricing", New: true}); args != "--dangerously-skip-permissions" {
+		t.Fatalf("%q", args)
+	}
+}
+
+func TestCodexContinuesASessionRecordedInItsDirectory(t *testing.T) {
+	t.Parallel()
+	a := FindAgent("codex")
+	if got := a.Resume([]string{"codex", "--dangerously-bypass-approvals-and-sandbox"}); !slices.Equal(got, []string{"codex", "resume", "--last", "--dangerously-bypass-approvals-and-sandbox"}) {
+		t.Fatalf("%q", got)
+	}
+	home := t.TempDir()
+	write(t, filepath.Join(home, "sessions", "2026", "10", "29", "rollout-1.jsonl"), `{"type":"session_meta","payload":{"id":"x","cwd":"/work/pricing/api"}}`+"\n")
+	had := func(dir string) bool {
+		c := exec.Command("sh", "-c", "dir="+Quote(dir)+"; "+a.HadSession)
+		c.Env = append(os.Environ(), "CODEX_HOME="+home)
+		return c.Run() == nil
+	}
+	if !had("/work/pricing/api") || had("/work/pricing") || had("/work/other") {
+		t.Fatal("codex's sessions were not told apart by directory")
 	}
 }

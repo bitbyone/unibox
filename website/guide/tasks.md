@@ -91,11 +91,16 @@ unibox task                      # the same as a list
 unibox task ls                   # every task in every sandbox
 unibox resume login              # its agent again
 unibox resume login --shell      # a shell beside it, also while the agent runs
-unibox resume login -- --continue
+unibox resume login --new        # its agent afresh, not on its last conversation
 ```
 
 A task keeps its repositories, branches and agent; `run` with the same
 repositories on the same branches resumes the task it made before.
+
+claude and codex continue the last conversation they had in the task -
+claude with `--continue`, codex with `codex resume --last` - when they had
+one there, and start afresh when they had none; `--new` starts them
+afresh. copilot and opencode start afresh each time.
 
 ## Another agent on the same task
 

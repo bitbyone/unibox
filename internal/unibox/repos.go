@@ -90,6 +90,9 @@ type Request struct {
 	// Remove takes the task away once its session is over, unless it holds
 	// work the forge does not have.
 	Remove bool
+	// New starts the agent afresh rather than on the last conversation it
+	// had in the task.
+	New bool
 	// Mount mounts the selected directories of the host into the sandbox,
 	// Clone clones them in it instead; with neither, a task mounts when
 	// every source is a directory of the host, and clones otherwise.

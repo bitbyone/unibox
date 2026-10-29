@@ -174,6 +174,7 @@ mounts, unless `--only`. Arguments after `--` go to the agent.
 | `-e`, `--env <env>` | env to create the sandbox from |
 | `-s`, `--sandbox <name>` | sandbox to work in |
 | `--shell` | a shell in the task's directory instead of the agent |
+| `--new` | start claude or codex afresh rather than on the last conversation it had in the task, which it otherwise continues |
 | `--rm` | remove the task once the session ends, unless a clone holds uncommitted files, unpushed commits or stashes |
 | `--agent <name>` | `claude`, `codex`, `copilot` or `opencode`, when the sandbox has it (default: the task's last, else the env's) |
 | `--task <name>` | the task's name, unique across sandboxes (default: first repository and a digest) |
@@ -190,7 +191,7 @@ mounts, unless `--only`. Arguments after `--` go to the agent.
 ### `unibox resume`
 
 ```
-unibox resume [task] [-- agent-args...] [--agent <name>] [--shell] [--rm]
+unibox resume [task] [-- agent-args...] [--agent <name>] [--shell] [--new] [--rm]
 ```
 
 Runs a prepared task's agent again, or with `--shell` a shell, in its

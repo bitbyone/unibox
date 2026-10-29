@@ -2,6 +2,7 @@ package unibox
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -24,7 +25,23 @@ type Agent struct {
 	// directories the session works in, so the agent does not stop to ask
 	// whether to trust what unibox prepared.
 	Trust func(dirs []string) map[string]any
+
+	// Resume starts the agent, from the command it is started with, on the
+	// last conversation it had in the session's directory, and HadSession
+	// is a guest shell test, of $dir, for whether it had one there: an
+	// agent asked to continue where it has none fails rather than starting
+	// afresh. Without both, every session starts afresh.
+	Resume     func(command []string) []string
+	HadSession string
 }
+
+// claudeHadSession finds claude's conversations of a directory where it
+// keeps them, the directory's path with every other character a dash.
+const claudeHadSession = `ls "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(printf %s "$dir" | sed 's/[^A-Za-z0-9]/-/g')/"*.jsonl >/dev/null 2>&1`
+
+// codexHadSession finds a codex session recorded with the directory as
+// its working directory, which codex resume --last picks among.
+const codexHadSession = `grep -rqsF --include='rollout-*.jsonl' "\"cwd\":\"$dir\"" "${CODEX_HOME:-$HOME/.codex}/sessions"`
 
 // claudeTrust is what sbx's own claude kit seeds: each directory's trust
 // dialog answered, and the bypass mode its kit starts claude in accepted.
@@ -51,8 +68,11 @@ func copilotTrust(dirs []string) map[string]any {
 var Agents = []Agent{
 	// The kit's image fixes each agent's version, so none updates itself,
 	// and unibox's commit hook says the co-author, so no agent's own byline.
-	{ID: "claude", Command: "claude", Args: []string{"--dangerously-skip-permissions"}, CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust},
-	{ID: "codex", Command: "codex", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup},
+	{ID: "claude", Command: "claude", Args: []string{"--dangerously-skip-permissions"}, CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust,
+		Resume: func(c []string) []string { return append(slices.Clone(c), "--continue") }, HadSession: claudeHadSession},
+	{ID: "codex", Command: "codex", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup,
+		// resume takes the options codex itself does, after it.
+		Resume: func(c []string) []string { return append([]string{c[0], "resume", "--last"}, c[1:]...) }, HadSession: codexHadSession},
 	{ID: "copilot", Command: "copilot", Args: []string{"--yolo"}, CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust},
 	{ID: "opencode", Command: "opencode", CoAuthor: "opencode <noreply@opencode.ai>"},
 }
