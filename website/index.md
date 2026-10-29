@@ -9,9 +9,12 @@ Unibox is a command-line companion to
 works with the sandboxes a team already describes for sbx, and makes
 everyday work in them frictionless.
 
-It is a thin layer on top of sbx. The sandbox, its isolation, the proxy
-that keeps tokens out of it and the network policy stay sbx's own; unibox
-adds the conveniences sbx leaves out.
+It is a thin, stateful layer on top of sbx. The sandbox, its isolation,
+the proxy that keeps tokens out of it and the network policy remain sbx's.
+Unibox adds what sbx leaves out, and keeps its own record of it: envs,
+sandboxes, tasks and your values. Most of the convenience comes from that
+record. It outlives even a reinstall of sbx: the next run creates the
+sandbox again and brings its tasks back.
 
 ## Why use it
 
