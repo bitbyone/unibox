@@ -26,10 +26,8 @@ lists you work in with a single key.
 - **Your checkout or a fresh clone.** A task mounts the directory you
   work in, or, for maximum isolation, clones from the forge, so the agent
   never touches your files. Per repository.
-- **No commands to remember.** `unibox` alone, or a noun such as `unibox
-  task`, opens a list at the terminal: pick a row, press one of the keys
-  shown under it, search with `/`. The commands are there for scripts,
-  with `--json`.
+- **No commands to remember.** By default unibox is a minimal
+  interactive TUI; every command is scriptable too, with `--json`.
 - **The agent knows the ground.** Each task tells it which repositories
   it works in, which it only reads, and what the team expects of them.
 - **The env changes, the work stays.** When the team's files change,
