@@ -43,6 +43,24 @@ const claudeHadSession = `ls "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(pri
 // its working directory, which codex resume --last picks among.
 const codexHadSession = `grep -rqsF --include='rollout-*.jsonl' "\"cwd\":\"$dir\"" "${CODEX_HOME:-$HOME/.codex}/sessions"`
 
+// copilotHadSession finds the session copilot last had in the directory:
+// its --continue takes the last one anywhere, which in a sandbox of
+// several tasks is another task's. A session's workspace.yaml keeps the
+// directory it began in, its events.jsonl is written to as it goes on, so
+// the newest of those is the last; the test leaves its id in $session.
+const copilotHadSession = `{ session= newest=
+for w in "${COPILOT_HOME:-$HOME/.copilot}"/session-state/*/workspace.yaml; do
+grep -qxF "cwd: $dir" "$w" 2>/dev/null || continue
+e=${w%/workspace.yaml}/events.jsonl; [ -e "$e" ] || e=$w
+if [ -z "$newest" ] || [ "$e" -nt "$newest" ]; then newest=$e; session=${w%/workspace.yaml}; session=${session##*/}; fi
+done
+[ -n "$session" ]; }`
+
+// sessionArg stands in an argument of Resume for $session, the session a
+// HadSession test found, which the guest's shell puts in its place. An
+// argument cannot hold a NUL, so no argument a person gives is taken for it.
+const sessionArg = "\x00session\x00"
+
 // claudeTrust is what sbx's own claude kit seeds: each directory's trust
 // dialog answered, and the bypass mode its kit starts claude in accepted.
 func claudeTrust(dirs []string) map[string]any {
@@ -73,7 +91,8 @@ var Agents = []Agent{
 	{ID: "codex", Command: "codex", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup,
 		// resume takes the options codex itself does, after it.
 		Resume: func(c []string) []string { return append([]string{c[0], "resume", "--last"}, c[1:]...) }, HadSession: codexHadSession},
-	{ID: "copilot", Command: "copilot", Args: []string{"--yolo"}, CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust},
+	{ID: "copilot", Command: "copilot", Args: []string{"--yolo"}, CoAuthor: "Copilot <Copilot@users.noreply.github.com>", Config: ".copilot/config.json", Trust: copilotTrust,
+		Resume: func(c []string) []string { return append(slices.Clone(c), "--resume="+sessionArg) }, HadSession: copilotHadSession},
 	{ID: "opencode", Command: "opencode", CoAuthor: "opencode <noreply@opencode.ai>"},
 }
 

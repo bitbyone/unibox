@@ -97,10 +97,12 @@ unibox resume login --new        # its agent afresh, not on its last conversatio
 A task keeps its repositories, branches and agent; `run` with the same
 repositories on the same branches resumes the task it made before.
 
-claude and codex continue the last conversation they had in the task -
-claude with `--continue`, codex with `codex resume --last` - when they had
-one there, and start afresh when they had none; `--new` starts them
-afresh. copilot and opencode start afresh each time.
+claude, codex and copilot continue the last conversation they had in the
+task - claude with `--continue`, codex with `codex resume --last`, copilot
+with `--resume` and the id of its last session there, as its own
+`--continue` takes the last session of any task in the sandbox - when they
+had one there, and start afresh when they had none; `--new` starts them
+afresh. opencode starts afresh each time.
 
 ## Another agent on the same task
 

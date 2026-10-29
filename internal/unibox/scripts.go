@@ -237,6 +237,10 @@ func sessionStart(id string) string {
 func quoteArgs(args []string) string {
 	s := ""
 	for _, arg := range args {
+		if before, after, ok := strings.Cut(arg, sessionArg); ok {
+			s += Quote(before) + `"$session"` + Quote(after) + " "
+			continue
+		}
 		s += Quote(arg) + " "
 	}
 	return s

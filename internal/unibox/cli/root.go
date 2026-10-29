@@ -484,8 +484,9 @@ func (o *options) resumeCommand() *cobra.Command {
 	c := &cobra.Command{Use: "resume [task] [-- agent-args...]", Args: cobra.ArbitraryArgs, Short: "Run a prepared task's agent again, or a shell in it, in the sandbox that holds it", Long: `Run a prepared task's agent again, or a shell in it, in the sandbox that
 holds it. Without a task at a terminal, it lists the tasks to pick one.
 
-claude and codex continue the last conversation they had in the task, when
-they had one there; --new starts them afresh. Other agents start afresh.`, RunE: func(cmd *cobra.Command, args []string) error {
+claude, codex and copilot continue the last conversation they had in the
+task, when they had one there; --new starts them afresh. Other agents
+start afresh.`, RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 || cmd.ArgsLenAtDash() == 0 {
 			if o.json || !o.interactive {
 				return fmt.Errorf("name the task to resume; unibox task ls lists them")

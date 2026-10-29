@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tobola/unibox/internal/unibox/api"
 )
@@ -996,6 +997,41 @@ func TestCodexContinuesASessionRecordedInItsDirectory(t *testing.T) {
 	}
 	if !had("/work/pricing/api") || had("/work/pricing") || had("/work/other") {
 		t.Fatal("codex's sessions were not told apart by directory")
+	}
+}
+
+func TestCopilotResumesTheLastSessionOfItsDirectoryNotTheLastOfAll(t *testing.T) {
+	t.Parallel()
+	a := FindAgent("copilot")
+	home := t.TempDir()
+	session := func(id, cwd string, age time.Duration) {
+		dir := filepath.Join(home, "session-state", id)
+		write(t, filepath.Join(dir, "workspace.yaml"), "id: "+id+"\ncwd: "+cwd+"\n")
+		write(t, filepath.Join(dir, "events.jsonl"), "{}\n")
+		when := time.Now().Add(-age)
+		if err := os.Chtimes(filepath.Join(dir, "events.jsonl"), when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	session("older", "/work/pricing", 2*time.Hour)
+	session("newer", "/work/pricing", time.Hour)
+	// The last of all is another task's, which copilot --continue would take.
+	session("other", "/work/billing", time.Minute)
+	session("nested", "/work/pricing/api", 0)
+	resumed := func(dir string) string {
+		c := exec.Command("sh", "-c", "set -u; dir="+Quote(dir)+"\nif "+a.HadSession+"; then printf '%s ' "+quoteArgs(a.Resume([]string{"copilot", "--yolo"}))+"; fi")
+		c.Env = append(os.Environ(), "COPILOT_HOME="+home)
+		out, err := c.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if got := resumed("/work/pricing"); got != "copilot --yolo --resume=newer" {
+		t.Fatalf("%q", got)
+	}
+	if got := resumed("/work/fresh"); got != "" {
+		t.Fatalf("%q", got)
 	}
 }
 
