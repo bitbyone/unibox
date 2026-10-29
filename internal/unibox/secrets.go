@@ -47,6 +47,9 @@ type NeededSecret struct {
 	// keychain.
 	Scope string `json:"scope,omitempty"`
 	Own   string `json:"own,omitempty"`
+	// Variable is the variable a token kept the way a subscription's is
+	// stands in, for one stored so.
+	Variable string `json:"variable,omitempty"`
 	// Page is where the token is made, and Hint what to make there.
 	Page string `json:"page,omitempty"`
 	Hint string `json:"hint,omitempty"`
@@ -251,7 +254,7 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 		for _, w := range guides[service].AllWays() {
 			for _, s := range secrets {
 				if !l.Stored && w.Env != "" && s.Type == "custom" && s.Env == w.Env && (s.Scope == "global" || s.Scope == sandbox) {
-					l.Stored, l.Scope = true, s.Scope+", "+w.Name
+					l.Stored, l.Scope, l.Variable = true, s.Scope+", "+w.Name, s.Env
 				}
 			}
 		}
@@ -626,4 +629,151 @@ func (m *Manager) SyncOwnSecrets(ctx context.Context, envName, sandbox string) e
 		}
 	}
 	return nil
+}
+
+// SecretUse is a token kept somewhere, or one a sandbox needs that is kept
+// nowhere, with the sandboxes that take it.
+type SecretUse struct {
+	Service string `json:"service"`
+	// Scope is where it is kept: global, "env <name>" or "sandbox <name>"
+	// for one config.yaml keeps, "sbx sandbox <name>" for one sbx keeps
+	// for a sandbox that unibox did not give it, "" for one kept nowhere.
+	Scope string `json:"scope"`
+	// Kept says how: stored by sbx, a variable of sbx's a subscription's
+	// token is in, in the keychain or read by a command.
+	Kept string `json:"kept"`
+	// UsedBy are the sandboxes that take this one, those an env would make
+	// marked "(not made)"; Needed whether any of them must have it.
+	UsedBy []string `json:"used_by"`
+	Needed bool     `json:"needed,omitempty"`
+}
+
+// SecretOverview is every token kept, global, an env's or a sandbox's,
+// and every one needed and kept nowhere, with the sandboxes that take
+// each: those unibox has, and the one each env without one would make.
+// An env whose files cannot be read is named in skipped.
+func (m *Manager) SecretOverview(ctx context.Context) (out []SecretUse, skipped []string, err error) {
+	have, err := m.SBX.Secrets(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot list sbx's secrets: %w", err)
+	}
+	state, err := m.Paths.ReadState()
+	if err != nil {
+		return nil, nil, err
+	}
+	rows := map[string]*SecretUse{}
+	order := []string{}
+	row := func(scope, service, kept string) *SecretUse {
+		key := scope + "\x00" + service + "\x00" + kept
+		if r, ok := rows[key]; ok {
+			return r
+		}
+		r := &SecretUse{Service: service, Scope: scope, Kept: kept, UsedBy: []string{}}
+		rows[key] = r
+		order = append(order, key)
+		return r
+	}
+	ours := map[string]bool{}
+	for _, b := range state.Sandboxes {
+		for service := range b.Secrets {
+			ours[b.Name+"\x00"+service] = true
+		}
+	}
+	for _, s := range have {
+		switch {
+		case s.Type == "custom" && s.Scope == "global":
+			row("global", s.Env, "variable")
+		case s.Type == "custom":
+			row("sbx sandbox "+s.Scope, s.Env, "variable")
+		case s.Scope == "global":
+			row("global", s.Name, "sbx")
+		case !ours[s.Scope+"\x00"+s.Name]:
+			// One unibox has sbx keep is the env's or sandbox's below.
+			row("sbx sandbox "+s.Scope, s.Name, "sbx")
+		}
+	}
+	for _, name := range sortedKeys(m.Config.Envs) {
+		for _, service := range sortedKeys(m.Config.Envs[name].Secrets) {
+			row("env "+name, service, ownText(m.Config.Envs[name].Secrets[service]))
+		}
+	}
+	for _, name := range sortedKeys(m.Config.Sandboxes) {
+		for _, service := range sortedKeys(m.Config.Sandboxes[name].Secrets) {
+			row("sandbox "+name, service, ownText(m.Config.Sandboxes[name].Secrets[service]))
+		}
+	}
+	// Which each sandbox takes is what it would be told it has.
+	boxes := map[string][]string{}
+	for _, name := range sortedKeys(state.Sandboxes) {
+		b := state.Sandboxes[name]
+		if b.Env != "" {
+			boxes[b.Env] = append(boxes[b.Env], name)
+		}
+	}
+	for _, envName := range sortedKeys(m.Config.Envs) {
+		env, err := m.Config.LoadEnv(envName)
+		if err != nil {
+			skipped = append(skipped, envName)
+			continue
+		}
+		names, made := boxes[envName], true
+		if len(names) == 0 {
+			names, made = []string{env.SandboxName()}, false
+		}
+		for _, sandbox := range names {
+			needed, err := m.NeededSecrets(ctx, env, sandbox)
+			if err != nil {
+				skipped = append(skipped, envName)
+				break
+			}
+			who := sandbox
+			if !made {
+				who += " (not made)"
+			}
+			for _, l := range needed {
+				var r *SecretUse
+				switch {
+				case !l.Stored:
+					r = row("", l.Service, "missing")
+				case l.Variable != "":
+					scope, _, _ := strings.Cut(l.Scope, ", ")
+					if scope != "global" {
+						scope = "sbx sandbox " + scope
+					}
+					r = row(scope, l.Variable, "variable")
+				case l.Own != "":
+					r = row(l.Scope, l.Service, l.Own)
+				case l.Scope == "global":
+					r = row("global", l.Service, "sbx")
+				default:
+					r = row("sbx sandbox "+l.Scope, l.Service, "sbx")
+				}
+				if !slices.Contains(r.UsedBy, who) {
+					r.UsedBy = append(r.UsedBy, who)
+				}
+				r.Needed = r.Needed || !l.Optional
+			}
+		}
+	}
+	for _, key := range order {
+		out = append(out, *rows[key])
+	}
+	// By service, then from the widest scope to the narrowest.
+	rank := func(scope string) int {
+		switch {
+		case scope == "global":
+			return 0
+		case strings.HasPrefix(scope, "env "):
+			return 1
+		case scope == "":
+			return 4
+		case strings.HasPrefix(scope, "sbx "):
+			return 3
+		}
+		return 2
+	}
+	slices.SortStableFunc(out, func(a, b SecretUse) int {
+		return cmp.Or(cmp.Compare(a.Service, b.Service), cmp.Compare(rank(a.Scope), rank(b.Scope)), cmp.Compare(a.Scope, b.Scope))
+	})
+	return out, slices.Compact(skipped), nil
 }

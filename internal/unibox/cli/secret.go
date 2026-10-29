@@ -69,7 +69,14 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 		})
 		return env, l, err
 	}
-	c.AddCommand(&cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List the tokens an env needs and whether sbx has each", RunE: func(cmd *cobra.Command, args []string) error {
+	var overview bool
+	ls := &cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List the tokens an env needs and whether sbx has each, or with --all every token kept", RunE: func(cmd *cobra.Command, args []string) error {
+		if overview {
+			if envFlag != "" || sandboxFlag != "" {
+				return fmt.Errorf("--all lists every env's and sandbox's tokens; leave out -e and -s")
+			}
+			return o.secretOverview(cmd)
+		}
 		env, list, err := needed(cmd)
 		if err != nil {
 			return err
@@ -91,7 +98,9 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", l.Service, stored, needed, cmp.Or(l.Description, strings.Join(l.Kits, ", "), "the env's bindings"))
 		}
 		return w.Flush()
-	}})
+	}}
+	ls.Flags().BoolVarP(&overview, "all", "a", false, "Every token kept, global, an env's or a sandbox's, and the sandboxes that take each")
+	c.AddCommand(ls)
 	var command, scopeFlag string
 	var all, generate, envOnly bool
 	set := &cobra.Command{Use: "set [service...]", Short: "Have sbx store the tokens an env lacks, or those named", RunE: func(cmd *cobra.Command, args []string) error {
@@ -251,7 +260,11 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	_ = rm.Flags().MarkHidden("env-only")
 	c.AddCommand(rm)
 	c.Args = cobra.NoArgs
+	c.Flags().BoolVarP(&overview, "all", "a", false, "Every token kept, global, an env's or a sandbox's, and the sandboxes that take each")
 	c.RunE = func(cmd *cobra.Command, args []string) error {
+		if overview {
+			return o.runStep(cmd, "secret", "ls", "--all")
+		}
 		ls := func() error { return o.runStep(cmd, append([]string{"secret", "ls"}, envArgs(envFlag)...)...) }
 		if !o.interactive || o.json {
 			return ls()
@@ -435,4 +448,45 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		return o.success(fmt.Sprintf("%s takes its own %s token, kept in %s", scope, service, unibox.KeychainName()))
 	}
 	return o.success(fmt.Sprintf("%s takes its own %s token, which sbx reads with %s", scope, service, command))
+}
+
+// secretOverview lists every token kept, and every one a sandbox needs
+// that is kept nowhere, with the sandboxes that take each, so what uses
+// what is seen at once.
+func (o *options) secretOverview(cmd *cobra.Command) error {
+	if err := o.manager.SBX.Available(cmd.Context()); err != nil {
+		return err
+	}
+	var uses []unibox.SecretUse
+	var skipped []string
+	err := o.waiting("reading every env's kits", func() (err error) {
+		uses, skipped, err = o.manager.SecretOverview(cmd.Context())
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if o.json {
+		return o.write(map[string]any{"api_version": api.Version, "secrets": uses, "skipped_envs": skipped})
+	}
+	for _, e := range skipped {
+		fmt.Fprintf(o.log, "env %s is left out: its files cannot be read; unibox doctor says why\n", e)
+	}
+	if len(uses) == 0 {
+		fmt.Fprintln(o.output, "no token is kept, and no sandbox needs one")
+		return nil
+	}
+	w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "SERVICE\tSCOPE\tKEPT\tUSED BY")
+	for _, u := range uses {
+		used := strings.Join(u.UsedBy, ", ")
+		switch {
+		case used == "":
+			used = "-"
+		case u.Kept == "missing" && u.Needed:
+			used += " (needed)"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Service, cmp.Or(u.Scope, "-"), u.Kept, used)
+	}
+	return w.Flush()
 }

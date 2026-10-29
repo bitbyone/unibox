@@ -156,6 +156,24 @@ the macOS keychain asks for the github token of sandbox personal; it goes there,
 Moved back to global, a token sbx has no global one of is asked for at
 once.
 
+## Which sandbox takes which
+
+`unibox secret --all` lists every token kept, in every scope, with the
+sandboxes that take it - and those a sandbox needs that are kept nowhere:
+
+```term
+$ unibox secret --all
+SERVICE    SCOPE             KEPT      USED BY
+anthropic  global            sbx       personal, team
+github     global            sbx       team
+github     sandbox personal  keychain  personal
+gitlab     -                 missing   team (needed)
+npm        global            sbx       -
+```
+
+A sandbox an env would make and has not yet is named with `(not made)`.
+`--json` gives the same for a program.
+
 ## One name, two hosts
 
 sbx keeps one token a service name. If two teams' kits both name a

@@ -1228,3 +1228,52 @@ esac
 		t.Fatalf("%v %s", left, calls(t, asked))
 	}
 }
+
+func TestSecretAllShowsEveryTokenAndTheSandboxesThatTakeIt(t *testing.T) {
+	log := fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	// sbx keeps anthropic for every sandbox and npm, which none needs; one
+	// sandbox reads its own gitlab token, the other has none.
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "secrets"), []byte("anthropic\nnpm\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["team"] = api.Sandbox{Name: "team", Env: "team", State: "running"}
+		s.Sandboxes["personal"] = api.Sandbox{Name: "personal", Env: "team", State: "running"}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := paths.LoadConfig()
+	cfg.Sandboxes = map[string]unibox.SandboxConfig{"personal": {Secrets: map[string]unibox.EnvSecret{"gitlab": {Command: "pass gitlab-mine"}}}}
+	if err := paths.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, paths, "", "secret", "--all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := []string{}
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n")[1:] {
+		lines = append(lines, strings.Join(strings.Fields(l), " "))
+	}
+	want := []string{
+		"anthropic global sbx personal, team",
+		"gitlab sandbox personal command personal",
+		"gitlab - missing team (needed)",
+		"npm global sbx -",
+	}
+	if !slices.Equal(lines, want) {
+		t.Fatalf("%q\n%s", lines, out)
+	}
+	if _, _, err := run(t, paths, "", "secret", "ls", "--all", "-e", "team"); err == nil {
+		t.Fatal("--all took an env")
+	}
+	if out, _, err = run(t, paths, "", "secret", "ls", "-a", "--json"); err != nil || !strings.Contains(out, `"used_by": [`) {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}

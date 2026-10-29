@@ -118,8 +118,8 @@ env repo's over the global one. A value starting with
 ### `unibox secret`
 
 ```
-unibox secret [-e <env>] [-s <sandbox>]
-unibox secret ls [-e <env>] [-s <sandbox>]
+unibox secret [-e <env>] [-s <sandbox>] [-a]
+unibox secret ls [-e <env>] [-s <sandbox>] [-a]
 unibox secret set [service...] [-e <env>] [-s <sandbox>] [--all] [-g] [--command <cmd>] [--scope global|env|sandbox]
 unibox secret rm <service...> [-e <env>] [-s <sandbox>] [--scope global|env|sandbox]
 ```
@@ -137,6 +137,10 @@ under `secrets:` in its `unibox.yaml` files.
 | `-g`, `--generate` | open the page where a new token is made without asking, then ask for it |
 | `--command <cmd>` | store a command sbx runs on the host for the token; one service |
 | `--scope <scope>` | `global` (default), sbx's for every sandbox; `env`, the env's sandboxes' own; `sandbox`, one sandbox's own (`-s`, default the env's), over its env's. Without `--command` the system's keychain asks for it and keeps it |
+
+`-a`, `--all` lists instead every token kept - global, each env's and
+each sandbox's, and those sbx keeps for one sandbox - and every one a
+sandbox needs that is kept nowhere, each with the sandboxes that take it.
 
 `rm --scope env|sandbox` gives the scope the token over it again, and
 takes out of the keychain what unibox stored there. A sandbox removed
