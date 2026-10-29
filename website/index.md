@@ -23,8 +23,8 @@ sandbox again and brings its tasks back.
   creates the sandbox.
 - **Many tasks, one sandbox.** Each task is its own repositories, branch
   and agent. `unibox resume feature-oauth` brings that task back, and the
-  agent carries on its last conversation there. The task outlives even a
-  full recreate of its sandbox.
+  agent carries on its last conversation there - even after a full
+  recreate of its sandbox.
 - **Your checkout or a fresh clone.** A task mounts the directory you
   work in, or, for maximum isolation, clones from the forge, so the agent
   never touches your files. Per repository.

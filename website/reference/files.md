@@ -16,6 +16,7 @@ default to these, on Windows too:
 | `~/.cache/unibox/args/` | the args and resources files for one `sbx env create`, removed after |
 | `~/.cache/unibox/kits/` | what `sbx kit inspect` said of the env's kits |
 | `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |
+| `~/.local/share/unibox/conversations/<task>.tar.gz` | the task's agents' conversations, kept after each session and before a recreate (mode `0600`); removed with the task |
 
 ### `config.yaml`
 

@@ -104,6 +104,14 @@ with `--resume` and the id of its last session there, as its own
 had one there, and start afresh when they had none; `--new` starts them
 afresh. opencode starts afresh each time.
 
+A conversation lives in the agent's home in the sandbox, which a recreate
+or sbx losing the sandbox would take with it. So after each session, and
+before a recreate, unibox keeps the task's conversations on your computer
+(`~/.local/share/unibox/conversations/<task>.tar.gz`), and puts them back
+when it prepares the task in a sandbox made anew. Only the task's own go
+there and back: those of its directory and its repositories', never
+another task's. They are removed with the task.
+
 ## Another agent on the same task
 
 `--agent` resumes a task with another agent the sandbox has; the task

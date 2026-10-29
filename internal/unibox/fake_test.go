@@ -397,7 +397,7 @@ kits:
 `)
 	write(t, filepath.Join(root, "kits", "agent", "agent.yaml"), "kind: sandbox\n")
 	write(t, filepath.Join(root, "kits", "git", "git.yaml"), "kind: mixin\n")
-	paths := Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	paths := Paths{Config: t.TempDir(), Cache: t.TempDir(), Data: t.TempDir()}
 	var log bytes.Buffer
 	t.Cleanup(func() {
 		if t.Failed() {

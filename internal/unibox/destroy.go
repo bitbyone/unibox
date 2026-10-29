@@ -40,6 +40,7 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 			if err := m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil }); err != nil {
 				return err
 			}
+			m.forgetConversations(s.Sandboxes[name].Tasks...)
 			fmt.Fprintf(m.Log, "forgot sandbox %s, which unibox adopted; sbx rm %s removes it\n", name, name)
 			continue
 		}
@@ -138,6 +139,7 @@ func (m *Manager) Prune(ctx context.Context) ([]string, error) {
 				found = found || v.Name == name
 			}
 			if !found && len(s.Sandboxes[name].Runs) == 0 {
+				m.forgetConversations(s.Sandboxes[name].Tasks...)
 				delete(s.Sandboxes, name)
 				gone = append(gone, name)
 			}

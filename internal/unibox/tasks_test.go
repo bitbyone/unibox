@@ -982,6 +982,72 @@ func TestResumeContinuesTheAgentsLastConversationInTheTask(t *testing.T) {
 	}
 }
 
+func TestATasksConversationsOutliveARecreateOfItsSandbox(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	bin, seen := t.TempDir(), filepath.Join(t.TempDir(), "agent")
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" > "+Quote(seen)+"\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	run := func(req Request) string {
+		t.Helper()
+		if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(seen)
+		return strings.TrimSpace(string(b))
+	}
+	for _, task := range []string{"pricing", "pricing-2"} {
+		run(Request{Sandbox: "dev", Task: task, Author: "Person <person@example.com>", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}}})
+	}
+	// The fake runs the guest's /work and home in directories of its own.
+	home := filepath.Join(f.root, "dev", "home")
+	conversation := func(task string) string {
+		dir := filepath.Join(f.root, "dev", "work", task, "payments")
+		return filepath.Join(home, ".claude", "projects", regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(dir, "-"), "s.jsonl")
+	}
+	write(t, conversation("pricing"), "pricing's\n")
+	write(t, conversation("pricing-2"), "pricing-2's\n")
+	// A session's end keeps its task's conversations, and only its own,
+	// though another task's directory begins with its name.
+	run(Request{Task: "pricing"})
+	listed, err := exec.Command("tar", "-tzf", m.Paths.conversationsFile("pricing")).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(listed), filepath.Base(filepath.Dir(conversation("pricing")))) || strings.Contains(string(listed), "pricing-2") {
+		t.Fatalf("%s", listed)
+	}
+	// A recreate keeps every task's before the sandbox goes, and the tasks
+	// get them back.
+	if err := m.Recreate(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range []string{"pricing", "pricing-2"} {
+		if b, err := os.ReadFile(conversation(task)); err != nil || string(b) != task+"'s\n" {
+			t.Fatalf("%s: %q %v", task, b, err)
+		}
+	}
+	if args := run(Request{Task: "pricing"}); args != "--dangerously-skip-permissions --continue" {
+		t.Fatalf("%q", args)
+	}
+	// What the host kept goes with the task.
+	if _, err := os.Stat(m.Paths.conversationsFile("pricing")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove(ctx, "dev", "pricing", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(m.Paths.conversationsFile("pricing")); !os.IsNotExist(err) {
+		t.Fatalf("the kept conversations stayed: %v", err)
+	}
+}
+
 func TestCodexContinuesASessionRecordedInItsDirectory(t *testing.T) {
 	t.Parallel()
 	a := FindAgent("codex")

@@ -773,7 +773,12 @@ stop a sandbox under it.
 - **A change of the env is told, not asked about, and not applied**:
   doctor and the next start say the env changed since the sandbox was
   made, and the user recreates when they choose. Recreating discards what
-  the sandbox holds outside its tasks, so it is never done unasked.
+  the sandbox holds outside its tasks, so it is never done unasked. The
+  agents' conversations of each task are not discarded: kept on the host
+  after every session and before the sandbox goes, they are put back as
+  the task is prepared again, so resume continues them. Each agent finds
+  its last conversation by the directory it had, so a task's are those of
+  its directory and its repositories', and no other task's.
 - **The worked-on repositories choose nothing of the sandbox.**
 
 ## Unibox

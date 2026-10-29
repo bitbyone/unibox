@@ -130,7 +130,11 @@ about it. Keep command output short: pipe through `head`, `tail` or
   one there, tested in the guest before it starts; `--new` starts it
   afresh. copilot's `--continue` takes the last session of the whole
   sandbox, so its test finds the id of the directory's own, which
-  `sessionArg` puts in its `--resume=`.
+  `sessionArg` puts in its `--resume=`. The conversations go with the
+  sandbox's home, so a task's own (of its directory and its repositories',
+  compared whole) are kept on the host after each session and before a
+  recreate (`conversations.go`), and put back when the task is prepared
+  in a sandbox made anew; they go with the task.
 - **Task names are unique across sandboxes**, so a task alone finds its
   sandbox (`unibox resume <task>`).
 - **init starts from the team's repository** (`cli/init.go`): the

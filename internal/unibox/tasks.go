@@ -401,6 +401,7 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(prepareScript(t))}), m.Log); err != nil {
 			return b, t, nil, nil, err
 		}
+		m.restoreConversations(ctx, b, t)
 		t.State = "ready"
 	} else if err = m.remount(ctx, b, t); err != nil {
 		return b, t, nil, nil, err
@@ -564,12 +565,13 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		taskLock.Close()
 		return err
 	}
-	// A task asked to go goes once its session is over and its lock is
-	// let go, before an idle sandbox is stopped; one with work the forge
-	// lacks stays, and says so.
-	var after func()
+	// Once the session is over, its conversations are kept on the host. A
+	// task asked to go goes then, once its lock is let go, before an idle
+	// sandbox is stopped; one with work the forge lacks stays, and says so.
+	after := func() { m.keepConversations(ctx, b, t) }
 	if req.Remove {
 		after = func() {
+			m.keepConversations(ctx, b, t)
 			if err := m.removeTask(context.WithoutCancel(ctx), b.Name, t.ID, false); err != nil {
 				fmt.Fprintf(m.Log, "task %s kept: %v; unibox task rm %s removes it once its work is safe\n", t.ID, err, t.ID)
 				return
@@ -790,6 +792,7 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 	if err = m.Paths.State(func(s *State) error { delete(s.Sandboxes, name); return nil }); err != nil {
 		return err
 	}
+	m.forgetConversations(b.Tasks...)
 	// Resources and network rules given to this sandbox alone go with it.
 	if err = m.forgetNetwork(name); err != nil {
 		return err
@@ -875,12 +878,16 @@ func (m *Manager) removeTask(ctx context.Context, name, task string, force bool)
 	}
 	// Only this task's record goes; a session started meanwhile in another
 	// task of the sandbox has recorded its run in the same state.
-	return m.Paths.State(func(s *State) error {
+	if err = m.Paths.State(func(s *State) error {
 		box := s.Sandboxes[name]
 		box.Tasks = slices.DeleteFunc(box.Tasks, func(t api.Task) bool { return t.ID == task })
 		s.Sandboxes[name] = box
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	m.forgetConversations(removed)
+	return nil
 }
 
 // mounts are a task's mounted repositories: each host directory and the

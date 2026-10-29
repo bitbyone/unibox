@@ -47,7 +47,7 @@ func TestCloneURLsLoseCredentialsAndAmbiguousSSHIsRefused(t *testing.T) {
 
 func TestStateWritesDoNotLoseConcurrentTasks(t *testing.T) {
 	t.Parallel()
-	paths := Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	paths := Paths{Config: t.TempDir(), Cache: t.TempDir(), Data: t.TempDir()}
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
 	for i := 0; i < 20; i++ {

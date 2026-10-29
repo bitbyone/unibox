@@ -52,7 +52,8 @@ does not ask again for host commands it was shown before.
 
 This removes the sandbox and creates it again from the env as it is now.
 Tasks come back: mounts are mounted again, clones are cloned again from the
-forge. Anything else in the sandbox, such as installed packages or Docker
+forge, and the agents' conversations are put back, so a resumed task
+carries on where it was. Anything else in the sandbox, such as installed packages or Docker
 images, is lost. It refuses while a session runs or a clone has unpushed
 work.
 

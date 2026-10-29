@@ -454,6 +454,10 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 		if err = m.safeBox(ctx, *b); err != nil {
 			return err
 		}
+		// What its tasks' agents said goes with it; the host keeps it.
+		for _, t := range b.Tasks {
+			m.keepConversations(ctx, *b, t)
+		}
 		fmt.Fprintf(m.Log, "removing sandbox %s to create it again from env %s\n", b.Name, env.Name)
 		if err = m.removeBox(ctx, *b); err != nil {
 			return err
@@ -730,6 +734,7 @@ func (m *Manager) restoreTasks(ctx context.Context, b *api.Sandbox) error {
 		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(prepareScript(b.Tasks[i]))}), m.Log); err != nil {
 			return err
 		}
+		m.restoreConversations(ctx, *b, b.Tasks[i])
 		b.Tasks[i].State = "ready"
 		if err := m.saveBox(*b); err != nil {
 			return err

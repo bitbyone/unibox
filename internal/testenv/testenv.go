@@ -30,6 +30,7 @@ var Tools = []string{
 	"mkdir", "rm", "rmdir", "mv", "cp", "ln", "touch", "chmod", "ls", "pwd",
 	"head", "tail", "grep", "sed", "tr", "cut", "wc", "sort", "tee",
 	"dirname", "basename", "readlink", "date", "kill", "du", "find",
+	"tar", "gzip",
 }
 
 // Main runs a package's tests in an environment of their own.

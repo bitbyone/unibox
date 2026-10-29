@@ -21,10 +21,13 @@ there), its clones, its Docker - and any host directory a task mounts.
 | --- | --- |
 | a mounted directory's files and `.git` | at once, on your disk |
 | a clone's commits | pushed to the forge, fetched by you |
+| the agents' conversations of a task | copied after each session to `~/.local/share/unibox/conversations/` (mode `0600`), to be put back after a recreate |
 | ports | published on `127.0.0.1` only |
 | network requests | through sbx's proxy, under its policy |
 
-Nothing of the sandbox is mounted on the host.
+Nothing of the sandbox is mounted on the host. Tokens never reach a
+conversation, as the agent sees placeholders only, but what was said in
+one - code, a pasted log - is kept on your disk until the task is removed.
 
 ## Tokens
 
