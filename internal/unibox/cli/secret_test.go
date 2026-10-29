@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1157,7 +1158,7 @@ func TestAnEnvsOwnTokenIsACommandInConfigYaml(t *testing.T) {
 	if cfg, _ := paths.LoadConfig(); cfg.Envs["team"].Secrets["anthropic"].Command != "pass anthropic-team" {
 		t.Fatalf("%+v", cfg.Envs["team"])
 	}
-	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team"); err != nil || !strings.Contains(out, "env team, config.yaml") {
+	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team"); err != nil || !strings.Contains(out, "env team, command") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if _, _, err := run(t, paths, "", "secret", "rm", "anthropic", "-e", "team", "--env-only"); err != nil {
@@ -1165,5 +1166,65 @@ func TestAnEnvsOwnTokenIsACommandInConfigYaml(t *testing.T) {
 	}
 	if cfg, _ := paths.LoadConfig(); cfg.Envs["team"].Secrets != nil {
 		t.Fatalf("%+v", cfg.Envs["team"])
+	}
+}
+
+func TestASandboxsOwnTokenIsTypedIntoTheKeychainAndGoesWithIt(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the stand-in is Linux's secret-tool")
+	}
+	fakeSBX(t)
+	// secret-tool keeps an item as a file of the keyring's, and says what
+	// it was asked.
+	keyring := t.TempDir()
+	asked := filepath.Join(t.TempDir(), "asked")
+	bin := t.TempDir()
+	if err := testenv.WriteExecutable(filepath.Join(bin, "secret-tool"), []byte(`#!/bin/sh
+echo "$*" >> `+unibox.Quote(asked)+`
+item=$(echo "$3" | tr / _)
+case "$1" in
+store) item=$(echo "$5" | tr / _); cat > `+unibox.Quote(keyring)+`/"$item" ;;
+lookup) cat `+unibox.Quote(keyring)+`/"$item" ;;
+clear) rm -f `+unibox.Quote(keyring)+`/"$item" ;;
+esac
+`)); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "set", "gitlab", "-e", "team", "-s", "personal", "--scope", "sandbox"); err == nil || !strings.Contains(err.Error(), "on a terminal") {
+		t.Fatalf("%v", err)
+	}
+	t.Setenv("ACCESSIBLE", "1")
+	if _, said, err := runAt(t, paths, "personal-token\n", "secret", "set", "gitlab", "-e", "team", "-s", "personal", "--scope", "sandbox"); err != nil || !strings.Contains(said, "not through unibox") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	cfg, _ := paths.LoadConfig()
+	own := cfg.Sandboxes["personal"].Secrets["gitlab"]
+	if own.Keychain != "sandbox/personal/gitlab" || own.Command != "secret-tool lookup 'unibox' 'sandbox/personal/gitlab'" {
+		t.Fatalf("%+v", cfg.Sandboxes)
+	}
+	// The command config.yaml keeps reads what was typed, as sbx will.
+	if b, err := exec.Command("sh", "-c", own.Command).Output(); err != nil || string(b) != "personal-token\n" {
+		t.Fatalf("%v %q", err, b)
+	}
+	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team", "-s", "personal"); err != nil || !strings.Contains(out, "sandbox personal, keychain") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// The env's other sandboxes do not take it.
+	if out, _, err := run(t, paths, "", "secret", "ls", "-e", "team"); err != nil || strings.Contains(out, "personal") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "secret", "rm", "gitlab", "-e", "team", "-s", "personal", "--scope", "sandbox"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Sandboxes != nil {
+		t.Fatalf("%+v", cfg.Sandboxes)
+	}
+	if left, _ := os.ReadDir(keyring); len(left) != 0 || !strings.Contains(calls(t, asked), "clear unibox sandbox/personal/gitlab") {
+		t.Fatalf("%v %s", left, calls(t, asked))
 	}
 }

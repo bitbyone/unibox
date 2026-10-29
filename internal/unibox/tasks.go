@@ -776,6 +776,9 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 	if err = m.forgetNetwork(name); err != nil {
 		return err
 	}
+	if err = m.forgetSecrets(ctx, name); err != nil {
+		return err
+	}
 	if v, err := m.Paths.LoadEnvValues(); err == nil && v.SandboxResources[name] != (Resources{}) {
 		return m.Paths.SetSandboxResources(name, Resources{})
 	}

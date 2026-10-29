@@ -113,21 +113,48 @@ subscription is signed in from Claude Code, with `/login`: Docker's Claude
 kit manages api.anthropic.com and keeps the sign-in through sbx's proxy.
 `unibox secret rm <service>` has sbx forget a service's token.
 
-## A token of one env's own
+## A token of an env's or a sandbox's own
 
-Tokens are global: every sandbox takes the same. To give one env's
-sandboxes another - a second Copilot account for work, say - keep it as a
-command on your machine that prints it:
+Tokens are global unless told otherwise: every sandbox takes the same. A
+token can instead be one env's sandboxes' own - a second Copilot account
+for work - or one sandbox's own, over its env's: a personal sandbox with
+your own GitHub token beside the team's. The narrowest wins: the
+sandbox's, then the env's, then the global one.
 
 ```sh
-unibox secret set copilot -e my2n-dev --env-only --command 'security find-generic-password -s copilot-2n -w'
-unibox secret rm copilot -e my2n-dev --env-only       # the global one again
+unibox secret set github -s personal --scope sandbox     # typed into the keychain
+unibox secret set copilot -e my2n-dev --scope env --command 'pass copilot-2n'
+unibox secret rm github -s personal --scope sandbox      # the env's or global one again
 ```
 
-The command goes to `config.yaml`, under `envs.<env>.secrets`, where it
-can be edited by hand. unibox has sbx keep it as the token of each of the
-env's sandboxes, set again at every start: a recreate takes a sandbox's
-own tokens away, and a changed command is applied.
+Typed in, the token goes to your system's keychain, asked for by its own
+program on your terminal, never through unibox: `security` and the login
+keychain on macOS, `secret-tool` and the Secret Service (GNOME Keyring,
+KWallet) on Linux - `libsecret-tools` on Debian and Ubuntu - and on
+Windows PowerShell, which encrypts it for your account alone (DPAPI). sbx
+is given the command that reads it, so `--command` with a command of
+your own works the same.
+
+The command goes to `config.yaml`, under `envs.<env>.secrets` or
+`sandboxes.<sandbox>.secrets`, where it can be edited by hand. unibox has
+sbx keep it as the token of each sandbox it is for, set again at every
+start: a recreate takes a sandbox's own tokens away, and a changed
+command is applied. Removed with `rm --scope`, or with the sandbox, what
+unibox stored in the keychain goes too.
+
+In `unibox secret` at a terminal, `s` moves the token under the cursor:
+
+```term
+$ unibox secret -s personal
+[dim]...[/]
+[blue]?[/] [b]Where sandbox personal takes the github token from[/]  sandbox personal: its own, over its env's
+[blue]?[/] [b]How the github token of sandbox personal is kept[/]  typed in; it goes into the macOS keychain
+the macOS keychain asks for the github token of sandbox personal; it goes there, not through unibox
+[dim](security's prompt for the value)[/]
+```
+
+Moved back to global, a token sbx has no global one of is asked for at
+once.
 
 ## One name, two hosts
 

@@ -456,9 +456,20 @@ replaces.
   (`TokenGuides`). Before sbx asks, `secret set` offers to open the page
   in the browser; `--generate` opens it without asking. The page is all
   unibox hands over: the token is still typed into sbx.
-- **Always global.** `sbx env rm` deletes a sandbox's own secrets with
-  the sandbox, so a token stored for one sandbox would be lost at the
-  first recreation. unibox never stores one per sandbox.
+- **Global, or a command a scope keeps.** `sbx env rm` deletes a
+  sandbox's own secrets with the sandbox, so a token stored for one
+  sandbox would be lost at the first recreation. A token of an env's or
+  a sandbox's own is therefore a command in config.yaml, which unibox has
+  sbx keep for each sandbox again at every start; the sandbox's wins over
+  the env's, the env's over the global one. A value typed for one goes to
+  the system's keychain by its own program, asked on the terminal -
+  `security add-generic-password -w` on macOS, `secret-tool store` on
+  Linux, `Read-Host -AsSecureString` into a DPAPI-encrypted file on
+  Windows, which has no Credential Manager command that prints a secret -
+  and the command kept reads it, so the value never passes through
+  unibox. Not yet checked against real sbx on Windows: how sbx runs a
+  `--command` there decides whether the PowerShell read needs other
+  quoting.
 - **sbx asks once to bind a credential** at the first `create` (verified);
   unibox writes no bindings. unibox 1 wrote `~/.config/sbx/credentials.yaml`
   itself because sbx 0.47 asked nothing and injected a kit's credential

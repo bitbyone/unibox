@@ -35,6 +35,9 @@ envs:
       adrs: {default: off}        # only switches a team's repository
     secrets:                      # tokens of this env's sandboxes alone, read by a command
       copilot: {command: security find-generic-password -s copilot-2n -w}
+      github:                     # typed into the keychain by unibox secret set --scope env
+        command: security find-generic-password -s 'unibox' -a 'env/dev/github' -w
+        keychain: env/dev/github
     instructions: |               # yours for this env's tasks' agents
       Use the staging database.
 ports:                            # yours, for every env
@@ -49,9 +52,12 @@ env_repos:                        # yours for every env of one env repository:
       spec: https://github.com/acme/spec.git
     instructions: |
       Tickets are in Jira project ACME.
-sandboxes:                        # unibox network rules
+sandboxes:                        # one sandbox's own, dropped with it
+  personal:
+    secrets:                      # its tokens, over its env's and the global ones
+      github: {command: pass github-personal}
   dev:
-    network:
+    network:                      # unibox network rules
       - allow: jitpack.io
       - allow: stun.example.com:3478
         protocol: udp

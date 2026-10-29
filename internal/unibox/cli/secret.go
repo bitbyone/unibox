@@ -3,7 +3,6 @@ package cli
 import (
 	"cmp"
 	"fmt"
-	"maps"
 	"os/exec"
 	"runtime"
 	"slices"
@@ -22,7 +21,7 @@ import (
 // are sbx's secrets: unibox reads which are stored, never a value, and has
 // sbx ask for a missing one on the person's own terminal.
 func (o *options) secretCommand() *cobra.Command {
-	var envFlag string
+	var envFlag, sandboxFlag string
 	c := &cobra.Command{Use: "secret", Short: "The tokens an env's sandboxes use, kept by sbx", Long: `An env's kits declare the services they take a token for, and its
 bindings name the hosts each token may reach. The tokens are sbx's secrets,
 stored once on this machine and used by every sandbox that needs them; the
@@ -34,14 +33,25 @@ through unibox - or with --command stores a command sbx runs on the host
 for it, a keychain read say. Before sbx asks, set offers to open the page
 where a new token is made, when it knows one: GitHub's for github and
 copilot, and what the team names under secrets: in its unibox.yaml files;
---generate opens it without asking.`, Example: `  unibox secret ls -e dev
+--generate opens it without asking.
+
+A token is global unless --scope says otherwise: env gives the env's
+sandboxes one of their own, sandbox one sandbox (-s) its own over its
+env's. Typed in, unibox has the system's keychain ask for it and keep it -
+security on macOS, secret-tool on Linux, PowerShell on Windows - and sbx
+reads it from there at every start; --command gives a command of yours
+instead. rm --scope gives the scope the token over it again. Alone at a
+terminal, s in the list moves a token between the scopes.`, Example: `  unibox secret ls -e dev
   unibox secret set -e dev
+  unibox secret set github -s personal --scope sandbox
+  unibox secret rm github -s personal --scope sandbox
   unibox secret set copilot --generate
   unibox secret set copilot --command 'security find-generic-password -s copilot -w'
   security find-generic-password -s artifactory -w | unibox secret set artifactory`}
 	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
+	c.PersistentFlags().StringVarP(&sandboxFlag, "sandbox", "s", "", "Sandbox whose tokens to show or keep (default: the env's)")
 	needed := func(cmd *cobra.Command) (unibox.Env, []unibox.NeededSecret, error) {
-		name, err := o.envName(envFlag)
+		name, err := o.secretEnv(envFlag, sandboxFlag)
 		if err != nil {
 			return unibox.Env{}, nil, err
 		}
@@ -54,7 +64,7 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 		}
 		var l []unibox.NeededSecret
 		err = o.waiting("reading the kits of env "+env.Name, func() (err error) {
-			l, err = o.manager.NeededSecrets(cmd.Context(), env, "")
+			l, err = o.manager.NeededSecrets(cmd.Context(), env, sandboxFlag)
 			return err
 		})
 		return env, l, err
@@ -74,10 +84,7 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "SERVICE\tSTORED\tNEEDED\tFOR")
 		for _, l := range list {
-			stored, needed := "no", "yes"
-			if l.Stored {
-				stored = l.Scope
-			}
+			stored, needed := storedText(l), "yes"
 			if l.Optional {
 				needed = "optional"
 			}
@@ -85,7 +92,7 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 		}
 		return w.Flush()
 	}})
-	var command string
+	var command, scopeFlag string
 	var all, generate, envOnly bool
 	set := &cobra.Command{Use: "set [service...]", Short: "Have sbx store the tokens an env lacks, or those named", RunE: func(cmd *cobra.Command, args []string) error {
 		env, list, err := needed(cmd)
@@ -103,19 +110,15 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 				return o.success(fmt.Sprintf("sbx has every token env %s needs", env.Name))
 			}
 		}
-		if envOnly {
-			// The env's own token: a command in config.yaml, which unibox
-			// has sbx keep for each of the env's sandboxes.
-			if command == "" || len(args) != 1 {
-				return fmt.Errorf("--env-only keeps one service's token as a command for the env's sandboxes alone; name the service and give --command")
+		scope, err := o.secretScope(env, scopeFlag, envOnly, sandboxFlag)
+		if err != nil {
+			return err
+		}
+		if scope != (unibox.SecretScope{}) {
+			if len(args) != 1 {
+				return fmt.Errorf("--scope %s keeps one service's token; name the service", scopeFlag)
 			}
-			if err := o.setEnvSecret(env.Name, args[0], command); err != nil {
-				return err
-			}
-			if err := o.manager.SyncEnvSecrets(cmd.Context(), env.Name); err != nil {
-				return err
-			}
-			return o.success(fmt.Sprintf("env %s's sandboxes take their own %s token, which sbx reads with %s", env.Name, args[0], command))
+			return o.setOwnSecret(cmd, env, scope, args[0], command, generate)
 		}
 		if command != "" && len(services) != 1 {
 			return fmt.Errorf("--command stores one service's token; name the service")
@@ -181,24 +184,32 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 	set.Flags().StringVar(&command, "command", "", "A command sbx runs on the host for the token, instead of asking for it")
 	set.Flags().BoolVar(&all, "all", false, "Ask for the optional tokens too")
 	set.Flags().BoolVarP(&generate, "generate", "g", false, "Open the page where a new token is made, then ask for it")
-	set.Flags().BoolVar(&envOnly, "env-only", false, "Give this env's sandboxes a token of their own, read by --command, kept in config.yaml")
+	set.Flags().StringVar(&scopeFlag, "scope", "global", "global, the one sbx keeps for every sandbox; env, the env's sandboxes' own; sandbox, one sandbox's own (-s)")
+	set.Flags().BoolVar(&envOnly, "env-only", false, "The same as --scope env")
+	_ = set.Flags().MarkHidden("env-only")
 	c.AddCommand(set)
 	var rmEnvOnly bool
-	rm := &cobra.Command{Use: "rm service...", Args: cobra.MinimumNArgs(1), Short: "Have sbx forget a service's global token, however it was stored", RunE: func(cmd *cobra.Command, args []string) error {
+	var rmScope string
+	rm := &cobra.Command{Use: "rm service...", Args: cobra.MinimumNArgs(1), Short: "Have sbx forget a service's global token, or a scope its own", RunE: func(cmd *cobra.Command, args []string) error {
 		env, _, err := needed(cmd)
 		if err != nil {
 			return err
 		}
-		if rmEnvOnly {
+		scope, err := o.secretScope(env, rmScope, rmEnvOnly, sandboxFlag)
+		if err != nil {
+			return err
+		}
+		if scope != (unibox.SecretScope{}) {
 			for _, service := range args {
-				if err := o.setEnvSecret(env.Name, service, ""); err != nil {
+				if err := o.manager.RemoveOwnSecret(cmd.Context(), scope, env.Name, service); err != nil {
 					return err
 				}
 			}
-			if err := o.manager.SyncEnvSecrets(cmd.Context(), env.Name); err != nil {
-				return err
+			over := "global"
+			if scope.Sandbox != "" && len(env.Config.Secrets) > 0 {
+				over = "env's or the global"
 			}
-			return o.success(fmt.Sprintf("env %s's sandboxes take the global %s token again", env.Name, strings.Join(args, ", ")))
+			return o.success(fmt.Sprintf("%s takes the %s %s token again", scope, over, strings.Join(args, ", ")))
 		}
 		guides, err := unibox.TokenGuides(env.Config.Files)
 		if err != nil {
@@ -235,7 +246,9 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 		}
 		return o.success("sbx forgot the tokens of " + strings.Join(slices.Compact(removed), ", "))
 	}}
-	rm.Flags().BoolVar(&rmEnvOnly, "env-only", false, "Take away the env's own token from config.yaml and its sandboxes")
+	rm.Flags().StringVar(&rmScope, "scope", "global", "global, sbx's own; env or sandbox (-s), the token kept for them, which then take the one over them")
+	rm.Flags().BoolVar(&rmEnvOnly, "env-only", false, "The same as --scope env")
+	_ = rm.Flags().MarkHidden("env-only")
 	c.AddCommand(rm)
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
@@ -243,11 +256,15 @@ copilot, and what the team names under secrets: in its unibox.yaml files;
 		if !o.interactive || o.json {
 			return ls()
 		}
-		name, err := o.envName(envFlag)
+		name, err := o.secretEnv(envFlag, sandboxFlag)
 		if err != nil {
 			return err
 		}
-		return o.secretUI(cmd, name, func() error { return o.runStep(cmd, "secret", "ls", "-e", name) })
+		listArgs := []string{"secret", "ls", "-e", name}
+		if sandboxFlag != "" {
+			listArgs = append(listArgs, "-s", sandboxFlag)
+		}
+		return o.secretUI(cmd, name, sandboxFlag, func() error { return o.runStep(cmd, listArgs...) })
 	}
 	return c
 }
@@ -339,40 +356,83 @@ func openPage(page string) error {
 	}
 }
 
-// setEnvSecret keeps in config.yaml the command an env's own token is read
-// by, or with command "" forgets it.
-func (o *options) setEnvSecret(env, service, command string) error {
-	if !unibox.ValidSecretName(service) {
-		return fmt.Errorf("%q is no service name sbx takes; use letters, digits and dashes", service)
+// secretEnv is the env whose tokens are meant: the one named, else the
+// named sandbox's, else the default.
+func (o *options) secretEnv(envFlag, sandbox string) (string, error) {
+	if envFlag == "" && sandbox != "" {
+		if state, err := o.paths.ReadState(); err == nil {
+			if b, ok := state.Sandboxes[sandbox]; ok && b.Env != "" {
+				return b.Env, nil
+			}
+		}
 	}
-	cfg, err := o.paths.LoadConfig()
-	if err != nil {
-		return err
+	return o.envName(envFlag)
+}
+
+// secretScope reads --scope: where a token is kept.
+func (o *options) secretScope(env unibox.Env, flag string, envOnly bool, sandbox string) (unibox.SecretScope, error) {
+	if envOnly {
+		flag = "env"
 	}
-	ec, ok := cfg.Envs[env]
-	if !ok {
-		return fmt.Errorf("there is no env %s; unibox env ls lists them", env)
+	switch flag {
+	case "", "global":
+		return unibox.SecretScope{}, nil
+	case "env":
+		return unibox.SecretScope{Env: env.Name}, nil
+	case "sandbox":
+		return unibox.SecretScope{Sandbox: cmp.Or(sandbox, env.SandboxName())}, nil
 	}
-	ec.Secrets = maps.Clone(ec.Secrets)
+	return unibox.SecretScope{}, fmt.Errorf("--scope is global, env or sandbox, not %s", flag)
+}
+
+// storedText says where a token an env needs is kept, or that none is.
+func storedText(l unibox.NeededSecret) string {
+	switch {
+	case !l.Stored:
+		return "no"
+	case l.Own != "":
+		return l.Scope + ", " + l.Own
+	}
+	return l.Scope
+}
+
+// setOwnSecret keeps a token of a scope's own: read by the command given,
+// or typed into the system's keychain, which its own program asks for on
+// this terminal. The page where it is made is offered first, as for a
+// global one.
+func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.SecretScope, service, command string, generate bool) error {
+	ctx := cmd.Context()
+	v := unibox.EnvSecret{Command: command}
 	if command == "" {
-		if _, had := ec.Secrets[service]; !had {
-			return fmt.Errorf("env %s has no token of its own for %s; unibox secret ls -e %s says where each comes from", env, service, env)
+		if !o.canAsk() {
+			return fmt.Errorf("the keychain asks for the %s token on a terminal; run this in one, or give --command", service)
 		}
-		delete(ec.Secrets, service)
-	} else {
-		if ec.Secrets == nil {
-			ec.Secrets = map[string]unibox.EnvSecret{}
+		if err := unibox.KeychainAvailable(); err != nil {
+			return err
 		}
-		ec.Secrets[service] = unibox.EnvSecret{Command: command}
+		guides, err := unibox.TokenGuides(env.Config.Files)
+		if err != nil {
+			return err
+		}
+		way, err := o.offerTokenPage(service, guides[service], generate)
+		if err != nil {
+			return err
+		}
+		if way.SignIn || way.Agent || way.Env != "" {
+			return fmt.Errorf("%s is kept by sbx itself, which keeps it for every sandbox alike; give %s a token of its own, typed in or with --command", way.Name, scope)
+		}
+		item := unibox.KeychainItem(scope, service)
+		fmt.Fprintf(o.log, "%s asks for the %s token of %s; it goes there, not through unibox\n", unibox.KeychainName(), service, scope)
+		if err := o.paths.KeychainStore(ctx, item, "unibox: the "+service+" token of "+scope.String(), o.input, o.output, o.log); err != nil {
+			return err
+		}
+		v = unibox.EnvSecret{Command: o.paths.KeychainCommand(item), Keychain: item}
 	}
-	if len(ec.Secrets) == 0 {
-		ec.Secrets = nil
-	}
-	cfg.Envs = maps.Clone(cfg.Envs)
-	cfg.Envs[env] = ec
-	if err := o.paths.SaveConfig(cfg); err != nil {
+	if err := o.manager.SetOwnSecret(ctx, scope, env.Name, service, v); err != nil {
 		return err
 	}
-	o.manager.Config = cfg
-	return nil
+	if v.Keychain != "" {
+		return o.success(fmt.Sprintf("%s takes its own %s token, kept in %s", scope, service, unibox.KeychainName()))
+	}
+	return o.success(fmt.Sprintf("%s takes its own %s token, which sbx reads with %s", scope, service, command))
 }

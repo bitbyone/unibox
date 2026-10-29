@@ -98,11 +98,17 @@ about it. Keep command output short: pipe through `head`, `tail` or
   applied only by `sandbox recreate`, which brings the tasks back.
   `--adopt` takes over a sandbox made with sbx, which unibox then removes
   only when forced.
-- **Secrets are sbx's secrets, always global.** `unibox secret` reads which
-  services an env needs from its kits (`sbx kit inspect`, with
-  `--kit-arg` from the env's values) and bindings, compares them with
-  `sbx secret ls`, and has `sbx secret set` store the rest. A sandbox's
-  own secrets go with `sbx env rm`, so unibox never makes one.
+- **Secrets are sbx's secrets, global unless a scope says otherwise.**
+  `unibox secret` reads which services an env needs from its kits (`sbx
+  kit inspect`, with `--kit-arg` from the env's values) and bindings,
+  compares them with `sbx secret ls`, and has `sbx secret set` store the
+  rest. A token of an env's or a sandbox's own (`--scope`, `s` in the
+  list) is a command in config.yaml (`envs.<env>.secrets`,
+  `sandboxes.<name>.secrets`, the narrowest winning), which `syncSecrets`
+  has sbx keep as each sandbox's own at every start, as a recreate takes
+  those away. Typed in, it goes to the system's keychain through its own
+  program (`keychain.go`: security, secret-tool, PowerShell with DPAPI),
+  which asks on the terminal, and the command reads it from there.
 - **A task mounts by default.** Directories go to `/work/<task>/<repo>`
   through `sbx mount`; the agent can write the host's `.git`, which is
   told once per directory (`State.Mounted`). `task rm` unmounts, checks

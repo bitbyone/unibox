@@ -197,7 +197,7 @@ func (m *Manager) updateNetwork(sandbox string, change func([]HostRule) []HostRu
 	}
 	s := c.Sandboxes[sandbox]
 	s.Network = change(slices.Clone(s.Network))
-	if len(s.Network) == 0 {
+	if s.empty() {
 		delete(c.Sandboxes, sandbox)
 	} else {
 		c.Sandboxes[sandbox] = s

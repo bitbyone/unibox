@@ -30,7 +30,12 @@ type SandboxConfig struct {
 	// Network are hosts they let the sandbox reach, or keep it from, over
 	// what its env's kits and the runtime's defaults say.
 	Network []HostRule `yaml:"network,omitempty" json:"network,omitempty"`
+	// Secrets are tokens this sandbox takes apart from its env's other
+	// sandboxes, over its env's own and the global ones, as an env's are.
+	Secrets map[string]EnvSecret `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 }
+
+func (s SandboxConfig) empty() bool { return len(s.Network) == 0 && len(s.Secrets) == 0 }
 
 // HostRule allows or denies one host, over tcp unless Protocol says udp
 // or tcp,udp.

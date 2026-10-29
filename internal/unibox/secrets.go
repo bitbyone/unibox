@@ -41,8 +41,12 @@ type NeededSecret struct {
 	Stored bool     `json:"stored"`
 	// Domains are the hosts the kits have the token sent to.
 	Domains []string `json:"domains,omitempty"`
-	// Scope is where the token is stored: global, or a sandbox's name.
+	// Scope is where the token is stored: global, a sandbox's name, or
+	// the env or the sandbox config.yaml keeps it for, as "env dev" or
+	// "sandbox dev"; Own says how those keep it, by a command or in the
+	// keychain.
 	Scope string `json:"scope,omitempty"`
+	Own   string `json:"own,omitempty"`
 	// Page is where the token is made, and Hint what to make there.
 	Page string `json:"page,omitempty"`
 	Hint string `json:"hint,omitempty"`
@@ -234,9 +238,13 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 			}
 		}
 		// The env's own, which unibox has sbx keep for each of its
-		// sandboxes, stands before a global one.
+		// sandboxes, stands before a global one, and the sandbox's own
+		// before the env's.
 		if c, ok := env.Config.Secrets[service]; ok && c.Command != "" {
-			l.Stored, l.Scope = true, "env "+env.Name+", config.yaml"
+			l.Stored, l.Scope, l.Own = true, "env "+env.Name, ownText(c)
+		}
+		if c, ok := m.Config.Sandboxes[sandbox].Secrets[service]; ok && c.Command != "" {
+			l.Stored, l.Scope, l.Own = true, "sandbox "+sandbox, ownText(c)
 		}
 		// A token kept the way a subscription's is, in a variable, stands
 		// for the service's.
@@ -379,13 +387,177 @@ func SecretClashes(needed map[string][]NeededSecret) []SecretClash {
 	return out
 }
 
+// ownText says how a token of an env's or a sandbox's own is kept.
+func ownText(s EnvSecret) string {
+	if s.Keychain != "" {
+		return "keychain"
+	}
+	return "command"
+}
+
+// SecretScope is where a token of a service is kept: the global one sbx
+// keeps for every sandbox, with neither said; an env's own, for each of
+// its sandboxes; or one sandbox's own, over its env's.
+type SecretScope struct{ Env, Sandbox string }
+
+func (s SecretScope) String() string {
+	switch {
+	case s.Sandbox != "":
+		return "sandbox " + s.Sandbox
+	case s.Env != "":
+		return "env " + s.Env
+	}
+	return "global"
+}
+
+// ownSecrets are the tokens a sandbox of env takes as its own: its env's,
+// and its own over them.
+func (c Config) ownSecrets(env Env, sandbox string) map[string]EnvSecret {
+	out := maps.Clone(env.Config.Secrets)
+	if out == nil {
+		out = map[string]EnvSecret{}
+	}
+	maps.Copy(out, c.Sandboxes[sandbox].Secrets)
+	return out
+}
+
+// OwnSecret is the token of a service a scope keeps, if it keeps one.
+func (c Config) OwnSecret(s SecretScope, service string) (EnvSecret, bool) {
+	var own map[string]EnvSecret
+	switch {
+	case s.Sandbox != "":
+		own = c.Sandboxes[s.Sandbox].Secrets
+	case s.Env != "":
+		own = c.Envs[s.Env].Secrets
+	}
+	v, ok := own[service]
+	return v, ok
+}
+
+// SetOwnSecret keeps in config.yaml the command a scope's token is read
+// by, over one it had - taking out of the keychain an item unibox stored
+// for it that the new one does not read - and has sbx keep it for the
+// sandboxes it is for. env is the env whose sandboxes those are.
+func (m *Manager) SetOwnSecret(ctx context.Context, s SecretScope, env, service string, v EnvSecret) error {
+	if !ValidSecretName(service) {
+		return fmt.Errorf("%q is no service name sbx takes; use letters, digits and dashes", service)
+	}
+	if strings.TrimSpace(v.Command) == "" {
+		return fmt.Errorf("say the command that prints the %s token", service)
+	}
+	was, _ := m.Config.OwnSecret(s, service)
+	if err := m.updateOwnSecrets(s, func(own map[string]EnvSecret) error { own[service] = v; return nil }); err != nil {
+		return err
+	}
+	if was.Keychain != "" && was.Keychain != v.Keychain {
+		if err := m.Paths.KeychainRemove(ctx, was.Keychain); err != nil {
+			return err
+		}
+	}
+	return m.SyncOwnSecrets(ctx, env, s.Sandbox)
+}
+
+// RemoveOwnSecret has a scope take its token of a service from the scope
+// over it again: a sandbox its env's or the global one, an env the global
+// one. What unibox stored in the keychain for it goes too.
+func (m *Manager) RemoveOwnSecret(ctx context.Context, s SecretScope, env, service string) error {
+	was, ok := m.Config.OwnSecret(s, service)
+	if !ok {
+		return fmt.Errorf("%s keeps no %s token of its own; unibox secret ls says where each comes from", s, service)
+	}
+	if err := m.updateOwnSecrets(s, func(own map[string]EnvSecret) error { delete(own, service); return nil }); err != nil {
+		return err
+	}
+	if was.Keychain != "" {
+		if err := m.Paths.KeychainRemove(ctx, was.Keychain); err != nil {
+			return err
+		}
+	}
+	return m.SyncOwnSecrets(ctx, env, s.Sandbox)
+}
+
+// forgetSecrets drops the tokens kept for a sandbox that is removed, and
+// what unibox stored in the keychain for them.
+func (m *Manager) forgetSecrets(ctx context.Context, sandbox string) error {
+	own := m.Config.Sandboxes[sandbox].Secrets
+	if len(own) == 0 {
+		return nil
+	}
+	if err := m.updateOwnSecrets(SecretScope{Sandbox: sandbox}, func(o map[string]EnvSecret) error { clear(o); return nil }); err != nil {
+		return err
+	}
+	for _, service := range slices.Sorted(maps.Keys(own)) {
+		if own[service].Keychain != "" {
+			if err := m.Paths.KeychainRemove(ctx, own[service].Keychain); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// updateOwnSecrets changes a scope's tokens in config.yaml.
+func (m *Manager) updateOwnSecrets(s SecretScope, change func(map[string]EnvSecret) error) error {
+	c, err := m.Paths.LoadConfig()
+	if err != nil {
+		return err
+	}
+	var own map[string]EnvSecret
+	switch {
+	case s.Sandbox != "":
+		own = c.Sandboxes[s.Sandbox].Secrets
+	case s.Env != "":
+		ec, ok := c.Envs[s.Env]
+		if !ok {
+			return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", s.Env)
+		}
+		own = ec.Secrets
+	default:
+		return fmt.Errorf("a global token is sbx's; unibox secret set stores it")
+	}
+	own = maps.Clone(own)
+	if own == nil {
+		own = map[string]EnvSecret{}
+	}
+	if err := change(own); err != nil {
+		return err
+	}
+	if len(own) == 0 {
+		own = nil
+	}
+	if s.Sandbox != "" {
+		c.Sandboxes = maps.Clone(c.Sandboxes)
+		if c.Sandboxes == nil {
+			c.Sandboxes = map[string]SandboxConfig{}
+		}
+		box := c.Sandboxes[s.Sandbox]
+		box.Secrets = own
+		if box.empty() {
+			delete(c.Sandboxes, s.Sandbox)
+		} else {
+			c.Sandboxes[s.Sandbox] = box
+		}
+	} else {
+		c.Envs = maps.Clone(c.Envs)
+		ec := c.Envs[s.Env]
+		ec.Secrets = own
+		c.Envs[s.Env] = ec
+	}
+	if err := m.Paths.SaveConfig(c); err != nil {
+		return err
+	}
+	m.Config = c
+	return nil
+}
+
 // syncSecrets has sbx keep, as the sandbox's own, each token its env's
-// config.yaml names a command for, and forget those it no longer names. A
+// config.yaml or its own names a command for, and forget those it no
+// longer names. A
 // recreate takes a sandbox's own tokens away, and a person may change a
 // command by hand, so each is set again when sbx lacks it for the sandbox
 // or the command is not the one set last.
 func (m *Manager) syncSecrets(ctx context.Context, b *api.Sandbox, env Env) error {
-	want := env.Config.Secrets
+	want := m.Config.ownSecrets(env, b.Name)
 	if len(want) == 0 && len(b.Secrets) == 0 {
 		return nil
 	}
@@ -423,9 +595,10 @@ func (m *Manager) syncSecrets(ctx context.Context, b *api.Sandbox, env Env) erro
 	return nil
 }
 
-// SyncEnvSecrets applies an env's own tokens to every sandbox unibox made
-// from it that sbx still has, as config.yaml says them now.
-func (m *Manager) SyncEnvSecrets(ctx context.Context, envName string) error {
+// SyncOwnSecrets applies an env's own tokens and its sandboxes' to every
+// sandbox unibox made from it that sbx still has, or to the one named, as
+// config.yaml says them now.
+func (m *Manager) SyncOwnSecrets(ctx context.Context, envName, sandbox string) error {
 	env, err := m.Config.LoadEnv(envName)
 	if err != nil {
 		return err
@@ -436,7 +609,7 @@ func (m *Manager) SyncEnvSecrets(ctx context.Context, envName string) error {
 	}
 	for _, name := range slices.Sorted(maps.Keys(state.Sandboxes)) {
 		b := state.Sandboxes[name]
-		if b.Env != envName || b.State == "missing" || b.State == "creating" {
+		if b.Env != envName || sandbox != "" && name != sandbox || b.State == "missing" || b.State == "creating" {
 			continue
 		}
 		guard, err := m.guard(name)

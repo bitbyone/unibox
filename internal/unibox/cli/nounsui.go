@@ -3,6 +3,7 @@ package cli
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -23,7 +24,7 @@ func (o *options) reloadConfig() error {
 // secretUI is unibox secret at a terminal: the tokens an env needs, each to
 // have sbx store. sbx asks for a token on the terminal itself, so storing
 // one leaves the list for it.
-func (o *options) secretUI(cmd *cobra.Command, envName string, leave func() error) error {
+func (o *options) secretUI(cmd *cobra.Command, envName, sandbox string, leave func() error) error {
 	ctx := cmd.Context()
 	env, err := o.manager.Config.LoadEnv(envName)
 	if err != nil {
@@ -32,21 +33,26 @@ func (o *options) secretUI(cmd *cobra.Command, envName string, leave func() erro
 	if err = o.manager.SBX.Available(ctx); err != nil {
 		return err
 	}
+	// The scopes are those of the sandbox the list is for: the one named,
+	// else the env's.
+	sandbox = cmp.Or(sandbox, env.SandboxName())
+	target := []string{"-e", env.Name, "-s", sandbox}
 	build := func() (listModel, error) {
-		list, err := o.manager.NeededSecrets(ctx, env, "")
+		if err := o.reloadConfig(); err != nil {
+			return listModel{}, err
+		}
+		list, err := o.manager.NeededSecrets(ctx, env, sandbox)
 		if err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: "tokens env " + env.Name + " needs", header: []string{"SERVICE", "STORED", "NEEDED", "FOR"}, actions: []listAction{
+		m := listModel{title: "tokens sandbox " + sandbox + " of env " + env.Name + " needs", header: []string{"SERVICE", "STORED", "NEEDED", "FOR"}, actions: []listAction{
 			{key: "enter", name: "set", help: "store"},
 			{key: "g", name: "generate", help: "generate a new token"},
 			{key: "c", name: "command", help: "store a command for it"},
+			{key: "s", name: "scope", help: "global, env or sandbox"},
 		}}
 		for _, l := range list {
-			stored, needed := "no", "yes"
-			if l.Stored {
-				stored = l.Scope
-			}
+			stored, needed := storedText(l), "yes"
 			if l.Optional {
 				needed = "optional"
 			}
@@ -56,6 +62,9 @@ func (o *options) secretUI(cmd *cobra.Command, envName string, leave func() erro
 		return m, nil
 	}
 	act := func(action, service string) (string, error) {
+		if action == "scope" {
+			return o.moveSecret(cmd, env, sandbox, service, target)
+		}
 		if action == "command" {
 			command, err := o.askText("The command sbx runs on the host for the "+service+" token", "A keychain read, say; it prints the token", "", func(s string) error {
 				if strings.TrimSpace(s) == "" {
@@ -339,4 +348,81 @@ func (o *options) askCreate(envName string) ([]string, error) {
 		}
 	}
 	return args, nil
+}
+
+// moveSecret moves a token between the scopes a sandbox takes it from:
+// the global one sbx keeps, its env's own, or its own. One moved to a
+// scope of its own is typed into the keychain or read by a command; one
+// moved back to the global is asked for when sbx has none.
+func (o *options) moveSecret(cmd *cobra.Command, env unibox.Env, sandbox, service string, target []string) (string, error) {
+	cfg := o.manager.Config
+	current := "global"
+	if _, ok := cfg.OwnSecret(unibox.SecretScope{Sandbox: sandbox}, service); ok {
+		current = "sandbox"
+	} else if _, ok := cfg.OwnSecret(unibox.SecretScope{Env: env.Name}, service); ok {
+		current = "env"
+	}
+	picks := []pick{}
+	for _, p := range []pick{
+		{"global", "global: the one sbx keeps for every sandbox"},
+		{"env", "env " + env.Name + ": its sandboxes' own"},
+		{"sandbox", "sandbox " + sandbox + ": its own, over its env's"},
+	} {
+		if p.value != current {
+			picks = append(picks, p)
+		}
+	}
+	to, err := o.askPick("Where sandbox "+sandbox+" takes the "+service+" token from", "Now: "+current, picks, picks[0].value)
+	if err != nil {
+		return "", err
+	}
+	scopeArgs := func(scope string) []string { return append([]string{"--scope", scope}, target...) }
+	if to == "global" {
+		if _, err := o.quietStep(cmd, append([]string{"secret", "rm", service}, scopeArgs(current)...)...); err != nil {
+			return "", err
+		}
+		secrets, err := o.manager.SBX.Secrets(cmd.Context())
+		if err != nil {
+			return "", err
+		}
+		if slices.ContainsFunc(secrets, func(s unibox.Secret) bool { return s.Scope == "global" && s.Name == service }) {
+			return "sandbox " + sandbox + " takes the global " + service + " token", nil
+		}
+		// None to fall back on: sbx asks for it now.
+		if err := o.runStep(cmd, append([]string{"secret", "set", service}, target...)...); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+	how, err := o.askPick("How the "+service+" token of "+to+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[to]+" is kept", "", []pick{
+		{"keychain", "typed in; it goes into " + unibox.KeychainName()},
+		{"command", "a command on this machine that prints it"},
+	}, "keychain")
+	if err != nil {
+		return "", err
+	}
+	args := append([]string{"secret", "set", service}, scopeArgs(to)...)
+	if how == "command" {
+		command, err := o.askText("The command sbx runs on the host for the "+service+" token", "A keychain read, say; it prints the token", "", func(s string) error {
+			if strings.TrimSpace(s) == "" {
+				return fmt.Errorf("say the command")
+			}
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+		args = append(args, "--command", command)
+	}
+	// The keychain's program asks on the terminal, so the step has it.
+	if err := o.runStep(cmd, args...); err != nil {
+		return "", err
+	}
+	if current != "global" {
+		// Moved, not copied: the scope it came from takes the one over it.
+		if _, err := o.quietStep(cmd, append([]string{"secret", "rm", service}, scopeArgs(current)...)...); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
 }

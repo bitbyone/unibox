@@ -386,7 +386,7 @@ func TestAnEnvsOwnTokenIsKeptForEachOfItsSandboxes(t *testing.T) {
 	f.calls = nil
 	f.mu.Unlock()
 	setSecrets(map[string]EnvSecret{"copilot": {Command: "pass copilot-2n"}})
-	if err := m.SyncEnvSecrets(ctx, "dev"); err != nil {
+	if err := m.SyncOwnSecrets(ctx, "dev", ""); err != nil {
 		t.Fatal(err)
 	}
 	if !called("secret set copilot --sandbox dev --command pass copilot-2n") {
@@ -394,7 +394,7 @@ func TestAnEnvsOwnTokenIsKeptForEachOfItsSandboxes(t *testing.T) {
 	}
 	// Taken out of config.yaml, sbx forgets it for the sandbox.
 	setSecrets(nil)
-	if err := m.SyncEnvSecrets(ctx, "dev"); err != nil {
+	if err := m.SyncOwnSecrets(ctx, "dev", ""); err != nil {
 		t.Fatal(err)
 	}
 	if !called("secret rm copilot --sandbox dev") {
@@ -418,5 +418,48 @@ func TestSBXSettingsInConfigAreSetBeforeASandboxStarts(t *testing.T) {
 	// An unsaid setting is left to sbx.
 	if len(f.called("settings set")) != 1 {
 		t.Fatalf("%v", f.calls)
+	}
+}
+
+func TestASandboxsOwnTokenStandsOverItsEnvsAndGoesWithIt(t *testing.T) {
+	m, f := managerFixture(t)
+	called := func(want string) bool { return len(f.called(want)) > 0 }
+	ctx := context.Background()
+	ec := m.Config.Envs["dev"]
+	ec.Secrets = map[string]EnvSecret{"github": {Command: "pass github-work"}}
+	m.Config.Envs["dev"] = ec
+	if err := m.Paths.SaveConfig(m.Config); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"dev", "personal"} {
+		if _, err := m.Create(ctx, Request{Sandbox: name, Env: "dev"}, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.SetOwnSecret(ctx, SecretScope{Sandbox: "personal"}, "dev", "github", EnvSecret{Command: "pass github-mine"}); err != nil {
+		t.Fatal(err)
+	}
+	if !called("secret set github --sandbox personal --command pass github-mine") || !called("secret set github --sandbox dev --command pass github-work") {
+		t.Fatalf("%v", f.calls)
+	}
+	if b, _ := m.sandbox("personal"); b.Secrets["github"] != "pass github-mine" {
+		t.Fatalf("%v", b.Secrets)
+	}
+	// Taken back, the sandbox takes its env's again.
+	if err := m.RemoveOwnSecret(ctx, SecretScope{Sandbox: "personal"}, "dev", "github"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := m.sandbox("personal"); b.Secrets["github"] != "pass github-work" {
+		t.Fatalf("%v", b.Secrets)
+	}
+	// One kept for a sandbox that is removed goes with it.
+	if err := m.SetOwnSecret(ctx, SecretScope{Sandbox: "personal"}, "dev", "github", EnvSecret{Command: "pass github-mine"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove(ctx, "personal", "", true); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := m.Paths.LoadConfig(); len(c.Sandboxes["personal"].Secrets) != 0 {
+		t.Fatalf("%+v", c.Sandboxes)
 	}
 }

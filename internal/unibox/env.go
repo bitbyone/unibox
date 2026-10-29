@@ -32,6 +32,10 @@ type EnvConfig struct {
 // EnvSecret is how an env's own token is read on the host.
 type EnvSecret struct {
 	Command string `yaml:"command" json:"command"`
+	// Keychain is the item of the system's keychain unibox stored the
+	// token in, which Command reads and which goes with the token; ""
+	// for a command of the person's own.
+	Keychain string `yaml:"keychain,omitempty" json:"keychain,omitempty"`
 }
 
 // Env is an env with what its files say.
