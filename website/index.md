@@ -11,8 +11,7 @@ everyday work in them frictionless.
 
 It is a thin layer on top of sbx. The sandbox, its isolation, the proxy
 that keeps tokens out of it and the network policy stay sbx's own; unibox
-adds the conveniences sbx leaves out, from tasks you return to by name to
-lists you work in with a single key.
+adds the conveniences sbx leaves out.
 
 ## Why use it
 
