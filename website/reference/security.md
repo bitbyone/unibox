@@ -57,7 +57,7 @@ run git all the time.
   agent configure.
 - **A cloned task keeps it out.** You get its work by `git fetch`, which
   carries objects and refs, not config or hooks.
-- unibox writes nothing into a host `.git`; a mount's author and hook come
+- Unibox writes nothing into a host `.git`; a mount's author and hook come
   from the sandbox's global git config.
 - The git unibox runs on your machine - to read a checkout's branch and
   origin, switch or push its branch, check a branch on the forge - runs
@@ -79,7 +79,7 @@ force-push, delete.
 
 ## Your SSH agent
 
-sbx can forward your SSH agent into sandboxes. unibox refuses to run while
+sbx can forward your SSH agent into sandboxes. Unibox refuses to run while
 sbx forwards it and you have not decided. `unibox init` asks (recommending
 no); `unibox config set ssh_agent true|false` decides later and sets sbx
 to match.

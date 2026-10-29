@@ -1,7 +1,7 @@
 # Network
 
 A sandbox reaches the hosts sbx's policy allows, the hosts the env's kits
-add, and the rules added for that sandbox. sbx enforces all of it. unibox
+add, and the rules added for that sandbox. sbx enforces all of it. Unibox
 adds the list of what the sandbox was refused lately, rules per sandbox
 kept across a recreate, and a way to hand rules back to the team's kits.
 

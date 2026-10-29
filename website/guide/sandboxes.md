@@ -124,5 +124,5 @@ reuse its name. Adopt it instead:
 unibox sandbox create --adopt dev -e dev
 ```
 
-unibox then adds tasks to it, but never recreates it, and removes it only
+Unibox then adds tasks to it, but never recreates it, and removes it only
 with `--force`.

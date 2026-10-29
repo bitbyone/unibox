@@ -2,7 +2,7 @@
 
 ## Where it stands
 
-unibox 2 (2026-10-25) is a thin layer over Docker Sandboxes (sbx). A
+Unibox 2 (2026-10-25) is a thin layer over Docker Sandboxes (sbx). A
 team describes its sandboxes in its own repository, as sbx's env files
 (`*.sbxenv.yaml`) and kits v3; unibox takes any such env as it is and adds
 only what sbx does not do: each person's values for the env's args, the
@@ -14,7 +14,7 @@ have unibox commands. Using the same files with plain `sbx env create`
 still works; unibox is never a condition, and nothing it adds to a team's
 repository limits someone without it.
 
-unibox 1 had a format of its own (profiles, `sandbox.yaml`), templates,
+Unibox 1 had a format of its own (profiles, `sandbox.yaml`), templates,
 image builds, generated kits and a second runtime; the sbxenv files and
 kits now say all of that, and it is gone. [From unibox 1](#from-unibox-1)
 says what went and why; [sbx-pivot.md](sbx-pivot.md) is the plan of the
@@ -44,10 +44,10 @@ secrets, and picks the work.
 
 ## Two programs
 
-unibox is a program and a repository of its own, usable alone; **unagit
+Unibox is a program and a repository of its own, usable alone; **unagit
 is a UI over it** and one of its users.
 
-- They share no code. unibox imports nothing of unagit's; unagit runs the
+- They share no code. Unibox imports nothing of unagit's; unagit runs the
   unibox binary and reads its `--json`, whose types are
   `internal/unibox/api`, versioned by `api_version` in every object (2
   since unibox 2: a sandbox names its env, not a profile).
@@ -126,7 +126,7 @@ What crosses the line between the machine and the VM:
   not want unibox runs `sbx env create` with the same files.
 - **What sbx can say, unibox does not repeat**: image, tools, agent,
   network policy, mounts of the team's, resources and credential bindings
-  are the env's and its kits'. unibox 1 said them in a format of its own
+  are the env's and its kits'. Unibox 1 said them in a format of its own
   and turned them into sbx flags and generated kits; once sbxenv and kits
   v3 could say all of it, the second format was only a second place for
   the same facts.
@@ -220,7 +220,7 @@ your checkout  <── git pull ───┐       /work/<task>/<repo>  a clone 
   stays safe however the agent behaves. This was unibox 1's only way, and
   stays for work the host's checkout should not be exposed to.
 - **The cost**: what the agent has not pushed is not seen on the host.
-- unibox takes the clone URLs from `origin` (credentials stripped, an ssh
+- Unibox takes the clone URLs from `origin` (credentials stripped, an ssh
   URL turned into https where the host is plain), or `--repo <https
   URL>`. It never pushes on its own: a branch the forge does not have is
   refused ("push it first"), unless `--push` asks it to run the user's
@@ -254,7 +254,7 @@ your checkout  <── git pull ───┐       /work/<task>/<repo>  a clone 
 - **Another runtime.** unibox 1 kept a runtime-neutral profile and an
   experimental second runtime (microsandbox) to show it carried over. It
   cost a format, a translation per runtime and features only one runtime
-  had; nobody used the second. unibox 2 builds on sbx alone.
+  had; nobody used the second. Unibox 2 builds on sbx alone.
 
 ## Sandboxes and VMs
 
@@ -297,7 +297,7 @@ no proof its guest process did.
    the user can read, under unibox's cache, for `--env-args-file`, removed
    as soon as sbx is done; then `sbx env create --name <sandbox>
    --env-args-file <file> <files...>` runs **on the user's terminal**, as
-   sbx asks there to approve the env's bindings and host commands. unibox
+   sbx asks there to approve the env's bindings and host commands. Unibox
    never passes `--force` for the user. The sandbox's state is
    `creating` until it is ready, so a creation that stopped - refused,
    interrupted - is tried again by the next `create` or `run`, and when
@@ -335,7 +335,7 @@ create` does steps 1 to 6 with no task.
 A sandbox sbx has under the name an env gives, which unibox did not
 create, is not taken over silently: a run refuses with
 `sandbox_taken`. `unibox sandbox create --adopt <name> -e <env>` records
-it, readies it and reads its agent. unibox then adds tasks to it but never
+it, readies it and reads its agent. Unibox then adds tasks to it but never
 recreates it, `sandbox rm` removes it only with `--force`, and `destroy`
 only forgets it - it was made by someone else's hand.
 
@@ -471,7 +471,7 @@ replaces.
   `--command` there decides whether the PowerShell read needs other
   quoting.
 - **sbx asks once to bind a credential** at the first `create` (verified);
-  unibox writes no bindings. unibox 1 wrote `~/.config/sbx/credentials.yaml`
+  unibox writes no bindings. Unibox 1 wrote `~/.config/sbx/credentials.yaml`
   itself because sbx 0.47 asked nothing and injected a kit's credential
   only with a binding there ([kits v3](#kits-v3-multi-agent-credentials-validated-2026-10-13));
   with bindings in the sbxenv and sbx asking, writing them would be
@@ -615,7 +615,7 @@ always. sbx 0.50 did the same for its own host git.
 one, the files each agent's documentation says it reads (Copilot's
 `/help`, Claude's and Codex's memory files; `agentInstructionFiles`), from
 the directory a session starts in, each once by its real path - Copilot,
-checked, reads a `CLAUDE.md` linked to `AGENTS.md` once. unibox's own file
+checked, reads a `CLAUDE.md` linked to `AGENTS.md` once. Unibox's own file
 is shown as the next session writes it.
 
 A task is removed while others of its sandbox work: it waits for its own
@@ -643,7 +643,7 @@ never in an sbxenv.
   back to the files. `name=HOST_PORT` keeps the named port's sandbox
   port, host address and protocol. A stopped sandbox is refused, since
   publishing would start it.
-- unibox records what it published, by name and mapping, finds sbx's
+- Unibox records what it published, by name and mapping, finds sbx's
   entries by the mapping (any host port for an ephemeral one), unpublishes
   them by what sbx lists, and **leaves a port it did not publish alone** -
   one a kit declares (`port@1`) or one published by hand with `sbx ports`.
@@ -776,7 +776,7 @@ stop a sandbox under it.
   the sandbox holds outside its tasks, so it is never done unasked.
 - **The worked-on repositories choose nothing of the sandbox.**
 
-## unibox
+## Unibox
 
 ### Its home
 
@@ -822,7 +822,7 @@ sandbox read images copied on the host.
 
 ### Platforms and releases
 
-unibox builds with `CGO_ENABLED=0` for Linux, macOS and Windows, amd64 and
+Unibox builds with `CGO_ENABLED=0` for Linux, macOS and Windows, amd64 and
 arm64. What differs per system is small and behind build tags: file locks
 are `flock` on Unix and `LockFileEx` on Windows (`lock_unix.go`,
 `lock_windows.go`), as is detaching herdr's watcher (`Setsid`, or a new
@@ -918,7 +918,7 @@ sbx's own verbs.
 ### herdr
 
 herdr recognises an agent by its pane's foreground process, and an agent
-behind `sbx exec` is not one it knows: no agent, no state. unibox fills
+behind `sbx exec` is not one it knows: no agent, no state. Unibox fills
 that in with **a herdr plugin of its own**. It is the one way; there is no
 launcher and no third-party plugin to choose instead.
 
@@ -967,7 +967,7 @@ into the VM; the state is the screen's.
 
 ### The boundary
 
-- unibox's code is `cmd/unibox` and `internal/unibox/...`, in its own
+- Unibox's code is `cmd/unibox` and `internal/unibox/...`, in its own
   repository with its own AGENTS.md. It imports nothing of unagit's.
 - unagit imports nothing of unibox's. It runs the binary and decodes
   `--json` into types of its own, written against `internal/unibox/api`
@@ -992,12 +992,12 @@ removed.
 
 - **`sbx env plan` has no JSON.** It prints text only. It does validate:
   an undeclared or missing required `--env-arg` exits 1 with the
-  argument's name and description. unibox reads `args`, `kits` and
+  argument's name and description. Unibox reads `args`, `kits` and
   `bindings` from the YAML itself, read-only, and runs `plan` only for
   its exit code and to show the user.
 - **Bindings are approved once, by the user.** A binding not yet applied
   is "present, not recorded as applied, needs your approval"; `create`
-  asks once, and `--force` approves without asking. unibox runs the
+  asks once, and `--force` approves without asking. Unibox runs the
   first create with the user's terminal and never passes `--force` on
   their behalf.
 - **The agent's command is the workload kit's.** `sbx kit inspect --json
@@ -1064,7 +1064,7 @@ mounted is harmless.
 ### Credentials and the proxy (unibox 1, sbx 0.47)
 
 Checked on throwaway sandboxes while unibox 1 wired host services (a
-forge, an Artifactory) as sbx custom secrets. unibox 2 leaves such wiring
+forge, an Artifactory) as sbx custom secrets. Unibox 2 leaves such wiring
 to the team's kits and bindings; what sbx does stays true.
 
 - A **local** custom secret only substitutes its placeholder wherever the
@@ -1184,7 +1184,7 @@ to the team's kits and bindings; what sbx does stays true.
 
 ### Kits v3: multi-agent credentials (validated 2026-10-13)
 
-unibox 1 took no kits at first; a v3 workload kit turned out to be how one
+Unibox 1 took no kits at first; a v3 workload kit turned out to be how one
 sandbox gets several agents' credentials, so it generated one. Verified by
 hand (`agent-sandboxes/_spike/personal-kit`): a local kit directory - a
 `# syntax=docker/sandbox-kit:3` descriptor beside a Dockerfile that is
@@ -1237,7 +1237,7 @@ image. Today the team writes such kits, and unibox reads them.
 
 ## From unibox 1
 
-unibox 1 had its own description of a sandbox, `sandbox.yaml` in a
+Unibox 1 had its own description of a sandbox, `sandbox.yaml` in a
 "profile", over sbx and an experimental microsandbox runtime. Once sbx's
 env files and kits v3 could say the same - image, kits, args, mounts,
 network, bindings - the profile was a second place for the team's
@@ -1260,7 +1260,7 @@ fragile code unibox had. So unibox 2 dropped:
 
 What stayed is what sbx does not do: tasks and their mounts and clones,
 the person's values, secrets checked against the kits, named ports,
-doctor, the agents' trust and co-author, herdr. unibox 2 sets the old
+doctor, the agents' trust and co-author, herdr. Unibox 2 sets the old
 state aside as `state.v1.json` and names the old sandboxes once, to be
 removed with `sbx rm` when their work is safe; config.yaml's old keys are
 read (`runtimes.sbx.ssh_agent` and `stop_idle` carry over) and dropped at

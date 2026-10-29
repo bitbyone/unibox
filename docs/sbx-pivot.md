@@ -1,9 +1,9 @@
-# unibox jako tenká nadstavba nad sbx – implementační plán
+# Unibox jako tenká nadstavba nad sbx – implementační plán
 
 ## Cíl
 
 Konfiguraci sandboxu vlastní sbx: `*.sbxenv.yaml` plus kity v3 v týmovém repu.
-unibox nemá vlastní formát. Bere libovolný sbxenv tak, jak je, a přidává jen to, co sbx neumí:
+Unibox nemá vlastní formát. Bere libovolný sbxenv tak, jak je, a přidává jen to, co sbx neumí:
 
 1. **Osobní hodnoty**: `vars.toml` → `--env-args-file`, aby se `env.args` nemusely vypisovat při každém create.
 2. **Loginy**: wizard, který zjistí, které secrety kity potřebují, a nechá je uložit přes `sbx secret set`.
@@ -12,11 +12,11 @@ unibox nemá vlastní formát. Bere libovolný sbxenv tak, jak je, a přidává 
 5. **Doctor, drift, recreate**: řekne, co chybí nebo se změnilo a co z toho plyne.
 6. **herdr** zůstane, jak je.
 
-Kdo unibox nechce, použije tytéž soubory přes čisté `sbx env create`. unibox nesmí být podmínkou.
+Kdo unibox nechce, použije tytéž soubory přes čisté `sbx env create`. Unibox nesmí být podmínkou.
 
 ## Principy
 
-- **Deterministicky pro jakýkoli sbxenv.** unibox sbxenv nemění, negeneruje ani neslučuje s vlastními soubory. Smí ho jen číst (args, kity, název) a předat sbx.
+- **Deterministicky pro jakýkoli sbxenv.** Unibox sbxenv nemění, negeneruje ani neslučuje s vlastními soubory. Smí ho jen číst (args, kity, název) a předat sbx.
 - **Žádná runtime abstrakce.** Ruší se `Runtime` a msb a zůstává konkrétní sbx klient. AGENTS.md: "Nothing above the adapter names sbx" přestává platit.
 - **Tvrdé pravidlo o loginech platí dál.** Hodnotu zadává uživatel přímo do `sbx secret set` s TTY zděděnou od uniboxu, takže unibox ji vůbec nevidí.
 - **Stav je jen uniboxu.** Tasky, mounty, runy a otisk konfigurace, ze které sandbox vznikl. Co ví sbx (`sbx ls`, `sbx secret ls`), se neduplikuje.
@@ -108,7 +108,7 @@ Výstupem fáze 0 je doplněná sekce v `docs/design.md`. Do té doby se nic nem
 
 **Hotovo (2026-10-25, sbx 0.49.2)**, podrobnosti v `docs/design.md`, sekce "sbx as the configuration":
 
-1. `plan` je jen text. unibox čte `args`, `kits` a `bindings` z YAML sám, `plan` pouští jen kvůli exit kódu (chybějící nebo neznámý arg = 1).
+1. `plan` je jen text. Unibox čte `args`, `kits` a `bindings` z YAML sám, `plan` pouští jen kvůli exit kódu (chybějící nebo neznámý arg = 1).
 2. `exec` dává agentovi stejné prostředí jako `run`, auth funguje. Příkazy se spouštějí přes bash, ne `sh` (dash nečte `BASH_ENV`).
 3. Příkaz agenta: `sbx kit inspect --json` workload kitu, `sandbox.entrypoint` + `sandbox.command.default`.
 4. Potřebné secrety: `credentials[].service` z `kit inspect --json` všech kitů (`optional` jen z YAML kitu), uložené: `sbx secret ls --json`.
@@ -239,4 +239,4 @@ Vše výše je hotové; odchylky od plánu:
 - **Agent přes `exec`:** ve fázi 0 ověřeno, že se chová jako přes `run`. Fallback (`sbx run` a `cd` přes `BASH_ENV`) zůstává, kdyby to nová verze sbx změnila.
 - **sbx se rychle mění:** `sbxList` tolerantní vůči tvaru JSON zůstává a minimální verze sbx se hlídá v doctor.
 - **Více sandboxů nad stejnou read/write Gradle cache:** zámky. Netýká se uniboxu, ale týmového repa.
-- **Kolize jmen:** sandbox založený ručně přes `sbx env create` se stejným jménem. unibox ho převezme jen s `--adopt`.
+- **Kolize jmen:** sandbox založený ručně přes `sbx env create` se stejným jménem. Unibox ho převezme jen s `--adopt`.

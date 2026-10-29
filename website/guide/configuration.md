@@ -2,7 +2,7 @@
 
 The team's repository describes the sandbox; each person adds values of
 their own. sbx has the first part in its sbxenv files and kits, and asks
-each person for the env's args. unibox keeps what it adds the same way: the
+each person for the env's args. Unibox keeps what it adds the same way: the
 team's in the repository, beside the sbx files, and yours on your machine,
 where it wins over the team's.
 

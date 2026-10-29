@@ -1,6 +1,6 @@
 # Repository Index
 
-sbx knows the workspace a sandbox is created with. unibox keeps, for each
+sbx knows the workspace a sandbox is created with. Unibox keeps, for each
 env, an index of the repositories its tasks take by name: the team's, in
 the env's repository, and each person's own. A name from the index works
 wherever a repository does.

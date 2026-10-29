@@ -4,7 +4,7 @@ title: Introduction
 
 # Introduction
 
-unibox is a command-line companion to
+Unibox is a command-line companion to
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`). It
 works with the sandboxes a team already describes for sbx, and makes
 everyday work in them frictionless.
@@ -49,12 +49,12 @@ agent-sandboxes/
 ```
 
 Every member creates the sandbox `dev` from it and runs the agent there.
-unibox needs nothing more than this.
+Unibox needs nothing more than this.
 
 ## Setting up
 
 With sbx alone, each member reads the kits to learn which tokens they
-need, and passes their own values on every command. unibox reads the same
+need, and passes their own values on every command. Unibox reads the same
 files and does it in one step: it asks for what the env needs, offers the
 page where each token is made, and runs the sbx commands.
 
@@ -76,7 +76,7 @@ unibox init https://github.com/acme/agent-sandboxes
 
 ## Working
 
-sbx gives the agent the sandbox's workspace. unibox adds tasks: each task
+sbx gives the agent the sandbox's workspace. Unibox adds tasks: each task
 is a set of repositories in the sandbox, a branch and an agent, and is
 resumed by name. Several tasks share one sandbox.
 
@@ -97,7 +97,7 @@ $ unibox task
 
 ## When the team changes the env
 
-unibox records what each sandbox was made from. When the env's files
+Unibox records what each sandbox was made from. When the env's files
 change, it says so, and recreates the sandbox with its tasks.
 
 ::: code-group

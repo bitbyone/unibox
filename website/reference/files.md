@@ -10,7 +10,7 @@ default to these, on Windows too:
 | `~/.config/unibox/config.yaml` | envs, named ports, network rules, default env, context, settings |
 | `~/.config/unibox/vars.toml` | your values for env args, and resources (mode `0600`) |
 | `~/.config/unibox/state.json` | sandboxes and what each was created from, their tasks, the directories whose mount was told |
-| `~/.config/unibox/state.v1.json` | unibox 1's state, set aside |
+| `~/.config/unibox/state.v1.json` | Unibox 1's state, set aside |
 | `~/.config/unibox/state.lock`, `locks/` | locks between concurrent unibox commands |
 | `~/.config/unibox/herdr-plugin/` | the herdr plugin, when installed |
 | `~/.cache/unibox/args/` | the args and resources files for one `sbx env create`, removed after |

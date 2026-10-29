@@ -61,7 +61,7 @@ unibox config set ssh_agent true    # needed for git over SSH in a mounted check
 **`env dev needs registryUser`** - `unibox var set -e dev registryUser jdoe`.
 
 **A token is missing, or the agent says it is not signed in** -
-`unibox secret ls`, then `unibox secret set`. unibox cannot see whether a
+`unibox secret ls`, then `unibox secret set`. Unibox cannot see whether a
 stored token has expired; store it again.
 
 **`env dev changed since sandbox dev was created`** - read the change in

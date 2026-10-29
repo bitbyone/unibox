@@ -1,6 +1,6 @@
 # Tasks
 
-sbx gives a sandbox one workspace. unibox puts any number of tasks into
+sbx gives a sandbox one workspace. Unibox puts any number of tasks into
 one sandbox instead: a task is a set of repositories at
 `/work/<task>/<repo>`, the branch they are worked on, and the agent
 working there. A task is kept until it is removed, and resumed by name.
@@ -64,7 +64,7 @@ see and asks whether to go on.
 
 ::: warning A mount gives the agent your .git
 A hook or setting the agent writes into a mounted `.git` runs on your
-machine the next time you or your editor run git there. unibox says so the
+machine the next time you or your editor run git there. Unibox says so the
 first time it mounts a directory. Use `--clone` for a repository you would
 not let the agent configure.
 :::

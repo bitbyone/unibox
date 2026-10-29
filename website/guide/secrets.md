@@ -2,7 +2,7 @@
 
 Every token a sandbox uses - the agent's login, the forge, a registry - is
 an sbx secret, kept by sbx on your machine and put into requests by its
-proxy; a sandbox sees placeholders only. unibox adds which tokens an env
+proxy; a sandbox sees placeholders only. Unibox adds which tokens an env
 needs, read from its kits, and where each one is made. It never sees a
 token's value: sbx asks for it.
 
@@ -136,7 +136,7 @@ is given the command that reads it, so `--command` with a command of
 your own works the same.
 
 The command goes to `config.yaml`, under `envs.<env>.secrets` or
-`sandboxes.<sandbox>.secrets`, where it can be edited by hand. unibox has
+`sandboxes.<sandbox>.secrets`, where it can be edited by hand. Unibox has
 sbx keep it as the token of each sandbox it is for, set again at every
 start: a recreate takes a sandbox's own tokens away, and a changed
 command is applied. Removed with `rm --scope`, or with the sandbox, what

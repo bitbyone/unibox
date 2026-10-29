@@ -1,7 +1,7 @@
 # Keeping the Env Current
 
 The team changes its repository; each person's sandbox follows when they
-choose. unibox pulls the repository and says what the change means for
+choose. Unibox pulls the repository and says what the change means for
 you.
 
 ```sh

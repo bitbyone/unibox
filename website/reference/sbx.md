@@ -2,7 +2,7 @@
 
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) does the
 work: each sandbox is a micro-VM with its own kernel, Docker Engine and
-disk, persistent until removed. unibox needs **sbx 0.50.0 or newer**,
+disk, persistent until removed. Unibox needs **sbx 0.50.0 or newer**,
 verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 
 ## Commands unibox runs
@@ -28,7 +28,7 @@ verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 | `doctor` | `sbx version`, `sbx diagnose --format json` |
 | `prune` | `sbx ls --json`, `sbx umount` of a mount no task has |
 
-unibox removes only sandboxes it created; an adopted one only with
+Unibox removes only sandboxes it created; an adopted one only with
 `--force`.
 
 ## Behaviour unibox relies on
@@ -69,5 +69,5 @@ scoped to it. sbx refuses to remove default and kit rules. Hosts are
 comma-joined, so unibox refuses a host containing a comma or whitespace or
 starting with `-`.
 
-**Lifecycle.** `sbx exec` starts a stopped VM. unibox stops a sandbox when
+**Lifecycle.** `sbx exec` starts a stopped VM. Unibox stops a sandbox when
 the last session it started there ends, unless `stop_idle` is `false`.

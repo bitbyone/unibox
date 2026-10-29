@@ -399,7 +399,7 @@ forgotten. `--all` also removes the herdr plugin and unibox's state,
 configuration and values. Tokens in sbx, env repositories and clones
 stay.
 
-## unibox itself
+## Unibox itself
 
 ### `unibox context`
 

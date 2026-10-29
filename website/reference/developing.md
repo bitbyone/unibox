@@ -9,7 +9,7 @@ read it before changing how a sandbox is created or signed in.
 
 **Never read a secret.** Never print a token, ask anyone to paste one, or
 `cat` an auth file; read key names, whether a value is set, or sbx's
-masked form. unibox never handles a value: sbx asks for it on the user's
+masked form. Unibox never handles a value: sbx asks for it on the user's
 terminal, and no token enters a sandbox.
 
 ## Build and test

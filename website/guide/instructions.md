@@ -1,7 +1,7 @@
 # Agent Instructions
 
 sbx tells an agent about the sandbox: each kit may carry guidance, which
-sbx lists in the agent's own instructions file. unibox tells it about the
+sbx lists in the agent's own instructions file. Unibox tells it about the
 task: which repositories it has, which of them it only reads, on which
 branch each one is, and what the team and you want of the env and of each
 repository.

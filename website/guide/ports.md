@@ -1,6 +1,6 @@
 # Ports
 
-sbx publishes a sandbox's ports with `sbx ports`. unibox adds names: the
+sbx publishes a sandbox's ports with `sbx ports`. Unibox adds names: the
 team lists the ports its projects listen on, each person decides which are
 on when the sandbox starts, and a running sandbox's ports are switched in
 a list. A port reaches your machine only when published, on `127.0.0.1`.

@@ -1,4 +1,4 @@
-# unibox
+# Unibox
 
 A thin layer over Docker Sandboxes (`sbx`) for running coding agents on
 your work. The team describes its sandboxes in its own repository, as
@@ -35,7 +35,7 @@ Documentation: **https://bitbyone.github.io/unibox/**
   forge, with the kit's agent running in your terminal.
 
 Tokens stay in sbx's store on the host; the sandbox sees placeholders the
-proxy replaces. unibox never reads them.
+proxy replaces. Unibox never reads them.
 
 ## Install
 
@@ -182,7 +182,7 @@ mounted among them.
 By default `run` mounts the directories you name (the current one when
 none) into the sandbox at `/work/<task>/<name>`: the agent works on your
 files and your `.git` as they are, and what it writes there - a git hook
-included - is on your machine at once. unibox says so the first time a
+included - is on your machine at once. Unibox says so the first time a
 directory is mounted. `--branch` switches your checkout first, making the
 branch from HEAD when you have none of that name. A git worktree cannot
 be mounted; mount the repository's own checkout.
@@ -263,7 +263,7 @@ running for it.
 ## Coming from unibox 1
 
 Profiles, templates, image builds, msb and the commands over them are
-gone: a team's sbxenv files and kits say all of that now. unibox 2 sets
+gone: a team's sbxenv files and kits say all of that now. Unibox 2 sets
 the old state aside as `state.v1.json` and names the old sandboxes once;
 remove them with `sbx rm` when their work is safe.
 

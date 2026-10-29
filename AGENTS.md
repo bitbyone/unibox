@@ -218,7 +218,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
   log writes. Anything new that hands the terminal on says "" first.
 - **`--rm` removes a task as `task rm` would**, after its session's lock
   is let go and before an idle sandbox stops; with work the forge lacks it
-  stays and says so. unibox's own AGENTS.md and its CLAUDE.md link are no
+  stays and says so. Unibox's own AGENTS.md and its CLAUDE.md link are no
   such work.
 - **unibox 1 is set aside, not migrated.** Its `state.json` becomes
   `state.v1.json` with the old sandboxes named once; its config.yaml keys
