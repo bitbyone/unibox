@@ -6,8 +6,8 @@ title: Introduction
 
 unibox is a command-line companion to
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`). It
-works with the sandboxes a team already describes for sbx, and makes the
-everyday work with them shorter.
+works with the sandboxes a team already describes for sbx, and makes
+everyday work in them frictionless.
 
 ## Why use it
 
