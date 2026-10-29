@@ -66,6 +66,7 @@ dependencies, with `checksums.txt` beside it. Or from a checkout, with Go
 ```sh
 git clone https://github.com/bitbyone/unibox && cd unibox
 make install            # → ~/.local/bin/unibox
+make uninstall          # removes it again
 ```
 
 `unibox --version` prints the release it was built from, `dev (<commit>)`

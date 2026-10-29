@@ -42,7 +42,9 @@ $ unibox version
 0.2
 ```
 
-Upgrade with `brew upgrade unibox` or `scoop update unibox`.
+Upgrade with `brew upgrade unibox` or `scoop update unibox`. `make
+uninstall` removes a binary `make install` put there, as when moving to
+brew; your config, state and sandboxes stay.
 
 ## Set it up
 

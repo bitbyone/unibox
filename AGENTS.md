@@ -24,6 +24,7 @@ make build             # the unibox binary
 make test              # go test -race ./...
 make test-fast         # while iterating; race before commit
 make install           # into ~/.local/bin
+make uninstall         # out of it again
 make dist VERSION=1.2  # release archives for every system, into dist/
 gofmt -l . && go vet ./...
 ```

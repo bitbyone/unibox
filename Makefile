@@ -1,6 +1,6 @@
 PREFIX ?= $(HOME)/.local
 
-.PHONY: build test test-fast install clean fmt dist
+.PHONY: build test test-fast install uninstall clean fmt dist
 
 # VERSION is the release tag on HEAD without its v, empty anywhere else,
 # where unibox --version names the commit instead.
@@ -24,6 +24,14 @@ install: build
 	@if ! cmp -s unibox "$(PREFIX)/bin/unibox" || [ ! -x "$(PREFIX)/bin/unibox" ]; then \
 		install -m 0755 unibox "$(PREFIX)/bin/unibox"; \
 		echo "installed unibox"; \
+	fi
+
+# uninstall removes only the binary install put there: config, state and
+# sandboxes stay, for unibox from brew or Scoop to carry on with.
+uninstall:
+	@if [ -e "$(PREFIX)/bin/unibox" ]; then \
+		rm -f "$(PREFIX)/bin/unibox"; \
+		echo "removed $(PREFIX)/bin/unibox"; \
 	fi
 
 # dist builds a release for every system unibox runs on, without cgo so
