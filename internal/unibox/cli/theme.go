@@ -19,6 +19,7 @@ var (
 	themeDim   = lipgloss.AdaptiveColor{Light: "245", Dark: "243"}
 	themeKey   = lipgloss.AdaptiveColor{Light: "136", Dark: "178"}
 	themeMount = lipgloss.AdaptiveColor{Light: "#C4570A", Dark: "#FF9F43"}
+	themePath  = lipgloss.AdaptiveColor{Light: "#D98A4A", Dark: "#FFC890"}
 )
 
 var (
@@ -31,6 +32,8 @@ var (
 	portErr    = lipgloss.NewStyle().Foreground(themeRed)
 	helpKey    = lipgloss.NewStyle().Foreground(themeKey)
 	repoMount  = lipgloss.NewStyle().Foreground(themeMount)
+	mountPath  = lipgloss.NewStyle().Foreground(themePath)
+	taskName   = lipgloss.NewStyle().Foreground(themeBlue)
 )
 
 // cursorMark marks the row under the cursor.

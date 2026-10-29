@@ -143,14 +143,9 @@ func (m tasksModel) View() string {
 		repos := []string{}
 		for _, repo := range r.Repositories {
 			kind, where := repoWhere(repo)
-			if repo.Mounted {
-				kind = repoMount.Render(kind)
-			} else {
-				kind = portHelp.Render(kind)
-			}
-			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default")+"  "+kind+"\t"+where)
+			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default")+"\t"+kind+":"+where)
 		}
-		cols = append(cols, []string{name, r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, "\n")})
+		cols = append(cols, []string{taskName.Render(name), r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, "\n")})
 	}
 	row := m.rows[m.cursor]
 	var foot []string
@@ -171,22 +166,19 @@ func (m tasksModel) View() string {
 	default:
 		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit")
 	}
-	header, blocks, gap := tallTable(cols, m.cursor, m.width)
+	header, blocks := tallTable(cols, m.cursor, m.width)
 	heights := []int{}
 	for _, bl := range blocks {
 		heights = append(heights, len(bl))
 	}
 	// The title, the header, the lines of how many more, the blank one,
 	// the keys and the line the cursor is left on take the rest.
-	first, end := blockWindow(heights, m.cursor, gap, listRoom(m.height, len(foot)+7))
+	first, end := blockWindow(heights, m.cursor, 0, listRoom(m.height, len(foot)+7))
 	b.WriteString(header + "\n")
 	if l := moreAbove(first); l != "" {
 		b.WriteString(l + "\n")
 	}
 	for i := first; i < end; i++ {
-		if i > first && gap > 0 {
-			b.WriteString("\n")
-		}
 		b.WriteString(strings.Join(blocks[i], "\n") + "\n")
 	}
 	if l := moreBelow(first, end, len(blocks)); l != "" {
@@ -212,10 +204,11 @@ func repoWhere(r api.Repository) (kind, where string) {
 // tallTable draws a table whose last column's cells may hold several
 // lines, each wrapped to the room the terminal leaves it - width 0 is one
 // that has not said its width: its header, and each row's lines. A line's
-// part after a tab, a path, goes on a line of its own beneath it when the
-// two do not fit, so a path is not broken where it starts. gap is the
-// blank line that sets the rows apart once one is more than a line.
-func tallTable(cols [][]string, cursor, width int) (header string, rows [][]string, gap int) {
+// part after a tab, where a repository is from, goes on a line of its own
+// beneath it when the two do not fit, so a path is not broken where it
+// starts; it is wrapped as plain text and painted after, so its colour
+// holds on every line it takes.
+func tallTable(cols [][]string, cursor, width int) (header string, rows [][]string) {
 	last := len(cols[0]) - 1
 	widths := make([]int, last)
 	for _, c := range cols {
@@ -236,24 +229,24 @@ func tallTable(cols [][]string, cursor, width int) (header string, rows [][]stri
 		}
 	}
 	cells := make([][]string, len(cols))
-	tall := false
 	for n, c := range cols {
 		for _, l := range strings.Split(c[last], "\n") {
 			head, tail, split := strings.Cut(l, "\t")
-			if !split || room == 0 || lipgloss.Width(head)+1+lipgloss.Width(tail) <= room {
-				l = strings.Replace(l, "\t", " ", 1)
+			switch {
+			case !split:
 				if room > 0 && lipgloss.Width(l) > room {
 					l = ansi.Wrap(l, room, "/ ")
 				}
 				cells[n] = append(cells[n], strings.Split(l, "\n")...)
-				continue
-			}
-			cells[n] = append(cells[n], head)
-			for _, t := range strings.Split(ansi.Wrap(tail, room-2, "/ "), "\n") {
-				cells[n] = append(cells[n], "  "+t)
+			case room == 0 || lipgloss.Width(head)+2+lipgloss.Width(tail) <= room:
+				cells[n] = append(cells[n], head+"  "+paintWhere([]string{tail})[0])
+			default:
+				cells[n] = append(cells[n], head)
+				for _, t := range paintWhere(strings.Split(ansi.Wrap(tail, room-2, "/ "), "\n")) {
+					cells[n] = append(cells[n], "  "+t)
+				}
 			}
 		}
-		tall = tall || n > 0 && len(cells[n]) > 1
 	}
 	rows = make([][]string, len(cols)-1)
 	for n, c := range cols {
@@ -288,10 +281,29 @@ func tallTable(cols [][]string, cursor, width int) (header string, rows [][]stri
 			}
 		}
 	}
-	if tall {
-		gap = 1
+	return header, rows
+}
+
+// paintWhere colours where a repository is from, as kind:path wrapped into
+// pieces: a mount orange, its path a lighter orange on every piece, as the
+// agent writes into it; a clone's kind dimmed.
+func paintWhere(pieces []string) []string {
+	out := make([]string, len(pieces))
+	mounted := strings.HasPrefix(pieces[0], "mount:")
+	for i, p := range pieces {
+		switch {
+		case i == 0 && mounted:
+			out[i] = repoMount.Render("mount") + mountPath.Render(strings.TrimPrefix(p, "mount"))
+		case mounted:
+			out[i] = mountPath.Render(p)
+		case i == 0:
+			kind, rest, _ := strings.Cut(p, ":")
+			out[i] = portHelp.Render(kind+":") + rest
+		default:
+			out[i] = p
+		}
 	}
-	return header, rows, gap
+	return out
 }
 
 // drawTable draws a list's columns, its first row the header, the row

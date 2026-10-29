@@ -89,18 +89,22 @@ func TestATasksRepositoriesSayWhetherEachIsMountedAndFromWhere(t *testing.T) {
 	// Wide enough, a repository is a line of its own.
 	v := ansi.Strip(tasksModel{rows: rows, width: 200}.View())
 	for _, want := range []string{
-		"web@feat/pricing  mount /srv/checkouts/customers/acme/frontends/web",
-		"api@feat/pricing  clone /srv/checkouts/api",
-		"adrs@default  clone github.com/acme/adrs",
-		"spec@main  clone github.com/acme/spec",
+		"web@feat/pricing  mount:/srv/checkouts/customers/acme/frontends/web",
+		"api@feat/pricing  clone:/srv/checkouts/api",
+		"adrs@default  clone:github.com/acme/adrs",
+		"spec@main  clone:github.com/acme/spec",
 	} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("no %q in\n%s", want, v)
 		}
 	}
-	// A task of more than a line is set apart from the next by a blank one.
-	if !strings.Contains(v, "github.com/acme/adrs\n\n") {
+	// The tasks follow one another without a blank line.
+	if !strings.Contains(v, "github.com/acme/adrs\n  fix") {
 		t.Fatalf("%s", v)
+	}
+	// A mount's path is painted on every line it takes when wrapped.
+	if got := paintWhere([]string{"mount:/srv/a/", "b/c"}); got[1] != mountPath.Render("b/c") || !strings.HasPrefix(got[0], repoMount.Render("mount")) {
+		t.Fatalf("%q", got)
 	}
 	// Narrow, a path wraps in its column and no line is cut.
 	narrow := tasksModel{rows: rows, width: 80}.View()
