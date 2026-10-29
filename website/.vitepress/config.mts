@@ -53,6 +53,7 @@ const referenceSidebar = [
       { text: 'Security', link: '/reference/security' },
       { text: 'What unibox Asks of sbx', link: '/reference/sbx' },
       { text: 'Developing unibox', link: '/reference/developing' },
+      { text: 'Changelog', link: '/reference/changelog' },
     ],
   },
 ]
@@ -113,6 +114,7 @@ export default defineConfig({
         text: 'Resources',
         items: [
           { text: 'GitHub', link: repo },
+          { text: 'Changelog', link: '/reference/changelog' },
           { text: 'Releases', link: `${repo}/releases` },
           { text: 'Issues', link: `${repo}/issues` },
           { text: 'unagit', link: 'https://bitbyone.github.io/unagit/' },
