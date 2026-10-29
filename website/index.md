@@ -49,9 +49,10 @@ agent-sandboxes/
 ```
 
 Every member creates the sandbox `dev` from it and runs the agent there.
-Unibox needs nothing more than this to start. To get more of what it adds,
-the team can [add unibox's own files](#what-unibox-adds-to-the-repository)
-beside the sbx files, one at a time as it needs them. sbx never reads
+Unibox needs nothing more than this to start, and what you set up for
+yourself stays in your own configuration. To share unibox's settings with
+the team, add [unibox's own files](#what-unibox-adds-to-the-repository)
+beside the sbx files, one at a time as you need them. sbx never reads
 them, so they never get in the way of anyone on the team who does not use
 unibox.
 
