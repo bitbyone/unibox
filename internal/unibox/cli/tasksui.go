@@ -143,7 +143,7 @@ func (m tasksModel) View() string {
 		repos := []string{}
 		for _, repo := range r.Repositories {
 			kind, where := repoWhere(repo)
-			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default")+"\t"+kind+":"+where)
+			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default")+"\t"+kind+": "+where)
 		}
 		cols = append(cols, []string{taskName.Render(name), r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, "\n")})
 	}
@@ -198,7 +198,7 @@ func repoWhere(r api.Repository) (kind, where string) {
 	case r.HostPath != "":
 		return "clone", tildePath(r.HostPath)
 	}
-	return "clone", cmp.Or(strings.TrimSuffix(strings.TrimPrefix(r.URL, "https://"), ".git"), "-")
+	return "clone", cmp.Or(r.URL, "-")
 }
 
 // tallTable draws a table whose last column's cells may hold several
@@ -284,24 +284,23 @@ func tallTable(cols [][]string, cursor, width int) (header string, rows [][]stri
 	return header, rows
 }
 
-// paintWhere colours where a repository is from, as kind:path wrapped into
-// pieces: a mount orange, its path a lighter orange on every piece, as the
-// agent writes into it; a clone's kind dimmed.
+// paintWhere colours where a repository is from, as "kind: path" wrapped
+// into pieces: a mount orange and its path a lighter orange, as the agent
+// writes into it; a clone and its address in two greys. The path's colour
+// is on every piece.
 func paintWhere(pieces []string) []string {
 	out := make([]string, len(pieces))
-	mounted := strings.HasPrefix(pieces[0], "mount:")
+	kind, path := repoMount, mountPath
+	if !strings.HasPrefix(pieces[0], "mount:") {
+		kind, path = portHelp, clonePath
+	}
 	for i, p := range pieces {
-		switch {
-		case i == 0 && mounted:
-			out[i] = repoMount.Render("mount") + mountPath.Render(strings.TrimPrefix(p, "mount"))
-		case mounted:
-			out[i] = mountPath.Render(p)
-		case i == 0:
-			kind, rest, _ := strings.Cut(p, ":")
-			out[i] = portHelp.Render(kind+":") + rest
-		default:
-			out[i] = p
+		if i == 0 {
+			k, rest, _ := strings.Cut(p, ":")
+			out[i] = kind.Render(k+":") + path.Render(rest)
+			continue
 		}
+		out[i] = path.Render(p)
 	}
 	return out
 }

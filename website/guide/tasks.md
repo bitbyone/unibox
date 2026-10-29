@@ -107,8 +107,8 @@ $ unibox task
 [blue]Tasks[/]
 
   TASK   SANDBOX  AGENT   STATE  SESSIONS  REPOSITORIES
-[blue]>[/] [b][blue]login[/]  dev      claude  ready  1         api@feat/login  [warn]mount:~/code/api[/][/]
-                                         [b]adrs@main  [dim]clone:[/]github.com/acme/adrs[/]
+[blue]>[/] [b][blue]login[/]  dev      claude  ready  1         api@feat/login  [warn]mount: ~/code/api[/][/]
+                                         [b]adrs@main  [dim]clone:[/] https://github.com/acme/adrs.git[/]
 
 Resume login with  [b]claude[/]  [blue]codex[/]
 [key]←/→ h/l[/] agent · [key]enter[/] resume · [key]esc[/] back

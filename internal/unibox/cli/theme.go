@@ -10,7 +10,8 @@ import (
 // green for what is on and red for errors, with titles and the cursor in a
 // light blue. Keys are told
 // apart from what they do in a dark yellow, and what is mounted from the
-// host, which the agent writes into, in orange. Each colour has a shade for a
+// host, which the agent writes into, in orange, and what is cloned in two
+// greys. Each colour has a shade for a
 // light terminal too.
 var (
 	themeBlue  = lipgloss.AdaptiveColor{Light: "#0A75C2", Dark: "#7CC4FA"}
@@ -20,6 +21,7 @@ var (
 	themeKey   = lipgloss.AdaptiveColor{Light: "136", Dark: "178"}
 	themeMount = lipgloss.AdaptiveColor{Light: "#C4570A", Dark: "#FF9F43"}
 	themePath  = lipgloss.AdaptiveColor{Light: "#D98A4A", Dark: "#FFC890"}
+	themeFrom  = lipgloss.AdaptiveColor{Light: "240", Dark: "250"}
 )
 
 var (
@@ -33,6 +35,7 @@ var (
 	helpKey    = lipgloss.NewStyle().Foreground(themeKey)
 	repoMount  = lipgloss.NewStyle().Foreground(themeMount)
 	mountPath  = lipgloss.NewStyle().Foreground(themePath)
+	clonePath  = lipgloss.NewStyle().Foreground(themeFrom)
 	taskName   = lipgloss.NewStyle().Foreground(themeBlue)
 )
 
