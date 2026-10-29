@@ -241,7 +241,7 @@ func (o *options) taskCommand(name string) *cobra.Command {
 			fmt.Fprintf(o.output, "task %s ready in sandbox %s (%s)\n", result.Task, result.Sandbox, result.Directory)
 			return nil
 		}
-		return o.manager.Run(cmd.Context(), req, o.input, o.output, o.log, extra)
+		return o.runTask(cmd.Context(), req, extra)
 	}
 	return c
 }

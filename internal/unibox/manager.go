@@ -33,6 +33,10 @@ type Manager struct {
 	// ApproveEnv has sbx apply an env's plan without asking, which the
 	// person says with --yes to sandbox create and recreate.
 	ApproveEnv bool
+	// Progress, when set, is told what the manager does while it works on
+	// its own, which takes seconds of sbx's - "" each time it hands the
+	// terminal to sbx or an agent - so a spinner can say it.
+	Progress func(what string)
 	// kits are the kits read so far, by reference and args: reading one
 	// from a registry takes seconds, and a list drawn again after each
 	// action asks for the same ones.
@@ -411,7 +415,15 @@ func (m *Manager) findBox(ctx context.Context, b api.Sandbox) (Box, bool, error)
 // its env when sbx has none, recreated when asked, its ports as the env
 // says. A change of the env is told, never applied unasked: recreating
 // discards what the sandbox holds outside its tasks.
+// progress says what the manager does now, to Progress if it is set.
+func (m *Manager) progress(what string) {
+	if m.Progress != nil {
+		m.Progress(what)
+	}
+}
+
 func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate bool) error {
+	m.progress("checking sandbox " + b.Name)
 	if err := m.SBX.Available(ctx); err != nil {
 		return err
 	}
@@ -450,6 +462,8 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 	}
 	switch {
 	case !exists:
+		// sbx asks on the terminal before it creates one.
+		m.progress("")
 		if err = m.create(ctx, b, env, args, fingerprint); err != nil {
 			return err
 		}
@@ -471,12 +485,15 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 		// kits' agents.
 		m.installedAgents(ctx, b)
 	}
+	m.progress("publishing the ports of sandbox " + b.Name)
 	if err = m.syncPorts(ctx, b, env); err != nil {
 		return err
 	}
+	m.progress("setting the network rules of sandbox " + b.Name)
 	if err = m.syncNetwork(ctx, b.Name); err != nil {
 		return err
 	}
+	m.progress("giving sandbox " + b.Name + " its tokens")
 	if err = m.syncSecrets(ctx, b, env); err != nil {
 		return err
 	}

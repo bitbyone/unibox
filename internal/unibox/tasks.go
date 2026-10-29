@@ -387,6 +387,7 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 	}
 	// The agent asked for, else the one the task ran last, else the env's.
 	t.Agent = cmp.Or(req.Agent, t.Agent, b.Agent)
+	m.progress("preparing task " + t.ID)
 	if !resume || t.State != "ready" {
 		t.State = "preparing"
 		replaceTask(&b, t)
@@ -540,6 +541,9 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if req.Shell && len(extra) > 0 {
 		return fmt.Errorf("a shell takes no agent arguments; leave out what follows --")
 	}
+	// Whatever ends the run, nothing is said to be under way any longer.
+	defer m.progress("")
+	m.progress("finding the task's sandbox")
 	b, t, usage, taskLock, err := m.prepare(ctx, req, true)
 	if err != nil {
 		return err
@@ -585,6 +589,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if req.Shell {
 		// A shell is the user's own session: no agent is credited in its
 		// commits.
+		m.progress("")
 		return RunChild(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", told + sessionScript(run.ID, withEnv(m.sshEnv(), []string{"bash", "-l"}))}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout}))
 	}
 	a := FindAgent(agent)
@@ -603,13 +608,14 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if resumed != nil {
 		resumed = withEnv(env, resumed)
 	}
+	m.progress("preparing " + a.ID)
 	if a.Trust != nil && a.Config != "" {
 		dirs := []string{"/work", t.Directory}
 		for _, repo := range t.Repositories {
 			dirs = append(dirs, path.Join(t.Directory, repo.Name))
 		}
 		if err := m.mergeAgentConfig(ctx, b, a, a.Trust(dirs)); err != nil {
-			fmt.Fprintf(errout, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
+			fmt.Fprintf(m.Log, "unibox: %s may ask whether to trust the directory: %v\n", a.ID, err)
 		}
 	}
 	script := told + sessionScript(run.ID, args)
@@ -619,6 +625,8 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	if a.Setup != "" {
 		script = "(\n" + a.Setup + ") || echo 'unibox: preparing " + a.ID + " failed; it may ask whether to trust the directory' >&2\n" + script
 	}
+	// The agent takes the terminal.
+	m.progress("")
 	cmd := m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", script}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout})
 	err = RunChild(cmd)
 	var exit *exec.ExitError

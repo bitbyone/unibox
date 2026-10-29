@@ -448,7 +448,7 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			if err := o.preflight(cmd, &req); err != nil {
 				return err
 			}
-			return o.manager.Run(ctx, req, o.input, o.output, o.log, nil)
+			return o.runTask(ctx, req, nil)
 		case "repos":
 			if err := o.addTaskRepos(cmd, t); err != nil && !errors.Is(err, errCancelled) {
 				fmt.Fprintln(o.log, err)
@@ -502,7 +502,7 @@ they had one there; --new starts them afresh. Other agents start afresh.`, RunE:
 		if err := o.preflight(cmd, &req); err != nil {
 			return err
 		}
-		return o.manager.Run(cmd.Context(), req, o.input, o.output, o.log, args[1:])
+		return o.runTask(cmd.Context(), req, args[1:])
 	}}
 	shellFlag(c, &req)
 	rmFlag(c, &req.Remove)

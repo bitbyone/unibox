@@ -591,7 +591,7 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 		if err := o.preflight(cmd, &req); err != nil {
 			return err
 		}
-		return o.manager.Run(cmd.Context(), req, o.input, o.output, o.log, nil)
+		return o.runTask(cmd.Context(), req, nil)
 	}
 	f := c.Flags()
 	f.StringVarP(&sandbox, "sandbox", "s", "", "Sandbox to work in (default: UNIBOX_SANDBOX, the context's, or the only one)")

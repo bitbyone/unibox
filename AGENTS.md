@@ -205,6 +205,12 @@ about it. Keep command output short: pipe through `head`, `tail` or
   secrets: the picker searches them with `/`, lists them with `r`, `a`
   names one in the person's index for the env and `d` forgets it, as
   `unibox repo recent rm` does.
+- **Readying a task says what it does.** `Manager.Progress` is told each
+  step of a run that takes sbx's seconds - checking the sandbox, its
+  ports, network and tokens, the task, the agent - and "" whenever the
+  terminal goes to `sbx env create` or the session; `runTask`
+  (`cli/spinner.go`) draws it as a spinner, cleared before the manager's
+  log writes. Anything new that hands the terminal on says "" first.
 - **`--rm` removes a task as `task rm` would**, after its session's lock
   is let go and before an idle sandbox stops; with work the forge lacks it
   stays and says so. unibox's own AGENTS.md and its CLAUDE.md link are no

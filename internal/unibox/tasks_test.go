@@ -998,3 +998,26 @@ func TestCodexContinuesASessionRecordedInItsDirectory(t *testing.T) {
 		t.Fatal("codex's sessions were not told apart by directory")
 	}
 }
+
+func TestRunSaysWhatItDoesUntilTheAgentTakesTheTerminal(t *testing.T) {
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	bin := t.TempDir()
+	mustWriteExecutable(t, filepath.Join(bin, "claude"), []byte("#!/bin/sh\nexit 0\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	said := []string{}
+	m.Progress = func(what string) { said = append(said, what) }
+	if err := m.Run(ctx, Request{Sandbox: "dev", Task: "pricing", Author: "Person <person@example.com>", Branch: "main", Repositories: []RepoInput{{Source: url, Name: "payments"}}}, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	agent := slices.Index(said, "preparing claude")
+	if !slices.Contains(said, "preparing task pricing") || agent < 0 || agent+1 >= len(said) || said[agent+1] != "" || said[len(said)-1] != "" {
+		t.Fatalf("%q", said)
+	}
+}
