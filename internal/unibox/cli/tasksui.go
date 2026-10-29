@@ -44,6 +44,8 @@ type tasksModel struct {
 	// width and height are the terminal's: the keys and repositories are
 	// wrapped to the one, the tasks scroll within the other.
 	width, height int
+	// context stands in the title's corner: where commands work.
+	context string
 }
 
 func (m tasksModel) Init() tea.Cmd { return nil }
@@ -131,7 +133,7 @@ func (m tasksModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(listTitle.Render("Tasks") + "\n\n")
+	b.WriteString(titleLine(listTitle.Render("Tasks"), m.context, m.width) + "\n\n")
 	cols := [][]string{{"TASK", "SANDBOX", "AGENT", "STATE", "SESSIONS", "REPOSITORIES"}}
 	for _, r := range m.rows {
 		name := r.ID
@@ -174,18 +176,21 @@ func (m tasksModel) View() string {
 	for _, bl := range blocks {
 		heights = append(heights, len(bl))
 	}
-	// The title, the header, the line of how many more, the blank one,
+	// The title, the header, the lines of how many more, the blank one,
 	// the keys and the line the cursor is left on take the rest.
-	first, end := blockWindow(heights, m.cursor, gap, listRoom(m.height, len(foot)+6))
+	first, end := blockWindow(heights, m.cursor, gap, listRoom(m.height, len(foot)+7))
 	b.WriteString(header + "\n")
+	if l := moreAbove(first); l != "" {
+		b.WriteString(l + "\n")
+	}
 	for i := first; i < end; i++ {
 		if i > first && gap > 0 {
 			b.WriteString("\n")
 		}
 		b.WriteString(strings.Join(blocks[i], "\n") + "\n")
 	}
-	if more := moreLine(first, len(blocks)-end); more != "" {
-		b.WriteString(more + "\n")
+	if l := moreBelow(first, end, len(blocks)); l != "" {
+		b.WriteString(l + "\n")
 	}
 	b.WriteString("\n" + strings.Join(foot, "\n") + "\n")
 	return b.String()

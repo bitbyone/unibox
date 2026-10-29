@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // A list is a part of the terminal below the prompt, not all of it: its
@@ -59,18 +61,50 @@ func blockWindow(heights []int, cursor, gap, room int) (first, end int) {
 	return first, end
 }
 
-// moreLine says how many rows lie above and below the part a list shows,
-// "" when it shows them all.
-func moreLine(above, below int) string {
-	parts := []string{}
-	if above > 0 {
-		parts = append(parts, fmt.Sprintf("↑ %d more", above))
-	}
-	if below > 0 {
-		parts = append(parts, fmt.Sprintf("↓ %d more", below))
-	}
-	if len(parts) == 0 {
+// moreAbove and moreBelow stand above and below the rows a list shows,
+// where rows lie beyond them, so a list cut to a few rows does not read as
+// a list of a few; "" where none lie. The one below says where the rows
+// shown are among all of them.
+func moreAbove(above int) string {
+	if above <= 0 {
 		return ""
 	}
-	return portHelp.Render("  " + strings.Join(parts, " · "))
+	return listCursor.Render("  ↑") + portHelp.Render(fmt.Sprintf(" %d more", above))
+}
+
+func moreBelow(first, end, n int) string {
+	if first == 0 && end >= n {
+		return ""
+	}
+	if end >= n {
+		return portHelp.Render(fmt.Sprintf("  rows %d-%d of %d", first+1, end, n))
+	}
+	return listCursor.Render("  ↓") + portHelp.Render(fmt.Sprintf(" %d more · rows %d-%d of %d", n-end, first+1, end, n))
+}
+
+// scrolled puts the lines of how many more about the rows a list shows.
+func scrolled(rows []string, first, end, n int) []string {
+	out := []string{}
+	if l := moreAbove(first); l != "" {
+		out = append(out, l)
+	}
+	out = append(out, rows...)
+	if l := moreBelow(first, end, n); l != "" {
+		out = append(out, l)
+	}
+	return out
+}
+
+// titleLine is a list's title with corner at the right of the terminal,
+// or a few spaces after the title on one that has not said its width or
+// is too narrow for both.
+func titleLine(title, corner string, width int) string {
+	if corner == "" {
+		return title
+	}
+	gap := 3
+	if width > 0 {
+		gap = max(width-1-lipgloss.Width(title)-lipgloss.Width(corner), 3)
+	}
+	return title + strings.Repeat(" ", gap) + corner
 }

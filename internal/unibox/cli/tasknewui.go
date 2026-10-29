@@ -86,6 +86,9 @@ type taskPickModel struct {
 	input        string
 	// existing are the tasks unibox has, which a name of theirs resumes.
 	existing map[string]bool
+	// context stands in the title's corner after the task's name: where
+	// commands work.
+	context string
 	// showRecent offers the recent repositories beside the index; a filter
 	// searches them either way. name has one named in the env's index,
 	// saying where.
@@ -407,12 +410,11 @@ func (m taskPickModel) View() string {
 	if m.adding != "" {
 		title, corner = listTitle.Render("Add repositories to task "+m.adding), ""
 	}
-	gap := 3
-	if m.width > 0 {
-		gap = max(m.width-1-lipgloss.Width(title)-lipgloss.Width(corner), 3)
+	if m.context != "" {
+		corner = strings.TrimSpace(corner + "   " + m.context)
 	}
 	lines := []string{
-		title + strings.Repeat(" ", gap) + corner,
+		titleLine(title, corner, m.width),
 		"",
 		"  branch  " + field("branch", m.branch, "none: each its ref, its checkout's branch or the forge's default"),
 	}
@@ -493,13 +495,10 @@ func (m taskPickModel) View() string {
 	} else {
 		rows := strings.Split(strings.TrimSuffix(drawTable(table, m.cursor), "\n"), "\n")
 		body := rows[1:]
-		// The lines above, the header, the line of how many more, the
+		// The lines above, the header, the lines of how many more, the
 		// summary, a note and the keys take the rest.
-		first, end := rowWindow(len(body), m.cursor, listRoom(m.height, len(lines)+len(help)+5))
-		lines = append(append(lines, rows[0]), body[first:end]...)
-		if more := moreLine(first, len(body)-end); more != "" {
-			lines = append(lines, more)
-		}
+		first, end := rowWindow(len(body), m.cursor, listRoom(m.height, len(lines)+len(help)+6))
+		lines = append(append(lines, rows[0]), scrolled(body[first:end], first, end, len(body))...)
 	}
 	summary := fmt.Sprintf("%d picked", picked)
 	if m.branch != "" {
@@ -646,7 +645,7 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 		}
 		rows = append(rows, recentRows(ctx, recent, rows, taken)...)
 	}
-	m := taskPickModel{env: env.Name, branch: branch, rows: rows, existing: map[string]bool{}}
+	m := taskPickModel{env: env.Name, branch: branch, rows: rows, existing: map[string]bool{}, context: o.contextCorner()}
 	m.name = func(name string, r unibox.IndexedRepo) (string, error) {
 		scope := unibox.Scope{Env: env.Name}
 		return o.scopeText(scope), o.manager.SetRepo(scope, name, r)

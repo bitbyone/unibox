@@ -44,6 +44,8 @@ type listModel struct {
 	ownLeave bool
 	// width and height are the terminal's, once it says them.
 	width, height int
+	// context stands in the title's corner: where commands work.
+	context string
 	// query narrows the rows to those it matches, fuzzily, typed after /
 	// while filtering.
 	query     string
@@ -175,7 +177,7 @@ func (m listModel) View() string {
 		}
 		foot = append(foot, helpLines(m.width, append(help, "q", "quit")...)...)
 	}
-	lines := []string{listTitle.Render(m.title), ""}
+	lines := []string{titleLine(listTitle.Render(m.title), m.context, m.width), ""}
 	visible := m.visible()
 	if m.filtering || m.query != "" {
 		typing := ""
@@ -196,14 +198,11 @@ func (m listModel) View() string {
 		}
 		table := strings.Split(strings.TrimSuffix(drawTable(shown, m.cursor), "\n"), "\n")
 		rows := table[1:]
-		// The title, the filter, the header, the line of how many more,
+		// The title, the filter, the header, the lines of how many more,
 		// the blank one, the keys and the line the cursor is left on take
 		// the rest.
-		first, end := rowWindow(len(rows), m.cursor, listRoom(m.height, len(lines)+len(foot)+4))
-		lines = append(append(lines, table[0]), rows[first:end]...)
-		if more := moreLine(first, len(rows)-end); more != "" {
-			lines = append(lines, more)
-		}
+		first, end := rowWindow(len(rows), m.cursor, listRoom(m.height, len(lines)+len(foot)+5))
+		lines = append(append(lines, table[0]), scrolled(rows[first:end], first, end, len(rows))...)
 	}
 	lines = append(append(lines, ""), foot...)
 	if m.width > 0 {
@@ -225,6 +224,7 @@ func displayKey(k string) string {
 // left. The model it ends with says where its cursor and filter were.
 func (o *options) runList(cmd *cobra.Command, m listModel) (*listAction, listModel, error) {
 	m.cursor = min(m.cursor, max(len(m.visible())-1, 0))
+	m.context = o.contextCorner()
 	lipgloss.HasDarkBackground()
 	out, err := tea.NewProgram(m, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(cmd.Context())).Run()
 	if err != nil {

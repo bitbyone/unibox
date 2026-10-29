@@ -166,6 +166,7 @@ func (o *options) portsUI(cmd *cobra.Command, name string) error {
 	}}
 	// The theme asks the terminal for its background; asked here, before
 	// the program reads keys, the answer is not taken for typing.
+	m.context = o.contextCorner()
 	lipgloss.HasDarkBackground()
 	if _, err := tea.NewProgram(m, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run(); err != nil {
 		return err

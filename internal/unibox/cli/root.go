@@ -423,7 +423,7 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			return nil
 		}
 		lipgloss.HasDarkBackground()
-		out, err := tea.NewProgram(tasksModel{rows: rows}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run()
+		out, err := tea.NewProgram(tasksModel{rows: rows, context: o.contextCorner()}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run()
 		if err != nil {
 			return err
 		}

@@ -27,6 +27,8 @@ type sandboxesModel struct {
 	// width and height are the terminal's: the keys are wrapped to the
 	// one, the rows scroll within the other.
 	width, height int
+	// context stands in the title's corner: where commands work.
+	context string
 }
 
 func (m sandboxesModel) Init() tea.Cmd { return nil }
@@ -89,7 +91,7 @@ func (m sandboxesModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(listTitle.Render("Sandboxes") + "\n\n")
+	b.WriteString(titleLine(listTitle.Render("Sandboxes"), m.context, m.width) + "\n\n")
 	cols := [][]string{{"SANDBOX", "ENV", "AGENT", "STATE", "TASKS", "SESSIONS"}}
 	for _, r := range m.rows {
 		state := r.State
@@ -109,13 +111,10 @@ func (m sandboxesModel) View() string {
 		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit")
 	}
 	table := strings.Split(strings.TrimSuffix(drawTable(cols, m.cursor), "\n"), "\n")
-	// The title, the header, the line of how many more, the blank one,
+	// The title, the header, the lines of how many more, the blank one,
 	// the keys and the line the cursor is left on take the rest.
-	first, end := rowWindow(len(table)-1, m.cursor, listRoom(m.height, len(foot)+6))
-	b.WriteString(table[0] + "\n" + strings.Join(table[1+first:1+end], "\n") + "\n")
-	if more := moreLine(first, len(table)-1-end); more != "" {
-		b.WriteString(more + "\n")
-	}
+	first, end := rowWindow(len(table)-1, m.cursor, listRoom(m.height, len(foot)+7))
+	b.WriteString(table[0] + "\n" + strings.Join(scrolled(table[1+first:1+end], first, end, len(table)-1), "\n") + "\n")
 	b.WriteString("\n" + strings.Join(foot, "\n") + "\n")
 	return b.String()
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/tobola/unibox/internal/unibox"
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -93,6 +94,28 @@ func TestEveryListScrollsWithinTheTerminal(t *testing.T) {
 	// The most a list shows, however tall the terminal.
 	tall, _ := lm.Update(tea.WindowSizeMsg{Width: 100, Height: 200})
 	if v := ansi.Strip(tall.View()); !strings.Contains(v, fmt.Sprintf("↓ %d more", 40-listMaxLines)) {
+		t.Fatalf("%s", v)
+	}
+}
+
+func TestAListSaysWhatLiesBeyondItsRowsAndWhereCommandsWork(t *testing.T) {
+	t.Parallel()
+	// Rows above and below are said where they lie, with where those
+	// shown are.
+	got := ansi.Strip(strings.Join(scrolled([]string{"b", "c"}, 1, 3, 10), "\n"))
+	if got != "  ↑ 1 more\nb\nc\n  ↓ 7 more · rows 2-3 of 10" {
+		t.Fatalf("%q", got)
+	}
+	if got := scrolled([]string{"a"}, 0, 1, 1); len(got) != 1 {
+		t.Fatalf("%q", got)
+	}
+	// The corner stands at the right of the terminal.
+	line := titleLine("Tasks", "context sandbox dev", 40)
+	if lipgloss.Width(line) != 39 || !strings.HasSuffix(line, "context sandbox dev") {
+		t.Fatalf("%q", line)
+	}
+	m := listModel{title: "every token kept", header: []string{"A"}, rows: [][]string{{"x"}}, ids: []string{"x"}, context: "context env dev", width: 60}
+	if v := ansi.Strip(m.View()); !strings.HasPrefix(v, "every token kept") || !strings.Contains(strings.Split(v, "\n")[0], "context env dev") {
 		t.Fatalf("%s", v)
 	}
 }

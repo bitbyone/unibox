@@ -34,6 +34,8 @@ type portsModel struct {
 	// width and height are the terminal's: the keys are wrapped to the
 	// one, the rows scroll within the other.
 	width, height int
+	// context stands in the title's corner: where commands work.
+	context string
 }
 
 type portsSwitched struct {
@@ -154,16 +156,19 @@ func (m portsModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n", listTitle.Render("Ports of sandbox "+m.sandbox+", until it next starts"))
+	fmt.Fprintf(&b, "%s\n\n", titleLine(listTitle.Render("Ports of sandbox "+m.sandbox+", until it next starts"), m.context, m.width))
 	nameW, specW, startW, urlW := 4, 7, 0, 0
 	url := func(r unibox.PortState) string { return cmp.Or(strings.Join(portURLs(r), " "), "-") }
 	for _, r := range m.rows {
 		nameW, specW, startW, urlW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r))), max(urlW, len(url(r)))
 	}
 	keys := helpLines(m.width, "↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done")
-	// The title, the line of how many more, the blank one, the note, the
+	// The title, the lines of how many more, the blank one, the note, the
 	// keys and the line the cursor is left on take the rest.
-	first, end := rowWindow(len(m.rows), m.cursor, listRoom(m.height, len(keys)+7))
+	first, end := rowWindow(len(m.rows), m.cursor, listRoom(m.height, len(keys)+8))
+	if l := moreAbove(first); l != "" {
+		b.WriteString(l + "\n")
+	}
 	for i := first; i < end; i++ {
 		r := m.rows[i]
 		mark, state := "  ", portOff.Render("off")
@@ -177,8 +182,8 @@ func (m portsModel) View() string {
 		line := fmt.Sprintf("%s%s  %s  %-*s  %-*s  %-*s  %s", mark, state, name, startW, atStart(r), specW, r.Spec, urlW, url(r), r.Description)
 		b.WriteString(strings.TrimRight(line, " ") + "\n")
 	}
-	if more := moreLine(first, len(m.rows)-end); more != "" {
-		b.WriteString(more + "\n")
+	if l := moreBelow(first, end, len(m.rows)); l != "" {
+		b.WriteString(l + "\n")
 	}
 	b.WriteString("\n")
 	if m.asking {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 	"github.com/tobola/unibox/internal/testenv"
 	"github.com/tobola/unibox/internal/unibox"
@@ -391,5 +392,42 @@ func TestRepoRecentListsAnEnvsAloneAndForgetsThem(t *testing.T) {
 	}
 	if out, _, err = run(t, paths, "", "repo", "recent", "--all"); err != nil || strings.Contains(out, "x/") || !strings.Contains(out, "infra") {
 		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+func TestEveryListsCornerSaysTheContext(t *testing.T) {
+	paths := cliFixture(t)
+	var out, log bytes.Buffer
+	o := &options{paths: paths, input: strings.NewReader(""), output: &out, log: &log}
+	root := o.root()
+	root.SetArgs([]string{"version"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	// The env the configuration defaults to, its sandbox not made.
+	if got := ansi.Strip(o.contextCorner()); got != "context env dev" {
+		t.Fatalf("%q", got)
+	}
+	err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["personal"] = api.Sandbox{Name: "personal", Env: "dev"}
+		s.Sandboxes["other"] = api.Sandbox{Name: "other", Env: "dev"}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.manager.Config.Context = unibox.Context{Sandbox: "personal"}
+	if got := ansi.Strip(o.contextCorner()); got != "context sandbox personal · env dev" {
+		t.Fatalf("%q", got)
+	}
+	t.Setenv("UNIBOX_SANDBOX", "other")
+	if got := ansi.Strip(o.contextCorner()); got != "context sandbox other (UNIBOX_SANDBOX) · env dev" {
+		t.Fatalf("%q", got)
+	}
+	t.Setenv("UNIBOX_SANDBOX", "")
+	o.manager.Config.Context, o.manager.Config.DefaultEnv = unibox.Context{}, ""
+	o.manager.Config.Envs["web"] = o.manager.Config.Envs["dev"]
+	if got := ansi.Strip(o.contextCorner()); got != "no context" {
+		t.Fatalf("%q", got)
 	}
 }

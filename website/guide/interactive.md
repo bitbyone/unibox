@@ -6,7 +6,7 @@ between the list and the command line.
 
 ```term
 $ unibox
-[blue]Sandboxes[/]
+[blue]Sandboxes[/]                                    [dim]context sandbox[/] [b]dev[/] [dim]· env[/] [b]dev[/]
 
   SANDBOX  ENV  AGENT   STATE    TASKS  SESSIONS
 [blue]>[/] [b]dev      dev  claude  running  2      1[/]
@@ -21,8 +21,14 @@ Lists open from `unibox` (the sandboxes), `task`, `task new`, `repo`,
 
 A list takes a part of the terminal below your prompt, not all of it: at
 most 20 lines of rows, fewer when the terminal is short, never fewer than
-3. Rows beyond scroll with the cursor, and a line under them says how
-many lie above and below (`↑ 3 more · ↓ 12 more`). Keys that do not fit
+3. Rows beyond scroll with the cursor: `↑ 9 more` stands above the rows
+shown when some lie above, `↓ 25 more · rows 10-15 of 40` below them when
+some lie below.
+
+Every list says in its top right corner the sandbox and env commands work
+in when not told - the context `unibox context use` sets, `UNIBOX_SANDBOX`,
+or the only one - also in a list that does not depend on it, such as
+`unibox secret --all`. Keys that do not fit
 the terminal's width wrap onto the next line.
 
 ## Without a terminal

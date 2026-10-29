@@ -246,3 +246,30 @@ func (o *options) useContext(sandbox, env string) error {
 	o.manager.Config = cfg
 	return nil
 }
+
+// contextCorner stands in the corner of every list: the sandbox and env
+// commands work in when not told, as unibox context says them, so the
+// person sees where they are even where the list does not depend on it,
+// and before a command that does.
+func (o *options) contextCorner() string {
+	sandbox, env := o.defaultSandbox(), o.defaultEnv()
+	why := ""
+	switch {
+	case os.Getenv("UNIBOX_SANDBOX") != "":
+		why = " (UNIBOX_SANDBOX)"
+	case sandbox != "" && o.chosenSandbox() == "":
+		why = " (the only one)"
+	case sandbox == "" && os.Getenv("UNIBOX_ENV") != "":
+		why = " (UNIBOX_ENV)"
+	}
+	label := portHelp.Render("context ")
+	switch {
+	case sandbox != "" && env != "":
+		return label + portHelp.Render("sandbox ") + portCursor.Render(sandbox) + portHelp.Render(why+" · env ") + portCursor.Render(env)
+	case sandbox != "":
+		return label + portHelp.Render("sandbox ") + portCursor.Render(sandbox) + portHelp.Render(why)
+	case env != "":
+		return label + portHelp.Render("env ") + portCursor.Render(env) + portHelp.Render(why)
+	}
+	return portHelp.Render("no context")
+}

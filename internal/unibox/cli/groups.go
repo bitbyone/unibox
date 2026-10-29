@@ -72,7 +72,7 @@ func (o *options) sandboxesUI(cmd *cobra.Command) error {
 			return nil
 		}
 		lipgloss.HasDarkBackground()
-		out, err := tea.NewProgram(sandboxesModel{rows: boxes}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(cmd.Context())).Run()
+		out, err := tea.NewProgram(sandboxesModel{rows: boxes, context: o.contextCorner()}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(cmd.Context())).Run()
 		if err != nil {
 			return err
 		}
