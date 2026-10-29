@@ -1341,3 +1341,39 @@ func TestTheOverviewsActionsStoreAndForgetATokenWhereItIsKept(t *testing.T) {
 		t.Fatalf("%q", note)
 	}
 }
+
+func TestSecretTakesTheContextsSandboxAndItsEnv(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["team"] = api.Sandbox{Name: "team", Env: "team", State: "running"}
+		s.Sandboxes["personal"] = api.Sandbox{Name: "personal", Env: "team", State: "running"}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := paths.LoadConfig()
+	cfg.Context = unibox.Context{Sandbox: "personal"}
+	cfg.Sandboxes = map[string]unibox.SandboxConfig{"personal": {Secrets: map[string]unibox.EnvSecret{"gitlab": {Command: "pass gitlab-mine"}}}}
+	if err := paths.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	// Neither -e nor -s: the context's sandbox, and the env it is of.
+	if out, _, err := run(t, paths, "", "secret", "ls"); err != nil || !strings.Contains(out, "sandbox personal, command") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err := run(t, paths, "", "secret", "ls", "-s", "team"); err != nil || strings.Contains(out, "personal") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// A scope of the sandbox's own is the context's sandbox's too.
+	if _, _, err := run(t, paths, "", "secret", "rm", "gitlab", "--scope", "sandbox"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.Sandboxes != nil {
+		t.Fatalf("%+v", cfg.Sandboxes)
+	}
+}

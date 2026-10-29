@@ -124,7 +124,9 @@ unibox secret set [service...] [-e <env>] [-s <sandbox>] [--all] [-g] [--command
 unibox secret rm <service...> [-e <env>] [-s <sandbox>] [--scope global|env|sandbox]
 ```
 
-The tokens an env needs, kept by sbx. `ls` lists them and whether sbx has
+The tokens a sandbox needs: the one `-s` names, else the one you work in
+(`UNIBOX_SANDBOX` or the context's) when it is of the env, else the one
+the env makes; the env is `-e`, else that sandbox's. `ls` lists them and whether sbx has
 each. `set` has sbx ask for the missing ones (or those named) on this
 terminal; without a terminal, one service's token may be piped in. Before
 sbx asks, `set` offers to open the page where a new token is made, when it

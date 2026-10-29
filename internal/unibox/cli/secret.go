@@ -49,7 +49,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
   unibox secret set copilot --command 'security find-generic-password -s copilot -w'
   security find-generic-password -s artifactory -w | unibox secret set artifactory`}
 	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
-	c.PersistentFlags().StringVarP(&sandboxFlag, "sandbox", "s", "", "Sandbox whose tokens to show or keep (default: the env's)")
+	c.PersistentFlags().StringVarP(&sandboxFlag, "sandbox", "s", "", "Sandbox whose tokens to show or keep (default: UNIBOX_SANDBOX or the context's, when of the env, else the env's)")
 	needed := func(cmd *cobra.Command) (unibox.Env, []unibox.NeededSecret, error) {
 		name, err := o.secretEnv(envFlag, sandboxFlag)
 		if err != nil {
@@ -64,7 +64,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 		}
 		var l []unibox.NeededSecret
 		err = o.waiting("reading the kits of env "+env.Name, func() (err error) {
-			l, err = o.manager.NeededSecrets(cmd.Context(), env, sandboxFlag)
+			l, err = o.manager.NeededSecrets(cmd.Context(), env, o.secretSandbox(env, sandboxFlag))
 			return err
 		})
 		return env, l, err
@@ -82,7 +82,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			return err
 		}
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "env": env.Name, "secrets": list})
+			return o.write(map[string]any{"api_version": api.Version, "env": env.Name, "sandbox": o.secretSandbox(env, sandboxFlag), "secrets": list})
 		}
 		if len(list) == 0 {
 			fmt.Fprintf(o.output, "env %s needs no token\n", env.Name)
@@ -119,7 +119,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 				return o.success(fmt.Sprintf("sbx has every token env %s needs", env.Name))
 			}
 		}
-		scope, err := o.secretScope(env, scopeFlag, envOnly, sandboxFlag)
+		scope, err := o.secretScope(env, scopeFlag, envOnly, o.secretSandbox(env, sandboxFlag))
 		if err != nil {
 			return err
 		}
@@ -204,7 +204,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 		if err != nil {
 			return err
 		}
-		scope, err := o.secretScope(env, rmScope, rmEnvOnly, sandboxFlag)
+		scope, err := o.secretScope(env, rmScope, rmEnvOnly, o.secretSandbox(env, sandboxFlag))
 		if err != nil {
 			return err
 		}
@@ -279,11 +279,12 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 		if err != nil {
 			return err
 		}
-		listArgs := []string{"secret", "ls", "-e", name}
-		if sandboxFlag != "" {
-			listArgs = append(listArgs, "-s", sandboxFlag)
+		env, err := o.manager.Config.LoadEnv(name)
+		if err != nil {
+			return err
 		}
-		return o.secretUI(cmd, name, sandboxFlag, func() error { return o.runStep(cmd, listArgs...) })
+		sandbox := o.secretSandbox(env, sandboxFlag)
+		return o.secretUI(cmd, name, sandbox, func() error { return o.runStep(cmd, "secret", "ls", "-e", name, "-s", sandbox) })
 	}
 	return c
 }
@@ -386,6 +387,19 @@ func (o *options) secretEnv(envFlag, sandbox string) (string, error) {
 		}
 	}
 	return o.envName(envFlag)
+}
+
+// secretSandbox is the sandbox of env whose tokens are meant: the one
+// named, else the one chosen to work in - UNIBOX_SANDBOX or the
+// context's - when it is of env, else the one env makes.
+func (o *options) secretSandbox(env unibox.Env, flag string) string {
+	if flag != "" {
+		return flag
+	}
+	if s := o.defaultSandbox(); s != "" && o.sandboxEnv(s) == env.Name {
+		return s
+	}
+	return env.SandboxName()
 }
 
 // secretScope reads --scope: where a token is kept.
