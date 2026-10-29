@@ -11,16 +11,24 @@ everyday work with them shorter.
 
 ## Why use it
 
-- You set up from the team's repository in one command, without reading
-  its kits.
-- You keep several pieces of work in one sandbox and return to each by
-  name, with the agent you choose.
-- The agent is told which repositories it works in and what the team
-  expects of them.
-- Every command is a list at the terminal, and plain output with `--json`
-  for scripts.
-- Nothing is locked in: the sandbox is plain sbx, and you can stop using
-  unibox at any time.
+- **One command to start.** `unibox init` reads the team's sbx files,
+  asks only for what you must give - your tokens and values - and
+  creates the sandbox.
+- **Many tasks, one sandbox.** Each task is its own repositories, branch
+  and agent. `unibox resume feature-oauth` brings that task back, and the
+  agent carries on its last conversation there.
+- **Your checkout or a fresh clone.** A task mounts the directory you
+  work in, or clones from the forge, per repository.
+- **No commands to remember.** `unibox` alone, or a noun such as `unibox
+  task`, opens a list at the terminal: pick a row, press one of the keys
+  shown under it, search with `/`. The commands are there for scripts,
+  with `--json`.
+- **The agent knows the ground.** Each task tells it which repositories
+  it works in, which it only reads, and what the team expects of them.
+- **The env changes, the work stays.** When the team's files change,
+  unibox says so and recreates the sandbox with its tasks.
+- **Plain sbx underneath.** No format of its own and nothing locked in:
+  stop using unibox and the sandbox is still yours.
 
 ## A team's sbx environment
 
