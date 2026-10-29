@@ -557,8 +557,9 @@ func (m *Manager) updateOwnSecrets(s SecretScope, change func(map[string]EnvSecr
 // config.yaml or its own names a command for, and forget those it no
 // longer names. A
 // recreate takes a sandbox's own tokens away, and a person may change a
-// command by hand, so each is set again when sbx lacks it for the sandbox
-// or the command is not the one set last.
+// command by hand, so each is set again when sbx lacks it for the sandbox,
+// the command is not the one set last, or the sandbox is new (ready
+// forgets what was set).
 func (m *Manager) syncSecrets(ctx context.Context, b *api.Sandbox, env Env) error {
 	want := m.Config.ownSecrets(env, b.Name)
 	if len(want) == 0 && len(b.Secrets) == 0 {

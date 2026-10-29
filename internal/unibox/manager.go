@@ -552,6 +552,10 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 	}
 	b.Fingerprint = fingerprint
 	b.Ports, b.PortSwitches, b.PortMaps = nil, nil, nil
+	// A sandbox made anew has none of its own tokens, whatever sbx lists
+	// under its name: sbx may still list the removed one's, which the new
+	// sandbox does not get, and it would take the global token instead.
+	b.Secrets = nil
 	b.State = "running"
 	return m.saveBox(*b)
 }

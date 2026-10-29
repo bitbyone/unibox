@@ -421,6 +421,28 @@ func TestSBXSettingsInConfigAreSetBeforeASandboxStarts(t *testing.T) {
 	}
 }
 
+func TestARecreatedSandboxIsGivenItsOwnTokensAgain(t *testing.T) {
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	ec := m.Config.Envs["dev"]
+	ec.Secrets = map[string]EnvSecret{"github": {Command: "pass github-mine"}}
+	m.Config.Envs["dev"] = ec
+	if err := m.Paths.SaveConfig(m.Config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	// sbx may still list the old sandbox's token under its name, which the
+	// sandbox made anew does not get: without it the global one stands.
+	if err := m.Recreate(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(f.called("secret set github --sandbox dev --command pass github-mine")); got != 2 {
+		t.Fatalf("set %d times: %v", got, f.calls)
+	}
+}
+
 func TestASandboxsOwnTokenStandsOverItsEnvsAndGoesWithIt(t *testing.T) {
 	m, f := managerFixture(t)
 	called := func(want string) bool { return len(f.called(want)) > 0 }
