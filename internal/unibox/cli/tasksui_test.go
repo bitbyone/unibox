@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
@@ -71,5 +73,43 @@ func TestTaskAndResumeAloneListOrAskForATaskWithoutATerminal(t *testing.T) {
 	}
 	if _, _, err := run(t, paths, "", "resume"); err == nil || !strings.Contains(err.Error(), "name the task") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestATasksRepositoriesSayWhetherEachIsMountedAndFromWhere(t *testing.T) {
+	t.Parallel()
+	rows := []taskRow{
+		{Task: api.Task{ID: "pricing", Sandbox: "dev", State: "ready", Repositories: []api.Repository{
+			{Name: "web", Branch: "feat/pricing", HostPath: "/srv/checkouts/customers/acme/frontends/web", Mounted: true},
+			{Name: "api", Branch: "feat/pricing", HostPath: "/srv/checkouts/api"},
+			{Name: "adrs", URL: "https://github.com/acme/adrs.git", Context: true},
+		}}},
+		{Task: api.Task{ID: "fix", Sandbox: "dev", State: "ready", Repositories: []api.Repository{{Name: "spec", Branch: "main", URL: "https://github.com/acme/spec.git"}}}},
+	}
+	// Wide enough, a repository is a line of its own.
+	v := ansi.Strip(tasksModel{rows: rows, width: 200}.View())
+	for _, want := range []string{
+		"web@feat/pricing  mount /srv/checkouts/customers/acme/frontends/web",
+		"api@feat/pricing  clone /srv/checkouts/api",
+		"adrs@default  clone github.com/acme/adrs",
+		"spec@main  clone github.com/acme/spec",
+	} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("no %q in\n%s", want, v)
+		}
+	}
+	// A task of more than a line is set apart from the next by a blank one.
+	if !strings.Contains(v, "github.com/acme/adrs\n\n") {
+		t.Fatalf("%s", v)
+	}
+	// Narrow, a path wraps in its column and no line is cut.
+	narrow := tasksModel{rows: rows, width: 80}.View()
+	for _, l := range strings.Split(narrow, "\n") {
+		if w := lipgloss.Width(l); w > 79 {
+			t.Fatalf("%d wide: %q", w, ansi.Strip(l))
+		}
+	}
+	if s := ansi.Strip(narrow); !strings.Contains(s, "frontends/") || !strings.Contains(s, "web") {
+		t.Fatalf("%s", s)
 	}
 }

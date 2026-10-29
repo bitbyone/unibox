@@ -107,11 +107,17 @@ $ unibox task
 [blue]Tasks[/]
 
   TASK   SANDBOX  AGENT   STATE  SESSIONS  REPOSITORIES
-[blue]>[/] [b]login  dev      claude  ready  1         api@feat/login, adrs@main[/]
+[blue]>[/] [b]login  dev      claude  ready  1         api@feat/login  [warn]mount[/] ~/code/api[/]
+                                         [b]adrs@main  [dim]clone[/] github.com/acme/adrs[/]
 
 Resume login with  [b]claude[/]  [blue]codex[/]
 [key]←/→ h/l[/] agent · [key]enter[/] resume · [key]esc[/] back
 ```
+
+Each repository is a line of its own: mounted from a directory of yours,
+in orange, as the agent writes into it, or cloned in the sandbox, from
+your checkout or the forge. A path too long for the terminal goes on a
+line beneath; a task of more than one line is set apart from the next.
 
 Both may work in the task at once: each session is its own process in the
 same directories.

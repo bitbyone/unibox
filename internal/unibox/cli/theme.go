@@ -9,7 +9,8 @@ import (
 // The lists are drawn beside the questions huh asks, in its Charm theme's
 // green for what is on and red for errors, with titles and the cursor in a
 // light blue. Keys are told
-// apart from what they do in a dark yellow. Each colour has a shade for a
+// apart from what they do in a dark yellow, and what is mounted from the
+// host, which the agent writes into, in orange. Each colour has a shade for a
 // light terminal too.
 var (
 	themeBlue  = lipgloss.AdaptiveColor{Light: "#0A75C2", Dark: "#7CC4FA"}
@@ -17,6 +18,7 @@ var (
 	themeRed   = lipgloss.AdaptiveColor{Light: "#FF4672", Dark: "#ED567A"}
 	themeDim   = lipgloss.AdaptiveColor{Light: "245", Dark: "243"}
 	themeKey   = lipgloss.AdaptiveColor{Light: "136", Dark: "178"}
+	themeMount = lipgloss.AdaptiveColor{Light: "#C4570A", Dark: "#FF9F43"}
 )
 
 var (
@@ -28,6 +30,7 @@ var (
 	portHelp   = lipgloss.NewStyle().Foreground(themeDim)
 	portErr    = lipgloss.NewStyle().Foreground(themeRed)
 	helpKey    = lipgloss.NewStyle().Foreground(themeKey)
+	repoMount  = lipgloss.NewStyle().Foreground(themeMount)
 )
 
 // cursorMark marks the row under the cursor.

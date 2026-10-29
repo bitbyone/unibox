@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
@@ -138,11 +139,17 @@ func (m tasksModel) View() string {
 		}
 		repos := []string{}
 		for _, repo := range r.Repositories {
-			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default"))
+			kind, where := repoWhere(repo)
+			if repo.Mounted {
+				kind = repoMount.Render(kind)
+			} else {
+				kind = portHelp.Render(kind)
+			}
+			repos = append(repos, repo.Name+"@"+cmp.Or(repo.Branch, "default")+"  "+kind+"\t"+where)
 		}
-		cols = append(cols, []string{name, r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, ", ")})
+		cols = append(cols, []string{name, r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, "\n")})
 	}
-	b.WriteString(drawTable(cols, m.cursor))
+	b.WriteString(drawTallTable(cols, m.cursor, m.width))
 	b.WriteString("\n")
 	row := m.rows[m.cursor]
 	switch m.mode {
@@ -162,6 +169,100 @@ func (m tasksModel) View() string {
 		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
 	default:
 		b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit"), "\n") + "\n")
+	}
+	return b.String()
+}
+
+// repoWhere says how a task holds a repository and from where: mounted
+// from a directory of the host, which the agent writes into, or cloned in
+// the sandbox, from the host's checkout or from the forge.
+func repoWhere(r api.Repository) (kind, where string) {
+	switch {
+	case r.Mounted:
+		return "mount", tildePath(r.HostPath)
+	case r.HostPath != "":
+		return "clone", tildePath(r.HostPath)
+	}
+	return "clone", cmp.Or(strings.TrimSuffix(strings.TrimPrefix(r.URL, "https://"), ".git"), "-")
+}
+
+// drawTallTable draws a table whose last column's cells may hold several
+// lines, each wrapped to the room the terminal leaves it - width 0 is one
+// that has not said its width. A line's part after a tab, a path, goes on
+// a line of its own beneath it when the two do not fit, so a path is not
+// broken where it starts. Once a row is more than a line, a blank line
+// sets the rows apart.
+func drawTallTable(cols [][]string, cursor, width int) string {
+	last := len(cols[0]) - 1
+	widths := make([]int, last)
+	for _, c := range cols {
+		for i, v := range c[:last] {
+			widths[i] = max(widths[i], lipgloss.Width(v))
+		}
+	}
+	room := 0
+	if width > 0 {
+		// The cursor's mark and the gaps between the columns take the rest.
+		room = width - 1 - 2 - 2*last
+		for _, w := range widths {
+			room -= w
+		}
+		// Too narrow to wrap into, the terminal cuts the line instead.
+		if room < 20 {
+			room = 0
+		}
+	}
+	cells := make([][]string, len(cols))
+	tall := false
+	for n, c := range cols {
+		for _, l := range strings.Split(c[last], "\n") {
+			head, tail, split := strings.Cut(l, "\t")
+			if !split || room == 0 || lipgloss.Width(head)+1+lipgloss.Width(tail) <= room {
+				l = strings.Replace(l, "\t", " ", 1)
+				if room > 0 && lipgloss.Width(l) > room {
+					l = ansi.Wrap(l, room, "/ ")
+				}
+				cells[n] = append(cells[n], strings.Split(l, "\n")...)
+				continue
+			}
+			cells[n] = append(cells[n], head)
+			for _, t := range strings.Split(ansi.Wrap(tail, room-2, "/ "), "\n") {
+				cells[n] = append(cells[n], "  "+t)
+			}
+		}
+		tall = tall || n > 0 && len(cells[n]) > 1
+	}
+	var b strings.Builder
+	for n, c := range cols {
+		if tall && n > 1 {
+			b.WriteString("\n")
+		}
+		for k, more := range cells[n] {
+			parts := []string{}
+			for i, v := range c[:last] {
+				if k > 0 {
+					v = ""
+				}
+				parts = append(parts, v+strings.Repeat(" ", widths[i]-lipgloss.Width(v)))
+			}
+			parts = append(parts, more)
+			if n-1 == cursor {
+				// Each cell bold on its own, as drawTable has it.
+				for i, v := range parts {
+					parts[i] = portCursor.Render(v)
+				}
+			}
+			line := strings.TrimRight(strings.Join(parts, "  "), " ")
+			switch {
+			case n == 0:
+				line = "  " + portHelp.Render(line)
+			case n-1 == cursor && k == 0:
+				line = cursorMark() + line
+			default:
+				line = "  " + line
+			}
+			b.WriteString(line + "\n")
+		}
 	}
 	return b.String()
 }
