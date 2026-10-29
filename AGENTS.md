@@ -37,10 +37,11 @@ builds `website/` with VitePress and publishes it to GitHub Pages; a
 `vX.Y` tag on a commit of main whose tests passed releases it - `release`
 builds it, checks `unibox --version` prints the tag's version, publishes
 `make dist`'s archives for Linux, macOS and Windows as the tag's GitHub
-release, and points `Formula/unibox.rb` (the Homebrew tap this repository
-is) and `bucket/unibox.json` (its Scoop bucket) at it. Release by pushing
-such a tag; never edit the formula's tag or revision, or the manifest, by
-hand.
+release, and writes `Formula/unibox.rb` (the Homebrew tap this repository
+is) and `bucket/unibox.json` (its Scoop bucket) whole from the archives'
+sums, so brew and Scoop install the binary built there and nothing builds
+on the person's machine. Release by pushing such a tag; never edit the
+formula or the manifest by hand - change the workflow that writes them.
 A test that fails one run in a few is a bug to find, not to rerun: the
 lock tests did, until FileLock.Close unlocked before closing (a forked
 child holds a copy of the descriptor, and with it the flock).

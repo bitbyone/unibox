@@ -83,9 +83,9 @@ why.
 Push a `vX.Y` tag on a commit of `main` whose tests passed. The release
 workflow checks the tag is on `main`, builds, checks `unibox --version`
 prints `X.Y`, publishes archives and checksums from `make dist` as the
-GitHub release, then points `Formula/unibox.rb` at the tag and commit and
-writes `bucket/unibox.json` for the Windows archives, and pushes both to
-`main`. Never edit the formula or manifest by hand; never move a tag.
+GitHub release, then writes `Formula/unibox.rb` for the macOS and Linux
+archives and `bucket/unibox.json` for the Windows ones, each with its
+SHA-256, and pushes both to `main`. Never edit the formula or manifest by hand; never move a tag.
 `make build` takes the version from a release tag on `HEAD`; otherwise
 the binary is `dev (<commit>)`.
 

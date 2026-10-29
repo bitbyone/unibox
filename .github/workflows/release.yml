@@ -3,8 +3,9 @@
 # every system unibox runs on is published as the tag's GitHub release
 # (`make dist`), and the Homebrew formula and the Scoop manifest in this
 # repository are pointed at it and pushed to main, where `brew upgrade` and
-# `scoop update` find them. Homebrew builds the tagged commit from source;
-# Scoop takes the Windows archive, checked against its SHA-256.
+# `scoop update` find them. Both install the archive for their system,
+# checked against its SHA-256: Homebrew the macOS or Linux one, Scoop the
+# Windows one. Neither builds anything, so neither needs Go.
 #
 # The tests are not run again: they ran when the commit was pushed to main
 # (test.yml), and running them twice only gives a flaky one a second chance
@@ -154,19 +155,69 @@ jobs:
           for attempt in 1 2 3; do
             git fetch origin main
             git reset --hard origin/main
-            perl -pi -e 's/(tag:\s+)"v[0-9.]+"/$1"$ENV{TAG}"/; s/(revision:\s+)"[0-9a-f]{40}"/$1"$ENV{SHA}"/' \
-              Formula/unibox.rb
-            # A replacement that matched nothing would push the old release
-            # as the new one.
-            grep -q "tag: *\"$TAG\"" Formula/unibox.rb
-            grep -q "revision: *\"$SHA\"" Formula/unibox.rb
-            # The manifest is written whole, from the sums of the archives
-            # just published; a missing sum stops the release.
+            # The formula and the manifest are written whole, from the sums
+            # of the archives just published; a missing sum stops the
+            # release.
             version=${TAG#v}
             url="https://github.com/$REPO/releases/download/$TAG"
-            sum() { awk -v f="unibox_${version}_windows_$1.zip" '$2 == f { print $1 }' "$SUMS" | grep .; }
-            amd64=$(sum amd64)
-            arm64=$(sum arm64)
+            sum() { awk -v f="unibox_${version}_$1" '$2 == f { print $1 }' "$SUMS" | grep .; }
+            darwin_arm64=$(sum darwin_arm64.tar.gz)
+            darwin_amd64=$(sum darwin_amd64.tar.gz)
+            linux_arm64=$(sum linux_arm64.tar.gz)
+            linux_amd64=$(sum linux_amd64.tar.gz)
+            amd64=$(sum windows_amd64.zip)
+            arm64=$(sum windows_arm64.zip)
+            cat > Formula/unibox.rb <<FORMULA
+          # The release workflow (.github/workflows/release.yml) writes this file
+          # whole when a vX.Y tag is pushed, from the release's archives and their
+          # SHA-256 sums; change it there. brew installs the archive's binary, so
+          # it needs no Go; --HEAD builds main from source.
+          class Unibox < Formula
+            desc "Wrapper over Docker Sandboxes for running coding agents locally"
+            homepage "https://bitbyone.github.io/unibox/"
+            version "$version"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "$url/unibox_${version}_darwin_arm64.tar.gz"
+                sha256 "$darwin_arm64"
+              end
+              on_intel do
+                url "$url/unibox_${version}_darwin_amd64.tar.gz"
+                sha256 "$darwin_amd64"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "$url/unibox_${version}_linux_arm64.tar.gz"
+                sha256 "$linux_arm64"
+              end
+              on_intel do
+                url "$url/unibox_${version}_linux_amd64.tar.gz"
+                sha256 "$linux_amd64"
+              end
+            end
+
+            head do
+              url "https://github.com/$REPO.git", branch: "main"
+              depends_on "go" => :build
+            end
+
+            def install
+              if build.head?
+                system "go", "build", *std_go_args(ldflags: "-X github.com/tobola/unibox/internal/version.Version=HEAD"), "./cmd/unibox"
+              else
+                bin.install "unibox"
+              end
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/unibox --version")
+            end
+          end
+          FORMULA
             mkdir -p bucket
             jq -n --arg v "$version" --arg url "$url" --arg repo "$REPO" \
               --arg amd64 "$amd64" --arg arm64 "$arm64" '{
@@ -191,7 +242,7 @@ jobs:
               exit 0
             fi
             git commit -m "Release unibox ${TAG#v}" \
-              -m "Point the Homebrew formula at $TAG, commit $SHA, so brew builds that commit and nothing else, and the Scoop manifest at the release's Windows archives."
+              -m "Point the Homebrew formula at the release's macOS and Linux archives of $TAG, commit $SHA, and the Scoop manifest at its Windows ones."
             # main may have moved during the tests; fetch and try again.
             git push origin HEAD:main && exit 0
             sleep 5

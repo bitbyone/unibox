@@ -834,9 +834,13 @@ tests that need no shell stand-in, as the stand-ins are `sh` scripts.
 
 A `vX.Y` tag publishes `make dist`'s archives - one binary, the licence
 and the README per system - with their SHA-256 sums as the GitHub release.
-Homebrew still builds the tagged commit from source; Scoop, for Windows,
-installs the archive, from the manifest the release writes into
-`bucket/unibox.json` beside the formula. The jobs that write run none of
+Homebrew and Scoop install those archives, each checked against its sum:
+the release writes `Formula/unibox.rb` for macOS and Linux and
+`bucket/unibox.json` for Windows whole, so no machine builds unibox but
+CI and none needs Go. A binary installed by brew carries no quarantine
+mark, so macOS runs it without a Developer ID signature or notarisation;
+Go signs a darwin/arm64 binary ad hoc as it links, which Apple silicon
+needs. Only an archive downloaded with a browser is quarantined. The jobs that write run none of
 the repository's code.
 
 ### The command line

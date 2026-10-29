@@ -10,8 +10,8 @@
 
 ## Install unibox
 
-Homebrew, from the tap in unibox's repository; it builds the release from
-its tagged commit:
+Homebrew, from the tap in unibox's repository; it installs the release's
+binary for your system, so it needs no Go:
 
 ```sh
 brew tap bitbyone/unibox https://github.com/bitbyone/unibox
