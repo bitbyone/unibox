@@ -57,9 +57,21 @@ exit $status
 }
 
 // restoreConversationsScript unpacks kept conversations where they were,
-// leaving a file the sandbox has newer as it is; tar says so of each, to
-// the operation log.
-const restoreConversationsScript = `tar -xzPf - --keep-newer-files`
+// leaving what the sandbox already has as it is: sbx keeps some agents'
+// directories on disks of their own, which a recreate does not take, and
+// what is there is as new as what was kept from it, or newer. GNU tar,
+// the guest's, skips them silently; its --keep-newer-files fails on every
+// directory that exists. Another tar, as the tests' on macOS, has -k.
+const restoreConversationsScript = `set -u
+kept=/tmp/unibox-conversations.$$
+trap 'rm -f "$kept"' EXIT
+cat > "$kept" || exit 1
+if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+tar -xzPf "$kept" --skip-old-files
+else
+tar -xzPkf "$kept"
+fi
+`
 
 // keepConversations copies a task's conversations from its sandbox to the
 // host. A failure is told and nothing more: the session itself is over.

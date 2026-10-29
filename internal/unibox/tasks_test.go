@@ -1036,6 +1036,25 @@ func TestATasksConversationsOutliveARecreateOfItsSandbox(t *testing.T) {
 	if args := run(Request{Task: "pricing"}); args != "--dangerously-skip-permissions --continue" {
 		t.Fatalf("%q", args)
 	}
+	// sbx keeps claude's conversations on a disk a recreate leaves, so
+	// they may be there already: what is there stays, and nothing fails.
+	if out, err := exec.Command("tar", "--version").Output(); err == nil && strings.Contains(string(out), "GNU tar") {
+		b, err := m.sandbox("dev")
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(t, conversation("pricing"), "pricing's, and more\n")
+		var said strings.Builder
+		m.Log = &said
+		m.restoreConversations(ctx, b, b.Tasks[0])
+		if strings.Contains(said.String(), "not put back") || strings.Contains(said.String(), "tar:") {
+			t.Fatal(said.String())
+		}
+		if got, _ := os.ReadFile(conversation("pricing")); string(got) != "pricing's, and more\n" {
+			t.Fatalf("%q", got)
+		}
+		m.Log = io.Discard
+	}
 	// What the host kept goes with the task.
 	if _, err := os.Stat(m.Paths.conversationsFile("pricing")); err != nil {
 		t.Fatal(err)
