@@ -32,7 +32,7 @@ func (o *options) secretAllUI(cmd *cobra.Command) error {
 		}
 		m := listModel{title: "every token kept, and those needed", header: []string{"SERVICE", "SCOPE", "KEPT", "USED BY"}, actions: []listAction{
 			{key: "enter", name: "set", help: "store"},
-			{key: "s", name: "scope", help: "global, env or sandbox"},
+			{key: "s", name: "scope", help: "change scope"},
 			{key: "d", name: "rm", help: "forget", confirm: "forget the token %s? the sandboxes that take it lose it"},
 		}}
 		if len(skipped) > 0 {

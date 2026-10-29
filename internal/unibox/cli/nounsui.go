@@ -49,7 +49,7 @@ func (o *options) secretUI(cmd *cobra.Command, envName, sandbox string, leave fu
 			{key: "enter", name: "set", help: "store"},
 			{key: "g", name: "generate", help: "generate a new token"},
 			{key: "c", name: "command", help: "store a command for it"},
-			{key: "s", name: "scope", help: "global, env or sandbox"},
+			{key: "s", name: "scope", help: "change scope"},
 		}}
 		for _, l := range list {
 			stored, needed := storedText(l), "yes"

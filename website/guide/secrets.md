@@ -142,7 +142,7 @@ start: a recreate takes a sandbox's own tokens away, and a changed
 command is applied. Removed with `rm --scope`, or with the sandbox, what
 unibox stored in the keychain goes too.
 
-In `unibox secret` at a terminal, `s` moves the token under the cursor:
+In `unibox secret` at a terminal, `s` (change scope) moves the token under the cursor:
 
 ```term
 $ unibox secret -s personal
@@ -174,7 +174,7 @@ npm        global            sbx       -
 A sandbox an env would make and has not yet is named with `(not made)`.
 At a terminal the overview is a list to act in: `enter` stores the token
 under the cursor again - one kept nowhere where you pick, global, the
-env's or a sandbox's - `s` moves it for one of the sandboxes that take it,
+env's or a sandbox's - `s` (change scope) moves it for one of the sandboxes that take it,
 and `d` forgets it, asking first. Without a terminal, or with `--json`,
 it is printed.
 

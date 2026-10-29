@@ -144,7 +144,7 @@ under `secrets:` in its `unibox.yaml` files.
 each sandbox's, and those sbx keeps for one sandbox - and every one a
 sandbox needs that is kept nowhere, each with the sandboxes that take it.
 At a terminal it is a list: `enter` stores the token again where it is
-kept, or one kept nowhere where you pick; `s` moves it, for one sandbox
+kept, or one kept nowhere where you pick; `s` changes its scope, for one sandbox
 that takes it, between global, the env and the sandbox; `d` forgets it.
 
 `rm --scope env|sandbox` gives the scope the token over it again, and
@@ -152,7 +152,7 @@ takes out of the keychain what unibox stored there. A sandbox removed
 takes its own tokens with it.
 
 List keys: `enter` store, `g` generate a new token, `c` store a command,
-`s` move it between global, the env and the sandbox.
+`s` change scope: global, the env or the sandbox.
 
 ## Tasks
 
