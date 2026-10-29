@@ -427,6 +427,7 @@ unibox config unset <key>
 | `editor_ssh` | may editors and apps reach a sandbox as `ssh <sandbox>.sbx`; sbx is set to match and its daemon restarted |
 | `remember_host_commands` | sbx's `env.rememberHostCommands`: approving an env's host commands covers later runs (default `false`) |
 | `claude_remote_control` | sbx's `claude.remoteControl`: Claude Code's `/remote-control` works in sandboxes, so claude.ai and its app drive a session (default `false`) |
+| `clipboard_image_paste` | sbx's `clipboard.imagePaste`: agents paste images from your clipboard with Ctrl+V, which lets processes in a sandbox read images you copy; text pastes either way (default `false`) |
 
 ### `unibox herdr`
 

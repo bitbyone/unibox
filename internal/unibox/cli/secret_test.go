@@ -279,7 +279,7 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	}
 	// An env is planned only once its args are given.
 	out, _, _ := run(t, paths, "", "doctor")
-	if !strings.Contains(out, "0.50.0") || !strings.Contains(out, "sbx asks before an env's host commands run") || strings.Contains(calls(t, log), "env plan") {
+	if !strings.Contains(out, "0.50.0") || !strings.Contains(out, "sbx asks before an env's host commands run") || !strings.Contains(out, "unibox config set clipboard_image_paste true") || strings.Contains(calls(t, log), "env plan") {
 		t.Fatalf("%s", out)
 	}
 	if _, _, err := run(t, paths, "", "var", "set", "-e", "team", "user", "me"); err != nil {
@@ -804,14 +804,17 @@ func TestRememberingHostCommandsIsSbxsSetting(t *testing.T) {
 	if _, _, err := run(t, paths, "", "config", "set", "remember_host_commands", "yes"); err == nil {
 		t.Fatal("a value that is no bool went through")
 	}
-	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}, {"config", "set", "claude_remote_control", "true"}} {
+	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}, {"config", "set", "claude_remote_control", "true"}, {"config", "set", "clipboard_image_paste", "true"}} {
 		if _, _, err := run(t, paths, "", args...); err != nil {
 			t.Fatal(err)
 		}
 	}
 	calls, _ := os.ReadFile(log)
-	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") || !strings.Contains(string(calls), "settings set claude.remoteControl true\n") {
+	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") || !strings.Contains(string(calls), "settings set claude.remoteControl true\n") || !strings.Contains(string(calls), "settings set clipboard.imagePaste true\n") {
 		t.Fatalf("%s", calls)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.ClipboardImagePaste == nil || !*cfg.ClipboardImagePaste {
+		t.Fatalf("%v", cfg.ClipboardImagePaste)
 	}
 }
 
@@ -823,11 +826,14 @@ func TestInitAsksAboutClaudesRemoteControlForAnEnvThatRunsIt(t *testing.T) {
 	}
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
-	// SSH agent, editors, host commands; remote control: yes; the arg;
-	// the secrets: later; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n1\n1\n1\nperson\nn\n2\nn\n", "init", repo)
-	if err != nil || !strings.Contains(said, "Claude remote control") {
+	// SSH agent, editors, host commands; remote control and pasting
+	// images: yes; the arg; the secrets: later; no sandbox yet.
+	_, said, err := runAt(t, paths, "1\n1\n1\n1\n1\nperson\nn\n2\nn\n", "init", repo)
+	if err != nil || !strings.Contains(said, "Claude remote control") || !strings.Contains(said, "Pasting images") {
 		t.Fatalf("%v\n%s", err, said)
+	}
+	if cfg, _ := paths.LoadConfig(); cfg.ClipboardImagePaste == nil || !*cfg.ClipboardImagePaste {
+		t.Fatalf("%v", cfg.ClipboardImagePaste)
 	}
 	if cfg, _ := paths.LoadConfig(); cfg.ClaudeRemoteControl == nil || !*cfg.ClaudeRemoteControl {
 		t.Fatalf("%v", cfg.ClaudeRemoteControl)

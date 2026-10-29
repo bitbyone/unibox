@@ -103,6 +103,20 @@ func (o *options) doctorCommand() *cobra.Command {
 					add("sbx", "host commands", "pass", "sbx asks before an env's host commands run", "")
 				}
 			}
+			// Pasting an image is off until said, and nothing else tells the
+			// person why Ctrl+V does nothing in an agent.
+			if paste, err := sbx.Setting(ctx, "clipboard.imagePaste"); err == nil {
+				switch said := o.manager.Config.ClipboardImagePaste; {
+				case paste == "true":
+					add("sbx", "pasting images", "pass", "agents paste images from your clipboard", "")
+				case said != nil && !*said:
+					add("sbx", "pasting images", "pass", "agents paste text alone, as config.yaml says", "")
+				default:
+					// Not fixed by doctor: it lets the sandbox read images copied
+					// here, the person's call.
+					add("sbx", "pasting images", "warn", "agents paste text alone; an image pasted with Ctrl+V does nothing", "unibox config set clipboard_image_paste true lets them paste images, false says text alone")
+				}
+			}
 			allowed, said := o.manager.Config.SSHAgent()
 			forwarding, err := sbx.SSHForwarding(ctx)
 			switch {

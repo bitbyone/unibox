@@ -189,11 +189,15 @@ func (o *options) configCommand() *cobra.Command {
                runs too, rather than being asked each time (sbx's setting)
   claude_remote_control
                whether Claude Code's /remote-control works in sandboxes, so
-               claude.ai and its app can drive a session (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
+               claude.ai and its app can drive a session (sbx's setting)
+  clipboard_image_paste
+               whether agents paste images from this computer's clipboard
+               with Ctrl+V, which lets the sandbox read images copied here
+               (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		key, value := args[0], args[1]
 		switch key {
-		case "remember_host_commands", "claude_remote_control":
+		case "remember_host_commands", "claude_remote_control", "clipboard_image_paste":
 			v, err := strconv.ParseBool(value)
 			if err != nil {
 				return fmt.Errorf("%s must be true or false", key)
@@ -245,7 +249,7 @@ func (o *options) configCommand() *cobra.Command {
 	c.AddCommand(&cobra.Command{Use: "unset key", Args: cobra.ExactArgs(1), Short: "Forget a setting, back to its default", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		switch args[0] {
-		case "remember_host_commands", "claude_remote_control":
+		case "remember_host_commands", "claude_remote_control", "clipboard_image_paste":
 			if err := o.manager.SBX.SetSetting(cmd.Context(), unibox.SBXSettings[args[0]], ""); err != nil {
 				return err
 			}
@@ -278,7 +282,7 @@ func (o *options) configCommand() *cobra.Command {
 	return c
 }
 
-const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh, remember_host_commands and claude_remote_control"
+const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh, remember_host_commands, claude_remote_control and clipboard_image_paste"
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {

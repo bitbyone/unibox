@@ -360,10 +360,12 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 		envs = append(envs, env)
 	}
-	claude := false
+	claude, pastes := false, false
 	if err = o.working("reading which agents the envs run", func() error {
 		for _, env := range envs {
-			claude = claude || slices.Contains(o.manager.EnvAgents(ctx, env), "claude")
+			agents := o.manager.EnvAgents(ctx, env)
+			claude = claude || slices.Contains(agents, "claude")
+			pastes = pastes || slices.Contains(agents, "claude") || slices.Contains(agents, "codex")
 		}
 		return nil
 	}); err != nil {
@@ -373,6 +375,16 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		if err := o.askSBXSetting(cmd, "claude_remote_control", "Claude remote control", "Claude Code's /remote-control lets claude.ai and the Claude app drive a session in a sandbox. Claude signs that channel in with a session token of its own, not your credentials.", []pick{
 			{"yes", "Yes - allow /remote-control"},
 			{"no", "No"},
+		}, "yes"); err != nil {
+			return err
+		}
+	}
+	// Claude Code and Codex paste images with Ctrl+V, which sbx serves
+	// from this computer's clipboard only once told to.
+	if pastes {
+		if err := o.askSBXSetting(cmd, "clipboard_image_paste", "Pasting images", "Claude Code and Codex paste a screenshot with Ctrl+V. sbx hands them images from this computer's clipboard only when let to, and then any process in a sandbox can read an image you copy. Text pastes either way.", []pick{
+			{"yes", "Yes - paste images from my clipboard"},
+			{"no", "No - text only"},
 		}, "yes"); err != nil {
 			return err
 		}

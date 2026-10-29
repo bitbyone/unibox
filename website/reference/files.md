@@ -69,6 +69,7 @@ ssh_agent: false
 editor_ssh: true
 remember_host_commands: true      # sbx's settings, set to match at each start
 claude_remote_control: true
+clipboard_image_paste: true       # agents paste images from your clipboard
 ```
 
 Edit it through `unibox env`, `config`, `context`, `network`, `port
@@ -77,7 +78,7 @@ written by hand, and `ports:` may
 be ([Ports](/guide/ports#named-ports)): a port is its mapping alone, on
 at each start, or `{port, default}`. A repository takes the keys of the
 team's (below); one of yours that says only `default` switches the
-team's of its name. `remember_host_commands` and `claude_remote_control`
+team's of its name. `remember_host_commands`, `claude_remote_control` and `clipboard_image_paste`
 are sbx's settings: unibox sets sbx to match before it creates or starts
 a sandbox, so editing them here is enough; left out, sbx's own stand.
 
