@@ -154,7 +154,7 @@ func (m listModel) id() string {
 
 // View draws the list to fit the terminal: a line longer than it would
 // wrap, and the list would no longer be drawn over in place, so a line is
-// cut; rows beyond its height scroll with the cursor.
+// cut; rows beyond the room listRoom gives scroll with the cursor.
 func (m listModel) View() string {
 	if m.chosen != nil || m.done {
 		return ""
@@ -196,16 +196,14 @@ func (m listModel) View() string {
 		}
 		table := strings.Split(strings.TrimSuffix(drawTable(shown, m.cursor), "\n"), "\n")
 		rows := table[1:]
-		if m.height > 0 {
-			// The title, the header, the blank lines, the filter and the
-			// line the cursor is left on take the rest.
-			room := max(m.height-len(foot)-7, 1)
-			if room < len(rows) {
-				first := min(max(m.cursor-room/2, 0), len(rows)-room)
-				rows = rows[first : first+room]
-			}
+		// The title, the filter, the header, the line of how many more,
+		// the blank one, the keys and the line the cursor is left on take
+		// the rest.
+		first, end := rowWindow(len(rows), m.cursor, listRoom(m.height, len(lines)+len(foot)+4))
+		lines = append(append(lines, table[0]), rows[first:end]...)
+		if more := moreLine(first, len(rows)-end); more != "" {
+			lines = append(lines, more)
 		}
-		lines = append(append(lines, table[0]), rows...)
 	}
 	lines = append(append(lines, ""), foot...)
 	if m.width > 0 {

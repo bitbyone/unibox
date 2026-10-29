@@ -172,8 +172,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   actions run their subcommand through `runStep`, each by a key (`*ui.go`,
   bubbletea). A list's line is cut to the terminal's width, or it wraps
   and is no longer drawn over; its keys are wrapped between two keys
-  instead (`helpLines`), as a cut line would hide the last ones, and the
-  rows get the room left. Nothing may write to the terminal while a list is drawn. An action that takes the terminal or asks
+  instead (`helpLines`), as a cut line would hide the last ones. Every
+  list's rows scroll within `listRoom` (`scroll.go`): at most
+  `listMaxLines`, fewer on a short terminal, never under `listMinLines`,
+  with a line saying how many more lie above and below. Nothing may write to the terminal while a list is drawn. An action that takes the terminal or asks
   more ends the list and runs as its command would; without a terminal
   or with `--json` the noun lists as `ls` does.
 - **Commands are a noun, then a verb** (`unibox sandbox stop`); only

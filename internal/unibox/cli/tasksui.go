@@ -41,15 +41,16 @@ type tasksModel struct {
 	agent  int
 	chosen *taskAction
 	done   bool
-	// width is the terminal's, which the keys are wrapped to.
-	width int
+	// width and height are the terminal's: the keys and repositories are
+	// wrapped to the one, the tasks scroll within the other.
+	width, height int
 }
 
 func (m tasksModel) Init() tea.Cmd { return nil }
 
 func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width = size.Width
+		m.width, m.height = size.Width, size.Height
 		return m, nil
 	}
 	key, ok := msg.(tea.KeyMsg)
@@ -149,9 +150,8 @@ func (m tasksModel) View() string {
 		}
 		cols = append(cols, []string{name, r.Sandbox, cmp.Or(r.Agent, "-"), r.State, fmt.Sprint(r.sessions), strings.Join(repos, "\n")})
 	}
-	b.WriteString(drawTallTable(cols, m.cursor, m.width))
-	b.WriteString("\n")
 	row := m.rows[m.cursor]
+	var foot []string
 	switch m.mode {
 	case tasksAgent:
 		agents := []string{}
@@ -163,13 +163,31 @@ func (m tasksModel) View() string {
 			}
 			agents = append(agents, a)
 		}
-		fmt.Fprintf(&b, "Resume %s with %s\n", cmp.Or(row.Alias, row.ID), strings.Join(agents, ""))
-		b.WriteString(strings.Join(helpLines(m.width, "←/→ h/l", "agent", "enter", "resume", "esc", "back"), "\n") + "\n")
+		foot = append([]string{fmt.Sprintf("Resume %s with %s", cmp.Or(row.Alias, row.ID), strings.Join(agents, ""))}, helpLines(m.width, "←/→ h/l", "agent", "enter", "resume", "esc", "back")...)
 	case tasksRemove:
-		fmt.Fprintf(&b, "Remove task %s from sandbox %s? [y/N]\n", cmp.Or(row.Alias, row.ID), row.Sandbox)
+		foot = []string{fmt.Sprintf("Remove task %s from sandbox %s? [y/N]", cmp.Or(row.Alias, row.ID), row.Sandbox)}
 	default:
-		b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit"), "\n") + "\n")
+		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit")
 	}
+	header, blocks, gap := tallTable(cols, m.cursor, m.width)
+	heights := []int{}
+	for _, bl := range blocks {
+		heights = append(heights, len(bl))
+	}
+	// The title, the header, the line of how many more, the blank one,
+	// the keys and the line the cursor is left on take the rest.
+	first, end := blockWindow(heights, m.cursor, gap, listRoom(m.height, len(foot)+6))
+	b.WriteString(header + "\n")
+	for i := first; i < end; i++ {
+		if i > first && gap > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(strings.Join(blocks[i], "\n") + "\n")
+	}
+	if more := moreLine(first, len(blocks)-end); more != "" {
+		b.WriteString(more + "\n")
+	}
+	b.WriteString("\n" + strings.Join(foot, "\n") + "\n")
 	return b.String()
 }
 
@@ -186,13 +204,13 @@ func repoWhere(r api.Repository) (kind, where string) {
 	return "clone", cmp.Or(strings.TrimSuffix(strings.TrimPrefix(r.URL, "https://"), ".git"), "-")
 }
 
-// drawTallTable draws a table whose last column's cells may hold several
+// tallTable draws a table whose last column's cells may hold several
 // lines, each wrapped to the room the terminal leaves it - width 0 is one
-// that has not said its width. A line's part after a tab, a path, goes on
-// a line of its own beneath it when the two do not fit, so a path is not
-// broken where it starts. Once a row is more than a line, a blank line
-// sets the rows apart.
-func drawTallTable(cols [][]string, cursor, width int) string {
+// that has not said its width: its header, and each row's lines. A line's
+// part after a tab, a path, goes on a line of its own beneath it when the
+// two do not fit, so a path is not broken where it starts. gap is the
+// blank line that sets the rows apart once one is more than a line.
+func tallTable(cols [][]string, cursor, width int) (header string, rows [][]string, gap int) {
 	last := len(cols[0]) - 1
 	widths := make([]int, last)
 	for _, c := range cols {
@@ -232,11 +250,8 @@ func drawTallTable(cols [][]string, cursor, width int) string {
 		}
 		tall = tall || n > 0 && len(cells[n]) > 1
 	}
-	var b strings.Builder
+	rows = make([][]string, len(cols)-1)
 	for n, c := range cols {
-		if tall && n > 1 {
-			b.WriteString("\n")
-		}
 		for k, more := range cells[n] {
 			parts := []string{}
 			for i, v := range c[:last] {
@@ -261,10 +276,17 @@ func drawTallTable(cols [][]string, cursor, width int) string {
 			default:
 				line = "  " + line
 			}
-			b.WriteString(line + "\n")
+			if n == 0 {
+				header = line
+			} else {
+				rows[n-1] = append(rows[n-1], line)
+			}
 		}
 	}
-	return b.String()
+	if tall {
+		gap = 1
+	}
+	return header, rows, gap
 }
 
 // drawTable draws a list's columns, its first row the header, the row

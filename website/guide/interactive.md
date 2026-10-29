@@ -19,6 +19,12 @@ Lists open from `unibox` (the sandboxes), `task`, `task new`, `repo`,
 `port`, `network`, `secret`, `env`, `var` and `context`. Most filter with
 `/`.
 
+A list takes a part of the terminal below your prompt, not all of it: at
+most 20 lines of rows, fewer when the terminal is short, never fewer than
+3. Rows beyond scroll with the cursor, and a line under them says how
+many lie above and below (`↑ 3 more · ↓ 12 more`). Keys that do not fit
+the terminal's width wrap onto the next line.
+
 ## Without a terminal
 
 In a pipe, a script or with `--json`, the same command prints what its

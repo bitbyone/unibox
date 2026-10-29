@@ -31,8 +31,9 @@ type portsModel struct {
 	// setDefault has a named port on or off at each start, for the person,
 	// and reads the ports anew.
 	setDefault func(key string, on bool) ([]unibox.PortState, string, error)
-	// width is the terminal's, which the keys are wrapped to.
-	width int
+	// width and height are the terminal's: the keys are wrapped to the
+	// one, the rows scroll within the other.
+	width, height int
 }
 
 type portsSwitched struct {
@@ -46,7 +47,7 @@ func (m portsModel) Init() tea.Cmd { return nil }
 func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
+		m.width, m.height = msg.Width, msg.Height
 	case portsSwitched:
 		m.busy, m.err, m.note = false, msg.err, msg.note
 		if msg.err == nil {
@@ -159,7 +160,12 @@ func (m portsModel) View() string {
 	for _, r := range m.rows {
 		nameW, specW, startW, urlW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r))), max(urlW, len(url(r)))
 	}
-	for i, r := range m.rows {
+	keys := helpLines(m.width, "↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done")
+	// The title, the line of how many more, the blank one, the note, the
+	// keys and the line the cursor is left on take the rest.
+	first, end := rowWindow(len(m.rows), m.cursor, listRoom(m.height, len(keys)+7))
+	for i := first; i < end; i++ {
+		r := m.rows[i]
 		mark, state := "  ", portOff.Render("off")
 		if r.On {
 			state = portOn.Render("on ")
@@ -170,6 +176,9 @@ func (m portsModel) View() string {
 		}
 		line := fmt.Sprintf("%s%s  %s  %-*s  %-*s  %-*s  %s", mark, state, name, startW, atStart(r), specW, r.Spec, urlW, url(r), r.Description)
 		b.WriteString(strings.TrimRight(line, " ") + "\n")
+	}
+	if more := moreLine(first, len(m.rows)-end); more != "" {
+		b.WriteString(more + "\n")
 	}
 	b.WriteString("\n")
 	if m.asking {
@@ -187,7 +196,7 @@ func (m portsModel) View() string {
 	default:
 		b.WriteString("\n")
 	}
-	b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done"), "\n") + "\n")
+	b.WriteString(strings.Join(keys, "\n") + "\n")
 	return b.String()
 }
 

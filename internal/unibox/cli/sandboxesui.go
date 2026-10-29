@@ -24,15 +24,16 @@ type sandboxesModel struct {
 	confirm string
 	chosen  *sandboxAction
 	done    bool
-	// width is the terminal's, which the keys are wrapped to.
-	width int
+	// width and height are the terminal's: the keys are wrapped to the
+	// one, the rows scroll within the other.
+	width, height int
 }
 
 func (m sandboxesModel) Init() tea.Cmd { return nil }
 
 func (m sandboxesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width = size.Width
+		m.width, m.height = size.Width, size.Height
 		return m, nil
 	}
 	key, ok := msg.(tea.KeyMsg)
@@ -97,16 +98,24 @@ func (m sandboxesModel) View() string {
 		}
 		cols = append(cols, []string{r.Name, r.Env, cmp.Or(r.Agent, "-"), state, fmt.Sprint(len(r.Tasks)), fmt.Sprint(len(r.Runs))})
 	}
-	b.WriteString(drawTable(cols, m.cursor))
-	b.WriteString("\n")
 	name := m.rows[m.cursor].Name
+	var foot []string
 	switch m.confirm {
 	case "recreate":
-		fmt.Fprintf(&b, "Recreate sandbox %s and discard what it holds outside its tasks? [y/N]\n", name)
+		foot = []string{fmt.Sprintf("Recreate sandbox %s and discard what it holds outside its tasks? [y/N]", name)}
 	case "remove":
-		fmt.Fprintf(&b, "Remove sandbox %s? [y/N]\n", name)
+		foot = []string{fmt.Sprintf("Remove sandbox %s? [y/N]", name)}
 	default:
-		b.WriteString(strings.Join(helpLines(m.width, "↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit"), "\n") + "\n")
+		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit")
 	}
+	table := strings.Split(strings.TrimSuffix(drawTable(cols, m.cursor), "\n"), "\n")
+	// The title, the header, the line of how many more, the blank one,
+	// the keys and the line the cursor is left on take the rest.
+	first, end := rowWindow(len(table)-1, m.cursor, listRoom(m.height, len(foot)+6))
+	b.WriteString(table[0] + "\n" + strings.Join(table[1+first:1+end], "\n") + "\n")
+	if more := moreLine(first, len(table)-1-end); more != "" {
+		b.WriteString(more + "\n")
+	}
+	b.WriteString("\n" + strings.Join(foot, "\n") + "\n")
 	return b.String()
 }

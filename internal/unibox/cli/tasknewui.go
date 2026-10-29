@@ -493,14 +493,13 @@ func (m taskPickModel) View() string {
 	} else {
 		rows := strings.Split(strings.TrimSuffix(drawTable(table, m.cursor), "\n"), "\n")
 		body := rows[1:]
-		if m.height > 0 {
-			room := max(m.height-len(lines)-5-len(help), 1)
-			if room < len(body) {
-				first := min(max(m.cursor-room/2, 0), len(body)-room)
-				body = body[first : first+room]
-			}
+		// The lines above, the header, the line of how many more, the
+		// summary, a note and the keys take the rest.
+		first, end := rowWindow(len(body), m.cursor, listRoom(m.height, len(lines)+len(help)+5))
+		lines = append(append(lines, rows[0]), body[first:end]...)
+		if more := moreLine(first, len(body)-end); more != "" {
+			lines = append(lines, more)
 		}
-		lines = append(append(lines, rows[0]), body...)
 	}
 	summary := fmt.Sprintf("%d picked", picked)
 	if m.branch != "" {
