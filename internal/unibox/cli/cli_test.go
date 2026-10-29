@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -429,5 +430,41 @@ func TestEveryListsCornerSaysTheContext(t *testing.T) {
 	o.manager.Config.Envs["web"] = o.manager.Config.Envs["dev"]
 	if got := ansi.Strip(o.contextCorner()); got != "no context" {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestRepoAddTakesTheCheckoutItIsIn(t *testing.T) {
+	paths := cliFixture(t)
+	home, _ := os.UserHomeDir()
+	checkout := filepath.Join(home, "code", "Billing")
+	if err := os.MkdirAll(filepath.Join(checkout, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := exec.Command("git", "init", "-q", checkout).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, b)
+	}
+	// . deep in the checkout is its top, kept under ~ and named after it.
+	t.Chdir(filepath.Join(checkout, "src"))
+	if out, _, err := run(t, paths, "", "repo", "add", "."); err != nil || !strings.Contains(out, "billing (~/code/Billing)") {
+		t.Fatalf("%v %s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "repo", "add", "-g", "notes", checkout); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "repo", "add", "-g", "https://github.com/acme/spec.git"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := paths.LoadConfig()
+	if got := cfg.Envs["dev"].Repos["billing"].URL; got != "~/code/Billing" {
+		t.Fatalf("%q", got)
+	}
+	if cfg.Repos["notes"].URL != "~/code/Billing" || cfg.Repos["spec"].URL != "https://github.com/acme/spec.git" {
+		t.Fatalf("%+v", cfg.Repos)
+	}
+	if _, _, err := run(t, paths, "", "repo", "add", "./gone"); err == nil || !strings.Contains(err.Error(), "no directory of this machine") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "repo", "rm", "-g", "notes"); err != nil {
+		t.Fatal(err)
 	}
 }

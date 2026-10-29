@@ -347,9 +347,9 @@ lack, and the hosts refused lately commented out, as a kit's
 ```
 unibox repo [-e <env>]
 unibox repo ls [-e <env>]
-unibox repo add <name> <url|directory> [--ref <branch>] [--default always|on|off] [--context true|false] [--description <text>] [-e <env> | --every-env | --env-repo]
+unibox repo add [name] <url|directory> [--ref <branch>] [--default always|on|off] [--context true|false] [--description <text>] [-e <env> | -g, --every-env | --env-repo]
 unibox repo default <name> always|on|off|- [-e <env>] [--env-repo]
-unibox repo rm <name> [-e <env> | --every-env | --env-repo]
+unibox repo rm <name> [-e <env> | -g, --every-env | --env-repo]
 unibox repo recent [-e <env> | --all]
 unibox repo recent rm <path|url>... [-e <env> | --all]
 ```
@@ -365,6 +365,10 @@ beside what it mounts; `on` has `task new` pick it to begin with, and
 when picked or named. `context` - unsaid, true for `always` - is one a
 task reads: it keeps its ref and is never pushed to. A name works
 wherever `run`, `prepare`, `check` and `add-repo` take a repository.
+`unibox repo add .` names the checkout you are in, `-g` for every env:
+without a name it is named after the checkout's directory or the
+address, and a directory is kept as its checkout's top under `~`, the
+same from wherever a task starts.
 `default` writes your say for the env, or with `--env-repo` its
 repository's envs, into `config.yaml`, over the team's; `-` takes it back. `rm` forgets one of yours; the team's stay.
 List keys: `/` filter, `n` new task with it, `space` off/on/always, `a`

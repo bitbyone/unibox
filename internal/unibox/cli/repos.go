@@ -89,7 +89,12 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 	var add unibox.IndexedRepo
 	var everyEnv, addEnvRepo bool
 	var contextFlag string
-	addCmd := &cobra.Command{Use: "add name url|directory", Args: cobra.ExactArgs(2), Short: "Name a repository of yours, a forge's to clone or a directory to mount, for the env or every env", RunE: func(cmd *cobra.Command, args []string) error {
+	addCmd := &cobra.Command{Use: "add [name] url|directory", Args: cobra.RangeArgs(1, 2), Short: "Name a repository of yours, a forge's to clone or a directory to mount, for the env or every env", Long: `Name a repository of yours for the env, or with -g for every env: a
+forge's address a task clones, or a directory of this machine a task
+mounts - unibox repo add . names the checkout you are in. Without a name
+it is named after the checkout's directory or the address; a directory is
+kept as its checkout's top, under ~ where it is, so it is the same from
+wherever a task is started.`, Example: "  unibox repo add .\n  unibox repo add -g ~/code/notes\n  unibox repo add adrs https://gitlab.example.com/arch/adrs.git --ref main --default always", RunE: func(cmd *cobra.Command, args []string) error {
 		scope, err := o.repoScope(envFlag, everyEnv, addEnvRepo)
 		if err != nil {
 			return err
@@ -108,17 +113,24 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 			}
 			add.Context = &on
 		}
-		add.URL = args[1]
-		if err := o.manager.SetRepo(scope, args[0], add); err != nil {
+		name, source := "", args[0]
+		if len(args) == 2 {
+			name, source = args[0], args[1]
+		}
+		if add.URL, err = o.repoSource(cmd, source); err != nil {
 			return err
 		}
-		return o.success(fmt.Sprintf("repository %s is named %s", args[0], o.scopeText(scope)))
+		name = cmp.Or(name, repoNameOf(add.URL))
+		if err := o.manager.SetRepo(scope, name, add); err != nil {
+			return err
+		}
+		return o.success(fmt.Sprintf("repository %s (%s) is named %s", name, add.URL, o.scopeText(scope)))
 	}}
 	addCmd.Flags().StringVar(&add.Ref, "ref", "", "Branch a task works on (default: the forge's default branch)")
 	addCmd.Flags().StringVar(&add.Default, "default", "", "always, on or off (default off)")
 	addCmd.Flags().StringVar(&add.Description, "description", "", "What it is, shown where it is picked")
 	addCmd.Flags().StringVar(&contextFlag, "context", "", "true for one a task reads and keeps on its ref (default: true when always)")
-	addCmd.Flags().BoolVar(&everyEnv, "every-env", false, "Name it for every env rather than this one")
+	addCmd.Flags().BoolVarP(&everyEnv, "every-env", "g", false, "Name it for every env rather than this one")
 	addCmd.Flags().BoolVar(&addEnvRepo, "env-repo", false, "Name it for every env of this env's repository")
 	addCmd.MarkFlagsMutuallyExclusive("every-env", "env-repo")
 	var rmEvery, rmEnvRepo bool
@@ -132,7 +144,7 @@ task with one.`, Example: "  unibox repo ls\n  unibox repo add adrs https://gitl
 		}
 		return o.success(fmt.Sprintf("forgot repository %s %s", args[0], o.scopeText(scope)))
 	}}
-	rm.Flags().BoolVar(&rmEvery, "every-env", false, "Forget the one named for every env")
+	rm.Flags().BoolVarP(&rmEvery, "every-env", "g", false, "Forget the one named for every env")
 	rm.Flags().BoolVar(&rmEnvRepo, "env-repo", false, "Forget the one named for every env of this env's repository")
 	rm.MarkFlagsMutuallyExclusive("every-env", "env-repo")
 	var defEnvRepo bool
@@ -245,6 +257,27 @@ sandboxes may reach neither the forge nor the secrets they need.`, Example: "  u
 	rm.Flags().BoolVar(&all, "all", false, "Forget them for every env")
 	c.AddCommand(rm)
 	return c
+}
+
+// repoSource is how a repository named to repo add is kept: a directory of
+// this machine as its checkout's top, under ~ where it is, as . or a path
+// relative to where unibox runs means nothing to a task started elsewhere;
+// anything else as a forge's address.
+func (o *options) repoSource(cmd *cobra.Command, source string) (string, error) {
+	if p, err := unibox.ExpandPath(source); err == nil && isDirectory(p) {
+		top, _, _, err := unibox.HostCheckout(cmd.Context(), p)
+		if err != nil {
+			return "", err
+		}
+		return tildePath(top), nil
+	}
+	if strings.HasPrefix(source, ".") || strings.HasPrefix(source, "/") || strings.HasPrefix(source, "~") {
+		return "", fmt.Errorf("%s is no directory of this machine; name a checkout of yours, or a forge's address", source)
+	}
+	if _, err := unibox.CloneURL(source); err != nil {
+		return "", fmt.Errorf("%s is neither a directory of this machine nor a forge's address: %w", source, err)
+	}
+	return source, nil
 }
 
 // repoScope is where a repository of the person's is named: for every
