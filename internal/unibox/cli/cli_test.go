@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -466,5 +467,24 @@ func TestRepoAddTakesTheCheckoutItIsIn(t *testing.T) {
 	}
 	if _, _, err := run(t, paths, "", "repo", "rm", "-g", "notes"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAPathUnderAHomeBehindALinkIsUnderTilde(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the home is USERPROFILE there")
+	}
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip(err)
+	}
+	t.Setenv("HOME", link)
+	resolved, _ := filepath.EvalSymlinks(real)
+	if got := tildePath(filepath.Join(resolved, "code", "web")); got != "~/code/web" {
+		t.Fatalf("%q", got)
+	}
+	if got := tildePath(filepath.Join(link, "code")); got != "~/code" {
+		t.Fatalf("%q", got)
 	}
 }

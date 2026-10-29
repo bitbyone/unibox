@@ -766,14 +766,22 @@ func (m taskPickModel) inputs() []unibox.RepoInput {
 	return out
 }
 
-// tildePath is a path under the home as ~ says it, shorter to read.
+// tildePath is a path under the home as ~ says it, shorter to read. The
+// home is matched also as its links resolve, as a checkout's path is, so
+// a home behind a link - macOS's /var is /private/var - is still ~.
 func tildePath(p string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return p
 	}
-	if rest, ok := strings.CutPrefix(p, home); ok && (rest == "" || strings.HasPrefix(rest, string(filepath.Separator))) {
-		return "~" + filepath.ToSlash(rest)
+	homes := []string{home}
+	if real, err := filepath.EvalSymlinks(home); err == nil && real != home {
+		homes = append(homes, real)
+	}
+	for _, h := range homes {
+		if rest, ok := strings.CutPrefix(p, h); ok && (rest == "" || strings.HasPrefix(rest, string(filepath.Separator))) {
+			return "~" + filepath.ToSlash(rest)
+		}
 	}
 	return p
 }
