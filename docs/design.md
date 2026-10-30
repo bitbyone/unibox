@@ -1099,6 +1099,14 @@ to the team's kits and bindings; what sbx does stays true.
   carry it there. A short-lived token fits this well with a refresh
   shorter than its lifetime: each refresh fetches the next one. This is
   what `unibox secret set --command` relies on.
+- **A sandbox made again under its name ignores a token set for it**
+  (sbx 0.50.1). Checked on a throwaway env: after `sbx env rm` and `sbx
+  env create`, `sbx secret set github --sandbox S --command ...` says it
+  applied the token and `secret ls` lists it, yet the proxy sends the
+  global one - after a restart and a second set alike. A `sbx secret rm
+  github --sandbox S` before the set, though nothing is listed to remove,
+  makes it take, every time; a sandbox never made before takes a set
+  alone. So unibox removes before it sets.
 - **sbx's own `github` secret takes github.com over.** With the built-in
   `github` service stored (copilot's `gh auth token`), the proxy sets
   Authorization on requests to github.com itself, and overwrites any the

@@ -402,6 +402,11 @@ func (r *SBX) SecretSetCustom(ctx context.Context, env, placeholder string, host
 }
 
 func (r *SBX) SecretSetSandbox(ctx context.Context, service, sandbox, command string) error {
+	// A sandbox sbx env rm removed and env create made again under its
+	// name keeps getting the global token after a set alone, though sbx
+	// says it applied the sandbox's own (sbx 0.50.1); a remove before it
+	// makes the set take. There may be nothing to remove.
+	_ = runQuiet(hostCommand(ctx, "sbx", "secret", "rm", service, "--sandbox", sandbox, "--force"))
 	if err := runQuiet(hostCommand(ctx, "sbx", "secret", "set", service, "--sandbox", sandbox, "--command", command)); err != nil {
 		return fmt.Errorf("sbx did not keep the %s token of sandbox %s; check the command in config.yaml prints it: %w", service, sandbox, err)
 	}
