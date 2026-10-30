@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"slices"
@@ -174,6 +175,9 @@ func (r *SBX) Exec(ctx context.Context, name string, c Command) *exec.Cmd {
 	args := []string{"exec"}
 	if c.Interactive {
 		args = append(args, "-it")
+		for _, v := range terminalEnv() {
+			args = append(args, "-e", v)
+		}
 	} else if c.Input != nil {
 		args = append(args, "-i")
 	}
@@ -655,4 +659,18 @@ func sbxList[T any](b []byte, key string) ([]T, error) {
 		return list, err
 	}
 	return list, nil
+}
+
+// terminalEnv is what tells a program in the sandbox which terminal it
+// draws on. sbx sets TERM alone, to xterm-256color, the guest having no
+// terminfo for most others, so an agent would not know it can show images
+// over the kitty or iTerm protocol, nor use the colors it has.
+func terminalEnv() []string {
+	env := []string{}
+	for _, key := range []string{"TERM_PROGRAM", "TERM_PROGRAM_VERSION", "LC_TERMINAL", "LC_TERMINAL_VERSION", "COLORTERM", "KITTY_WINDOW_ID"} {
+		if v, ok := os.LookupEnv(key); ok && v != "" {
+			env = append(env, key+"="+v)
+		}
+	}
+	return env
 }

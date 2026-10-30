@@ -236,3 +236,22 @@ func TestVersionsAreComparedByNumberNotText(t *testing.T) {
 		}
 	}
 }
+
+func TestSBXTellsAnInteractiveSessionItsTerminal(t *testing.T) {
+	t.Setenv("TERM_PROGRAM", "ghostty")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("KITTY_WINDOW_ID", "")
+	r := &SBX{}
+	ctx := context.Background()
+	session := r.Exec(ctx, "dev", Command{Args: []string{"claude"}, Interactive: true}).Args
+	if !slices.Contains(session, "TERM_PROGRAM=ghostty") || !slices.Contains(session, "COLORTERM=truecolor") {
+		t.Fatalf("session not told its terminal: %q", session)
+	}
+	if slices.ContainsFunc(session, func(a string) bool { return strings.HasPrefix(a, "KITTY_WINDOW_ID") }) {
+		t.Fatalf("empty variable passed: %q", session)
+	}
+	script := r.Exec(ctx, "dev", Command{Args: []string{"true"}}).Args
+	if slices.Contains(script, "TERM_PROGRAM=ghostty") {
+		t.Fatalf("a script is told the terminal: %q", script)
+	}
+}
