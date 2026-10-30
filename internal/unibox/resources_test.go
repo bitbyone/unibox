@@ -161,7 +161,7 @@ func TestResourcesReachSbxInAFileGivenLastAndAChangeIsTold(t *testing.T) {
 	if err != nil || len(check.Needs) != 1 || check.Needs[0].Code != "env_changed" {
 		t.Fatalf("%v %+v", err, check)
 	}
-	if err := m.Recreate(ctx, "dev"); err != nil {
+	if err := m.Recreate(ctx, "dev", false); err != nil {
 		t.Fatal(err)
 	}
 	calls := f.called("env create dev ")

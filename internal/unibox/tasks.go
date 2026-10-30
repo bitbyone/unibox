@@ -295,7 +295,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	if len(added) == 0 {
 		return t, added, nil
 	}
-	if err = m.ensure(ctx, &b, env, false); err != nil {
+	if err = m.ensure(ctx, &b, env, false, false); err != nil {
 		return t, nil, err
 	}
 	usage, err := m.usage(b.Name, true)
@@ -372,7 +372,7 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 			}
 		}
 	}()
-	if err = m.ensure(ctx, &b, env, false); err != nil {
+	if err = m.ensure(ctx, &b, env, false, false); err != nil {
 		return b, t, nil, nil, err
 	}
 	usage, err = m.usage(b.Name, true)
@@ -848,7 +848,7 @@ func (m *Manager) removeTask(ctx context.Context, name, task string, force bool)
 	// Its clones are checked for unpushed work before anything goes.
 	if exists && !force {
 		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(safeToRemoveScript(removed))}), m.Log); err != nil {
-			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before removing it", task)
+			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before removing it, or discard it with unibox task rm --force %s", task, task)
 		}
 	}
 	if exists {

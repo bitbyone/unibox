@@ -104,7 +104,7 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 		t.Fatal("host changed")
 	}
 	write(t, filepath.Join(clone, "agent.txt"), "uncommitted agent work\n")
-	if err = m.Recreate(ctx, "dev"); err == nil {
+	if err = m.Recreate(ctx, "dev", false); err == nil {
 		t.Fatal("recreated sandbox with uncommitted files")
 	}
 	if f.removes != 0 {
@@ -756,6 +756,43 @@ func TestATaskIsRemovedWhileAnotherTaskOfItsSandboxHasASession(t *testing.T) {
 	}
 }
 
+func TestForceDiscardsWorkOnlyTheSandboxHas(t *testing.T) {
+	t.Parallel()
+	remote, _ := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "notes", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "main"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// Something an agent left beside the clones has no forge copy.
+	notes := filepath.Join(f.root, "dev", "work", "notes", ".scratch")
+	write(t, notes, "kept by nobody\n")
+	if err := m.Recreate(ctx, "dev", false); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("%v", err)
+	}
+	if err := m.Recreate(ctx, "dev", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(notes); err == nil {
+		t.Fatal("the forced recreate kept what the sandbox held")
+	}
+	write(t, notes, "kept by nobody\n")
+	if err := m.Remove(ctx, "dev", "notes", false); err == nil || !strings.Contains(err.Error(), "task rm --force notes") {
+		t.Fatalf("%v", err)
+	}
+	if err := m.Remove(ctx, "dev", "notes", true); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := m.sandbox("dev"); len(b.Tasks) != 0 {
+		t.Fatalf("%+v", b.Tasks)
+	}
+}
+
 func TestATasksAgentsAreToldItsRepositoriesAndTheirInstructions(t *testing.T) {
 	remote, _ := remoteFixture(t)
 	m, f := managerFixture(t)
@@ -1025,7 +1062,7 @@ func TestATasksConversationsOutliveARecreateOfItsSandbox(t *testing.T) {
 	}
 	// A recreate keeps every task's before the sandbox goes, and the tasks
 	// get them back.
-	if err := m.Recreate(ctx, "dev"); err != nil {
+	if err := m.Recreate(ctx, "dev", false); err != nil {
 		t.Fatal(err)
 	}
 	for _, task := range []string{"pricing", "pricing-2"} {

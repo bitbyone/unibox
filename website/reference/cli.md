@@ -209,7 +209,7 @@ unibox task prepare [directory|url] [-- agent-args...] [flags]
 unibox task add-repo <task> [directory|url] [flags]
 unibox task rename <task> [name] [--reset]
 unibox task instructions <task> [--agent <a>] [--paths]
-unibox task rm <task>
+unibox task rm <task> [--force]
 ```
 
 - `new` - a task on repositories of the env's index (`unibox repo`), a
@@ -254,7 +254,8 @@ unibox task rm <task>
 - `rename` - an alias usable wherever the ID is; the ID and `/work/<id>`
   stay. `--reset` removes the alias.
 - `rm` - remove a task after checking for running sessions and unpushed
-  work. Mounted directories are unmounted, never deleted.
+  work; `--force` discards them. Mounted directories are unmounted, never
+  deleted.
 
 List keys: `enter` resume, `t` new task (`task new` in the sandbox of the
 one under the cursor), `a` attach another agent (`←` `→` or `h` `l`),
@@ -273,7 +274,7 @@ unibox sandbox create [name] [-e <env>] [--cpus <n>] [--memory <size>] [--adopt]
 unibox sandbox inspect [sandbox]
 unibox sandbox shell [sandbox]
 unibox sandbox stop [sandbox]
-unibox sandbox recreate [sandbox]
+unibox sandbox recreate [sandbox] [--force]
 unibox sandbox resources [sandbox] [--cpus <n>] [--memory <size>]
 unibox sandbox rm <sandbox> [--force]
 ```
@@ -287,8 +288,9 @@ unibox sandbox rm <sandbox> [--force]
 - `shell` - an interactive shell; counts as a session.
 - `stop` - stop an idle sandbox; the disk stays.
 - `recreate` - remove and create again from the env and your values as
-  they are now, after checking for sessions and unpushed work. Tasks come
-  back; anything else in the sandbox is lost.
+  they are now, after checking for sessions and unpushed work; `--force`
+  discards the unpushed work. Tasks come back; anything else in the
+  sandbox is lost.
 - `resources` - show or set its CPUs and memory, over the env's; `-`
   restores the env's. Kept in `vars.toml`, applied at the next recreate.
 - `rm` - remove after checking for sessions and unpushed work; `--force`

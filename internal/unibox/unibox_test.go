@@ -200,7 +200,7 @@ func TestASandboxUniboxDidNotMakeIsAdoptedOnlyWhenAskedAndKeptUnlessForced(t *te
 	if err != nil || !b.Adopted || b.ID != "theirs" || b.Agent != "claude" {
 		t.Fatalf("%v %+v", err, b)
 	}
-	if err := m.Recreate(ctx, "dev"); err == nil || !strings.Contains(err.Error(), "adopted") {
+	if err := m.Recreate(ctx, "dev", false); err == nil || !strings.Contains(err.Error(), "adopted") {
 		t.Fatalf("%v", err)
 	}
 	if err := m.Remove(ctx, "dev", "", false); err == nil || !strings.Contains(err.Error(), "--force") {
@@ -250,7 +250,7 @@ func TestAChangedEnvIsToldAndAppliedOnlyByRecreate(t *testing.T) {
 	}
 	log := m.Log.(*bytes.Buffer)
 	log.Reset()
-	if err = m.ensure(ctx, &b, mustEnv(t, m), false); err != nil {
+	if err = m.ensure(ctx, &b, mustEnv(t, m), false, false); err != nil {
 		t.Fatal(err)
 	}
 	if f.creates != 1 || !strings.Contains(log.String(), "unibox sandbox recreate dev applies it") {
@@ -261,14 +261,14 @@ func TestAChangedEnvIsToldAndAppliedOnlyByRecreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = m.Recreate(ctx, "dev"); err == nil {
+	if err = m.Recreate(ctx, "dev", false); err == nil {
 		t.Fatal("recreated a sandbox in use")
 	}
 	if err = m.Stop(ctx, "dev"); err == nil {
 		t.Fatal("stopped a sandbox in use")
 	}
 	usage.Close()
-	if err = m.Recreate(ctx, "dev"); err != nil {
+	if err = m.Recreate(ctx, "dev", false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ = m.sandbox("dev")
@@ -435,7 +435,7 @@ func TestARecreatedSandboxIsGivenItsOwnTokensAgain(t *testing.T) {
 	}
 	// sbx may still list the old sandbox's token under its name, which the
 	// sandbox made anew does not get: without it the global one stands.
-	if err := m.Recreate(ctx, "dev"); err != nil {
+	if err := m.Recreate(ctx, "dev", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := len(f.called("secret set github --sandbox dev --command pass github-mine")); got != 2 {

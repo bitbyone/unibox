@@ -90,7 +90,7 @@ func TestPortsArePublishedByTheEnvAndSwitchedWhileASandboxRuns(t *testing.T) {
 	}
 	f.mu.Unlock()
 	b, _ := m.sandbox("dev")
-	if err := m.ensure(ctx, &b, mustEnv(t, m), false); err != nil {
+	if err := m.ensure(ctx, &b, mustEnv(t, m), false, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.hostPorts("dev"); !slices.Equal(got, []int{3000, 7000}) {
@@ -105,7 +105,7 @@ func TestPortsArePublishedByTheEnvAndSwitchedWhileASandboxRuns(t *testing.T) {
 	// session.
 	setPorts(map[string]Port{"fe": {Spec: "3100:3000", Default: true}})
 	b, _ = m.sandbox("dev")
-	if err := m.ensure(ctx, &b, mustEnv(t, m), false); err != nil {
+	if err := m.ensure(ctx, &b, mustEnv(t, m), false, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.hostPorts("dev"); !slices.Equal(got, []int{3100, 7000}) {

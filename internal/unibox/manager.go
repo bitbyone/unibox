@@ -422,7 +422,7 @@ func (m *Manager) progress(what string) {
 	}
 }
 
-func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate bool) error {
+func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate, force bool) error {
 	m.progress("checking sandbox " + b.Name)
 	if err := m.SBX.Available(ctx); err != nil {
 		return err
@@ -451,8 +451,11 @@ func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate 
 			return fmt.Errorf("sandbox %s is in use; retry after its sessions finish", b.Name)
 		}
 		defer exclusive.Close()
-		if err = m.safeBox(ctx, *b); err != nil {
-			return err
+		// Forced, what only the sandbox holds goes with it.
+		if !force {
+			if err = m.safeBox(ctx, *b); err != nil {
+				return err
+			}
 		}
 		// What its tasks' agents said goes with it; the host keeps it.
 		for _, t := range b.Tasks {
@@ -653,18 +656,18 @@ func (m *Manager) Create(ctx context.Context, req Request, adopt bool) (api.Sand
 		b.Agent, b.AgentCommand, b.Agents = m.agentOf(ctx, env)
 		return b, m.saveBox(b)
 	}
-	return b, m.ensure(ctx, &b, env, false)
+	return b, m.ensure(ctx, &b, env, false, false)
 }
 
 // safeBox refuses while a session runs in the sandbox or a task's clone
 // holds work only the sandbox has.
 func (m *Manager) safeBox(ctx context.Context, b api.Sandbox) error {
 	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(guestIdleScript)}), m.Log); err != nil {
-		return Fail(4, "guest_busy", "sandbox %s may still have a running guest session; inspect it with unibox sandbox shell", b.Name)
+		return Fail(4, "guest_busy", "sandbox %s may still have a running guest session; inspect it with unibox sandbox shell, or end it with --force", b.Name)
 	}
 	for _, t := range b.Tasks {
 		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(safeToRemoveScript(t))}), m.Log); err != nil {
-			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before recreating or removing the sandbox", t.ID)
+			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before recreating or removing the sandbox, or discard it with --force", t.ID)
 		}
 	}
 	return nil
@@ -708,9 +711,9 @@ func (m *Manager) removeBox(ctx context.Context, b api.Sandbox) error {
 }
 
 // Recreate creates a sandbox again from its env as it is now, and puts its
-// tasks back: their clones are checked for unpushed work first, and made
-// again; their host directories are mounted again.
-func (m *Manager) Recreate(ctx context.Context, name string) error {
+// tasks back: their clones are checked for unpushed work first, unless
+// forced, and made again; their host directories are mounted again.
+func (m *Manager) Recreate(ctx context.Context, name string, force bool) error {
 	l, err := m.guard(name)
 	if err != nil {
 		return err
@@ -723,7 +726,7 @@ func (m *Manager) Recreate(ctx context.Context, name string) error {
 	if b.Adopted {
 		return fmt.Errorf("sandbox %s was adopted, so unibox does not know how it was made; recreate it with sbx, or remove it with unibox sandbox rm --force", name)
 	}
-	if err = m.ensure(ctx, &b, env, true); err != nil {
+	if err = m.ensure(ctx, &b, env, true, force); err != nil {
 		return err
 	}
 	return m.restoreTasks(ctx, &b)

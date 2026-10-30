@@ -276,7 +276,7 @@ func TestMountsTheSandboxLacksOrNoTaskHasAreFoundAndRecreateMountsAgain(t *testi
 	}
 	// A recreated sandbox has no mounts; its tasks wait to be prepared
 	// again, which mounts them.
-	if err := m.Recreate(ctx, "dev"); err != nil {
+	if err := m.Recreate(ctx, "dev", false); err != nil {
 		t.Fatal(err)
 	}
 	if missing, stray := drift(); len(missing) != 0 || len(stray) != 0 {

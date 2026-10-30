@@ -535,10 +535,12 @@ func (o *options) stopCommand() *cobra.Command {
 	}}
 }
 func (o *options) recreateCommand() *cobra.Command {
-	return &cobra.Command{Use: "recreate [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Create a sandbox again from its env as it is now, keeping its tasks", Long: `Remove a sandbox and create it again from its env's files and your args as
+	var force bool
+	c := &cobra.Command{Use: "recreate [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Create a sandbox again from its env as it is now, keeping its tasks", Long: `Remove a sandbox and create it again from its env's files and your args as
 they are now, after checking for running sessions and unpushed work. Its
 tasks come back: mounted directories are mounted again, clones are made
-again from the forge. What the sandbox held outside its tasks is lost.`, RunE: func(cmd *cobra.Command, args []string) error {
+again from the forge. What the sandbox held outside its tasks is lost, and
+with --force what its tasks' clones held that the forge lacks as well.`, RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := o.sandboxName(first(args))
 		if err != nil {
 			return err
@@ -548,11 +550,13 @@ again from the forge. What the sandbox held outside its tasks is lost.`, RunE: f
 		}
 		// Asked for by name with --yes, sbx's plan is approved as well.
 		o.manager.ApproveEnv = o.yes
-		if err := o.manager.Recreate(cmd.Context(), name); err != nil {
+		if err := o.manager.Recreate(cmd.Context(), name, force); err != nil {
 			return err
 		}
 		return o.success("sandbox recreated")
 	}}
+	c.Flags().BoolVar(&force, "force", false, "Recreate it with its tasks' unpushed work, discarding it")
+	return c
 }
 func (o *options) removeCommand(task bool) *cobra.Command {
 	use, short := "rm sandbox", "Remove a sandbox, after checking for running sessions and unpushed work"
@@ -588,7 +592,9 @@ func (o *options) removeCommand(task bool) *cobra.Command {
 		}
 		return o.success("removed")
 	}}
-	if !task {
+	if task {
+		c.Flags().BoolVar(&force, "force", false, "Remove it with its running session and unpushed work, discarding it")
+	} else {
 		c.Flags().BoolVar(&force, "force", false, "Remove it with its running sessions and unpushed work, or one unibox adopted")
 	}
 	return c
