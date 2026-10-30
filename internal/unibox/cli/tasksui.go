@@ -101,6 +101,8 @@ func (m tasksModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return choose("resume", "")
 		case "r":
 			return choose("repos", "")
+		case "u":
+			return choose("unrepo", "")
 		case "t":
 			return choose("new", "")
 		case "s":
@@ -164,7 +166,7 @@ func (m tasksModel) View() string {
 	case tasksRemove:
 		foot = []string{fmt.Sprintf("Remove task %s from sandbox %s? [y/N]", cmp.Or(row.Alias, row.ID), row.Sandbox)}
 	default:
-		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "s", "shell", "n", "rename", "d", "remove", "q", "quit")
+		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "resume", "t", "new task", "a", "attach agent", "r", "add repos", "u", "remove a repo", "s", "shell", "n", "rename", "d", "remove", "q", "quit")
 	}
 	header, blocks := tallTable(cols, m.cursor, m.width)
 	heights := []int{}

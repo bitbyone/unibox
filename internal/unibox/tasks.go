@@ -267,10 +267,13 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	if t.ID == "" {
 		return api.Task{}, nil, fmt.Errorf("task %s does not exist; unibox task ls lists them", req.Task)
 	}
-	// A task's directories are mounted or cloned as its first ones were;
-	// an address, which no mount can take, is cloned beside mounted ones.
-	req.Mount = slices.ContainsFunc(t.Repositories, func(r api.Repository) bool { return r.Mounted })
-	req.Clone = !req.Mount
+	// Asked for neither, a task's directories are mounted or cloned as its
+	// first ones were; the picker, which says Clone of each, asks Mount.
+	// An address, which no mount can take, is cloned beside mounted ones.
+	if !req.Mount && !req.Clone {
+		req.Mount = slices.ContainsFunc(t.Repositories, func(r api.Repository) bool { return r.Mounted })
+		req.Clone = !req.Mount
+	}
 	if req.Mount {
 		for i, in := range req.Repositories {
 			if p, err := ExpandPath(in.Source); err != nil || !isDir(p) {
@@ -329,6 +332,87 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 		return nil
 	})
 	return t, added, err
+}
+
+// RemoveRepository takes one repository out of a task, also while its
+// agent runs: a mounted directory is unmounted, never deleted; a clone is
+// checked for work the forge lacks first, unless forced, and deleted.
+func (m *Manager) RemoveRepository(ctx context.Context, task, repo string, force bool) (api.Task, error) {
+	task = m.taskID(task)
+	name, err := m.taskSandbox(task, false)
+	if err != nil {
+		return api.Task{}, err
+	}
+	guard, err := m.guard(name)
+	if err != nil {
+		return api.Task{}, err
+	}
+	defer guard.Close()
+	b, err := m.sandbox(name)
+	if err != nil {
+		return api.Task{}, err
+	}
+	i := slices.IndexFunc(b.Tasks, func(t api.Task) bool { return t.ID == task })
+	if i < 0 {
+		return api.Task{}, fmt.Errorf("task %s does not exist; unibox task ls lists them", task)
+	}
+	t := b.Tasks[i]
+	j := slices.IndexFunc(t.Repositories, func(r api.Repository) bool { return r.Name == repo })
+	if j < 0 {
+		return t, fmt.Errorf("task %s has no repository %s; unibox task ls lists what it holds", t.ID, repo)
+	}
+	if len(t.Repositories) == 1 {
+		return t, fmt.Errorf("%s is the only repository of task %s; unibox task rm %s removes the task", repo, t.ID, t.ID)
+	}
+	r := t.Repositories[j]
+	part := t
+	part.Repositories = []api.Repository{r}
+	_, exists, err := m.findBox(ctx, b)
+	if err != nil && !force {
+		return t, err
+	}
+	if exists {
+		usage, err := m.usage(b.Name, true)
+		if err != nil {
+			return t, err
+		}
+		defer usage.Close()
+		if !force {
+			check := "set -eu\nexport GIT_TERMINAL_PROMPT=0\n" + repoCheck(part, r)
+			if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(check)}), m.Log); err != nil {
+				return t, Fail(4, "unpushed_work", "%s in task %s may contain unpushed work; preserve it before removing it, or discard it with unibox task rm-repo --force %s %s", repo, t.ID, t.ID, repo)
+			}
+		}
+		dir := path.Join(t.Directory, r.Name)
+		if r.Mounted {
+			// As when the whole task goes: unmounted and checked to be
+			// empty before its mount point is taken away.
+			if err = m.unmountTask(ctx, b, part); err != nil {
+				return t, err
+			}
+			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", unmountedScript(part)}}), m.Log); err != nil {
+				return t, err
+			}
+			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", `[ ! -d "$1" ] || rmdir -- "$1"`, "bash", dir}}), m.Log); err != nil {
+				return t, err
+			}
+		} else if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"rm", "-rf", "--", dir}}), m.Log); err != nil {
+			return t, err
+		}
+	}
+	err = m.Paths.State(func(s *State) error {
+		box := s.Sandboxes[b.Name]
+		for _, v := range box.Tasks {
+			if v.ID == t.ID {
+				v.Repositories = slices.DeleteFunc(v.Repositories, func(o api.Repository) bool { return o.Name == repo })
+				replaceTask(&box, v)
+				t = v
+			}
+		}
+		s.Sandboxes[b.Name] = box
+		return nil
+	})
+	return t, err
 }
 
 // The guard serializes preparation and lifecycle changes. Usage locks survive

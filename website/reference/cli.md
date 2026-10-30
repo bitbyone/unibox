@@ -207,6 +207,7 @@ unibox task ls [-s <sandbox>]
 unibox task check [directory|url] [-- agent-args...] [flags]
 unibox task prepare [directory|url] [-- agent-args...] [flags]
 unibox task add-repo <task> [directory|url] [flags]
+unibox task rm-repo <task> <repo> [--force]
 unibox task rename <task> [name] [--reset]
 unibox task instructions <task> [--agent <a>] [--paths]
 unibox task rm <task> [--force]
@@ -250,7 +251,11 @@ unibox task rm <task> [--force]
   flags as `check`.
 - `add-repo` - add repositories, even while the agent runs, mounted or
   cloned like the first. Flags: `--repo`, `--branch`, `--author`, `--push`,
-  `--ignore-local`.
+  `--ignore-local`. Picked in the task list, each is mounted or cloned as
+  its row says.
+- `rm-repo` - take a repository out of a task, even while the agent runs:
+  a mounted directory is unmounted, a clone deleted after checking for
+  unpushed work; `--force` discards it. A task's only repository stays.
 - `rename` - an alias usable wherever the ID is; the ID and `/work/<id>`
   stay. `--reset` removes the alias.
 - `rm` - remove a task after checking for running sessions and unpushed
@@ -260,7 +265,8 @@ unibox task rm <task> [--force]
 List keys: `enter` resume, `t` new task (`task new` in the sandbox of the
 one under the cursor), `a` attach another agent (`←` `→` or `h` `l`),
 `r` add repositories of the env's index (picked as in `task new`, seen at
-once by a running agent), `s` shell, `n` rename, `d` remove.
+once by a running agent), `u` remove a repository, `s` shell, `n` rename,
+`d` remove.
 
 ## Sandboxes
 

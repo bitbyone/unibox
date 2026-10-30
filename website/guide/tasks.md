@@ -169,6 +169,16 @@ A running agent sees the new directory at once; the next session's
 the index, are found with `/` or listed with `r` ([recent
 repositories](./repos#recent-repositories)).
 
+Each row is mounted or cloned as `m` sets it, whatever the task's first
+repositories were. One comes out again with `u` in the task list, or:
+
+```sh
+unibox task rm-repo login web             # unmounts a directory, deletes a clone
+```
+
+A mounted directory stays on the host. A clone with work the forge lacks
+stays until it is pushed, or `--force` discards it.
+
 ## Rename and remove
 
 ```sh

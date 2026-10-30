@@ -152,23 +152,7 @@ func safeToRemoveScript(t api.Task) string {
 	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\n")
 	fmt.Fprintf(&b, "echo %s\n", Quote("checking task "+t.ID+" for work not on the forge"))
 	for _, r := range t.Repositories {
-		dir := path.Join(t.Directory, r.Name)
-		if r.Mounted {
-			fmt.Fprintf(&b, "echo %s\n", Quote("  "+r.Name+": mounted from "+r.HostPath+"; its work is on the host"))
-			continue
-		}
-		fmt.Fprintf(&b, "dir=%s\nname=%s\n", Quote(dir), Quote(r.Name))
-		b.WriteString(`if [ -d "$dir" ]; then
-  [ -d "$dir/.git" ] || { echo "$name: an incomplete clone; inspect it before removing" >&2; exit 4; }
-  [ -z "$(git -C "$dir" status --porcelain --untracked-files=all)" ] || { echo "$name: uncommitted files; commit and push before removing" >&2; exit 4; }
-  git -C "$dir" fetch -q origin '+refs/heads/*:refs/remotes/origin/*' || { echo "$name: cannot fetch from the forge to compare; check its access and retry" >&2; exit 4; }
-  [ -z "$(git -C "$dir" rev-list --branches HEAD --not --remotes=origin)" ] || { echo "$name: unpushed commits; push them before removing" >&2; exit 4; }
-  [ -z "$(git -C "$dir" stash list)" ] || { echo "$name: stashes; preserve them before removing" >&2; exit 4; }
-  echo "  $name: clean, every commit on the forge, no stashes"
-else
-  echo "  $name: not cloned, nothing to keep"
-fi
-`)
+		b.WriteString(repoCheck(t, r))
 	}
 	// Files outside the registered clones have no forge copy either.
 	b.WriteString("if [ -d " + Quote(t.Directory) + " ]; then\nfor entry in " + Quote(t.Directory) + "/* " + Quote(t.Directory) + "/.[!.]* " + Quote(t.Directory) + "/..?*; do\n[ -e \"$entry\" ] || continue\ncase \"$entry\" in\n")
@@ -180,6 +164,28 @@ fi
 	b.WriteString(Quote(path.Join(t.Directory, "AGENTS.md")) + " ) head -n 1 \"$entry\" | grep -qF " + Quote(instructionsMark) + " || { echo 'AGENTS.md: not the one unibox writes; preserve it before removing' >&2; exit 4; } ;;\n")
 	b.WriteString(Quote(path.Join(t.Directory, "CLAUDE.md")) + " ) [ \"$(readlink -- \"$entry\")\" = AGENTS.md ] || { echo 'CLAUDE.md: not the link unibox makes; preserve it before removing' >&2; exit 4; } ;;\n")
 	b.WriteString("*) echo \"${entry##*/}: outside the task's repositories; preserve it before removing\" >&2; exit 4 ;;\nesac\ndone\nfi\necho '  nothing outside the repositories'\n")
+	return b.String()
+}
+
+// repoCheck checks one repository of a task for work only the sandbox has.
+func repoCheck(t api.Task, r api.Repository) string {
+	dir := path.Join(t.Directory, r.Name)
+	if r.Mounted {
+		return fmt.Sprintf("echo %s\n", Quote("  "+r.Name+": mounted from "+r.HostPath+"; its work is on the host"))
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "dir=%s\nname=%s\n", Quote(dir), Quote(r.Name))
+	b.WriteString(`if [ -d "$dir" ]; then
+  [ -d "$dir/.git" ] || { echo "$name: an incomplete clone; inspect it before removing" >&2; exit 4; }
+  [ -z "$(git -C "$dir" status --porcelain --untracked-files=all)" ] || { echo "$name: uncommitted files; commit and push before removing" >&2; exit 4; }
+  git -C "$dir" fetch -q origin '+refs/heads/*:refs/remotes/origin/*' || { echo "$name: cannot fetch from the forge to compare; check its access and retry" >&2; exit 4; }
+  [ -z "$(git -C "$dir" rev-list --branches HEAD --not --remotes=origin)" ] || { echo "$name: unpushed commits; push them before removing" >&2; exit 4; }
+  [ -z "$(git -C "$dir" stash list)" ] || { echo "$name: stashes; preserve them before removing" >&2; exit 4; }
+  echo "  $name: clean, every commit on the forge, no stashes"
+else
+  echo "  $name: not cloned, nothing to keep"
+fi
+`)
 	return b.String()
 }
 
@@ -286,7 +292,7 @@ func mountedScript(t api.Task, r api.Repository) string {
 }
 
 // unmountedScript takes out of the guest what mountedScript put there for
-// a task's mounted repositories - git's include - and, run after the
+// a task's mounted repositories, all of them or the ones going - git's include - and, run after the
 // runtime unmounted them, refuses to go on while a mount point still holds
 // anything: the task's directory is deleted next, and what a mount holds
 // is the host's.
@@ -298,13 +304,14 @@ func unmountedScript(t api.Task) string {
 		}
 		dir := path.Join(t.Directory, r.Name)
 		key := "includeIf.gitdir:" + dir + "/.git/.path"
-		fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\n", Quote(key))
+		fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\nrm -rf %s\n", Quote(key), Quote(mountedDir(t, r)))
 		fmt.Fprintf(&b, "dir=%s\n", Quote(dir))
 		b.WriteString(`if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then echo "$dir is still mounted; the task is kept so nothing of the host is deleted" >&2; exit 4; fi
 `)
 	}
 	if b.Len() > 0 {
-		b.WriteString("rm -rf " + Quote("/var/lib/unibox/mounted/"+t.ID) + "\n")
+		// The task's own directory goes once no repository of it is left.
+		b.WriteString("rmdir " + Quote("/var/lib/unibox/mounted/"+t.ID) + " 2>/dev/null || true\n")
 	}
 	return b.String()
 }

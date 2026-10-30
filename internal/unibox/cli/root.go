@@ -453,6 +453,10 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			if err := o.addTaskRepos(cmd, t); err != nil && !errors.Is(err, errCancelled) {
 				fmt.Fprintln(o.log, err)
 			}
+		case "unrepo":
+			if err := o.removeTaskRepo(ctx, t); err != nil && !errors.Is(err, errCancelled) {
+				fmt.Fprintln(o.log, err)
+			}
 		case "new":
 			// A new task in the sandbox of the one under the cursor, picked
 			// as unibox task new picks it; it takes the terminal.

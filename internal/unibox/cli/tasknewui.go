@@ -819,6 +819,9 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	if len(req.Repositories) == 0 {
 		return nil
 	}
+	// Each row says whether it is cloned, so one picked to mount is
+	// mounted, whatever the task's first repositories were.
+	req.Mount = slices.ContainsFunc(req.Repositories, func(in unibox.RepoInput) bool { return !in.Clone })
 	_, added, err := o.manager.AddRepositories(cmd.Context(), req)
 	if err != nil {
 		return err
@@ -826,6 +829,31 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 	for _, r := range added {
 		fmt.Fprintf(o.log, "added %s to task %s at %s/%s\n", r.Name, t.ID, t.Directory, r.Name)
 	}
+	return nil
+}
+
+// removeTaskRepo takes a repository the person picks out of a task; one
+// with work the forge lacks stays, and the error says how to discard it.
+func (o *options) removeTaskRepo(ctx context.Context, t api.Task) error {
+	if len(t.Repositories) < 2 {
+		return fmt.Errorf("task %s holds one repository; d removes the task", cmp.Or(t.Alias, t.ID))
+	}
+	picks := []pick{}
+	for _, r := range t.Repositories {
+		how := "clone, deleted"
+		if r.Mounted {
+			how = "mounted from " + tildePath(r.HostPath) + ", unmounted"
+		}
+		picks = append(picks, pick{value: r.Name, label: r.Name + " (" + how + ")"})
+	}
+	repo, err := o.askPick("Remove a repository from task "+cmp.Or(t.Alias, t.ID), "A mounted directory stays on the host; a clone is checked for unpushed work first", picks, "")
+	if err != nil {
+		return err
+	}
+	if _, err := o.manager.RemoveRepository(ctx, t.ID, repo, false); err != nil {
+		return err
+	}
+	fmt.Fprintf(o.log, "removed %s from task %s\n", repo, cmp.Or(t.Alias, t.ID))
 	return nil
 }
 

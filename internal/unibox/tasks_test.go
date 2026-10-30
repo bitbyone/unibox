@@ -520,6 +520,65 @@ func TestARepositoryJoinsATaskWhileItsAgentRuns(t *testing.T) {
 	}
 }
 
+func TestARepositoryIsMountedAsPickedAndTakenOutAgain(t *testing.T) {
+	t.Parallel()
+	payments, _ := remoteFixture(t)
+	ledger, _ := remoteFixture(t)
+	_, host := remoteFixture(t)
+	m, f := managerFixture(t)
+	paymentsURL := "https://forge.invalid/team/payments.git"
+	ledgerURL := "https://forge.invalid/team/ledger.git"
+	f.remotes[paymentsURL] = "file://" + payments
+	f.remotes[ledgerURL] = "file://" + ledger
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	author := "Person <person@example.com>"
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "refunds", Author: author, Repositories: []RepoInput{{Source: paymentsURL, Branch: "main"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// A task of clones mounts a directory the picker says to mount.
+	add := Request{Task: "refunds", Author: author, Mount: true, Repositories: []RepoInput{{Source: host, Name: "notes", Branch: "main"}, {Source: ledgerURL, Branch: "main", Clone: true}}}
+	task, _, err := m.AddRepositories(ctx, add)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range task.Repositories {
+		if r.Mounted != (r.Name == "notes") {
+			t.Fatalf("%+v", task.Repositories)
+		}
+	}
+	work := filepath.Join(f.root, "dev", "work", "refunds")
+	if task, err = m.RemoveRepository(ctx, "refunds", "notes", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Lstat(filepath.Join(work, "notes")); err == nil {
+		t.Fatal("the mount stayed in the task")
+	}
+	if _, err = os.Stat(filepath.Join(host, ".git")); err != nil {
+		t.Fatal("the host's checkout went with its mount")
+	}
+	// A clone with work the forge lacks stays, unless forced.
+	clone := filepath.Join(work, "ledger")
+	write(t, filepath.Join(clone, "agent.txt"), "work\n")
+	if _, err = m.RemoveRepository(ctx, "refunds", "ledger", false); err == nil || !strings.Contains(err.Error(), "rm-repo --force refunds ledger") {
+		t.Fatalf("%v", err)
+	}
+	if task, err = m.RemoveRepository(ctx, "refunds", "ledger", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(clone); err == nil {
+		t.Fatal("the forced clone stayed")
+	}
+	if len(task.Repositories) != 1 || task.Repositories[0].Name != "payments" {
+		t.Fatalf("%+v", task.Repositories)
+	}
+	if _, err = m.RemoveRepository(ctx, "refunds", "payments", false); err == nil || !strings.Contains(err.Error(), "only repository") {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestATaskAliasIsTakenWhereverItsIDIs(t *testing.T) {
 	t.Parallel()
 	remote, _ := remoteFixture(t)

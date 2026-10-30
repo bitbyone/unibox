@@ -208,6 +208,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   (`taskPickModel`): roles, work branch, push per row, task name.
   `instructions:` of the env and each repository become the task's
   `/work/<task>/AGENTS.md` (`CLAUDE.md` a link) before each session.
+  `task add-repo` mounts or clones as the task's first repositories were,
+  unless the request says (`Mount`, as the picker does, each row's
+  `Clone` its own); `task rm-repo` takes one out, unmounting a directory
+  and checking a clone (`repoCheck`) before deleting it.
   Every repository a task held is kept in `State.Recent` (`recent.go`)
   with its sandbox's env, the newest first, and offered to that env's
   tasks alone, as another env's sandbox may lack the forge's network or

@@ -289,6 +289,24 @@ func (o *options) addRepoCommand() *cobra.Command {
 	return c
 }
 
+// removeRepoCommand takes a repository out of a task, as addRepoCommand
+// put it in.
+func (o *options) removeRepoCommand() *cobra.Command {
+	var force bool
+	c := &cobra.Command{Use: "rm-repo task repo", Args: cobra.ExactArgs(2), Short: "Take a repository out of a task: unmount a directory, delete a clone after checking for unpushed work", RunE: func(cmd *cobra.Command, args []string) error {
+		t, err := o.manager.RemoveRepository(cmd.Context(), args[0], args[1], force)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "task": t})
+		}
+		return o.success("removed " + args[1] + " from task " + t.ID)
+	}}
+	c.Flags().BoolVar(&force, "force", false, "Remove a clone with its unpushed work, discarding it")
+	return c
+}
+
 func (o *options) createCommand() *cobra.Command {
 	var req unibox.Request
 	var adopt bool
