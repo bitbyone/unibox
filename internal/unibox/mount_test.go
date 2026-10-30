@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
 func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing.T) {
@@ -45,7 +47,7 @@ func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing
 	}
 	box := filepath.Join(f.root, "dev")
 	global, _ := os.ReadFile(filepath.Join(box, "home", ".gitconfig"))
-	if !strings.Contains(string(global), `[includeIf "gitdir:`+filepath.Join(box, "work", "local", filepath.Base(host))+`/.git/"]`) {
+	if !strings.Contains(string(global), `[includeIf "gitdir:`+filepath.Join(box, "work", "local", filepath.Base(host))+`/.git"]`) {
 		t.Fatalf("%s", global)
 	}
 	own, _ := os.ReadFile(filepath.Join(box, "state", "mounted", "local", filepath.Base(host), "gitconfig"))
@@ -390,5 +392,83 @@ func TestGitOnTheHostRunsNothingAMountedRepositoryConfigures(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(marks, name)); err == nil {
 			t.Errorf("unibox's git ran the repository's %s", name)
 		}
+	}
+}
+
+func TestAnAuthorTheEnvRequiresIsWhoEveryTaskCommitsAs(t *testing.T) {
+	t.Parallel()
+	_, host := remoteFixture(t)
+	host, _ = filepath.EvalSymlinks(host)
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	authorMissing := func() bool {
+		t.Helper()
+		check, err := m.Check(ctx, Request{Sandbox: "dev", Task: "early"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return slices.ContainsFunc(check.Needs, func(n api.Need) bool { return n.Code == "author_missing" && !n.Warning })
+	}
+	// An env that does not require one asks for none, and a task commits as
+	// the host's repository says.
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if authorMissing() {
+		t.Fatal("an author was asked for unrequired")
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "early", Author: "Host <host@example.com>", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
+		t.Fatal(err)
+	}
+	// Required by the team, a task waits for one of the person's.
+	write(t, filepath.Join(filepath.Dir(m.Config.Envs["dev"].Files[0]), "dev.unibox.yaml"), "author: required\n")
+	if !authorMissing() {
+		t.Fatal("a required author was not asked for")
+	}
+	box := filepath.Join(f.root, "dev")
+	committer := func(want string) {
+		t.Helper()
+		if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "early"}); err != nil {
+			t.Fatal(err)
+		}
+		global, _ := os.ReadFile(filepath.Join(box, "home", ".gitconfig"))
+		own, _ := os.ReadFile(filepath.Join(box, "state", "mounted", "early", filepath.Base(host), "gitconfig"))
+		name, email, _ := AuthorParts(want)
+		for _, config := range []string{string(global), string(own)} {
+			if !strings.Contains(config, "name = "+name+"\n") || !strings.Contains(config, "email = "+email+"\n") {
+				t.Fatalf("not %s:\n%s", want, config)
+			}
+		}
+		if b, _ := m.sandbox("dev"); b.Tasks[0].Repositories[0].Author != want {
+			t.Fatalf("%+v", b.Tasks[0].Repositories)
+		}
+	}
+	// Every env's author is the default, the env's wins over it and the
+	// sandbox's over both, each taken by the task's next session.
+	v, _ := m.Paths.LoadEnvValues()
+	v.Author = "Everywhere <all@example.com>"
+	if err := m.Paths.SaveEnvValues(v); err != nil {
+		t.Fatal(err)
+	}
+	if authorMissing() {
+		t.Fatal("every env's author did not do")
+	}
+	committer("Everywhere <all@example.com>")
+	v, _ = m.Paths.LoadEnvValues()
+	v.EnvAuthors["dev"] = "Work <work@example.com>"
+	if err := m.Paths.SaveEnvValues(v); err != nil {
+		t.Fatal(err)
+	}
+	committer("Work <work@example.com>")
+	if err := m.Paths.SetSandboxAuthor("dev", "Mine <mine@example.com>"); err != nil {
+		t.Fatal(err)
+	}
+	committer("Mine <mine@example.com>")
+	// Removing the sandbox forgets its own author, and the env's stays.
+	if err := m.Remove(ctx, "dev", "", true); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := m.Paths.LoadEnvValues(); v.SandboxAuthors["dev"] != "" || v.EnvAuthors["dev"] != "Work <work@example.com>" {
+		t.Fatalf("%+v %+v", v.SandboxAuthors, v.EnvAuthors)
 	}
 }

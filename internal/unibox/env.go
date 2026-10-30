@@ -53,6 +53,9 @@ type Env struct {
 	// Instructions are what the env's tasks' agents are told, the team's
 	// files' first, then the person's from the widest scope to the env.
 	Instructions []string
+	// AuthorRequired is the team's asking each person for a commit author
+	// of their own, without which no task of the env starts.
+	AuthorRequired bool
 }
 
 // SandboxName is the name of the env's sandbox: the user's, else the
@@ -96,8 +99,16 @@ func (c Config) LoadEnv(name string) (Env, error) {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
 	}
 	instructions := []string{}
-	if err := readTeamFiles(ec.Files, func(_, _ string, doc teamDoc) error {
+	authorRequired := false
+	if err := readTeamFiles(ec.Files, func(file, _ string, doc teamDoc) error {
 		instructions = append(instructions, doc.Instructions)
+		switch doc.Author {
+		case "":
+		case "required", "optional":
+			authorRequired = doc.Author == "required"
+		default:
+			return fmt.Errorf("%s: author is required or optional, not %q", file, doc.Author)
+		}
 		return nil
 	}); err != nil {
 		return Env{}, fmt.Errorf("env %s: %w", name, err)
@@ -106,7 +117,7 @@ func (c Config) LoadEnv(name string) (Env, error) {
 		instructions = append(instructions, layer.Instructions)
 	}
 	instructions = slices.DeleteFunc(instructions, func(s string) bool { return strings.TrimSpace(s) == "" })
-	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources, Repos: repos, Instructions: instructions}, nil
+	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources, Repos: repos, Instructions: instructions, AuthorRequired: authorRequired}, nil
 }
 
 // ValidEnvConfig checks what an env says before it is kept: a name, files

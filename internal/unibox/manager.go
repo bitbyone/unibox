@@ -375,6 +375,9 @@ func (m *Manager) Check(ctx context.Context, req Request) (api.Check, error) {
 		}
 	}
 	req.decide()
+	if req.Author = m.author(env, b.Name, req.Author); req.Author == "" && env.AuthorRequired {
+		result.Needs = append(result.Needs, api.Need{Code: "author_missing", Message: fmt.Sprintf("env %s asks for a commit author of yours; set it with unibox author set -e %s \"Name <email>\"", env.Name, env.Name)})
+	}
 	repos, needs, err := ResolveRepositories(ctx, req)
 	if err != nil {
 		return result, err
@@ -729,16 +732,19 @@ func (m *Manager) Recreate(ctx context.Context, name string, force bool) error {
 	if err = m.ensure(ctx, &b, env, true, force); err != nil {
 		return err
 	}
-	return m.restoreTasks(ctx, &b)
+	return m.restoreTasks(ctx, &b, env)
 }
 
 // restoreTasks prepares a sandbox's tasks again after it was created anew.
-func (m *Manager) restoreTasks(ctx context.Context, b *api.Sandbox) error {
+func (m *Manager) restoreTasks(ctx context.Context, b *api.Sandbox, env Env) error {
 	for i := range b.Tasks {
 		if err := m.mountTask(ctx, *b, b.Tasks[i]); err != nil {
 			return err
 		}
 		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(prepareScript(b.Tasks[i]))}), m.Log); err != nil {
+			return err
+		}
+		if err := m.setAuthor(ctx, *b, &b.Tasks[i], m.author(env, b.Name, "")); err != nil {
 			return err
 		}
 		m.restoreConversations(ctx, *b, b.Tasks[i])

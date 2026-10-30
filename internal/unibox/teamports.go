@@ -138,6 +138,9 @@ type teamDoc struct {
 	Repos     map[string]IndexedRepo `yaml:"repos"`
 	// Instructions are what every task of the env's agents are told.
 	Instructions string `yaml:"instructions"`
+	// Author says whether each person gives the env a commit author of
+	// their own: required, else optional, as when it is left out.
+	Author string `yaml:"author"`
 }
 
 // readTeamFiles reads the team's files of an env in the order they apply:

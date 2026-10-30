@@ -244,6 +244,26 @@ func AuthorParts(author string) (string, string, error) {
 	return m[1], m[2], nil
 }
 
+// ValidAuthor says whether author names who commits are by, as git takes
+// it: Name <email>.
+func ValidAuthor(author string) error {
+	if !authorPattern.MatchString(author) {
+		return fmt.Errorf("%q is no commit author; give it as Name <email>", author)
+	}
+	return nil
+}
+
+// HostAuthor is the host's git user, Name <email>, or "" when it has none
+// whole: what a sandbox's author is offered as.
+func HostAuthor(ctx context.Context) string {
+	name, _ := git(ctx, ".", "config", "--global", "user.name")
+	email, _ := git(ctx, ".", "config", "--global", "user.email")
+	if author := name + " <" + email + ">"; ValidAuthor(author) == nil {
+		return author
+	}
+	return ""
+}
+
 func ResolveRepositories(ctx context.Context, req Request) ([]api.Repository, []api.Need, error) {
 	if req.Mount {
 		// The directories are mounted, and what is always cloned is cloned

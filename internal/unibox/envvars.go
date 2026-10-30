@@ -18,7 +18,9 @@ import (
 // --env-args-file at each create, so nobody types them twice. The
 // resources a sandbox gets of the machine are the person's alike:
 // [resources], [env_repos."<key>".resources], [envs.<name>.resources] and,
-// for one sandbox, [sandboxes.<name>.resources].
+// for one sandbox, [sandboxes.<name>.resources]. Who commits are by is
+// theirs alike: author for every env, [envs.<name>] author and
+// [sandboxes.<name>] author, asked when the team's files require one.
 
 const envValuesHeader = `# Your own values for the args your envs' sbxenv files declare, kept here
 # and never in the team's repository: [args] for every env that declares
@@ -28,8 +30,11 @@ const envValuesHeader = `# Your own values for the args your envs' sbxenv files 
 # create as an --env-args-file. [resources], [env_repos."<repo>".resources],
 # [envs.<env>.resources] and [sandboxes.<sandbox>.resources] are the CPUs
 # and memory your sandboxes get, a size or a share of this machine such as
-# 75%, written here by hand or by unibox sandbox create --cpus/--memory. No
-# secret belongs here - store tokens with unibox secret set.
+# 75%, written here by hand or by unibox sandbox create --cpus/--memory.
+# author = "Name <email>" is who commits are by, for every env, with
+# [envs.<env>] author and [sandboxes.<sandbox>] author winning over it;
+# unibox author set and unibox author rm change them. No secret belongs
+# here - store tokens with unibox secret set.
 
 `
 
@@ -44,6 +49,11 @@ type EnvValues struct {
 	EnvResources     map[string]Resources
 	// SandboxResources are one sandbox's, over its env's.
 	SandboxResources map[string]Resources
+	// Author is who commits are by, as Name <email>, for every env; each
+	// env's and each sandbox's own win over it.
+	Author         string
+	EnvAuthors     map[string]string
+	SandboxAuthors map[string]string
 	// other are tables of an older unibox, kept as they are.
 	other map[string]any
 }
@@ -52,7 +62,7 @@ type EnvValues struct {
 func (p Paths) VarsFile() string { return filepath.Join(p.Config, "vars.toml") }
 
 func (p Paths) LoadEnvValues() (EnvValues, error) {
-	v := EnvValues{Args: map[string]string{}, EnvRepos: map[string]map[string]string{}, Envs: map[string]map[string]string{}, EnvRepoResources: map[string]Resources{}, EnvResources: map[string]Resources{}, SandboxResources: map[string]Resources{}, other: map[string]any{}}
+	v := EnvValues{Args: map[string]string{}, EnvRepos: map[string]map[string]string{}, Envs: map[string]map[string]string{}, EnvRepoResources: map[string]Resources{}, EnvResources: map[string]Resources{}, SandboxResources: map[string]Resources{}, EnvAuthors: map[string]string{}, SandboxAuthors: map[string]string{}, other: map[string]any{}}
 	b, err := os.ReadFile(p.VarsFile())
 	if os.IsNotExist(err) {
 		return v, nil
@@ -82,6 +92,16 @@ func (p Paths) LoadEnvValues() (EnvValues, error) {
 		}
 		return values, nil
 	}
+	readAuthor := func(at string, body any) (string, error) {
+		author, ok := body.(string)
+		if !ok {
+			return "", fmt.Errorf("%s: %s is a string, in quotes", p.VarsFile(), at)
+		}
+		if err := ValidAuthor(author); err != nil {
+			return "", fmt.Errorf("%s: %s: %w", p.VarsFile(), at, err)
+		}
+		return author, nil
+	}
 	readResources := func(at string, body any) (Resources, error) {
 		var r Resources
 		table, ok := body.(map[string]any)
@@ -101,8 +121,8 @@ func (p Paths) LoadEnvValues() (EnvValues, error) {
 		return r, nil
 	}
 	// readScopes reads the tables of envs or env repos, each with args and
-	// resources in it.
-	readScopes := func(at string, body any, args map[string]map[string]string, resources map[string]Resources) error {
+	// resources in it, and an author where authors is given.
+	readScopes := func(at string, body any, args map[string]map[string]string, resources map[string]Resources, authors map[string]string) error {
 		scopes, ok := body.(map[string]any)
 		if !ok {
 			return fmt.Errorf("%s: %s is a table of [%s.<name>.args]", p.VarsFile(), at, at)
@@ -122,6 +142,12 @@ func (p Paths) LoadEnvValues() (EnvValues, error) {
 					args[name], err = readArgs(at+"."+name+".args", body)
 				case "resources":
 					resources[name], err = readResources(at+"."+name+".resources", body)
+				case "author":
+					if authors == nil {
+						err = fmt.Errorf("%s: %s.%s takes args and resources, not author; set it for the env or every env", p.VarsFile(), at, name)
+						break
+					}
+					authors[name], err = readAuthor(at+"."+name+".author", body)
 				default:
 					err = fmt.Errorf("%s: %s.%s takes args and resources, not %s", p.VarsFile(), at, name, k)
 				}
@@ -142,31 +168,41 @@ func (p Paths) LoadEnvValues() (EnvValues, error) {
 			if v.Resources, err = readResources("resources", body); err != nil {
 				return v, err
 			}
+		case "author":
+			if v.Author, err = readAuthor("author", body); err != nil {
+				return v, err
+			}
 		case "sandboxes":
 			boxes, ok := body.(map[string]any)
 			if !ok {
-				return v, fmt.Errorf("%s: sandboxes is a table of [sandboxes.<sandbox>.resources]", p.VarsFile())
+				return v, fmt.Errorf("%s: sandboxes is a table of [sandboxes.<sandbox>]", p.VarsFile())
 			}
 			for name, t := range boxes {
 				table, ok := t.(map[string]any)
 				if !ok {
-					return v, fmt.Errorf("%s: sandboxes.%s is a table with resources in it", p.VarsFile(), name)
+					return v, fmt.Errorf("%s: sandboxes.%s is a table with an author or resources in it", p.VarsFile(), name)
 				}
 				for k, body := range table {
-					if k != "resources" {
-						return v, fmt.Errorf("%s: sandboxes.%s takes resources, not %s", p.VarsFile(), name, k)
-					}
-					if v.SandboxResources[name], err = readResources("sandboxes."+name+".resources", body); err != nil {
-						return v, err
+					switch k {
+					case "resources":
+						if v.SandboxResources[name], err = readResources("sandboxes."+name+".resources", body); err != nil {
+							return v, err
+						}
+					case "author":
+						if v.SandboxAuthors[name], err = readAuthor("sandboxes."+name+".author", body); err != nil {
+							return v, err
+						}
+					default:
+						return v, fmt.Errorf("%s: sandboxes.%s takes an author and resources, not %s", p.VarsFile(), name, k)
 					}
 				}
 			}
 		case "envs":
-			if err = readScopes("envs", body, v.Envs, v.EnvResources); err != nil {
+			if err = readScopes("envs", body, v.Envs, v.EnvResources, v.EnvAuthors); err != nil {
 				return v, err
 			}
 		case "env_repos":
-			if err = readScopes("env_repos", body, v.EnvRepos, v.EnvRepoResources); err != nil {
+			if err = readScopes("env_repos", body, v.EnvRepos, v.EnvRepoResources, nil); err != nil {
 				return v, err
 			}
 		default:
@@ -255,6 +291,45 @@ func (p Paths) SetSandboxResources(sandbox string, r Resources) error {
 	return p.SaveEnvValues(v)
 }
 
+// Where a sandbox's author comes from, the narrowest first.
+const (
+	AuthorOfSandbox = "sandbox"
+	AuthorOfEnv     = "env"
+	AuthorOfAll     = "global"
+)
+
+// AuthorFor is who a sandbox of an env commits as - its own, else the
+// env's, else every env's - and which of them it is; "" with none.
+func (v EnvValues) AuthorFor(env Env, sandbox string) (author, from string) {
+	switch {
+	case v.SandboxAuthors[sandbox] != "":
+		return v.SandboxAuthors[sandbox], AuthorOfSandbox
+	case v.EnvAuthors[env.Name] != "":
+		return v.EnvAuthors[env.Name], AuthorOfEnv
+	case v.Author != "":
+		return v.Author, AuthorOfAll
+	}
+	return "", ""
+}
+
+// SetSandboxAuthor makes author, Name <email>, who a sandbox's commits are
+// by; "" forgets it.
+func (p Paths) SetSandboxAuthor(sandbox, author string) error {
+	v, err := p.LoadEnvValues()
+	if err != nil {
+		return err
+	}
+	if v.SandboxAuthors[sandbox] == author {
+		return nil
+	}
+	if author == "" {
+		delete(v.SandboxAuthors, sandbox)
+	} else {
+		v.SandboxAuthors[sandbox] = author
+	}
+	return p.SaveEnvValues(v)
+}
+
 func (p Paths) SaveEnvValues(v EnvValues) error {
 	doc := map[string]any{}
 	for k, body := range v.other {
@@ -266,7 +341,10 @@ func (p Paths) SaveEnvValues(v EnvValues) error {
 	if v.Resources != (Resources{}) {
 		doc["resources"] = v.Resources
 	}
-	scopes := func(key string, args map[string]map[string]string, resources map[string]Resources) {
+	if v.Author != "" {
+		doc["author"] = v.Author
+	}
+	scopes := func(key string, args map[string]map[string]string, resources map[string]Resources, authors map[string]string) {
 		tables := map[string]any{}
 		for name, values := range args {
 			if len(values) > 0 {
@@ -284,17 +362,39 @@ func (p Paths) SaveEnvValues(v EnvValues) error {
 			}
 			t["resources"] = r
 		}
+		for name, author := range authors {
+			if author == "" {
+				continue
+			}
+			t, _ := tables[name].(map[string]any)
+			if t == nil {
+				t = map[string]any{}
+				tables[name] = t
+			}
+			t["author"] = author
+		}
 		if len(tables) > 0 {
 			doc[key] = tables
 		}
 	}
-	scopes("envs", v.Envs, v.EnvResources)
-	scopes("env_repos", v.EnvRepos, v.EnvRepoResources)
+	scopes("envs", v.Envs, v.EnvResources, v.EnvAuthors)
+	scopes("env_repos", v.EnvRepos, v.EnvRepoResources, nil)
 	boxes := map[string]any{}
 	for name, r := range v.SandboxResources {
 		if r != (Resources{}) {
 			boxes[name] = map[string]any{"resources": r}
 		}
+	}
+	for name, author := range v.SandboxAuthors {
+		if author == "" {
+			continue
+		}
+		t, _ := boxes[name].(map[string]any)
+		if t == nil {
+			t = map[string]any{}
+			boxes[name] = t
+		}
+		t["author"] = author
 	}
 	if len(boxes) > 0 {
 		doc["sandboxes"] = boxes

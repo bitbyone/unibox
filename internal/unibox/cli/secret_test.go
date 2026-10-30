@@ -1383,3 +1383,76 @@ func TestSecretTakesTheContextsSandboxAndItsEnv(t *testing.T) {
 		t.Fatalf("%+v", cfg.Sandboxes)
 	}
 }
+
+func TestAnEnvThatRequiresAnAuthorAsksForItAndEachScopeKeepsOne(t *testing.T) {
+	fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(global, []byte("[user]\n\tname = Host Person\n\temail = host@example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	if _, _, err := run(t, paths, "", "env", "add", "work", file); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "work"); err != nil {
+		t.Fatal(err)
+	}
+	// Not required, nothing is asked: the stand-in creates nothing, and
+	// what matters is what was kept first.
+	runAt(t, paths, "", "sandbox", "create", "-e", "work")
+	if v, _ := paths.LoadEnvValues(); len(v.EnvAuthors) != 0 {
+		t.Fatalf("%+v", v.EnvAuthors)
+	}
+	team := strings.TrimSuffix(file, ".sbxenv.yaml") + ".unibox.yaml"
+	if err := os.WriteFile(team, []byte("author: whoever\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "author", "-e", "work"); err == nil || !strings.Contains(err.Error(), "required or optional") {
+		t.Fatalf("%v", err)
+	}
+	// Required, it is asked for the env, the host's git user offered: an
+	// empty answer takes it.
+	if err := os.WriteFile(team, []byte("author: required\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, _ := run(t, paths, "", "author", "-e", "work"); !strings.Contains(out, "requires a commit author") {
+		t.Fatalf("%s", out)
+	}
+	runAt(t, paths, "\n", "sandbox", "create", "-e", "work")
+	if v, _ := paths.LoadEnvValues(); v.EnvAuthors["work"] != "Host Person <host@example.com>" {
+		t.Fatalf("%+v", v.EnvAuthors)
+	}
+	// A sandbox's own wins over the env's, which wins over every env's.
+	for _, args := range [][]string{
+		{"author", "set", "All <all@example.com>", "--scope", "global"},
+		{"author", "set", "Mine <mine@example.com>", "-s", "team", "--scope", "sandbox"},
+	} {
+		if _, _, err := run(t, paths, "", args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, _, _ := run(t, paths, "", "author", "-e", "work", "-s", "team"); !strings.Contains(out, "by Mine <mine@example.com> (sandbox)") {
+		t.Fatalf("%s", out)
+	}
+	for _, args := range [][]string{{"author", "rm", "-s", "team", "--scope", "sandbox"}, {"author", "rm", "-e", "work"}} {
+		if _, _, err := run(t, paths, "", args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, _, _ := run(t, paths, "", "author", "-e", "work"); !strings.Contains(out, "by All <all@example.com> (global)") {
+		t.Fatalf("%s", out)
+	}
+	data, _ := os.ReadFile(paths.VarsFile())
+	if !strings.HasPrefix(strings.TrimLeft(strings.SplitN(string(data), "\n\n", 2)[1], "\n"), "author = 'All <all@example.com>'") {
+		t.Fatalf("%s", data)
+	}
+	if _, _, err := run(t, paths, "", "author", "rm", "-e", "work"); err == nil || !strings.Contains(err.Error(), "no author for env work") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "author", "set", "jane", "-e", "work"); err == nil || !strings.Contains(err.Error(), "Name <email>") {
+		t.Fatalf("%v", err)
+	}
+}

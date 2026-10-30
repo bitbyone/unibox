@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -307,6 +308,30 @@ func (o *options) askArgs(env unibox.Env) (bool, error) {
 		mine[name] = value
 	}
 	values.Envs[env.Name] = mine
+	return true, o.paths.SaveEnvValues(values)
+}
+
+// askAuthor asks, at a terminal, for the commit author an env requires
+// when the person has none for its sandbox, offering the host's git user,
+// and keeps it for the env as unibox author set would. It says whether it
+// set one.
+func (o *options) askAuthor(ctx context.Context, env unibox.Env, sandbox string) (bool, error) {
+	if !env.AuthorRequired || !o.canAsk() {
+		return false, nil
+	}
+	values, err := o.paths.LoadEnvValues()
+	if err != nil {
+		return false, err
+	}
+	if author, _ := values.AuthorFor(env, sandbox); author != "" {
+		return false, nil
+	}
+	fmt.Fprintf(o.log, "env %s asks for a commit author of yours, kept for it in vars.toml:\n", env.Name)
+	author, err := o.askText("Commit author", "Who the commits made in env "+env.Name+" are by, as Name <email>; unibox author set changes it, for one sandbox with --sandbox.", unibox.HostAuthor(ctx), unibox.ValidAuthor)
+	if err != nil {
+		return false, err
+	}
+	values.EnvAuthors[env.Name] = author
 	return true, o.paths.SaveEnvValues(values)
 }
 

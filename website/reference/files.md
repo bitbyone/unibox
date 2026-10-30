@@ -107,6 +107,14 @@ memory = '16g'
 
 [sandboxes.dev-big.resources]   # one sandbox: sandbox create / sandbox resources
 cpus = '8'
+
+author = 'John Doe <john@example.com>'   # commit author, every env (author set --scope global)
+
+[envs.dev]                      # one env, over every env's (author set)
+author = 'John Doe <john@acme.com>'
+
+[sandboxes.dev-big]             # one sandbox, over both (author set --scope sandbox)
+author = 'John Doe <john@example.com>'
 ```
 
 `cpus` is a count, `0` for all, or `1%`-`100%` of this machine; `memory` a
@@ -149,6 +157,7 @@ repos:                          # repositories a task is given by name
       Read the ADR index before proposing a design.
 instructions: |                 # told to every task's agents of the env
   Run make test before you commit.
+author: required                # each person gives a commit author (default: optional)
 ```
 
 A port is `{port, description, default}`, `default` on or off. A

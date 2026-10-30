@@ -115,6 +115,23 @@ repository that declares it; an env's own value wins over both, and the
 env repo's over the global one. A value starting with
 `secret:` is refused. List keys: `enter` set, `a` add, `d` remove.
 
+### `unibox author`
+
+```text
+unibox author [-e <env>] [-s <sandbox>]
+unibox author set "Name <email>" [-e <env>] [-s <sandbox>] [--scope global|env|sandbox]
+unibox author rm [-e <env>] [-s <sandbox>] [--scope global|env|sandbox]
+```
+
+Who your commits in a sandbox are by, in `vars.toml`: for every env
+(`--scope global`), for one env (`env`, the default) or for one sandbox
+(`sandbox`), each winning over the one before. Every session commits as
+it, in each repository of the task and in the sandbox's global git
+configuration. Without one, a repository commits as its git
+configuration on your computer says. An env whose `unibox.yaml` says
+`author: required` asks for one at `init`, `sandbox create` or the first
+run, offering your global git user, and keeps it for the env.
+
 ### `unibox secret`
 
 ```
@@ -276,7 +293,7 @@ once by a running agent), `u` remove a repository, `s` shell, `n` rename,
 unibox                      # alone at a terminal: the same list
 unibox sandbox
 unibox sandbox ls
-unibox sandbox create [name] [-e <env>] [--cpus <n>] [--memory <size>] [--adopt]
+unibox sandbox create [name] [-e <env>] [--cpus <n>] [--memory <size>] [--author "Name <email>"] [--adopt]
 unibox sandbox inspect [sandbox]
 unibox sandbox shell [sandbox]
 unibox sandbox stop [sandbox]
@@ -288,8 +305,9 @@ unibox sandbox rm <sandbox> [--force]
 - `ls` - unibox's sandboxes and their state in sbx.
 - `create` - a sandbox from an env, without a task. `--cpus` (count, `0`
   for all, or a share like `50%`) and `--memory` (size like `16g`, or a
-  share) set its own resources. `--adopt` takes over a sandbox made with
-  sbx; unibox never recreates it and removes it only with `--force`.
+  share) set its own resources; `--author` its own commit author. `--adopt`
+  takes over a sandbox made with sbx; unibox never recreates it and
+  removes it only with `--force`.
 - `inspect` - what unibox records about it.
 - `shell` - an interactive shell; counts as a session.
 - `stop` - stop an idle sandbox; the disk stays.

@@ -396,7 +396,11 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		if err != nil {
 			return err
 		}
-		if !asked {
+		author, err := o.askAuthor(cmd.Context(), env, env.SandboxName())
+		if err != nil {
+			return err
+		}
+		if !asked && !author {
 			fmt.Fprintf(o.log, "  env %s has every value it needs\n", env.Name)
 		}
 	}

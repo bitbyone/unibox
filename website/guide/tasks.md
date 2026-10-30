@@ -212,6 +212,12 @@ deleted.
 ## Commits
 
 Commits use your `user.name` and `user.email` from the repository's git
-configuration, or `--author "Name <email>"`. Each commit made during an
+configuration, unless you keep a commit author with `unibox author set`:
+for every env, for one env, or for one sandbox, so a work sandbox and a
+personal one commit as different people. Every session then commits as
+it, in the task's repositories and in repositories the agent clones
+itself. An env whose `unibox.yaml` says `author: required` asks you for
+one before its first task, offering your git user. `--author "Name
+<email>"` on a run wins for that run. Each commit made during an
 agent session gets a `Co-authored-by` line for that agent; commits made
 in a shell do not.

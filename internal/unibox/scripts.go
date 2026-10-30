@@ -252,6 +252,25 @@ func quoteArgs(args []string) string {
 	return s
 }
 
+// authorScript makes author, Name <email>, who commits in the sandbox are
+// by, at every session: git's global user, for a repository the agent
+// clones itself, and each of the task's, whose own would win, so a task
+// made before the sandbox had an author takes it as well.
+func authorScript(t api.Task, author string) string {
+	name, email, _ := AuthorParts(author)
+	var b strings.Builder
+	b.WriteString("set -eu\n")
+	fmt.Fprintf(&b, "git config --global user.name %s\ngit config --global user.email %s\n", Quote(name), Quote(email))
+	for _, r := range t.Repositories {
+		config := "git -C " + Quote(path.Join(t.Directory, r.Name)) + " config"
+		if r.Mounted {
+			config = "git config --file " + Quote(mountedDir(t, r)+"/gitconfig")
+		}
+		fmt.Fprintf(&b, "%s user.name %s\n%s user.email %s\n", config, Quote(name), config, Quote(email))
+	}
+	return b.String()
+}
+
 // mountedDir is where unibox keeps, in the guest, what a mounted repository
 // of a task needs of git: its configuration and commit hook, outside the
 // host's .git, which unibox does not write.
@@ -286,8 +305,25 @@ func mountedScript(t api.Task, r api.Repository) string {
 		b.WriteString(writeGuest(own+"/hooks/credit", []byte(credit), "600"))
 	}
 	b.WriteString(writeGuest(own+"/gitconfig", []byte(config), "600"))
-	key := "includeIf.gitdir:" + dir + "/.git/.path"
-	fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\ngit config --global --add %s %s\n", Quote(key), Quote(key), Quote(own+"/gitconfig"))
+	b.WriteString(unsetIncludes(dir))
+	fmt.Fprintf(&b, "git config --global --add %s %s\n", Quote(includeKey(dir)), Quote(own+"/gitconfig"))
+	return b.String()
+}
+
+// includeKey is the guest's global include of a mounted repository's own
+// configuration. Its pattern names the git directory itself: one ending
+// in a slash takes a ** after it and matches only what is under .git.
+func includeKey(dir string) string {
+	return "includeIf.gitdir:" + dir + "/.git.path"
+}
+
+// unsetIncludes takes out the include of a mounted repository, and the one
+// earlier versions wrote with a slash after .git, which matched nothing.
+func unsetIncludes(dir string) string {
+	var b strings.Builder
+	for _, key := range []string{includeKey(dir), "includeIf.gitdir:" + dir + "/.git/.path"} {
+		fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\n", Quote(key))
+	}
 	return b.String()
 }
 
@@ -303,8 +339,8 @@ func unmountedScript(t api.Task) string {
 			continue
 		}
 		dir := path.Join(t.Directory, r.Name)
-		key := "includeIf.gitdir:" + dir + "/.git/.path"
-		fmt.Fprintf(&b, "git config --global --unset-all %s >/dev/null 2>&1 || true\nrm -rf %s\n", Quote(key), Quote(mountedDir(t, r)))
+		b.WriteString(unsetIncludes(dir))
+		fmt.Fprintf(&b, "rm -rf %s\n", Quote(mountedDir(t, r)))
 		fmt.Fprintf(&b, "dir=%s\n", Quote(dir))
 		b.WriteString(`if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then echo "$dir is still mounted; the task is kept so nothing of the host is deleted" >&2; exit 4; fi
 `)

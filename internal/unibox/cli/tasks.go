@@ -137,6 +137,19 @@ func (o *options) preflight(cmd *cobra.Command, r *unibox.Request) error {
 					return unibox.Fail(4, n.Code, "%s", n.Message)
 				}
 				changed = true
+			case "author_missing":
+				b, env, err := o.manager.Definition(*r)
+				if err != nil {
+					return err
+				}
+				asked, err := o.askAuthor(cmd.Context(), env, b.Name)
+				if err != nil {
+					return err
+				}
+				if !asked {
+					return unibox.Fail(4, n.Code, "%s", n.Message)
+				}
+				changed = true
 			case "network_policy":
 				if !o.canAsk() {
 					return unibox.Fail(4, n.Code, "%s", n.Message)
@@ -315,7 +328,10 @@ func (o *options) createCommand() *cobra.Command {
 given. --adopt takes over a sandbox sbx has already, made from the env with
 sbx itself: unibox then adds tasks to it, and removes it only when forced.
 --cpus and --memory give this sandbox alone its share of the machine,
-written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Example: "  unibox sandbox create -e dev\n  unibox sandbox create dev-big -e dev --cpus 8 --memory 50%\n  unibox sandbox create --adopt my2n-dev -e my2n-dev", RunE: func(cmd *cobra.Command, args []string) error {
+written to vars.toml as [sandboxes.<name>.resources] and dropped with it.
+--author makes who its commits are by this sandbox's own, written there
+as [sandboxes.<name>] author; without it an env that requires an author
+asks for one when you have none, offering your git user.`, Example: "  unibox sandbox create -e dev\n  unibox sandbox create dev-big -e dev --cpus 8 --memory 50%\n  unibox sandbox create --adopt my2n-dev -e my2n-dev", RunE: func(cmd *cobra.Command, args []string) error {
 		req.Sandbox = first(args)
 		env, err := o.envName(req.Env)
 		if err != nil {
@@ -341,6 +357,21 @@ written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Exam
 				return fmt.Errorf("sandbox %s exists already; set its resources in vars.toml and unibox sandbox recreate %s applies them", b.Name, b.Name)
 			}
 			if err = o.manager.Paths.SetSandboxResources(b.Name, res); err != nil {
+				return err
+			}
+		}
+		// Who its commits are by: given for this sandbox, else asked for
+		// the env when it requires one and the person has none.
+		if b, e, err := o.manager.Definition(req); err == nil && (b.State == "missing" || b.State == "creating") {
+			if req.Author != "" {
+				if err = unibox.ValidAuthor(req.Author); err != nil {
+					return err
+				}
+				err = o.manager.Paths.SetSandboxAuthor(b.Name, req.Author)
+			} else {
+				_, err = o.askAuthor(cmd.Context(), e, b.Name)
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -371,6 +402,7 @@ written to vars.toml as [sandboxes.<name>.resources] and dropped with it.`, Exam
 	}}
 	envFlag(c, &req.Env)
 	c.Flags().BoolVar(&adopt, "adopt", false, "Take over a sandbox sbx already has instead of creating one")
+	c.Flags().StringVar(&req.Author, "author", "", "Commit author of this sandbox alone, as Name <email>")
 	c.Flags().StringVar(&res.CPUs, "cpus", "", "CPUs for this sandbox alone: a count, 0 for all, or a share such as 50%")
 	c.Flags().StringVar(&res.Memory, "memory", "", "Memory for this sandbox alone: a size such as 16g, or a share such as 75%")
 	return c

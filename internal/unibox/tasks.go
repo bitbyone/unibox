@@ -432,6 +432,8 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		b = old
 	}
 	req.decide()
+	author := m.author(env, b.Name, req.Author)
+	req.Author = author
 	t, err := m.task(ctx, req, &b, resume)
 	if err != nil {
 		return b, t, nil, nil, err
@@ -488,6 +490,9 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		m.restoreConversations(ctx, b, t)
 		t.State = "ready"
 	} else if err = m.remount(ctx, b, t); err != nil {
+		return b, t, nil, nil, err
+	}
+	if err = m.setAuthor(ctx, b, &t, author); err != nil {
 		return b, t, nil, nil, err
 	}
 	replaceTask(&b, t)
@@ -884,8 +889,45 @@ func (m *Manager) remove(ctx context.Context, name, task string, force bool) err
 	if err = m.forgetSecrets(ctx, name); err != nil {
 		return err
 	}
-	if v, err := m.Paths.LoadEnvValues(); err == nil && v.SandboxResources[name] != (Resources{}) {
-		return m.Paths.SetSandboxResources(name, Resources{})
+	// Its own author too; the env's stays for the next sandbox of it.
+	v, err := m.Paths.LoadEnvValues()
+	if err != nil {
+		return nil
+	}
+	if v.SandboxResources[name] != (Resources{}) {
+		if err = m.Paths.SetSandboxResources(name, Resources{}); err != nil {
+			return err
+		}
+	}
+	if v.SandboxAuthors[name] != "" {
+		return m.Paths.SetSandboxAuthor(name, "")
+	}
+	return nil
+}
+
+// author is who a sandbox's commits are by: the request's --author, else
+// the person's for the sandbox, the env or every env, else "", and each
+// repository takes the host's git user.
+func (m *Manager) author(env Env, sandbox, given string) string {
+	if given != "" {
+		return given
+	}
+	v, _ := m.Paths.LoadEnvValues()
+	author, _ := v.AuthorFor(env, sandbox)
+	return author
+}
+
+// setAuthor makes author who a task's commits are by, in the guest and in
+// the task as recorded; with none it leaves the task as it is.
+func (m *Manager) setAuthor(ctx context.Context, b api.Sandbox, t *api.Task, author string) error {
+	if author == "" {
+		return nil
+	}
+	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(authorScript(*t, author))}), m.Log); err != nil {
+		return err
+	}
+	for i := range t.Repositories {
+		t.Repositories[i].Author = author
 	}
 	return nil
 }
