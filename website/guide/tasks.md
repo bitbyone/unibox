@@ -218,6 +218,7 @@ personal one commit as different people. Every session then commits as
 it, in the task's repositories and in repositories the agent clones
 itself. An env whose `unibox.yaml` says `author: required` asks you for
 one before its first task, offering your git user. `--author "Name
-<email>"` on a run wins for that run. Each commit made during an
-agent session gets a `Co-authored-by` line for that agent; commits made
-in a shell do not.
+<email>"` on a run wins for that run. Whether an agent's commit names it
+co-author is up to each agent's own settings; `unibox co-author off`,
+for every env or with `-e` for one, has a commit hook take out the
+`Co-authored-by` line an agent adds of itself, whatever its settings say.

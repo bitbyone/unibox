@@ -120,3 +120,79 @@ for that run.`, Example: `  unibox author
 	}
 	return c
 }
+
+// coAuthorCommand switches whether agents name themselves co-author of
+// their commits, for every env or one: on, the default, leaves it to each
+// agent's own settings; off takes the trailer an agent adds of itself out.
+func (o *options) coAuthorCommand() *cobra.Command {
+	var envFlag string
+	c := &cobra.Command{Use: "co-author [on|off|default]", Args: cobra.MaximumNArgs(1), ValidArgs: []string{"on", "off", "default"}, Short: "Show or switch whether agents name themselves co-author of commits", Long: `Whether an agent's commits in a sandbox name it co-author, for every
+env, or with -e for one env over every env's, kept as co_author in
+~/.config/unibox/vars.toml. On, the default, each agent does as its own
+settings say; off, a commit hook takes out the Co-authored-by trailer an
+agent adds of itself, whatever its settings say. default forgets the
+env's own, or every env's without -e. It holds from the next session.`, Example: `  unibox co-author
+  unibox co-author off
+  unibox co-author on -e personal
+  unibox co-author default -e personal`}
+	c.Flags().StringVarP(&envFlag, "env", "e", "", "Env, over every env's (default: every env)")
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		v, err := o.paths.LoadEnvValues()
+		if err != nil {
+			return err
+		}
+		at := "every env"
+		if envFlag != "" {
+			env, err := o.manager.Config.LoadEnv(envFlag)
+			if err != nil {
+				return err
+			}
+			envFlag, at = env.Name, "env "+env.Name
+		}
+		if len(args) == 0 {
+			on, from := v.CoAuthorFor(envFlag)
+			if envFlag == "" && v.CoAuthor == nil {
+				from = ""
+			}
+			state := map[bool]string{true: "on", false: "off"}[on]
+			if o.json {
+				return o.write(map[string]any{"api_version": api.Version, "env": envFlag, "co_author": on, "from": from})
+			}
+			if from == "" {
+				from = "default"
+			}
+			if on {
+				fmt.Fprintf(o.output, "%s for %s (%s): each agent names itself co-author of its commits as its settings say\n", state, at, from)
+			} else {
+				fmt.Fprintf(o.output, "%s for %s (%s): no agent's commit names it co-author\n", state, at, from)
+			}
+			return nil
+		}
+		var set *bool
+		switch args[0] {
+		case "on", "off":
+			on := args[0] == "on"
+			set = &on
+		case "default":
+		default:
+			return fmt.Errorf("co-author is on, off or default, not %q", args[0])
+		}
+		switch {
+		case envFlag == "":
+			v.CoAuthor = set
+		case set == nil:
+			delete(v.EnvCoAuthors, envFlag)
+		default:
+			v.EnvCoAuthors[envFlag] = *set
+		}
+		if err = o.paths.SaveEnvValues(v); err != nil {
+			return err
+		}
+		if set == nil {
+			on, _ := v.CoAuthorFor(envFlag)
+			return o.success(fmt.Sprintf("co-authors for %s are as by default, %s, from the next session", at, map[bool]string{true: "on", false: "off"}[on]))
+		}
+		return o.success(fmt.Sprintf("co-authors are %s for %s from the next session", args[0], at))
+	}
+	return c
+}

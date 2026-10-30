@@ -64,7 +64,7 @@ func (o *options) root() *cobra.Command {
 	// What a command works on is a word of a group (unibox task rm); only
 	// the everyday ones stand alone.
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
-		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.authorCommand(), o.secretCommand(), o.portCommand(), o.networkCommand(), o.repoCommand(),
+		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.authorCommand(), o.coAuthorCommand(), o.secretCommand(), o.portCommand(), o.networkCommand(), o.repoCommand(),
 		o.herdrCommand(), o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
 	// Alone at a terminal, unibox is its sandboxes, the list one acts in
 	// most; anywhere else, or before init, it says how it is used.

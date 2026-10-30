@@ -85,7 +85,8 @@ func copilotTrust(dirs []string) map[string]any {
 
 var Agents = []Agent{
 	// The kit's image fixes each agent's version, so none updates itself,
-	// and unibox's commit hook says the co-author, so no agent's own byline.
+	// and unibox's commit hook takes out the co-author an agent names of
+	// itself where the person keeps agents from crediting themselves.
 	{ID: "claude", Command: "claude", Args: []string{"--dangerously-skip-permissions"}, CoAuthor: "Claude <noreply@anthropic.com>", Config: ".claude.json", Env: []string{"DISABLE_AUTOUPDATER=1"}, Trust: claudeTrust,
 		Resume: func(c []string) []string { return append(slices.Clone(c), "--continue") }, HadSession: claudeHadSession},
 	{ID: "codex", Command: "codex", Args: []string{"--dangerously-bypass-approvals-and-sandbox"}, CoAuthor: "Codex <noreply@openai.com>", Setup: codexSetup,

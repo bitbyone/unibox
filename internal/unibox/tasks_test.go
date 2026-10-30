@@ -131,13 +131,15 @@ func TestTaskClonesFromForgeAndKeepsOwnEdits(t *testing.T) {
 	}
 	gitTest(t, clone, "add", "agent.txt")
 	// The agent commits in its session, which names it to the hook.
-	commit := exec.Command("git", "-C", clone, "commit", "-m", "Agent work")
+	// It names itself by its model, at its own address, and the hook takes
+	// it out; a person it credits stays.
+	commit := exec.Command("git", "-C", clone, "commit", "-m", "Agent work\n\nCo-authored-by: Jane <jane@example.com>\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")
 	commit.Env = append(os.Environ(), "UNIBOX_AGENT=Claude", "UNIBOX_CO_AUTHOR=Claude <noreply@anthropic.com>")
 	if out, err := commit.CombinedOutput(); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
 	message := gitTest(t, clone, "log", "-1", "--format=%B")
-	if strings.Count(message, "Co-Authored-By: Claude <noreply@anthropic.com>") != 1 {
+	if strings.Contains(message, "Claude") || !strings.Contains(message, "Co-authored-by: Jane <jane@example.com>") {
 		t.Fatal(message)
 	}
 	if err = m.Remove(ctx, "dev", "", false); err == nil {
@@ -377,9 +379,32 @@ func TestClaudeTrustsTheTaskItRunsIn(t *testing.T) {
 	if err := m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
-	// The session names its agent to the commit hook.
-	if got, _ := os.ReadFile(seen); string(got) != "Claude <noreply@anthropic.com>" {
+	// By default the session names no agent to the commit hook: each
+	// credits itself as its settings say.
+	if got, _ := os.ReadFile(seen); len(got) != 0 {
 		t.Fatalf("the session named %q", got)
+	}
+	// With co-authors off for every env, it names its agent, to be taken
+	// out; an env's own on wins over that.
+	off, on := false, true
+	for _, c := range []struct {
+		env  map[string]bool
+		want string
+	}{{nil, "Claude <noreply@anthropic.com>"}, {map[string]bool{"dev": on}, ""}} {
+		v, err := m.Paths.LoadEnvValues()
+		if err != nil {
+			t.Fatal(err)
+		}
+		v.CoAuthor, v.EnvCoAuthors = &off, c.env
+		if err = m.Paths.SaveEnvValues(v); err != nil {
+			t.Fatal(err)
+		}
+		if err = m.Run(ctx, req, strings.NewReader(""), io.Discard, io.Discard, nil); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(seen); string(got) != c.want {
+			t.Fatalf("with env %v the session named %q", c.env, got)
+		}
 	}
 	data, _ := os.ReadFile(filepath.Join(home, ".claude.json"))
 	var cfg struct {
@@ -650,6 +675,11 @@ func TestATaskWorksOnTheForgesDefaultBranchAndRunsTheAgentChosen(t *testing.T) {
 		mustWriteExecutable(t, filepath.Join(bin, a), []byte("#!/bin/sh\nprintf '%s' \"$(basename \"$0\") $*|$UNIBOX_AGENT\" > "+Quote(seen)+"\n"))
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// With co-authors off the session names its agent, as the hook takes it.
+	off := false
+	if err := m.Paths.SaveEnvValues(EnvValues{CoAuthor: &off}); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
 		t.Fatal(err)

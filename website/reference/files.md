@@ -109,9 +109,11 @@ memory = '16g'
 cpus = '8'
 
 author = 'John Doe <john@example.com>'   # commit author, every env (author set --scope global)
+co_author = false               # no agent names itself co-author, every env (co-author off; default true)
 
 [envs.dev]                      # one env, over every env's (author set)
 author = 'John Doe <john@acme.com>'
+co_author = true                # (co-author on -e dev)
 
 [sandboxes.dev-big]             # one sandbox, over both (author set --scope sandbox)
 author = 'John Doe <john@example.com>'

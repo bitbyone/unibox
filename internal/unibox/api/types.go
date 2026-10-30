@@ -11,9 +11,6 @@ type Repository struct {
 	Branch   string `json:"branch"`
 	HostPath string `json:"host_path,omitempty"`
 	Author   string `json:"author"`
-	// CoAuthor says whether the agent's commits name it as co-author;
-	// unset means they do.
-	CoAuthor *bool `json:"co_author,omitempty"`
 	// Mounted is HostPath mounted into the sandbox at the repository's
 	// place in the task instead of cloned.
 	Mounted bool `json:"mounted,omitempty"`

@@ -132,6 +132,19 @@ configuration on your computer says. An env whose `unibox.yaml` says
 `author: required` asks for one at `init`, `sandbox create` or the first
 run, offering your global git user, and keeps it for the env.
 
+### `unibox co-author`
+
+```text
+unibox co-author [on|off|default] [-e <env>]
+```
+
+Whether an agent's commits name it co-author, for every env or, with
+`-e`, for one env over every env's, as `co_author` in `vars.toml`. On,
+the default, each agent does as its own settings say; off, a commit hook
+takes out the `Co-authored-by` line an agent adds of itself, whatever its
+settings say. `default` forgets the env's own, or every env's. Without
+an argument it shows what holds. It holds from the next session.
+
 ### `unibox secret`
 
 ```

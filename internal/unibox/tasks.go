@@ -690,7 +690,9 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		resumed = append(a.Resume(command), extra...)
 	}
 	env := slices.Clone(a.Env)
-	if a.CoAuthor != "" {
+	// Named, the agent is one the commit hook takes the co-author out of.
+	v, _ := m.Paths.LoadEnvValues()
+	if on, _ := v.CoAuthorFor(b.Env); a.CoAuthor != "" && !on {
 		name, _, _ := strings.Cut(a.CoAuthor, " <")
 		env = append(env, "UNIBOX_AGENT="+name, "UNIBOX_CO_AUTHOR="+a.CoAuthor)
 	}

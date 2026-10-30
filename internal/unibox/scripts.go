@@ -82,27 +82,22 @@ fi
 `)
 		fmt.Fprintf(&b, "git -C \"$dir\" config user.name %s\ngit -C \"$dir\" config user.email %s\n", Quote(name), Quote(email))
 		b.WriteString("git -C \"$dir\" config push.default simple\n")
-		// The hook is there either way: with crediting off it still takes
-		// out the trailer an agent adds of itself, so off means none.
-		credit := "on\n"
-		if r.CoAuthor != nil && !*r.CoAuthor {
-			credit = "off\n"
-		}
 		hooks := path.Join(dir, ".git", "unibox-hooks")
 		b.WriteString(writeGuest(path.Join(hooks, "commit-msg"), []byte(coAuthorHook()), "700"))
-		b.WriteString(writeGuest(path.Join(hooks, "credit"), []byte(credit), "600"))
 		fmt.Fprintf(&b, "git -C \"$dir\" config core.hooksPath %s\n", Quote(hooks))
 	}
 	return b.String()
 }
 
-// coAuthorHook makes a commit's co-author unibox's to say. The session
-// names its agent (UNIBOX_AGENT, as unibox's table calls it) and its
-// co-author (UNIBOX_CO_AUTHOR); the hook takes out any co-author
-// trailer of either name - agents add their own, copilot always, in their
-// own case and address - and, unless the clone's credit file says off,
-// adds the agent's. A commit made by hand in unibox sandbox shell, with no agent
-// running, is left as it is.
+// coAuthorHook keeps an agent's commits without a co-author of itself
+// where the person's co_author says false. A session with co-authors off
+// names its agent
+// (UNIBOX_AGENT, as unibox's table calls it) and its co-author
+// (UNIBOX_CO_AUTHOR); the hook takes out any co-author trailer of either
+// name or address - agents add their own, codex and copilot whatever
+// their settings say, in their own case. A commit of a session that names
+// no agent, such as one made by hand in unibox sandbox shell or with
+// co-authors on, is left as it is.
 func coAuthorHook() string {
 	return `#!/bin/sh
 set -eu
@@ -110,11 +105,16 @@ set -eu
 co="${UNIBOX_CO_AUTHOR:-}"
 names="$UNIBOX_AGENT"
 [ -z "$co" ] || names="$names|${co%% <*}"
-awk -v names="$names" '
-BEGIN { n = split(tolower(names), name, "|") }
+# An agent may name itself otherwise - Claude by its model - at the
+# same address, which is its too.
+email=""
+[ -z "$co" ] || email="<${co##*<}"
+awk -v names="$names" -v email="$email" '
+BEGIN { n = split(tolower(names), name, "|"); email = tolower(email) }
 {
   line = tolower($0)
   for (i = 1; i <= n; i++) if (index(line, "co-authored-by: " name[i] " <") == 1) next
+  if (email != "" && index(line, "co-authored-by: ") == 1 && index(line, email)) next
   # Blank lines wait for what follows, so none is left at the end where a
   # taken-out trailer was.
   if ($0 ~ /^[ \t]*$/) { blank = blank $0 "\n"; next }
@@ -124,9 +124,6 @@ BEGIN { n = split(tolower(names), name, "|") }
 }' "$1" > "$1.unibox"
 cat "$1.unibox" > "$1"
 rm -f "$1.unibox"
-credit=$(cat "$(dirname "$0")/credit" 2>/dev/null || echo on)
-[ "$credit" = on ] && [ -n "$co" ] || exit 0
-git interpret-trailers --in-place --trailer "Co-Authored-By: $co" "$1"
 `
 }
 
@@ -296,13 +293,8 @@ func mountedScript(t api.Task, r api.Repository) string {
 	config := "[gc]\n\tworktreePruneExpire = never\n"
 	if r.Author != "" {
 		name, email, _ := AuthorParts(r.Author)
-		credit := "on\n"
-		if r.CoAuthor != nil && !*r.CoAuthor {
-			credit = "off\n"
-		}
 		config += fmt.Sprintf("[user]\n\tname = %s\n\temail = %s\n[core]\n\thooksPath = %s\n", name, email, own+"/hooks")
 		b.WriteString(writeGuest(own+"/hooks/commit-msg", []byte(coAuthorHook()), "700"))
-		b.WriteString(writeGuest(own+"/hooks/credit", []byte(credit), "600"))
 	}
 	b.WriteString(writeGuest(own+"/gitconfig", []byte(config), "600"))
 	b.WriteString(unsetIncludes(dir))

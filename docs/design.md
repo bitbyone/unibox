@@ -524,13 +524,15 @@ replaces.
   that the author must be one of its users passes. In a clone they are
   set in the clone; in a mount, through the guest's include, since unibox
   writes nothing into the host's `.git`.
-- **unibox alone says the co-author.** A `commit-msg` hook - the clone's
-  `core.hooksPath`, or the mount's include - takes out any co-author
-  trailer the agent added of itself (copilot always does, as
-  `Co-authored-by: Copilot <...>`) and adds unibox's for the session's
-  agent: `run` and `resume` name it to the hook (`UNIBOX_AGENT`,
-  `UNIBOX_CO_AUTHOR`). A commit made in a shell, with no agent running,
-  is left as it is. The hook is rewritten before each session; it lives
+- **Co-authors are the agents' own, or off.** By default each agent
+  names itself co-author or not as its settings say. With `co_author =
+  false` in `vars.toml`, for every env or in `[envs.<env>]` for one
+  (`unibox co-author off [-e <env>]`), `run` and `resume` name the agent
+  (`UNIBOX_AGENT`, `UNIBOX_CO_AUTHOR`) to a `commit-msg` hook - the
+  clone's `core.hooksPath`, or the mount's include - which takes out any
+  co-author trailer the agent added of itself, by its name or address
+  (codex and copilot add one whatever their settings say). A commit made
+  in a shell, with no agent running, is left as it is. The hook is rewritten before each session; it lives
   in the guest, outside the host's `.git`.
 
 ## Repositories by name
