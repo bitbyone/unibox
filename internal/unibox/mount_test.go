@@ -3,6 +3,7 @@ package unibox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,6 +90,47 @@ func TestAMountedDirectoryIsWorkedOnInPlaceAndNeverDeletedWithItsTask(t *testing
 	}
 	if log := m.Log.(*bytes.Buffer).String(); strings.Count(log, "note: the agent can write to") != 1 {
 		t.Fatalf("told again:\n%s", log)
+	}
+}
+
+func TestATaskIsNotTakenUpOnACheckoutTheHostMovedToAnotherBranch(t *testing.T) {
+	t.Parallel()
+	_, host := remoteFixture(t)
+	host, _ = filepath.EvalSymlinks(host)
+	m, _ := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "local", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil {
+		t.Fatal(err)
+	}
+	refused := func(on string) {
+		t.Helper()
+		_, err := m.Prepare(ctx, Request{Task: "local"})
+		var f *Failure
+		if !errors.As(err, &f) || f.Code != "branch_moved" || !strings.Contains(err.Error(), "works on branch main, but "+host+" is on "+on) {
+			t.Fatalf("%v", err)
+		}
+	}
+	// Moved off the task's branch on the host, the checkout is left where
+	// the person put it and the task refused.
+	gitTest(t, host, "switch", "-qc", "feat/other")
+	refused("branch feat/other")
+	if got := gitTest(t, host, "branch", "--show-current"); got != "feat/other" {
+		t.Fatal(got)
+	}
+	gitTest(t, host, "switch", "-q", "--detach")
+	refused("a detached HEAD")
+	// Its own branch is a task of its own.
+	gitTest(t, host, "switch", "-q", "feat/other")
+	if got, err := m.Prepare(ctx, Request{Sandbox: "dev", Mount: true, Repositories: []RepoInput{{Source: host}}}); err != nil || got.Task == "local" {
+		t.Fatalf("%v %+v", err, got)
+	}
+	// Back on the task's branch, it is taken up again.
+	gitTest(t, host, "switch", "-q", "main")
+	if _, err := m.Prepare(ctx, Request{Task: "local"}); err != nil {
+		t.Fatal(err)
 	}
 }
 

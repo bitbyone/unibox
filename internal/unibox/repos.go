@@ -601,6 +601,29 @@ func switchMounted(ctx context.Context, repos []api.Repository) error {
 	return nil
 }
 
+// checkMountedBranches refuses a task whose mounted checkout the host has
+// moved off the task's branch since it was prepared: its agent would go on
+// with a conversation about one branch among the files of another, and
+// commit there. unibox does not switch it back itself, as what the person
+// has in the checkout now is theirs.
+func checkMountedBranches(ctx context.Context, t api.Task) error {
+	for _, r := range t.Repositories {
+		if !r.Mounted || r.Branch == "" || r.HostPath == "" {
+			continue
+		}
+		current, _ := git(ctx, r.HostPath, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if current == r.Branch {
+			continue
+		}
+		on, other := "a detached HEAD", "another task"
+		if current != "" {
+			on, other = "branch "+current, "a task on "+current
+		}
+		return Fail(4, "branch_moved", "task %s works on branch %s, but %s is on %s now; switch it back with git -C %s switch %s, or start %s with unibox run in it", t.ID, r.Branch, r.HostPath, on, Quote(r.HostPath), r.Branch, other)
+	}
+	return nil
+}
+
 func isDir(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()

@@ -58,6 +58,11 @@ unibox run https://github.com/acme/api           # an address is always cloned
 unibox run --repo api=https://github.com/acme/api --repo docs=https://github.com/acme/docs
 ```
 
+A mounted checkout stays on the task's branch: switched to another on
+your machine, the task is refused until it is back, as its agent would go
+on with one branch's conversation among another's files. A checkout run
+from on its new branch is a task of its own.
+
 A clone needs its branch on the forge, or made there: `--push` pushes
 yours first. `run` names uncommitted or unpushed work the clone would not
 see and asks whether to go on.

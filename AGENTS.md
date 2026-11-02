@@ -115,8 +115,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   through `sbx mount`; the agent can write the host's `.git`, which is
   told once per directory (`State.Mounted`). `task rm` unmounts, checks
   nothing of the host is left, and removes the root-owned mount points
-  with `rmdir` as root - never `rm -rf` over a mount. `--clone` clones
-  from the forge inside instead. sbx lists no mounts; a running sandbox's
+  with `rmdir` as root - never `rm -rf` over a mount. A task whose
+  mounted checkout the host moved off its branch is refused, not switched
+  back (`checkMountedBranches`). `--clone` clones from the forge inside
+  instead. sbx lists no mounts; a running sandbox's
   `/proc/self/mountinfo` does, with the host path as the mount's root,
   which doctor compares with the tasks.
 - **The agent is the kit's.** Its entrypoint names it; unibox runs it

@@ -438,6 +438,9 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 	if err != nil {
 		return b, t, nil, nil, err
 	}
+	if err = checkMountedBranches(ctx, t); err != nil {
+		return b, t, nil, nil, err
+	}
 	taskLock, err := LockFile(filepath.Join(m.Paths.Config, "locks", b.Name+"-task-"+t.ID+".lock"), false, false)
 	if err != nil {
 		// A shell joins a task whose agent works in it: the task is ready,
