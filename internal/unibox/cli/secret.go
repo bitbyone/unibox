@@ -102,7 +102,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	}}
 	ls.Flags().BoolVarP(&overview, "all", "a", false, "Every token kept, global, an env's or a sandbox's, and the sandboxes that take each")
 	c.AddCommand(ls)
-	var command, scopeFlag string
+	var command, scopeFlag, sameAs string
 	var all, generate, envOnly, typed bool
 	set := &cobra.Command{Use: "set [service...]", Short: "Have sbx store the tokens an env lacks, or those named", RunE: func(cmd *cobra.Command, args []string) error {
 		env, list, err := needed(cmd)
@@ -128,7 +128,13 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			if len(args) != 1 {
 				return fmt.Errorf("--scope %s keeps one service's token; name the service", scopeFlag)
 			}
+			if sameAs != "" {
+				return o.keepSameAs(cmd, env, scope, args[0], sameAs)
+			}
 			return o.setOwnSecret(cmd, env, scope, args[0], command, generate, typed)
+		}
+		if sameAs != "" {
+			return fmt.Errorf("--same-as keeps a token for an env or a sandbox; say which with --scope")
 		}
 		if command != "" && len(services) != 1 {
 			return fmt.Errorf("--command stores one service's token; name the service")
@@ -162,7 +168,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			}
 			var way unibox.TokenWay
 			if command == "" && o.canAsk() {
-				if way, err = o.offerTokenPage(cmd.Context(), service, guide, generate, typed); err != nil {
+				if way, err = o.offerTokenPage(cmd.Context(), service, guide, generate, typed, nil); err != nil {
 					return err
 				}
 			}
@@ -202,6 +208,10 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	// or read from gh: only the ways a token typed in is made are offered.
 	set.Flags().BoolVar(&typed, "typed", false, "Offer only the ways of a token typed in")
 	_ = set.Flags().MarkHidden("typed")
+	// Said by a list that has asked already which scope's token to take
+	// the same as, as env:<name> or sandbox:<name>.
+	set.Flags().StringVar(&sameAs, "same-as", "", "Keep the same token as another env's or sandbox's, env:<name> or sandbox:<name>")
+	_ = set.Flags().MarkHidden("same-as")
 	c.AddCommand(set)
 	var rmEnvOnly bool
 	var rmScope string
@@ -311,10 +321,13 @@ func (e tokenNotStored) Unwrap() error { return e.err }
 // a token made one way, whether they have one already. It says whether sbx
 // is to sign them in rather than ask for the token. A service with no way
 // goes straight to sbx.
-func (o *options) offerTokenPage(ctx context.Context, service string, guide unibox.TokenGuide, generate, typed bool) (way unibox.TokenWay, err error) {
+func (o *options) offerTokenPage(ctx context.Context, service string, guide unibox.TokenGuide, generate, typed bool, others []unibox.TokenWay) (way unibox.TokenWay, err error) {
 	ways := guide.AllWays()
 	if gh, ok := unibox.GHLoginWay(ctx, service); ok && !generate && !typed {
 		ways = append(ways, gh)
+	}
+	if !generate && !typed {
+		ways = append(ways, others...)
 	}
 	if len(ways) == 0 {
 		if generate {
@@ -350,7 +363,7 @@ func (o *options) offerTokenPage(ctx context.Context, service string, guide unib
 		fmt.Fprintf(o.log, "  %s\n", hint)
 	}
 	switch {
-	case way.SignIn, way.Agent, way.Run != "":
+	case way.SignIn, way.Agent, way.Run != "", way.Keep != nil:
 		return way, nil
 	case way.Command != "":
 		// unibox runs nothing for a token: what the command prints is the
@@ -458,7 +471,13 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		if err != nil {
 			return err
 		}
-		way, err := o.offerTokenPage(ctx, service, guides[service], generate, typed)
+		others := []unibox.TokenWay{}
+		for _, from := range o.manager.Config.SharableSecrets(scope, service) {
+			v, _ := o.manager.Config.OwnSecret(from, service)
+			others = append(others, unibox.TokenWay{Name: "The same as " + from.String() + "'s", Keep: &v,
+				Hint: "read the way " + from.String() + " reads it, kept for this one apart: taken out of either, the other keeps it; set anew for this one, it is its own"})
+		}
+		way, err := o.offerTokenPage(ctx, service, guides[service], generate, typed, others)
 		if err != nil {
 			return err
 		}
@@ -483,10 +502,13 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		if way.Run != "" {
 			return o.keepOwnSecret(ctx, env, scope, service, unibox.EnvSecret{Command: way.Run})
 		}
+		if way.Keep != nil {
+			return o.keepOwnSecret(ctx, env, scope, service, *way.Keep)
+		}
 		if err := unibox.KeychainAvailable(); err != nil {
 			return err
 		}
-		item := unibox.KeychainItem(scope, service)
+		item := o.manager.Config.FreeKeychainItem(scope, service)
 		fmt.Fprintf(o.log, "%s asks for the %s token of %s; it goes there, not through unibox\n", unibox.KeychainName(), service, scope)
 		if err := o.paths.KeychainStore(ctx, item, "unibox: the "+service+" token of "+scope.String(), o.input, o.output, o.log); err != nil {
 			return err
@@ -494,6 +516,18 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		v = unibox.EnvSecret{Command: o.paths.KeychainCommand(item), Keychain: item}
 	}
 	return o.keepOwnSecret(ctx, env, scope, service, v)
+}
+
+// keepSameAs has a scope keep the same token as another env's or
+// sandbox's, named as env:<name> or sandbox:<name>.
+func (o *options) keepSameAs(cmd *cobra.Command, env unibox.Env, scope unibox.SecretScope, service, from string) error {
+	kind, name, _ := strings.Cut(from, ":")
+	source := map[string]unibox.SecretScope{"env": {Env: name}, "sandbox": {Sandbox: name}}[kind]
+	v, ok := o.manager.Config.OwnSecret(source, service)
+	if name == "" || !ok {
+		return fmt.Errorf("%s keeps no %s token of its own to take the same as", from, service)
+	}
+	return o.keepOwnSecret(cmd.Context(), env, scope, service, v)
 }
 
 // keepOwnSecret has a scope keep its own token as v says, and says so.

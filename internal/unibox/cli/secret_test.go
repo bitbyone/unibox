@@ -1567,3 +1567,55 @@ func TestInitKeepsEachEnvsTokensForItAlone(t *testing.T) {
 		t.Fatalf("%s", c)
 	}
 }
+
+func TestAScopesTokenIsTakenTheSameAsAnothersAndKeptApart(t *testing.T) {
+	fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	// The keychain is a stand-in that says what it was asked to delete.
+	deleted := filepath.Join(t.TempDir(), "deleted")
+	bin := t.TempDir()
+	for _, name := range []string{"security", "secret-tool"} {
+		if err := testenv.WriteExecutable(filepath.Join(bin, name), []byte("#!/bin/sh\ncase \"$1\" in delete-generic-password|clear) echo \"$*\" >> "+unibox.Quote(deleted)+" ;; esac\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	// env team keeps its token in the keychain, as init would.
+	cfg, _ := paths.LoadConfig()
+	ec := cfg.Envs["team"]
+	ec.Secrets = map[string]unibox.EnvSecret{"gitlab": {Command: "read gitlab", Keychain: "env/team/gitlab"}}
+	cfg.Envs["team"] = ec
+	if err := paths.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	// A sandbox is offered env team's, beside one it has.
+	if out, said, err := runAt(t, paths, "2\n", "secret", "set", "gitlab", "-s", "personal", "--scope", "sandbox"); err != nil || !strings.Contains(said, "The same as env team's") || !strings.Contains(out, "sandbox personal takes its own gitlab token") {
+		t.Fatalf("%v\n%s\n%s", err, out, said)
+	}
+	cfg, _ = paths.LoadConfig()
+	if own := cfg.Sandboxes["personal"].Secrets["gitlab"]; own != (unibox.EnvSecret{Command: "read gitlab", Keychain: "env/team/gitlab"}) {
+		t.Fatalf("%+v", cfg.Sandboxes)
+	}
+	// Taken out of the env, the item stays for the sandbox; out of both,
+	// it goes.
+	if _, _, err := run(t, paths, "", "secret", "rm", "gitlab", "--scope", "env", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(deleted); len(b) != 0 {
+		t.Fatalf("deleted while the sandbox reads it: %s", b)
+	}
+	if _, _, err := run(t, paths, "", "secret", "rm", "gitlab", "--scope", "sandbox", "-s", "personal", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(deleted); !strings.Contains(string(b), "env/team/gitlab") {
+		t.Fatalf("%q", b)
+	}
+	// The list's way to it names the scope to take the same as.
+	if _, _, err := run(t, paths, "", "secret", "set", "gitlab", "--scope", "env", "-e", "team", "--same-as", "env:nope"); err == nil || !strings.Contains(err.Error(), "keeps no gitlab token") {
+		t.Fatalf("%v", err)
+	}
+}

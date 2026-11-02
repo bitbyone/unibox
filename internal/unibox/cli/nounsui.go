@@ -414,19 +414,28 @@ func (o *options) setInScope(cmd *cobra.Command, env unibox.Env, sandbox, servic
 	if signedIn {
 		picks = append(picks, pick{"gh", "your gh login; sbx runs gh auth token for it"})
 	}
+	target := unibox.SecretScope{Env: env.Name}
+	if scope == "sandbox" {
+		target = unibox.SecretScope{Sandbox: sandbox}
+	}
+	for _, from := range o.manager.Config.SharableSecrets(target, service) {
+		picks = append(picks, pick{"same:" + strings.Replace(from.String(), " ", ":", 1), "the same as " + from.String() + "'s"})
+	}
 	picks = append(picks, pick{"command", "another command on this machine that prints it"})
 	how, err := o.askPick("How the "+service+" token of "+scope+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[scope]+" is kept", "", picks, "keychain")
 	if err != nil {
 		return err
 	}
 	args := []string{"secret", "set", service, "--scope", scope, "-e", env.Name, "-s", sandbox}
-	switch how {
-	case "keychain":
+	switch {
+	case strings.HasPrefix(how, "same:"):
+		args = append(args, "--same-as", strings.TrimPrefix(how, "same:"))
+	case how == "keychain":
 		args = append(args, "--typed")
-	case "gh":
+	case how == "gh":
 		fmt.Fprintf(o.log, "  %s\n", gh.Hint)
 		args = append(args, "--command", gh.Run)
-	case "command":
+	case how == "command":
 		command, err := o.askText("The command sbx runs on the host for the "+service+" token", "A keychain read, say; it prints the token", "", func(s string) error {
 			if strings.TrimSpace(s) == "" {
 				return fmt.Errorf("say the command")

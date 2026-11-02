@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,8 @@ type TokenWay struct {
 	// Run is what sbx runs on the host for the token whenever it needs it,
 	// such as gh auth token, stored in place of a token typed in.
 	Run string `yaml:"-"`
+	// Keep is another scope's token, kept the same for this one.
+	Keep *EnvSecret `yaml:"-"`
 	// SignIn has sbx sign the person in with their subscription, in the
 	// browser, rather than ask for a token.
 	SignIn bool `yaml:"sign_in"`
@@ -480,12 +483,70 @@ func (m *Manager) SetOwnSecret(ctx context.Context, s SecretScope, env, service 
 	if err := m.updateOwnSecrets(s, func(own map[string]EnvSecret) error { own[service] = v; return nil }); err != nil {
 		return err
 	}
-	if was.Keychain != "" && was.Keychain != v.Keychain {
-		if err := m.Paths.KeychainRemove(ctx, was.Keychain); err != nil {
+	if was.Keychain != v.Keychain {
+		if err := m.dropKeychainItem(ctx, was.Keychain); err != nil {
 			return err
 		}
 	}
 	return m.SyncOwnSecrets(ctx, env, s.Sandbox)
+}
+
+// SharableSecrets are the scopes other than s that keep a token of a
+// service of their own, which s can take the same as: the same command, so
+// the same keychain item, kept for s apart.
+func (c Config) SharableSecrets(s SecretScope, service string) []SecretScope {
+	out := []SecretScope{}
+	for _, name := range slices.Sorted(maps.Keys(c.Envs)) {
+		if _, ok := c.Envs[name].Secrets[service]; ok && (SecretScope{Env: name}) != s {
+			out = append(out, SecretScope{Env: name})
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Sandboxes)) {
+		if _, ok := c.Sandboxes[name].Secrets[service]; ok && (SecretScope{Sandbox: name}) != s {
+			out = append(out, SecretScope{Sandbox: name})
+		}
+	}
+	return out
+}
+
+// FreeKeychainItem is the item a scope's token typed in anew is kept in:
+// its own name, unless another scope reads the item of that name, kept the
+// same as this one's was; then one of its own beside it, so the other keeps
+// the token it has.
+func (c Config) FreeKeychainItem(s SecretScope, service string) string {
+	used := map[string]bool{}
+	for _, from := range c.SharableSecrets(s, service) {
+		v, _ := c.OwnSecret(from, service)
+		used[v.Keychain] = true
+	}
+	item := KeychainItem(s, service)
+	for i := 2; used[item]; i++ {
+		item = KeychainItem(s, service) + "-" + strconv.Itoa(i)
+	}
+	return item
+}
+
+// dropKeychainItem takes an item unibox stored out of the keychain once no
+// scope's token reads it any longer: one env can keep the same as another.
+func (m *Manager) dropKeychainItem(ctx context.Context, item string) error {
+	if item == "" {
+		return nil
+	}
+	for _, e := range m.Config.Envs {
+		for _, v := range e.Secrets {
+			if v.Keychain == item {
+				return nil
+			}
+		}
+	}
+	for _, b := range m.Config.Sandboxes {
+		for _, v := range b.Secrets {
+			if v.Keychain == item {
+				return nil
+			}
+		}
+	}
+	return m.Paths.KeychainRemove(ctx, item)
 }
 
 // RemoveOwnSecret has a scope take its token of a service from the scope
@@ -499,10 +560,8 @@ func (m *Manager) RemoveOwnSecret(ctx context.Context, s SecretScope, env, servi
 	if err := m.updateOwnSecrets(s, func(own map[string]EnvSecret) error { delete(own, service); return nil }); err != nil {
 		return err
 	}
-	if was.Keychain != "" {
-		if err := m.Paths.KeychainRemove(ctx, was.Keychain); err != nil {
-			return err
-		}
+	if err := m.dropKeychainItem(ctx, was.Keychain); err != nil {
+		return err
 	}
 	return m.SyncOwnSecrets(ctx, env, s.Sandbox)
 }
@@ -519,7 +578,7 @@ func (m *Manager) forgetSecrets(ctx context.Context, sandbox string) error {
 	}
 	for _, service := range slices.Sorted(maps.Keys(own)) {
 		if own[service].Keychain != "" {
-			if err := m.Paths.KeychainRemove(ctx, own[service].Keychain); err != nil {
+			if err := m.dropKeychainItem(ctx, own[service].Keychain); err != nil {
 				return err
 			}
 		}

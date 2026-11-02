@@ -485,3 +485,23 @@ func TestASandboxsOwnTokenStandsOverItsEnvsAndGoesWithIt(t *testing.T) {
 		t.Fatalf("%+v", c.Sandboxes)
 	}
 }
+
+func TestATokenTypedAnewLeavesTheKeychainItemAnotherScopeReads(t *testing.T) {
+	t.Parallel()
+	shared := EnvSecret{Command: "read", Keychain: "env/team/gitlab"}
+	c := Config{
+		Envs:      map[string]EnvConfig{"team": {Secrets: map[string]EnvSecret{"gitlab": shared}}, "other": {}},
+		Sandboxes: map[string]SandboxConfig{"personal": {Secrets: map[string]EnvSecret{"gitlab": shared}}},
+	}
+	// env team's own item is read by sandbox personal too, so a token
+	// typed anew for env team goes beside it; another env's name is free.
+	if got := c.FreeKeychainItem(SecretScope{Env: "team"}, "gitlab"); got != "env/team/gitlab-2" {
+		t.Fatal(got)
+	}
+	if got := c.FreeKeychainItem(SecretScope{Env: "other"}, "gitlab"); got != "env/other/gitlab" {
+		t.Fatal(got)
+	}
+	if got := c.SharableSecrets(SecretScope{Env: "other"}, "gitlab"); len(got) != 2 || got[0] != (SecretScope{Env: "team"}) || got[1] != (SecretScope{Sandbox: "personal"}) {
+		t.Fatalf("%+v", got)
+	}
+}

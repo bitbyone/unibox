@@ -148,7 +148,13 @@ The command goes to `config.yaml`, under `envs.<env>.secrets` or
 sbx keep it as the token of each sandbox it is for, set again at every
 start: a recreate takes a sandbox's own tokens away, and a changed
 command is applied. Removed with `rm --scope`, or with the sandbox, what
-unibox stored in the keychain goes too.
+unibox stored in the keychain goes too, once no other scope reads it.
+
+A second env asks for a token another env or sandbox keeps already: it
+offers *The same as env personal's*, which copies that one's command, and
+so reads the same keychain item, into the new env's own entry. Each is
+then kept apart: taken out of one, the other keeps it, and set anew for
+one, that one gets its own.
 
 In `unibox secret` at a terminal, `s` (change scope) moves the token under the cursor:
 
