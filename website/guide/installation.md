@@ -46,6 +46,22 @@ Upgrade with `brew upgrade unibox` or `scoop update unibox`. `make
 uninstall` removes a binary `make install` put there, as when moving to
 brew; your config, state and sandboxes stay.
 
+## Nightly
+
+A nightly is a prerelease, tagged `vX.Y-pre.N` when something is to be
+tried before the next release. It has a formula and a manifest of its own,
+`unibox-nightly`, which install the same `unibox` command, so one channel
+is taken out before the other goes in:
+
+```sh
+brew uninstall unibox && brew install unibox-nightly
+scoop uninstall unibox; scoop install unibox-nightly
+```
+
+`brew upgrade` and `scoop update` then take the next nightly, and the way
+back to stable is the same the other way round. Your config, state and
+sandboxes stay either way.
+
 ## Set it up
 
 ```sh

@@ -7,6 +7,12 @@
 # checked against its SHA-256: Homebrew the macOS or Linux one, Scoop the
 # Windows one. Neither builds anything, so neither needs Go.
 #
+# A vX.Y-pre.N tag releases the commit as a prerelease the same way, for
+# the nightly channel: its GitHub release is marked a prerelease and never
+# the latest, and it writes Formula/unibox-nightly.rb and
+# bucket/unibox-nightly.json instead, leaving the stable formula and
+# manifest as they are.
+#
 # The tests are not run again: they ran when the commit was pushed to main
 # (test.yml), and running them twice only gives a flaky one a second chance
 # to stop the release. A failure there is re-run there, then this release is
@@ -20,7 +26,7 @@ name: release
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+"]
+    tags: ["v[0-9]+.[0-9]+", "v[0-9]+.[0-9]+-pre.[0-9]+"]
 
 permissions: {}
 
@@ -75,8 +81,8 @@ jobs:
           persist-credentials: false
       - name: Check the tag
         run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::$GITHUB_REF_NAME is not vX.Y"
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+(-pre\.[0-9]+)?$ ]]; then
+            echo "::error::$GITHUB_REF_NAME is not vX.Y or vX.Y-pre.N"
             exit 1
           fi
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
@@ -122,6 +128,11 @@ jobs:
           # A re-run finds the release made and replaces its archives.
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+          elif [[ "$TAG" == *-pre.* ]]; then
+            # A nightly is never what a stable install or the release page
+            # takes as the latest.
+            gh release create "$TAG" dist/* --repo "$REPO" --verify-tag \
+              --title "unibox ${TAG#v} (nightly)" --generate-notes --prerelease --latest=false
           else
             gh release create "$TAG" dist/* --repo "$REPO" --verify-tag \
               --title "unibox ${TAG#v}" --generate-notes
@@ -143,7 +154,7 @@ jobs:
           # Empty until branch protection needs it; then a deploy key allowed
           # to push to main, and the token is not used for the push.
           ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
-      - name: Point the formula and the Scoop manifest at the tag
+      - name: Point the formula and the Scoop manifest of the tag's channel at it
         env:
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
@@ -160,6 +171,16 @@ jobs:
             # release.
             version=${TAG#v}
             url="https://github.com/$REPO/releases/download/$TAG"
+            # The channel: stable for vX.Y, nightly for vX.Y-pre.N, each with
+            # a formula and a manifest of its own; both install unibox, so
+            # the nightly one says it cannot be beside the stable one.
+            name=unibox class=Unibox conflicts= scoop_check=true
+            if [[ "$TAG" == *-pre.* ]]; then
+              name=unibox-nightly class=UniboxNightly scoop_check=false
+              conflicts='
+            conflicts_with "unibox", because: "both install the unibox command"
+          '
+            fi
             sum() { awk -v f="unibox_${version}_$1" '$2 == f { print $1 }' "$SUMS" | grep .; }
             darwin_arm64=$(sum darwin_arm64.tar.gz)
             darwin_amd64=$(sum darwin_amd64.tar.gz)
@@ -167,17 +188,17 @@ jobs:
             linux_amd64=$(sum linux_amd64.tar.gz)
             amd64=$(sum windows_amd64.zip)
             arm64=$(sum windows_arm64.zip)
-            cat > Formula/unibox.rb <<FORMULA
+            cat > "Formula/$name.rb" <<FORMULA
           # The release workflow (.github/workflows/release.yml) writes this file
           # whole when a vX.Y tag is pushed, from the release's archives and their
           # SHA-256 sums; change it there. brew installs the archive's binary, so
           # it needs no Go; --HEAD builds main from source.
-          class Unibox < Formula
+          class $class < Formula
             desc "Wrapper over Docker Sandboxes for running coding agents locally"
             homepage "https://bitbyone.github.io/unibox/"
             version "$version"
             license "MIT"
-
+          $conflicts
             on_macos do
               on_arm do
                 url "$url/unibox_${version}_darwin_arm64.tar.gz"
@@ -219,8 +240,11 @@ jobs:
           end
           FORMULA
             mkdir -p bucket
+            # Scoop's own check finds the latest release, never a
+            # prerelease, so only the stable manifest has one; the nightly
+            # one is written here at every -pre tag.
             jq -n --arg v "$version" --arg url "$url" --arg repo "$REPO" \
-              --arg amd64 "$amd64" --arg arm64 "$arm64" '{
+              --arg amd64 "$amd64" --arg arm64 "$arm64" --argjson check "$scoop_check" '{
                 version: $v,
                 description: "Wrapper over Docker Sandboxes for running coding agents locally",
                 homepage: "https://bitbyone.github.io/unibox/",
@@ -229,19 +253,21 @@ jobs:
                   "64bit": {url: "\($url)/unibox_\($v)_windows_amd64.zip", hash: $amd64},
                   arm64: {url: "\($url)/unibox_\($v)_windows_arm64.zip", hash: $arm64}
                 },
-                bin: "unibox.exe",
+                bin: "unibox.exe"
+              }
+              + (if $check then {
                 checkver: {github: "https://github.com/\($repo)"},
                 autoupdate: {architecture: {
                   "64bit": {url: "https://github.com/\($repo)/releases/download/v$version/unibox_$version_windows_amd64.zip"},
                   arm64: {url: "https://github.com/\($repo)/releases/download/v$version/unibox_$version_windows_arm64.zip"}
                 }}
-              }' > bucket/unibox.json
-            git add Formula/unibox.rb bucket/unibox.json
+              } else {} end)' > "bucket/$name.json"
+            git add "Formula/$name.rb" "bucket/$name.json"
             if git diff --cached --quiet; then
-              echo "the formula and the manifest already name $TAG"
+              echo "the $name formula and manifest already name $TAG"
               exit 0
             fi
-            git commit -m "Release unibox ${TAG#v}" \
+            git commit -m "Release $name ${TAG#v}" \
               -m "Point the Homebrew formula at the release's macOS and Linux archives of $TAG, commit $SHA, and the Scoop manifest at its Windows ones."
             # main may have moved during the tests; fetch and try again.
             git push origin HEAD:main && exit 0

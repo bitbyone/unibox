@@ -41,7 +41,10 @@ builds it, checks `unibox --version` prints the tag's version, publishes
 release, and writes `Formula/unibox.rb` (the Homebrew tap this repository
 is) and `bucket/unibox.json` (its Scoop bucket) whole from the archives'
 sums, so brew and Scoop install the binary built there and nothing builds
-on the person's machine. Release by pushing such a tag; never edit the
+on the person's machine. A `vX.Y-pre.N` tag does the same for the
+nightly channel: a GitHub prerelease, never the latest, and
+`Formula/unibox-nightly.rb` and `bucket/unibox-nightly.json`, leaving the
+stable ones as they are. Release by pushing such a tag; never edit the
 formula or the manifest by hand - change the workflow that writes them.
 A test that fails one run in a few is a bug to find, not to rerun: the
 lock tests did, until FileLock.Close unlocked before closing (a forked
