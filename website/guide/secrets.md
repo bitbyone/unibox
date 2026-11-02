@@ -122,8 +122,9 @@ kit manages api.anthropic.com and keeps the sign-in through sbx's proxy.
 
 ## A token of an env's or a sandbox's own
 
-Tokens are global unless told otherwise: every sandbox takes the same. A
-token can instead be one env's sandboxes' own - a second Copilot account
+`unibox init` keeps the tokens it asks for as each env's own; `unibox
+secret set` without `--scope` stores a global one, which every sandbox
+takes. A token can be one env's sandboxes' own - a second Copilot account
 for work - or one sandbox's own, over its env's: a personal sandbox with
 your own GitHub token beside the team's. The narrowest wins: the
 sandbox's, then the env's, then the global one.

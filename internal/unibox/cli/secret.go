@@ -103,7 +103,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	ls.Flags().BoolVarP(&overview, "all", "a", false, "Every token kept, global, an env's or a sandbox's, and the sandboxes that take each")
 	c.AddCommand(ls)
 	var command, scopeFlag string
-	var all, generate, envOnly bool
+	var all, generate, envOnly, typed bool
 	set := &cobra.Command{Use: "set [service...]", Short: "Have sbx store the tokens an env lacks, or those named", RunE: func(cmd *cobra.Command, args []string) error {
 		env, list, err := needed(cmd)
 		if err != nil {
@@ -128,7 +128,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			if len(args) != 1 {
 				return fmt.Errorf("--scope %s keeps one service's token; name the service", scopeFlag)
 			}
-			return o.setOwnSecret(cmd, env, scope, args[0], command, generate)
+			return o.setOwnSecret(cmd, env, scope, args[0], command, generate, typed)
 		}
 		if command != "" && len(services) != 1 {
 			return fmt.Errorf("--command stores one service's token; name the service")
@@ -162,7 +162,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			}
 			var way unibox.TokenWay
 			if command == "" && o.canAsk() {
-				if way, err = o.offerTokenPage(cmd.Context(), service, guide, generate); err != nil {
+				if way, err = o.offerTokenPage(cmd.Context(), service, guide, generate, typed); err != nil {
 					return err
 				}
 			}
@@ -198,6 +198,10 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	set.Flags().StringVar(&scopeFlag, "scope", "global", "global, the one sbx keeps for every sandbox; env, the env's sandboxes' own; sandbox, one sandbox's own (-s)")
 	set.Flags().BoolVar(&envOnly, "env-only", false, "The same as --scope env")
 	_ = set.Flags().MarkHidden("env-only")
+	// Said by a list that has asked already whether the token is typed in
+	// or read from gh: only the ways a token typed in is made are offered.
+	set.Flags().BoolVar(&typed, "typed", false, "Offer only the ways of a token typed in")
+	_ = set.Flags().MarkHidden("typed")
 	c.AddCommand(set)
 	var rmEnvOnly bool
 	var rmScope string
@@ -307,9 +311,9 @@ func (e tokenNotStored) Unwrap() error { return e.err }
 // a token made one way, whether they have one already. It says whether sbx
 // is to sign them in rather than ask for the token. A service with no way
 // goes straight to sbx.
-func (o *options) offerTokenPage(ctx context.Context, service string, guide unibox.TokenGuide, generate bool) (way unibox.TokenWay, err error) {
+func (o *options) offerTokenPage(ctx context.Context, service string, guide unibox.TokenGuide, generate, typed bool) (way unibox.TokenWay, err error) {
 	ways := guide.AllWays()
-	if gh, ok := unibox.GHLoginWay(ctx, service); ok && !generate {
+	if gh, ok := unibox.GHLoginWay(ctx, service); ok && !generate && !typed {
 		ways = append(ways, gh)
 	}
 	if len(ways) == 0 {
@@ -443,7 +447,7 @@ func storedText(l unibox.NeededSecret) string {
 // or typed into the system's keychain, which its own program asks for on
 // this terminal. The page where it is made is offered first, as for a
 // global one.
-func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.SecretScope, service, command string, generate bool) error {
+func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.SecretScope, service, command string, generate, typed bool) error {
 	ctx := cmd.Context()
 	v := unibox.EnvSecret{Command: command}
 	if command == "" {
@@ -454,12 +458,27 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		if err != nil {
 			return err
 		}
-		way, err := o.offerTokenPage(ctx, service, guides[service], generate)
+		way, err := o.offerTokenPage(ctx, service, guides[service], generate, typed)
 		if err != nil {
 			return err
 		}
-		if way.SignIn || way.Agent || way.Env != "" {
-			return fmt.Errorf("%s is kept by sbx itself, which keeps it for every sandbox alike; give %s a token of its own, typed in or with --command", way.Name, scope)
+		// A subscription's sign-in sbx keeps for every sandbox alike, so it
+		// is done for them all, and said so, rather than refused.
+		switch {
+		case way.Agent:
+			return o.success(fmt.Sprintf("nothing is stored for %s; the agent signs in itself when it first starts, and sbx keeps that for every sandbox", service))
+		case way.SignIn:
+			fmt.Fprintf(o.log, "sbx keeps the %s sign-in for every sandbox, not for %s alone\n", way.Name, scope)
+			if err := o.manager.SBX.SecretSignIn(ctx, service, o.input, o.output, o.log); err != nil {
+				return tokenNotStored{err}
+			}
+			return o.success(fmt.Sprintf("sbx has stored %s for every sandbox", service))
+		case way.Env != "":
+			fmt.Fprintf(o.log, "sbx keeps %s for every sandbox, not for %s alone\n", way.Name, scope)
+			if err := o.manager.SBX.SecretSetCustom(ctx, way.Env, way.Placeholder, way.Hosts, o.input, o.output, o.log); err != nil {
+				return tokenNotStored{err}
+			}
+			return o.success(fmt.Sprintf("sbx has stored %s for every sandbox", service))
 		}
 		if way.Run != "" {
 			return o.keepOwnSecret(ctx, env, scope, service, unibox.EnvSecret{Command: way.Run})

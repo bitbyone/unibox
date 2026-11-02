@@ -407,6 +407,7 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 
 	o.walkStep(4, "Secrets")
 	lacking := []string{}
+	missingOf := map[string][]unibox.NeededSecret{}
 	for _, env := range envs {
 		var secrets []unibox.NeededSecret
 		if err = o.working("reading the kits of env "+env.Name, func() (err error) {
@@ -419,6 +420,7 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		for _, l := range secrets {
 			if !l.Stored && !l.Optional {
 				missing = append(missing, l.Service)
+				missingOf[env.Name] = append(missingOf[env.Name], l)
 			}
 		}
 		if len(missing) == 0 {
@@ -429,18 +431,38 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		lacking = append(lacking, env.Name)
 	}
 	if len(lacking) > 0 {
-		fmt.Fprintln(o.log, "  sbx asks for each on this terminal, and the value goes to it alone")
+		// Each env's tokens are its own, so a token for one env reaches no
+		// other's sandboxes; unibox secret moves one to every env later.
+		// Typed in, they go to the system's keychain; without one, sbx keeps
+		// them for every sandbox, as it would anyway.
+		own := unibox.KeychainAvailable() == nil
+		if own {
+			fmt.Fprintf(o.log, "  each is kept for its env alone, typed into %s or read from gh; s in unibox secret makes one every env's\n", unibox.KeychainName())
+		} else {
+			fmt.Fprintln(o.log, "  sbx asks for each on this terminal, and keeps it for every sandbox")
+		}
 		if store, err := o.askYes("Store them now?", true); err != nil {
 			return err
 		} else if store {
-			// sbx keeps a token for every sandbox: one stored for an env is
-			// not asked for again for the next.
 			for _, name := range lacking {
-				if err = o.runStep(cmd, "secret", "set", "-e", name); err != nil {
-					if missing, ok := errors.AsType[tokenNotStored](err); ok {
-						return fmt.Errorf("%w; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing", missing.err)
+				steps := [][]string{{"secret", "set", "-e", name}}
+				if own {
+					steps = nil
+					for _, l := range missingOf[name] {
+						steps = append(steps, []string{"secret", "set", l.Service, "--scope", "env", "-e", name})
 					}
-					return err
+				}
+				for i, step := range steps {
+					if own {
+						l := missingOf[name][i]
+						fmt.Fprintf(o.log, "%s of env %s: %s\n", l.Service, name, cmp.Or(l.Description, "the token for "+l.Service))
+					}
+					if err = o.runStep(cmd, step...); err != nil {
+						if missing, ok := errors.AsType[tokenNotStored](err); ok {
+							return fmt.Errorf("%w; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing", missing.err)
+						}
+						return err
+					}
 				}
 			}
 		} else {

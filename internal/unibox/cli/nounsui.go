@@ -409,15 +409,24 @@ func (o *options) moveSecret(cmd *cobra.Command, env unibox.Env, sandbox, servic
 // setInScope keeps a token of an env's or a sandbox's own, typed into the
 // keychain or read by a command, as the person picks.
 func (o *options) setInScope(cmd *cobra.Command, env unibox.Env, sandbox, service, scope string) error {
-	how, err := o.askPick("How the "+service+" token of "+scope+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[scope]+" is kept", "", []pick{
-		{"keychain", "typed in; it goes into " + unibox.KeychainName()},
-		{"command", "a command on this machine that prints it"},
-	}, "keychain")
+	picks := []pick{{"keychain", "typed in; it goes into " + unibox.KeychainName()}}
+	gh, signedIn := unibox.GHLoginWay(cmd.Context(), service)
+	if signedIn {
+		picks = append(picks, pick{"gh", "your gh login; sbx runs gh auth token for it"})
+	}
+	picks = append(picks, pick{"command", "another command on this machine that prints it"})
+	how, err := o.askPick("How the "+service+" token of "+scope+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[scope]+" is kept", "", picks, "keychain")
 	if err != nil {
 		return err
 	}
 	args := []string{"secret", "set", service, "--scope", scope, "-e", env.Name, "-s", sandbox}
-	if how == "command" {
+	switch how {
+	case "keychain":
+		args = append(args, "--typed")
+	case "gh":
+		fmt.Fprintf(o.log, "  %s\n", gh.Hint)
+		args = append(args, "--command", gh.Run)
+	case "command":
 		command, err := o.askText("The command sbx runs on the host for the "+service+" token", "A keychain read, say; it prints the token", "", func(s string) error {
 			if strings.TrimSpace(s) == "" {
 				return fmt.Errorf("say the command")

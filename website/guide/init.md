@@ -42,11 +42,11 @@ env dev asks for values of your own, kept for it in vars.toml:
 
 [b]4/5 Secrets[/]
   sbx has no token for anthropic, github of env dev
-  sbx asks for each on this terminal, and the value goes to it alone
+  each is kept for its env alone, typed into the macOS keychain or read from gh; s in unibox secret makes one every env's
 [blue]?[/] [b]Store them now?[/]  Yes
-anthropic: the Claude API key
-[dim](sbx's prompt for the value)[/]
-github: the token git pushes with
+anthropic of env dev: the Claude API key
+[blue]?[/] [b]The anthropic token[/]  Claude subscription
+github of env dev: the token git pushes with
 [blue]?[/] [b]The github token[/]  Generate a new token
   the browser opens https://github.com/settings/personal-access-tokens/new?name=...; make the token there, then paste it here
 [dim](sbx's prompt for the value)[/]
@@ -75,7 +75,11 @@ creating sandbox dev from env dev
    `~/.config/unibox/vars.toml`, never into the team's repository.
 4. **Secrets** - reads which tokens the env's kits need and which sbx has.
    Where the team or unibox knows the page that makes a token, it offers
-   to open it. The value goes from your keyboard to sbx alone; see
+   to open it, and for GitHub's your gh login. Each missing token is kept
+   for the env alone, typed into your system's keychain, so it reaches no
+   other env's sandboxes; `s` in `unibox secret` makes one global later.
+   A subscription's sign-in is sbx's for every sandbox. Without a
+   keychain, sbx keeps every token for every sandbox; see
    [Secrets](./secrets).
 5. **Sandboxes** - creates the env's sandbox with `sbx env create`. sbx
    shows what it will make and asks you to approve the env and its host

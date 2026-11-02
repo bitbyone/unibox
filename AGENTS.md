@@ -110,7 +110,12 @@ about it. Keep command output short: pipe through `head`, `tail` or
   has sbx keep as each sandbox's own at every start, as a recreate takes
   those away. Typed in, it goes to the system's keychain through its own
   program (`keychain.go`: security, secret-tool, PowerShell with DPAPI),
-  which asks on the terminal, and the command reads it from there.
+  which asks on the terminal, and the command reads it from there; read
+  from gh, the command is `gh auth token`. `init` keeps each env's
+  missing tokens as the env's own where the system has a keychain, so a
+  token for one env reaches no other's sandboxes, and sbx's global ones
+  only where it has none; a subscription's sign-in is sbx's for every
+  sandbox whatever the scope asked. `s` in `unibox secret` makes one global.
 - **A task mounts by default.** Directories go to `/work/<task>/<repo>`
   through `sbx mount`; the agent can write the host's `.git`, which is
   told once per directory (`State.Mounted`). `task rm` unmounts, checks

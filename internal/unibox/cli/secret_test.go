@@ -1519,8 +1519,51 @@ func TestAGitHubTokenComesFromTheGhLoginWhereGhIsSignedIn(t *testing.T) {
 	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); !strings.Contains(string(cfg), gh+" auth token") {
 		t.Fatalf("%s", cfg)
 	}
-	// A new token to make is not one gh has.
+	// A new token to make is not one gh has, nor is one the list has said
+	// is typed in.
 	if _, said, err := runAt(t, paths, "", "secret", "set", "github", "--generate"); err != nil || strings.Contains(said, "gh login") {
 		t.Fatalf("%v\n%s", err, said)
+	}
+	if _, said, err := runAt(t, paths, "1\n", "secret", "set", "github", "--typed"); err != nil || strings.Contains(said, "gh login") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	// A subscription's sign-in asked for one env is sbx's for every
+	// sandbox, done and said rather than refused.
+	if out, said, err := runAt(t, paths, "1\n", "secret", "set", "openai", "--scope", "env"); err != nil || !strings.Contains(said, "not for env team alone") || !strings.Contains(out, "for every sandbox") {
+		t.Fatalf("%v\n%s\n%s", err, out, said)
+	}
+}
+
+func TestInitKeepsEachEnvsTokensForItAlone(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	// The system's keychain is a stand-in that keeps what it is given to
+	// read, by the name of whichever program the system has.
+	kept := filepath.Join(t.TempDir(), "kept")
+	bin := t.TempDir()
+	for _, name := range []string{"security", "secret-tool"} {
+		if err := testenv.WriteExecutable(filepath.Join(bin, name), []byte("#!/bin/sh\nread -r v && echo \"$v\" >> "+unibox.Quote(kept)+"\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
+	// SSH agent: no; editors: yes; the arg; store the secrets: Claude signs
+	// in itself, gitlab's is typed into the keychain; no sandbox yet.
+	out, said, err := runAt(t, paths, "1\n1\n1\nperson\ny\n1\ngitlab-token\nn\n", "init", repo)
+	if err != nil || !strings.Contains(said, "each is kept for its env alone") || !strings.Contains(out+said, "nothing is stored for anthropic") {
+		t.Fatalf("%v\n%s\n%s", err, out, said)
+	}
+	cfg, _ := paths.LoadConfig()
+	if own := cfg.Envs["team"].Secrets["gitlab"]; own.Keychain != "env/team/gitlab" {
+		t.Fatalf("%+v", cfg.Envs["team"].Secrets)
+	}
+	if b, _ := os.ReadFile(kept); string(b) != "gitlab-token\n" {
+		t.Fatalf("%q", b)
+	}
+	// sbx was given no token for every sandbox.
+	if c := calls(t, log); strings.Contains(c, "secret set gitlab") || strings.Contains(c, "secret set anthropic") {
+		t.Fatalf("%s", c)
 	}
 }
