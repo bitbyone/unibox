@@ -28,6 +28,13 @@ platforms = ["macos", "linux"]
 [[startup]]
 command = ` + command + `
 
+[[actions]]
+id = "start-observer"
+title = "Start the unibox observer"
+description = "Report coding agents running in unibox sandboxes from now on"
+contexts = ["global"]
+command = ` + command + `
+
 [[events]]
 on = "pane.created"
 command = ` + command + `
@@ -113,7 +120,17 @@ func (m *Manager) InstallPlugin(ctx context.Context) error {
 	// The path before the flag: herdr 0.9.1, asked through a running
 	// server's socket as from inside one of its panes, takes the argument
 	// after --enabled for an option and refuses it.
-	return runLogged(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "link", filepath.Dir(m.pluginPath()), "--enabled"), m.Log)
+	if err = runLogged(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "link", filepath.Dir(m.pluginPath()), "--enabled"), m.Log); err != nil {
+		return err
+	}
+	// herdr runs a plugin's startup only when its server starts, not when
+	// the plugin is linked, so a running server is asked to start the
+	// observer now; with none, its next start does. The action again
+	// before --plugin, for the same reason as the path above.
+	if _, err = commandOutput(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "action", "invoke", "start-observer", "--plugin", pluginID)); err != nil {
+		fmt.Fprintln(m.Log, "the observer starts with herdr's next start")
+	}
+	return nil
 }
 func (m *Manager) UninstallPlugin(ctx context.Context) error {
 	if err := runLogged(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "unlink", pluginID), m.Log); err != nil {
