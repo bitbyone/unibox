@@ -4,7 +4,28 @@ What each release brought, newest first. Every release's archives are on
 [GitHub](https://github.com/bitbyone/unibox/releases); `brew upgrade
 unibox` or `scoop update unibox` takes the latest.
 
-## 0.5 <Badge type="tip" text="2026-10-29" />
+## 0.6 <Badge type="tip" text="2026-11-02" />
+
+- A person keeps who their commits are by, for every env, an env or a
+  sandbox (`unibox author`), and the team can require one; commits in a
+  mounted repository now go out as that author, not the sandbox's user.
+- Agents name themselves co-author as their own settings say, or not at
+  all for every env or one (`unibox co-author`).
+- A task whose mounted checkout was moved to another branch on the host
+  is refused until it is back, rather than taken up on the wrong branch.
+- `unibox port add` and `port rm`, or `a` and `r` in the port list, name
+  and forget a port of your own and publish it at once.
+- A repository added to a task is mounted or cloned as its row says, and
+  `task rm-repo` (`u` in the task list) takes one out again.
+- `sandbox recreate` and `task rm` take `--force` to discard work the
+  forge lacks.
+- An agent's session is told which terminal it draws on, so agents show
+  images in Ghostty, kitty and iTerm.
+- A recreated sandbox takes its own token again instead of the global one.
+- The herdr plugin installs from inside a herdr pane and starts its
+  observer at once, without restarting herdr.
+
+## 0.5 <Badge type="info" text="2026-10-29" />
 
 - A sandbox made anew gets its env's and its own tokens again, instead of
   the global token sbx would otherwise give it after a recreate.
