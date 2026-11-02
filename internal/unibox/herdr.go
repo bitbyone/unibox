@@ -110,7 +110,10 @@ func (m *Manager) InstallPlugin(ctx context.Context) error {
 	if err = AtomicWrite(m.pluginPath(), []byte(PluginManifest(binary)), 0o600); err != nil {
 		return err
 	}
-	return runLogged(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "link", "--enabled", filepath.Dir(m.pluginPath())), m.Log)
+	// The path before the flag: herdr 0.9.1, asked through a running
+	// server's socket as from inside one of its panes, takes the argument
+	// after --enabled for an option and refuses it.
+	return runLogged(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "link", filepath.Dir(m.pluginPath()), "--enabled"), m.Log)
 }
 func (m *Manager) UninstallPlugin(ctx context.Context) error {
 	if err := runLogged(herdrCommand(ctx, os.Getenv("HERDR_SOCKET_PATH"), "plugin", "unlink", pluginID), m.Log); err != nil {
