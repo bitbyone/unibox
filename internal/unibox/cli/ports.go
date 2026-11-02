@@ -14,19 +14,18 @@ import (
 	"github.com/tobola/unibox/internal/unibox/api"
 )
 
-// portCommand switches a running sandbox's ports. The ports themselves
-// are written by hand: the team's in unibox.yaml at its repository's root
-// and in the unibox file beside an env's sbxenv file, which sbx does not
-// read, and a person's in config.yaml - so nobody's host port is in the
-// team's files, and no command stands between a person and the file but
-// port default, which says only whether one is on at start.
+// portCommand switches a running sandbox's ports. The team's are written
+// by hand, in unibox.yaml at its repository's root and in the unibox file
+// beside an env's sbxenv file, which sbx does not read; a person's are in
+// config.yaml, named there by hand or by port add - so nobody's host port
+// is in the team's files.
 func (o *options) portCommand() *cobra.Command {
-	c := &cobra.Command{Use: "port", Short: "Switch a running sandbox's ports, and list them", Long: `A port is published on the host's loopback. The ports are named in files,
-by hand: the team's in unibox.yaml at the root of its repository and in
+	c := &cobra.Command{Use: "port", Short: "Switch a running sandbox's ports, and list them", Long: `A port is published on the host's loopback. The ports are named in files:
+the team's by hand in unibox.yaml at the root of its repository and in
 the unibox file beside an env's sbxenv file (dev.unibox.yaml beside
 dev.sbxenv.yaml), yours in ~/.config/unibox/config.yaml, for every env,
 for every env of one env repository or for one, each over the one
-before. What a port says as default is whether a sandbox starts with it
+before - by hand, or with port add and port rm. What a port says as default is whether a sandbox starts with it
 published; port default name on|off writes yours for the env, or with
 --env-repo for every env of its repository, and - takes it back.
 
@@ -36,11 +35,12 @@ name, by name=HOST_PORT for a named port on another host port, or by
 files.
 
 Alone at a terminal, unibox port shows a running sandbox's ports to
-switch with the arrows or h and l, and m publishes a named one on a host
-port typed there, as name=HOST_PORT does.
+switch with the arrows or h and l; m publishes a named one on a host port
+typed there, as name=HOST_PORT does, a names a port of yours for the env
+as port add does, and r forgets one of yours.
 
 A mapping is [[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 3000 takes any
-free host port, 8080:3000 host port 8080.`, Example: "  unibox port -s dev\n  unibox port on vite\n  unibox port on vite=15173 -s dev\n  unibox port on --map 9090:9090\n  unibox port off vite"}
+free host port, 8080:3000 host port 8080.`, Example: "  unibox port -s dev\n  unibox port add api 8080\n  unibox port on vite\n  unibox port on vite=15173 -s dev\n  unibox port on --map 9090:9090\n  unibox port off vite"}
 	var sandbox string
 	var maps []string
 	turn := func(on bool) *cobra.Command {
@@ -104,7 +104,50 @@ its ports until it next starts, or unibox port on|off switches them now.`, Examp
 	}}
 	def.Flags().StringVarP(&envFlagValue, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
 	def.Flags().BoolVar(&envRepo, "env-repo", false, "Say it for every env of the env's repository")
-	c.AddCommand(turn(true), turn(false), ls, def)
+	var addEnv string
+	var addEvery, addEnvRepo, addOff bool
+	add := &cobra.Command{Use: "add name mapping", Args: cobra.ExactArgs(2), Short: "Name a port of yours for the env, its repository's envs or every env", Long: `Names a port of yours in your config.yaml, for the env, or with --env-repo
+for every env of its repository, or with -g for every env, and publishes
+it in the running sandboxes it reaches. It is on at each start unless
+--off says otherwise. A name an env has already is refused; port on
+name=HOST_PORT moves one of those.`, Example: "  unibox port add api 8080\n  unibox port add debug 15005:5005 --off\n  unibox port add storybook 6006 -g", RunE: func(cmd *cobra.Command, args []string) error {
+		scope, err := o.repoScope(addEnv, addEvery, addEnvRepo)
+		if err != nil {
+			return err
+		}
+		if err := o.manager.AddPort(scope, args[0], args[1], !addOff); err != nil {
+			return err
+		}
+		if err := o.manager.SyncScopePorts(cmd.Context(), scope); err != nil {
+			return err
+		}
+		return o.success(fmt.Sprintf("port %s (%s) is named %s", args[0], args[1], o.scopeText(scope)))
+	}}
+	add.Flags().StringVarP(&addEnv, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
+	add.Flags().BoolVarP(&addEvery, "every-env", "g", false, "Name it for every env rather than this one")
+	add.Flags().BoolVar(&addEnvRepo, "env-repo", false, "Name it for every env of this env's repository")
+	add.Flags().BoolVar(&addOff, "off", false, "Leave it off at each start; port on publishes it")
+	add.MarkFlagsMutuallyExclusive("every-env", "env-repo")
+	var rmEnv string
+	var rmEvery, rmEnvRepo bool
+	rm := &cobra.Command{Use: "rm name", Args: cobra.ExactArgs(1), Short: "Forget a port of yours, and stop publishing it", RunE: func(cmd *cobra.Command, args []string) error {
+		scope, err := o.repoScope(rmEnv, rmEvery, rmEnvRepo)
+		if err != nil {
+			return err
+		}
+		if err := o.manager.RemovePort(scope, args[0]); err != nil {
+			return err
+		}
+		if err := o.manager.SyncScopePorts(cmd.Context(), scope); err != nil {
+			return err
+		}
+		return o.success(fmt.Sprintf("forgot port %s %s", args[0], o.scopeText(scope)))
+	}}
+	rm.Flags().StringVarP(&rmEnv, "env", "e", "", "Env (default: UNIBOX_ENV, the context's, or the only one)")
+	rm.Flags().BoolVarP(&rmEvery, "every-env", "g", false, "Forget the one named for every env")
+	rm.Flags().BoolVar(&rmEnvRepo, "env-repo", false, "Forget the one named for every env of this env's repository")
+	rm.MarkFlagsMutuallyExclusive("every-env", "env-repo")
+	c.AddCommand(turn(true), turn(false), ls, def, add, rm)
 	c.Args = cobra.NoArgs
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		name, err := o.sandboxName(sandbox)
@@ -130,7 +173,7 @@ func (o *options) portsUI(cmd *cobra.Command, name string) error {
 	if err != nil {
 		return err
 	}
-	if o.json || !o.interactive || !running || len(ports) == 0 {
+	if o.json || !o.interactive || !running {
 		if !o.json && o.interactive && !running {
 			fmt.Fprintf(o.log, "sandbox %s is not running; its ports can be switched once it runs (unibox resume, unibox sandbox shell)\n", name)
 		}
@@ -163,6 +206,33 @@ func (o *options) portsUI(cmd *cobra.Command, name string) error {
 		}
 		ports, _, err := o.manager.SandboxPorts(ctx, name)
 		return ports, portDefaultSaid(o.manager, b.Env, key), err
+	}, addPort: func(port, spec string) ([]unibox.PortState, string, error) {
+		b, _, err := o.manager.Definition(unibox.Request{Sandbox: name})
+		if err != nil {
+			return nil, "", err
+		}
+		if err := o.manager.AddPort(unibox.Scope{Env: b.Env}, port, spec, true); err != nil {
+			return nil, "", err
+		}
+		if err := o.manager.SyncPorts(ctx, name); err != nil {
+			return nil, "", err
+		}
+		ports, _, err := o.manager.SandboxPorts(ctx, name)
+		return ports, fmt.Sprintf("port %s (%s) is named for env %s in your config.yaml, and published", port, spec, b.Env), err
+	}, removePort: func(row unibox.PortState) ([]unibox.PortState, string, error) {
+		b, _, err := o.manager.Definition(unibox.Request{Sandbox: name})
+		if err != nil {
+			return nil, "", err
+		}
+		scope, _ := unibox.PortScope(b.Env, row.From)
+		if err := o.manager.RemovePort(scope, row.Name); err != nil {
+			return nil, "", err
+		}
+		if err := o.manager.SyncScopePorts(ctx, scope); err != nil {
+			return nil, "", err
+		}
+		ports, _, err := o.manager.SandboxPorts(ctx, name)
+		return ports, "forgot port " + row.Name + " " + o.scopeText(scope), err
 	}}
 	// The theme asks the terminal for its background; asked here, before
 	// the program reads keys, the answer is not taken for typing.
@@ -213,7 +283,7 @@ func (o *options) listPorts(cmd *cobra.Command, name string) error {
 		return o.write(map[string]any{"api_version": api.Version, "sandbox": name, "running": running, "ports": out})
 	}
 	if len(ports) == 0 {
-		fmt.Fprintf(o.output, "sandbox %s publishes no ports; name them under ports: in your config.yaml, or publish one now with unibox port on --map <mapping>\n", name)
+		fmt.Fprintf(o.output, "sandbox %s publishes no ports; name one with unibox port add <name> <mapping>, or publish one now with unibox port on --map <mapping>\n", name)
 		return nil
 	}
 	w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)

@@ -24,7 +24,7 @@ $ unibox port
   [dim]off[/]  vite      start off  5173:5173  -                      the Vite dev server
   [dim]off[/]  devtools  start off  9222:9222  -                      Chrome DevTools
 
-[key]↑/↓ j/k[/] move · [key]←/h[/] off · [key]→/l[/] on · [key]space[/] switch · [key]m[/] on another host port · [key]d[/] on/off at start · [key]enter/q[/] done
+[key]↑/↓ j/k[/] move · [key]←/h[/] off · [key]→/l[/] on · [key]space[/] switch · [key]m[/] on another host port · [key]d[/] on/off at start · [key]a[/] add yours · [key]r[/] forget yours · [key]enter/q[/] done
 ```
 
 Add `-s dev` for another sandbox than the default. The sandbox must be
@@ -42,7 +42,19 @@ The team can name ports in `unibox.yaml` at the root of the env repository
 `dev.sbxenv.yaml`). `unibox port ls` shows them.
 
 Your own go in `~/.config/unibox/config.yaml`, for every env at the top or
-for one env under it. Yours win over the team's:
+for one env under it. A command names one there and publishes it in the
+env's running sandboxes, or `a` in the `unibox port` list asks for its name
+and mapping; `r` there forgets one of yours:
+
+```sh
+unibox port add api 8080:8080       # for the env, on at every start
+unibox port add debug 5005 --off    # published only by unibox port on
+unibox port add docs 4000 -g        # for every env
+unibox port rm api
+```
+
+A name the env has already is refused; `unibox port on vite=15173` moves
+the team's. Yours win over the team's:
 
 ```yaml
 ports:                              # every env

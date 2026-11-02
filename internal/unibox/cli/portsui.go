@@ -25,12 +25,20 @@ type portsModel struct {
 	// named port under the cursor at, as port on name=HOST_PORT does.
 	asking   bool
 	hostPort string
+	// adding is 1 while a new port's name is typed, 2 while its mapping
+	// is, as port add takes them.
+	adding           int
+	newName, newSpec string
 	// switchPort publishes or unpublishes a port and reads the ports anew,
 	// with the last line it would have said.
 	switchPort func(key string, on bool) ([]unibox.PortState, string, error)
 	// setDefault has a named port on or off at each start, for the person,
 	// and reads the ports anew.
 	setDefault func(key string, on bool) ([]unibox.PortState, string, error)
+	// addPort names a port of the person's for the env and publishes it;
+	// removePort forgets one of theirs. Both read the ports anew.
+	addPort    func(name, spec string) ([]unibox.PortState, string, error)
+	removePort func(row unibox.PortState) ([]unibox.PortState, string, error)
 	// width and height are the terminal's: the keys are wrapped to the
 	// one, the rows scroll within the other.
 	width, height int
@@ -60,6 +68,9 @@ func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.asking {
 			return m.ask(msg)
 		}
+		if m.adding > 0 {
+			return m.add(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c", "q", "esc", "enter":
 			m.done = true
@@ -86,6 +97,25 @@ func (m portsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.busy, m.err, m.note = true, nil, ""
 			return m, func() tea.Msg {
 				rows, note, err := m.setDefault(row.Name, !row.Default)
+				return portsSwitched{rows, note, err}
+			}
+		case "a":
+			if m.busy || m.addPort == nil {
+				break
+			}
+			m.adding, m.newName, m.newSpec, m.err, m.note = 1, "", "", nil, ""
+		case "r":
+			if m.busy || len(m.rows) == 0 || m.removePort == nil {
+				break
+			}
+			row := m.rows[m.cursor]
+			if !row.Named || !unibox.IsYours(row.From) {
+				m.err, m.note = nil, "only a port of yours is forgotten here; d has one of the team's off at each start"
+				break
+			}
+			m.busy, m.err, m.note = true, nil, ""
+			return m, func() tea.Msg {
+				rows, note, err := m.removePort(row)
 				return portsSwitched{rows, note, err}
 			}
 		case "m":
@@ -133,6 +163,44 @@ func (m portsModel) ask(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// add takes a new port's name and then its mapping, and on the last
+// enter names and publishes it.
+func (m portsModel) add(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	field := &m.newName
+	if m.adding == 2 {
+		field = &m.newSpec
+	}
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.adding = 0
+	case tea.KeyBackspace:
+		if *field != "" {
+			*field = (*field)[:len(*field)-1]
+		}
+	case tea.KeyEnter:
+		if *field == "" {
+			break
+		}
+		if m.adding == 1 {
+			m.adding = 2
+			break
+		}
+		m.adding, m.busy = 0, true
+		name, spec := m.newName, m.newSpec
+		return m, func() tea.Msg {
+			rows, note, err := m.addPort(name, spec)
+			return portsSwitched{rows, note, err}
+		}
+	case tea.KeyRunes:
+		for _, r := range msg.Runes {
+			if r > ' ' && r < 127 && len(*field) < 64 {
+				*field += string(r)
+			}
+		}
+	}
+	return m, nil
+}
+
 // turn switches the port under the cursor, unless it is so already or a
 // switch is under way.
 func (m portsModel) turn(to func(bool) bool) (tea.Model, tea.Cmd) {
@@ -162,7 +230,7 @@ func (m portsModel) View() string {
 	for _, r := range m.rows {
 		nameW, specW, startW, urlW = max(nameW, len(r.Name)), max(specW, len(r.Spec)), max(startW, len(atStart(r))), max(urlW, len(url(r)))
 	}
-	keys := helpLines(m.width, "↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "enter/q", "done")
+	keys := helpLines(m.width, "↑/↓ j/k", "move", "←/h", "off", "→/l", "on", "space", "switch", "m", "on another host port", "d", "on/off at start", "a", "add yours", "r", "forget yours", "enter/q", "done")
 	// The title, the lines of how many more, the blank one, the note, the
 	// keys and the line the cursor is left on take the rest.
 	first, end := rowWindow(len(m.rows), m.cursor, listRoom(m.height, len(keys)+8))
@@ -186,6 +254,17 @@ func (m portsModel) View() string {
 		b.WriteString(l + "\n")
 	}
 	b.WriteString("\n")
+	if m.adding > 0 {
+		if m.adding == 1 {
+			fmt.Fprintf(&b, "name of the new port: %s_\n", m.newName)
+			b.WriteString(portHelp.Render("lower case letters, digits and dashes, e.g. api") + "\n")
+		} else {
+			fmt.Fprintf(&b, "mapping for %s: %s_\n", m.newName, m.newSpec)
+			b.WriteString(portHelp.Render("[[HOST_IP:]HOST_PORT:]SANDBOX_PORT[/PROTOCOL]: 8080 takes any free host port, 18080:8080 host port 18080") + "\n")
+		}
+		b.WriteString(strings.Join(helpLines(m.width, "enter", map[int]string{1: "next", 2: "add and publish it"}[m.adding], "esc", "cancel"), "\n") + "\n")
+		return b.String()
+	}
 	if m.asking {
 		fmt.Fprintf(&b, "host port for %s: %s_\n", m.rows[m.cursor].Name, m.hostPort)
 		b.WriteString(strings.Join(helpLines(m.width, "enter", "publish it there", "esc", "cancel"), "\n") + "\n")

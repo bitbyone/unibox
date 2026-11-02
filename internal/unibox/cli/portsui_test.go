@@ -124,3 +124,47 @@ func TestPortsAreSwitchedWhereTheyStandWithArrowsAndHL(t *testing.T) {
 		t.Fatal("enter did not end it")
 	}
 }
+
+func TestAPortOfThePersonsIsAddedWithAAndForgottenWithR(t *testing.T) {
+	t.Parallel()
+	added, removed := []string{}, []string{}
+	team := unibox.PortState{Name: "spring", Spec: "8080:8080", Named: true, Team: true, From: unibox.FromEnv}
+	mine := unibox.PortState{Name: "api", Spec: "9000", Named: true, From: unibox.FromYours, On: true}
+	m := portsModel{sandbox: "dev", addPort: func(name, spec string) ([]unibox.PortState, string, error) {
+		added = append(added, name+" "+spec)
+		return []unibox.PortState{mine, team}, "port api is named", nil
+	}, removePort: func(row unibox.PortState) ([]unibox.PortState, string, error) {
+		removed = append(removed, row.Name)
+		return []unibox.PortState{team}, "forgot port api", nil
+	}}
+	// With no ports yet, one is added; esc leaves it without one.
+	for _, k := range []string{"a", "x", "esc"} {
+		pressPort(&m, k)
+	}
+	if m.adding != 0 || len(added) != 0 {
+		t.Fatalf("%v %v", m.adding, added)
+	}
+	for _, k := range []string{"a", "a", "p", "i", "enter"} {
+		pressPort(&m, k)
+	}
+	if v := m.View(); !strings.Contains(v, "mapping for api: _") {
+		t.Fatalf("%q", v)
+	}
+	for _, k := range []string{"9", "0", "0", "1", "backspace", "0", "enter"} {
+		pressPort(&m, k)
+	}
+	if len(added) != 1 || added[0] != "api 9000" || len(m.rows) != 2 || !strings.Contains(m.View(), "port api is named") {
+		t.Fatalf("%v\n%s", added, m.View())
+	}
+	// One of the team's is not the person's to forget.
+	pressPort(&m, "j")
+	pressPort(&m, "r")
+	if len(removed) != 0 || !strings.Contains(m.View(), "only a port of yours") {
+		t.Fatalf("%v\n%s", removed, m.View())
+	}
+	pressPort(&m, "k")
+	pressPort(&m, "r")
+	if len(removed) != 1 || removed[0] != "api" || len(m.rows) != 1 {
+		t.Fatalf("%v %+v", removed, m.rows)
+	}
+}

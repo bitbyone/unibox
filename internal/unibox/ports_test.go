@@ -182,3 +182,68 @@ func TestASandboxStartsWithTheTeamsPortsThatAreOn(t *testing.T) {
 		t.Fatalf("%+v %v %v", ports, running, err)
 	}
 }
+
+func TestAPortOfThePersonsIsNamedPublishedAndForgotten(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	dev := Scope{Env: "dev"}
+	if err := m.AddPort(dev, "api", "8080:8080", true); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := m.Paths.LoadConfig(); c.Envs["dev"].Ports["api"] != (Port{Spec: "8080:8080", Default: true}) {
+		t.Fatalf("%+v", c.Envs["dev"].Ports)
+	}
+	if err := m.SyncScopePorts(ctx, dev); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.hostPorts("dev"); !slices.Equal(got, []int{8080}) {
+		t.Fatalf("added: %v", got)
+	}
+	// A name the env has, a name or mapping that does not read, and a host
+	// port another port asks for are refused, and nothing is written.
+	for _, bad := range [][2]string{{"api", "9000"}, {"Api", "9000"}, {"web", "x"}, {"web", "8080:3000"}} {
+		if err := m.AddPort(dev, bad[0], bad[1], true); err == nil {
+			t.Fatalf("%v was taken", bad)
+		}
+	}
+	if c, _ := m.Paths.LoadConfig(); len(c.Envs["dev"].Ports) != 1 {
+		t.Fatalf("%+v", c.Envs["dev"].Ports)
+	}
+	// Switched off while it runs and then forgotten, it goes with its
+	// switch, and what is not the person's is not forgotten.
+	if err := m.SwitchPorts(ctx, "dev", map[string]bool{"api": false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SwitchPorts(ctx, "dev", map[string]bool{"api": true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RemovePort(dev, "api"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SyncScopePorts(ctx, dev); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.hostPorts("dev"); len(got) != 0 {
+		t.Fatalf("forgotten: %v", got)
+	}
+	if b, _ := m.sandbox("dev"); len(b.PortSwitches) != 0 || len(b.Ports) != 0 {
+		t.Fatalf("%+v %+v", b.PortSwitches, b.Ports)
+	}
+	if err := m.RemovePort(dev, "api"); err == nil || !strings.Contains(err.Error(), "names no port api") {
+		t.Fatalf("%v", err)
+	}
+	// For every env, it reaches the env too.
+	if err := m.AddPort(Scope{}, "docs", "4000", false); err != nil {
+		t.Fatal(err)
+	}
+	if env, _ := m.Config.LoadEnv("dev"); env.Ports["docs"].Spec != "4000" || env.Ports["docs"].Default || env.Ports["docs"].From != FromYoursAll {
+		t.Fatalf("%+v", env.Ports)
+	}
+	if s, ok := PortScope("dev", FromYoursAll); !ok || s != (Scope{}) {
+		t.Fatalf("%+v", s)
+	}
+}

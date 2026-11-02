@@ -480,3 +480,186 @@ func (m *Manager) SwitchPorts(ctx context.Context, name string, switches map[str
 	}
 	return m.syncPorts(ctx, &b, env)
 }
+
+// AddPort names a port of the person's in config.yaml, in the scope s
+// says: for one env, every env of its repository, or every env. A name
+// some env already has is refused rather than taken over; port on
+// name=HOST_PORT moves one of those, and the person's files are there for
+// anything more.
+func (m *Manager) AddPort(s Scope, name, spec string, on bool) error {
+	if !portName.MatchString(name) {
+		return fmt.Errorf("port name %q must be lower case letters, digits and dashes, starting with a letter", name)
+	}
+	if _, err := ParsePortSpec(spec); err != nil {
+		return err
+	}
+	return m.updatePorts(s, func(c Config, _ string, ports map[string]Port) error {
+		if _, had := ports[name]; had {
+			return fmt.Errorf("your config.yaml names port %s there already; unibox port rm %s takes it out", name, name)
+		}
+		for env, ec := range c.Envs {
+			if s.Env != "" && env != s.Env {
+				continue
+			}
+			named, err := envPorts(ec, c)
+			if err != nil {
+				return fmt.Errorf("env %s: %w", env, err)
+			}
+			if _, ok := named[name]; ok {
+				return fmt.Errorf("env %s has a port %s already; name yours otherwise, or publish that one elsewhere with unibox port on %s=HOST_PORT", env, name, name)
+			}
+		}
+		ports[name] = Port{Spec: spec, Default: on}
+		return nil
+	})
+}
+
+// RemovePort takes a port of the person's out of config.yaml, in the scope
+// s says. One of the team's is not the person's to remove; port default
+// name off keeps it from being published.
+func (m *Manager) RemovePort(s Scope, name string) error {
+	return m.updatePorts(s, func(_ Config, _ string, ports map[string]Port) error {
+		if p, ok := ports[name]; !ok || p.Spec == "" {
+			return fmt.Errorf("your config.yaml names no port %s there; one of the team's stays, and unibox port default %s off keeps it unpublished", name, name)
+		}
+		delete(ports, name)
+		return nil
+	})
+}
+
+// PortScope is the scope of config.yaml a port of the person's was named
+// in, by the layer it came from.
+func PortScope(env, from string) (Scope, bool) {
+	switch from {
+	case FromYours:
+		return Scope{Env: env}, true
+	case FromYoursEnvRepo:
+		return Scope{Env: env, EnvRepo: true}, true
+	case FromYoursAll:
+		return Scope{}, true
+	}
+	return Scope{}, false
+}
+
+// updatePorts changes the person's ports in config.yaml in the scope s
+// says, and keeps the change only if every env still reads.
+func (m *Manager) updatePorts(s Scope, change func(c Config, key string, ports map[string]Port) error) error {
+	c, err := m.Paths.LoadConfig()
+	if err != nil {
+		return err
+	}
+	c.Envs = maps.Clone(c.Envs)
+	c.EnvRepos = maps.Clone(c.EnvRepos)
+	ports, key := c.Ports, ""
+	if s.Env != "" {
+		ec, ok := c.Envs[s.Env]
+		if !ok {
+			return Fail(4, "env_not_found", "there is no env %s; unibox env ls lists them", s.Env)
+		}
+		ports = ec.Ports
+		if s.EnvRepo {
+			if key, err = c.EnvRepoOf(s.Env); err != nil {
+				return err
+			}
+			ports = c.EnvRepos[key].Ports
+		}
+	}
+	ports = maps.Clone(ports)
+	if ports == nil {
+		ports = map[string]Port{}
+	}
+	if err := change(c, key, ports); err != nil {
+		return err
+	}
+	if len(ports) == 0 {
+		ports = nil
+	}
+	switch {
+	case s.Env == "":
+		c.Ports = ports
+	case s.EnvRepo:
+		er := c.EnvRepos[key]
+		er.Ports = ports
+		c.setEnvRepo(key, er)
+	default:
+		ec := c.Envs[s.Env]
+		ec.Ports = ports
+		c.Envs[s.Env] = ec
+	}
+	for name, e := range c.Envs {
+		if _, err := envPorts(e, c); err != nil {
+			return fmt.Errorf("env %s: %w", name, err)
+		}
+	}
+	if err := m.Paths.SaveConfig(c); err != nil {
+		return err
+	}
+	m.Config = c
+	return nil
+}
+
+// SyncPorts brings a running sandbox's ports to what its env names now,
+// as after a port was added or removed; a switch of a port the env no
+// longer names goes with it. A stopped sandbox gets them at its start.
+func (m *Manager) SyncPorts(ctx context.Context, name string) error {
+	guard, err := m.guard(name)
+	if err != nil {
+		return err
+	}
+	defer guard.Close()
+	b, env, err := m.Definition(Request{Sandbox: name})
+	if err != nil {
+		return err
+	}
+	for key := range b.PortSwitches {
+		if _, named := env.Ports[key]; !named {
+			if _, err := ParsePortSpec(key); err != nil {
+				delete(b.PortSwitches, key)
+				delete(b.PortMaps, key)
+			}
+		}
+	}
+	if b.State == "missing" {
+		return nil
+	}
+	box, exists, err := m.findBox(ctx, b)
+	if err != nil {
+		return err
+	}
+	if !exists || box.State != "running" {
+		return m.saveBox(b)
+	}
+	return m.syncPorts(ctx, &b, env)
+}
+
+// SyncScopePorts brings the ports of every sandbox of the envs a scope of
+// config.yaml reaches to what they name now. One that cannot be reached is
+// said and left; its next start publishes them.
+func (m *Manager) SyncScopePorts(ctx context.Context, s Scope) error {
+	state, err := m.Paths.ReadState()
+	if err != nil {
+		return err
+	}
+	key := ""
+	if s.EnvRepo {
+		if key, err = m.Config.EnvRepoOf(s.Env); err != nil {
+			return err
+		}
+	}
+	for _, name := range sortedKeys(state.Sandboxes) {
+		env := state.Sandboxes[name].Env
+		switch {
+		case s.Env == "":
+		case s.EnvRepo:
+			if ec, ok := m.Config.Envs[env]; !ok || EnvRepoKey(ec) != key {
+				continue
+			}
+		case env != s.Env:
+			continue
+		}
+		if err := m.SyncPorts(ctx, name); err != nil {
+			fmt.Fprintf(m.Log, "ports of sandbox %s stay as they were until it next starts: %v\n", name, err)
+		}
+	}
+	return nil
+}

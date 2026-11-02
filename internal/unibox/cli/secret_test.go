@@ -895,6 +895,26 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	if _, _, err = run(t, paths, "", "port", "default", "nope", "on"); err == nil || !strings.Contains(err.Error(), "has no port nope") {
 		t.Fatalf("%v", err)
 	}
+	// A port of one's own is named by command and forgotten again; the
+	// team's are neither taken over nor forgotten.
+	if _, _, err = run(t, paths, "", "port", "add", "api", "9000"); err == nil || !strings.Contains(err.Error(), "has a port api already") {
+		t.Fatalf("%v", err)
+	}
+	if out, _, err = run(t, paths, "", "port", "add", "docs", "4000", "--off"); err != nil || !strings.Contains(out, "port docs (4000) is named for env team") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, _, err = run(t, paths, "", "env", "show", "team"); err != nil || !strings.Contains(out, "port docs 4000, yours, off at start") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err = run(t, paths, "", "port", "rm", "api"); err == nil || !strings.Contains(err.Error(), "one of the team's stays") {
+		t.Fatalf("%v", err)
+	}
+	if out, _, err = run(t, paths, "", "port", "rm", "docs"); err != nil || !strings.Contains(out, "forgot port docs for env team") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); strings.Contains(string(cfg), "docs") {
+		t.Fatalf("forgetting it left\n%s", cfg)
+	}
 }
 
 func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T) {
