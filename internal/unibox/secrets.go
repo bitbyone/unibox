@@ -13,6 +13,7 @@ import (
 	"maps"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -74,6 +75,9 @@ type TokenWay struct {
 	Page    string `yaml:"page"`
 	Command string `yaml:"command"`
 	Hint    string `yaml:"hint"`
+	// Run is what sbx runs on the host for the token whenever it needs it,
+	// such as gh auth token, stored in place of a token typed in.
+	Run string `yaml:"-"`
 	// SignIn has sbx sign the person in with their subscription, in the
 	// browser, rather than ask for a token.
 	SignIn bool `yaml:"sign_in"`
@@ -133,6 +137,30 @@ var knownTokenGuides = map[string]TokenGuide{
 		Page: githubTokenPage("unibox github", "git and gh in unibox's sandboxes", "contents=write", "pull_requests=write"),
 		Hint: "a fine-grained token for the repositories the agent works on; leave Workflows out, so it cannot change GitHub Actions",
 	},
+}
+
+// GHLoginWay is the way a GitHub token comes from the person's gh login:
+// sbx runs gh auth token on the host whenever it needs the token, so it
+// follows the login. It is offered for github and copilot only where gh
+// is signed in to github.com; unibox asks gh whether it is, never for the
+// token.
+func GHLoginWay(ctx context.Context, service string) (TokenWay, bool) {
+	what := map[string]string{
+		"github":  "git and gh in the sandbox get your whole gh login, every repository and scope it has",
+		"copilot": "Copilot gets your whole gh login, where a token of its own reaches Copilot alone",
+	}[service]
+	if what == "" {
+		return TokenWay{}, false
+	}
+	gh, err := exec.LookPath("gh")
+	if err != nil || hostCommand(ctx, gh, "auth", "status", "--hostname", "github.com").Run() != nil {
+		return TokenWay{}, false
+	}
+	// sbx runs it without the person's PATH, so gh is named by its path.
+	if strings.ContainsAny(gh, " '\"") {
+		gh = Quote(gh)
+	}
+	return TokenWay{Name: "Your gh login", Run: gh + " auth token", Hint: "sbx runs gh auth token on this machine whenever a sandbox needs the token: " + what}, true
 }
 
 // TokenGuides are where an env's tokens are made: unibox's own for the

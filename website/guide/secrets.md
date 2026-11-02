@@ -37,7 +37,14 @@ Before sbx asks, unibox offers *I have a token* or *Generate a new token*
 when it knows where the token is made: GitHub's fine-grained token page
 for `github` and `copilot`, filled in with the permissions they need, and
 any page the env's team names. A new token opens that page in your
-browser; make it there and paste it at sbx's prompt.
+browser; make it there and paste it at sbx's prompt. What the token has to
+be - the `hint` - is said under the question and again where sbx asks.
+
+With `gh` signed in to github.com, `github` and `copilot` also offer *Your
+gh login*: sbx then runs `gh auth token` whenever a sandbox needs the token,
+so it follows your login. It hands over the whole login, every repository
+and scope it has, where a token of its own reaches only what it is made
+for.
 
 ```term
 $ unibox secret set github

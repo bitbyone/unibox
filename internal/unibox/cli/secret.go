@@ -2,6 +2,7 @@ package cli
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -161,7 +162,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			}
 			var way unibox.TokenWay
 			if command == "" && o.canAsk() {
-				if way, err = o.offerTokenPage(service, guide, generate); err != nil {
+				if way, err = o.offerTokenPage(cmd.Context(), service, guide, generate); err != nil {
 					return err
 				}
 			}
@@ -169,8 +170,9 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 				// Nothing is stored: the agent signs in, and sbx keeps that.
 				continue
 			}
+			run := cmp.Or(way.Run, command)
 			set := func() error {
-				return o.manager.SBX.SecretSet(cmd.Context(), service, command, o.input, o.output, o.log)
+				return o.manager.SBX.SecretSet(cmd.Context(), service, run, o.input, o.output, o.log)
 			}
 			switch {
 			case way.SignIn:
@@ -305,8 +307,11 @@ func (e tokenNotStored) Unwrap() error { return e.err }
 // a token made one way, whether they have one already. It says whether sbx
 // is to sign them in rather than ask for the token. A service with no way
 // goes straight to sbx.
-func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, generate bool) (way unibox.TokenWay, err error) {
+func (o *options) offerTokenPage(ctx context.Context, service string, guide unibox.TokenGuide, generate bool) (way unibox.TokenWay, err error) {
 	ways := guide.AllWays()
+	if gh, ok := unibox.GHLoginWay(ctx, service); ok && !generate {
+		ways = append(ways, gh)
+	}
 	if len(ways) == 0 {
 		if generate {
 			return way, fmt.Errorf("unibox knows no way the %s token is made; the env's <env>.unibox.yaml can name one under secrets:", service)
@@ -327,16 +332,21 @@ func (o *options) offerTokenPage(service string, guide unibox.TokenGuide, genera
 			return way, err
 		}
 		if choice == "have" {
+			// What to paste is said again where sbx asks for it, as the
+			// question that said it is gone.
+			if guide.Hint != "" {
+				fmt.Fprintf(o.log, "  %s\n", guide.Hint)
+			}
 			return unibox.TokenWay{}, nil
 		}
 		i, _ := strconv.Atoi(choice)
 		way = ways[i]
 	}
-	if way.Hint != "" {
-		fmt.Fprintf(o.log, "  %s\n", way.Hint)
+	if hint := cmp.Or(way.Hint, guide.Hint); hint != "" {
+		fmt.Fprintf(o.log, "  %s\n", hint)
 	}
 	switch {
-	case way.SignIn, way.Agent:
+	case way.SignIn, way.Agent, way.Run != "":
 		return way, nil
 	case way.Command != "":
 		// unibox runs nothing for a token: what the command prints is the
@@ -440,19 +450,22 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		if !o.canAsk() {
 			return fmt.Errorf("the keychain asks for the %s token on a terminal; run this in one, or give --command", service)
 		}
-		if err := unibox.KeychainAvailable(); err != nil {
-			return err
-		}
 		guides, err := unibox.TokenGuides(env.Config.Files)
 		if err != nil {
 			return err
 		}
-		way, err := o.offerTokenPage(service, guides[service], generate)
+		way, err := o.offerTokenPage(ctx, service, guides[service], generate)
 		if err != nil {
 			return err
 		}
 		if way.SignIn || way.Agent || way.Env != "" {
 			return fmt.Errorf("%s is kept by sbx itself, which keeps it for every sandbox alike; give %s a token of its own, typed in or with --command", way.Name, scope)
+		}
+		if way.Run != "" {
+			return o.keepOwnSecret(ctx, env, scope, service, unibox.EnvSecret{Command: way.Run})
+		}
+		if err := unibox.KeychainAvailable(); err != nil {
+			return err
 		}
 		item := unibox.KeychainItem(scope, service)
 		fmt.Fprintf(o.log, "%s asks for the %s token of %s; it goes there, not through unibox\n", unibox.KeychainName(), service, scope)
@@ -461,13 +474,18 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		}
 		v = unibox.EnvSecret{Command: o.paths.KeychainCommand(item), Keychain: item}
 	}
+	return o.keepOwnSecret(ctx, env, scope, service, v)
+}
+
+// keepOwnSecret has a scope keep its own token as v says, and says so.
+func (o *options) keepOwnSecret(ctx context.Context, env unibox.Env, scope unibox.SecretScope, service string, v unibox.EnvSecret) error {
 	if err := o.manager.SetOwnSecret(ctx, scope, env.Name, service, v); err != nil {
 		return err
 	}
 	if v.Keychain != "" {
 		return o.success(fmt.Sprintf("%s takes its own %s token, kept in %s", scope, service, unibox.KeychainName()))
 	}
-	return o.success(fmt.Sprintf("%s takes its own %s token, which sbx reads with %s", scope, service, command))
+	return o.success(fmt.Sprintf("%s takes its own %s token, which sbx reads with %s", scope, service, v.Command))
 }
 
 // secretOverview lists every token kept, and every one a sandbox needs

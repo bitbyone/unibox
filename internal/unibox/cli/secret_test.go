@@ -1476,3 +1476,51 @@ func TestAnEnvThatRequiresAnAuthorAsksForItAndEachScopeKeepsOne(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestAGitHubTokenComesFromTheGhLoginWhereGhIsSignedIn(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	// gh is a stand-in, signed in while a file says so; it never prints a
+	// token, as unibox asks it only whether it is signed in.
+	bin := t.TempDir()
+	signedIn := filepath.Join(bin, "signed-in")
+	gh := filepath.Join(bin, "gh")
+	if err := testenv.WriteExecutable(gh, []byte("#!/bin/sh\n[ \"$1 $2\" = \"auth status\" ] && [ -f "+unibox.Quote(signedIn)+" ]\n")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	// Signed out, gh is not offered; a token one has already is asked for
+	// with what to paste said again where sbx asks, under the question
+	// that said it first.
+	if _, said, err := runAt(t, paths, "1\n", "secret", "set", "github"); err != nil || strings.Contains(said, "gh login") || strings.Count(said, "a fine-grained token for the repositories") != 2 {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if c := calls(t, log); !strings.Contains(c, "secret set github\n") {
+		t.Fatalf("%s", c)
+	}
+	// Signed in, the login is the third way, and sbx keeps gh's command.
+	if err := os.WriteFile(signedIn, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, said, err := runAt(t, paths, "3\n", "secret", "set", "github"); err != nil || !strings.Contains(said, "your whole gh login") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if c := calls(t, log); !strings.Contains(c, "secret set github --command "+gh+" auth token\n") {
+		t.Fatalf("%s", c)
+	}
+	// An env's own token is the same command, kept in config.yaml.
+	if out, _, err := runAt(t, paths, "3\n", "secret", "set", "copilot", "--scope", "env"); err != nil || !strings.Contains(out, "which sbx reads with "+gh+" auth token") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); !strings.Contains(string(cfg), gh+" auth token") {
+		t.Fatalf("%s", cfg)
+	}
+	// A new token to make is not one gh has.
+	if _, said, err := runAt(t, paths, "", "secret", "set", "github", "--generate"); err != nil || strings.Contains(said, "gh login") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+}
