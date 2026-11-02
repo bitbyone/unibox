@@ -1,6 +1,7 @@
 package unibox
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -117,6 +118,41 @@ func (p Paths) KeychainCommand(item string) string {
 		return `powershell -NoProfile -NonInteractive -Command "[Net.NetworkCredential]::new('', (Get-Content -LiteralPath ` + psQuote(p.dpapiFile(item)) + ` | ConvertTo-SecureString)).Password"`
 	}
 	return "secret-tool lookup " + Quote(keychainService) + " " + Quote(item)
+}
+
+// keychainProbe is the item KeychainWorks stores and takes out again.
+const keychainProbe = "unibox/probe"
+
+// KeychainWorks says whether the keychain keeps an item now, not only
+// whether its program is there: secret-tool without a session's bus or an
+// unlocked keyring, over SSH or in WSL say, stores nothing. It stores an
+// item that is no token, asking nothing, and takes it out again.
+func (p Paths) KeychainWorks(ctx context.Context) error {
+	if err := KeychainAvailable(); err != nil {
+		return err
+	}
+	var c *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		c = hostCommand(ctx, "security", "add-generic-password", "-U", "-s", keychainService, "-a", keychainProbe, "-w", "probe")
+	case "windows":
+		// DPAPI works where it encrypts for the person's account.
+		c = hostCommand(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
+			"ConvertTo-SecureString -String 'probe' -AsPlainText -Force | ConvertFrom-SecureString | Out-Null")
+	default:
+		c = hostCommand(ctx, "secret-tool", "store", "--label", "unibox probe", keychainService, keychainProbe)
+		c.Env = append(c.Env, keyringEnvironment()...)
+		c.Stdin = strings.NewReader("probe")
+	}
+	var errout strings.Builder
+	c.Stderr = &errout
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("%s keeps nothing now: %s", KeychainName(), cmp.Or(strings.TrimSpace(errout.String()), err.Error()))
+	}
+	if runtime.GOOS != "windows" {
+		_ = p.KeychainRemove(ctx, keychainProbe)
+	}
+	return nil
 }
 
 // KeychainRemove takes an item out of the keychain; one already gone is

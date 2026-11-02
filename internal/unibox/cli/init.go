@@ -435,11 +435,13 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		// other's sandboxes; unibox secret moves one to every env later.
 		// Typed in, they go to the system's keychain; without one, sbx keeps
 		// them for every sandbox, as it would anyway.
-		own := unibox.KeychainAvailable() == nil
+		keychain := o.paths.KeychainWorks(ctx)
+		own := keychain == nil
 		if own {
 			fmt.Fprintf(o.log, "  each is kept for its env alone, typed into %s or read from gh; s in unibox secret makes one every env's\n", unibox.KeychainName())
 		} else {
-			fmt.Fprintln(o.log, "  sbx asks for each on this terminal, and keeps it for every sandbox")
+			fmt.Fprintf(o.log, "  %v\n", keychain)
+			fmt.Fprintln(o.log, "  so sbx asks for each on this terminal, and keeps it for every sandbox")
 		}
 		if store, err := o.askYes("Store them now?", true); err != nil {
 			return err

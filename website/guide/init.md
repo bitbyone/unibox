@@ -78,9 +78,10 @@ creating sandbox dev from env dev
    to open it, and for GitHub's your gh login. Each missing token is kept
    for the env alone, typed into your system's keychain, so it reaches no
    other env's sandboxes; `s` in `unibox secret` makes one global later.
-   A subscription's sign-in is sbx's for every sandbox. Without a
-   keychain, sbx keeps every token for every sandbox; see
-   [Secrets](./secrets).
+   A subscription's sign-in is sbx's for every sandbox. Where the keychain
+   keeps nothing - no keychain program, or secret-tool with no session's
+   bus or unlocked keyring, over SSH or in WSL - sbx keeps every token for
+   every sandbox; see [Secrets](./secrets).
 5. **Sandboxes** - creates the env's sandbox with `sbx env create`. sbx
    shows what it will make and asks you to approve the env and its host
    commands.

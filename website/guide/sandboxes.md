@@ -114,7 +114,8 @@ unibox destroy                      # every sandbox and task unibox made
 
 Your mounted directories are never deleted. `unibox destroy --all` also
 removes the herdr plugin and unibox's configuration, state and values; your
-tokens in sbx and the env repository stay.
+tokens in sbx, those kept for an env or a sandbox in your system's keychain
+(on Windows in `~/.config/unibox/secrets`), and the env repository stay.
 
 ## A sandbox made with sbx
 

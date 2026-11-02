@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/tobola/unibox/internal/unibox/api"
 )
@@ -57,11 +58,38 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 		}
 		// Last, as the locks live there: unibox's state, configuration and
 		// the person's args, and what it cached.
-		for _, dir := range []string{m.Paths.Cache, m.Paths.Config} {
-			if err := os.RemoveAll(dir); err != nil {
+		if err := os.RemoveAll(m.Paths.Cache); err != nil {
+			return err
+		}
+		fmt.Fprintf(m.Log, "removed %s\n", m.Paths.Cache)
+		// The tokens Windows keeps encrypted for the person stay, as the
+		// keychain's items do elsewhere: they are the person's, not unibox's
+		// state, and the same item is read again once a token is kept
+		// the same way.
+		kept := filepath.Join(m.Paths.Config, "secrets")
+		entries, err := os.ReadDir(m.Paths.Config)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		keep := false
+		for _, e := range entries {
+			if e.Name() == "secrets" {
+				if inside, _ := os.ReadDir(kept); len(inside) > 0 {
+					keep = true
+					continue
+				}
+			}
+			if err := os.RemoveAll(filepath.Join(m.Paths.Config, e.Name())); err != nil {
 				return err
 			}
-			fmt.Fprintf(m.Log, "removed %s\n", dir)
+		}
+		if !keep {
+			if err := os.RemoveAll(m.Paths.Config); err != nil {
+				return err
+			}
+			fmt.Fprintf(m.Log, "removed %s\n", m.Paths.Config)
+		} else {
+			fmt.Fprintf(m.Log, "removed %s, but for the tokens in %s; delete that to forget them\n", m.Paths.Config, kept)
 		}
 	}
 	return nil

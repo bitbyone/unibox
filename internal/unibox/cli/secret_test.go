@@ -1538,15 +1538,26 @@ func TestInitKeepsEachEnvsTokensForItAlone(t *testing.T) {
 	log := fakeSBX(t)
 	t.Setenv("ACCESSIBLE", "1")
 	// The system's keychain is a stand-in that keeps what it is given to
-	// read, by the name of whichever program the system has.
+	// read, by the name of whichever program the system has; it keeps the
+	// item init tries it with while a file says it works.
 	kept := filepath.Join(t.TempDir(), "kept")
 	bin := t.TempDir()
+	works := filepath.Join(bin, "works")
 	for _, name := range []string{"security", "secret-tool"} {
-		if err := testenv.WriteExecutable(filepath.Join(bin, name), []byte("#!/bin/sh\nread -r v && echo \"$v\" >> "+unibox.Quote(kept)+"\n")); err != nil {
+		if err := testenv.WriteExecutable(filepath.Join(bin, name), []byte("#!/bin/sh\ncase \"$*\" in *unibox/probe*) [ -f "+unibox.Quote(works)+" ]; exit ;; esac\nread -r v && echo \"$v\" >> "+unibox.Quote(kept)+"\n")); err != nil {
 			t.Fatal(err)
 		}
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// A keychain that keeps nothing now, as one without a session's bus,
+	// has sbx keep the tokens for every sandbox, and says why.
+	failing := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, said, err := runAt(t, failing, "1\n1\n1\nperson\nn\nn\n", "init", filepath.Dir(filepath.Dir(teamEnv(t)))); err != nil || !strings.Contains(said, "keeps nothing now") || !strings.Contains(said, "keeps it for every sandbox") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if err := os.WriteFile(works, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; editors: yes; the arg; store the secrets: Claude signs

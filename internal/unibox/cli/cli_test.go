@@ -321,11 +321,24 @@ func TestDestroyAsksAndAllRemovesUniboxsOwnFiles(t *testing.T) {
 	if _, _, err := run(t, paths, "", "destroy"); err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("%v", err)
 	}
-	if out, _, err := run(t, paths, "", "destroy", "--all", "--yes"); err != nil || !strings.Contains(out, "unibox is as if never used here") {
-		t.Fatalf("%v %s", err, out)
+	// A token Windows keeps encrypted in unibox's directory is the
+	// person's, and stays, as a keychain's item does elsewhere.
+	token := filepath.Join(paths.Config, "secrets", "env_dev_github.dpapi")
+	if err := os.MkdirAll(filepath.Dir(token), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(token, []byte("encrypted"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, said, err := run(t, paths, "", "destroy", "--all", "--yes")
+	if err != nil || !strings.Contains(out, "unibox is as if never used here") || !strings.Contains(said, "but for the tokens in") {
+		t.Fatalf("%v %s\n%s", err, out, said)
 	}
 	if _, err := os.Stat(filepath.Join(paths.Config, "config.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("config stayed: %v", err)
+	}
+	if b, err := os.ReadFile(token); err != nil || string(b) != "encrypted" {
+		t.Fatalf("the token went: %v", err)
 	}
 	if _, err := os.Stat(cfg.Envs["dev"].Files[0]); err != nil {
 		t.Fatal("the env's file went")

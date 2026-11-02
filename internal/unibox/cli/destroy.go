@@ -18,7 +18,9 @@ the host is never deleted, and a sandbox unibox adopted is only forgotten.
 
 --all goes on to the herdr plugin and unibox's state, configuration and
 your args. The env files, the kits and your secrets in sbx stay: they are
-the team's and sbx's.`, RunE: func(cmd *cobra.Command, args []string) error {
+the team's and sbx's. So do the tokens kept for an env or a sandbox, in
+the system's keychain or, on Windows, in unibox's secrets directory: they
+are yours.`, RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := o.paths.ReadState()
 		if err != nil {
 			return err
