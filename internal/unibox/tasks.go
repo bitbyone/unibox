@@ -723,7 +723,7 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 	}
 	// The agent takes the terminal.
 	m.progress("")
-	cmd := m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", script}, Directory: dir, Interactive: true, Input: in, Output: out, Error: errout})
+	cmd := m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", script}, Directory: dir, Interactive: true, HostEnv: herdrHint(a.ID), Input: in, Output: out, Error: errout})
 	err = RunChild(cmd)
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {

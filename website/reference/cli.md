@@ -434,7 +434,7 @@ unibox destroy [--force] [--all]
 Removes every sandbox unibox created, and their tasks, after checking for
 running sessions and unpushed work; any found stops it unless `--force`.
 Mounted directories are never deleted; adopted sandboxes are only
-forgotten. `--all` also removes the herdr plugin and unibox's state,
+forgotten. `--all` also removes unibox's state,
 configuration and values. Tokens in sbx, env repositories and clones
 stay.
 
@@ -472,17 +472,6 @@ unibox config unset <key>
 | `remember_host_commands` | sbx's `env.rememberHostCommands`: approving an env's host commands covers later runs (default `false`) |
 | `claude_remote_control` | sbx's `claude.remoteControl`: Claude Code's `/remote-control` works in sandboxes, so claude.ai and its app drive a session (default `false`) |
 | `clipboard_image_paste` | sbx's `clipboard.imagePaste`: agents paste images from your clipboard with Ctrl+V, which lets processes in a sandbox read images you copy; text pastes either way (default `false`) |
-
-### `unibox herdr`
-
-```
-unibox herdr status
-unibox herdr install-plugin
-unibox herdr uninstall-plugin
-```
-
-The [herdr](/guide/herdr) plugin: whether it is installed, install it
-(asks unless `--yes`), remove it and its observer.
 
 ### `unibox version`
 

@@ -250,6 +250,10 @@ func TestSBXTellsAnInteractiveSessionItsTerminal(t *testing.T) {
 	if slices.ContainsFunc(session, func(a string) bool { return strings.HasPrefix(a, "KITTY_WINDOW_ID") }) {
 		t.Fatalf("empty variable passed: %q", session)
 	}
+	hinted := r.Exec(ctx, "dev", Command{Args: []string{"claude"}, Interactive: true, HostEnv: []string{"HERDR_AGENT=claude"}})
+	if !slices.Contains(hinted.Env, "HERDR_AGENT=claude") || slices.Contains(hinted.Args, "HERDR_AGENT=claude") {
+		t.Fatalf("the host's variable went into the guest or nowhere: %q %q", hinted.Args, hinted.Env)
+	}
 	script := r.Exec(ctx, "dev", Command{Args: []string{"true"}}).Args
 	if slices.Contains(script, "TERM_PROGRAM=ghostty") {
 		t.Fatalf("a script is told the terminal: %q", script)

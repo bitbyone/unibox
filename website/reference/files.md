@@ -12,7 +12,6 @@ default to these, on Windows too:
 | `~/.config/unibox/state.json` | sandboxes and what each was created from, their tasks, the directories whose mount was told |
 | `~/.config/unibox/state.v1.json` | Unibox 1's state, set aside |
 | `~/.config/unibox/state.lock`, `locks/` | locks between concurrent unibox commands |
-| `~/.config/unibox/herdr-plugin/` | the herdr plugin, when installed |
 | `~/.cache/unibox/args/` | the args and resources files for one `sbx env create`, removed after |
 | `~/.cache/unibox/kits/` | what `sbx kit inspect` said of the env's kits |
 | `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |

@@ -51,11 +51,6 @@ func (m *Manager) Destroy(ctx context.Context, o DestroyOptions) error {
 		fmt.Fprintf(m.Log, "removed sandbox %s\n", name)
 	}
 	if o.All {
-		if _, err := os.Stat(m.pluginPath()); err == nil {
-			if err := m.UninstallPlugin(ctx); err != nil {
-				fmt.Fprintf(m.Log, "the herdr plugin stays linked (%v); herdr plugin unlink %s removes it\n", err, pluginID)
-			}
-		}
 		// Last, as the locks live there: unibox's state, configuration and
 		// the person's args, and what it cached.
 		if err := os.RemoveAll(m.Paths.Cache); err != nil {

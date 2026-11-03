@@ -5,7 +5,6 @@ package unibox
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"syscall"
 )
@@ -47,7 +46,3 @@ func (l *FileLock) Close() error {
 	l.f = nil
 	return err
 }
-
-// detach starts a command in a session of its own, so it outlives the
-// terminal unibox ran in.
-func detach(c *exec.Cmd) { c.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }

@@ -66,7 +66,7 @@ The parts:
  | sandboxes/dev.sbxenv.yaml |-->| unibox                         |   | the kits' image         |
  | kits/...                  |   |   envs, your args, secrets,     |   | /work/<task>/<repo>     |
  +---------------------------+   |   tasks, ports, doctor         |   |   your checkout mounted,|
-                                 |   herdr plugin                 |   |   or a clone            |
+                                 |   HERDR_AGENT on sbx exec      |   |   or a clone            |
  ~/.config/unibox/               |        |                       |   | the kit's agent, run by |
    config.yaml  envs, ports,  -->|        | sbx env create/rm,     |   |   sbx exec              |
                 settings         |        | exec, mount, ports,    |-->| placeholders for tokens |
@@ -832,8 +832,7 @@ sandbox read images copied on the host.
 Unibox builds with `CGO_ENABLED=0` for Linux, macOS and Windows, amd64 and
 arm64. What differs per system is small and behind build tags: file locks
 are `flock` on Unix and `LockFileEx` on Windows (`lock_unix.go`,
-`lock_windows.go`), as is detaching herdr's watcher (`Setsid`, or a new
-process group without a console); the environment handed to sbx and git
+`lock_windows.go`); the environment handed to sbx and git
 keeps Windows' own variables there (`SYSTEMROOT`, `USERPROFILE`, ...); a
 clone's directory is cleaned of characters Windows refuses. CI runs the
 whole suite on Linux and macOS; on Windows it builds, vets and runs the
@@ -875,7 +874,6 @@ build that is not one); `unibox version --json` adds `api_version`.
 | `unibox config get\|set\|unset` | `default_env`, `stop_idle`, `ssh_agent`, `editor_ssh` |
 | `unibox prune` | forgets the sandboxes sbx no longer has |
 | `unibox destroy [--all] [--force]` | every sandbox unibox created; with `--all` its state, configuration and the person's args too |
-| `unibox herdr install-plugin\|uninstall-plugin\|status` | [herdr](#herdr) |
 
 **Nouns, then verbs** (the user's call): commands are grouped by what they
 work on, and only the everyday ones stand alone: `run`, `resume`, `init`,
@@ -924,50 +922,28 @@ sbx's own verbs.
 
 ### herdr
 
-herdr recognises an agent by its pane's foreground process, and an agent
-behind `sbx exec` is not one it knows: no agent, no state. Unibox fills
-that in with **a herdr plugin of its own**. It is the one way; there is no
-launcher and no third-party plugin to choose instead.
+herdr recognises an agent by the processes of its pane's foreground job,
+and an agent behind `sbx exec` is not one it knows: no agent, no state.
+herdr's own answer for a wrapper that hides the agent is `HERDR_AGENT=<agent>`
+in the wrapper's environment (herdr's docs, "VMs and sandbox wrappers";
+`process_agent_hint` in its source reads it from any process of the
+foreground job, on Linux and macOS). Unibox gives it to the host's `sbx
+exec` of an agent's session (`Command.HostEnv`, `herdrHint`), with the
+agent's id, which is herdr's name for the agents unibox knows; a name
+herdr does not know it ignores. herdr then classifies the screen by its
+own rules for that agent. A shell gets no hint. The guest never sees the
+variable.
 
-What it does, as long as herdr runs:
+Unibox had a herdr plugin before: a manifest whose events started an
+observer that read each recorded pane's screen, had `herdr agent explain`
+classify it and reported the state. It never worked reliably, and herdr
+does the same itself from the hint, so it went. The first command of a
+newer unibox that finds `~/.config/unibox/herdr-plugin/` runs `herdr
+plugin unlink unibox` and removes the directory (`RemoveHerdrPlugin`), as
+herdr would otherwise run a command unibox no longer has.
 
-- `unibox run` started in a herdr pane records the pane
-  (`HERDR_PANE_ID`), the agent and the sandbox in unibox's state. For
-  every pane so recorded whose `unibox run` is alive, the plugin reads the
-  screen (`pane.read`), has herdr classify it by herdr's own rules for that
-  agent (`herdr agent explain --file … --agent <kind> --json`), and reports
-  the state (`pane.report_agent`, `pane.release_agent` when the agent is
-  gone), with the sandbox's name as the pane's metadata
-  (`pane.report_metadata`). It reports only on a change.
-- It never parses argv: unibox started the agent and wrote it down.
-- unagit's Activity matches herdr's agents by pane, so the state arrives
-  there with no change to it.
-
-The idea, and the herdr calls, come from
-[sbx-herdr](https://github.com/dvdksn/sbx-herdr) (read 2026-10-12 at
-0.1.0). It has no licence, so none of its code is taken.
-
-**The plugin is a manifest and nothing to build.** `herdr-plugin.toml`, its
-commands calling the unibox binary: a startup command and the
-`pane.created` / `pane.focused` events run `unibox herdr ensure`, which
-starts one `unibox herdr observe` per herdr socket (a lock in
-`HERDR_PLUGIN_STATE_DIR`, so a second ensure does nothing), detached, its
-log in that directory. Both are hidden commands that refuse to run outside
-herdr (no `HERDR_SOCKET_PATH`).
-
-**Installed only with the user's consent**, never quietly - it changes
-herdr's configuration and leaves a process running with herdr:
-
-- `unibox herdr install-plugin` asks unless `--yes`; it writes the
-  manifest, embedded in the binary, to `~/.config/unibox/herdr-plugin/`
-  with the absolute path of the running unibox, then `herdr plugin link
-  <dir>` and `enable`. `uninstall-plugin` undoes it.
-- The path changes when unibox is upgraded or moved. Every unibox
-  command that finds the plugin installed compares the linked manifest
-  with what it would write and rewrites it if it differs - the user
-  consented to the plugin, not to a path.
-- A sandboxed agent started in herdr without the plugin runs, with no
-  state.
+`unibox run` still records the pane (`HERDR_PANE_ID`) in its run, which
+unagit's Activity matches herdr's agents by.
 
 The agents' own hooks (Claude's session id, opencode's states) do not cross
 into the VM; the state is the screen's.

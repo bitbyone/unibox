@@ -83,8 +83,10 @@ type Command struct {
 	Args            []string
 	Directory, User string
 	Interactive     bool
-	Input           io.Reader
-	Output, Error   io.Writer
+	// HostEnv is for sbx's own process on the host; the guest never sees it.
+	HostEnv       []string
+	Input         io.Reader
+	Output, Error io.Writer
 }
 
 // Child processes receive only the host context they need. In particular, an

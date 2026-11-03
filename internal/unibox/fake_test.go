@@ -46,6 +46,8 @@ type fakeRuntime struct {
 	unavailable                          error
 	sshAgent                             bool
 	settings                             map[string]string
+	// hostEnv is what the last session gave sbx's own process.
+	hostEnv []string
 }
 
 func (f *fakeRuntime) record(call string) {
@@ -365,6 +367,9 @@ func (f *fakeRuntime) Exec(ctx context.Context, name string, c Command) *exec.Cm
 		args = []string{"cat", at}
 	}
 	f.record("exec " + name + " " + strings.Join(c.Args, " "))
+	if c.Interactive {
+		f.hostEnv = slices.Clone(c.HostEnv)
+	}
 	f.mu.Unlock()
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	// The guest's global git configuration is its home's, as in a VM.

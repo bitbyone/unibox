@@ -5,7 +5,6 @@ package unibox
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"golang.org/x/sys/windows"
@@ -46,9 +45,4 @@ func (l *FileLock) Close() error {
 	err := l.f.Close()
 	l.f = nil
 	return err
-}
-
-// detach starts a command apart from unibox's console, so it outlives it.
-func detach(c *exec.Cmd) {
-	c.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS}
 }

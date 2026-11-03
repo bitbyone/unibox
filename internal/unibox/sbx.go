@@ -190,6 +190,7 @@ func (r *SBX) Exec(ctx context.Context, name string, c Command) *exec.Cmd {
 	args = append(args, name)
 	args = append(args, c.Args...)
 	cmd := hostCommand(ctx, "sbx", args...)
+	cmd.Env = append(cmd.Env, c.HostEnv...)
 	cmd.Stdin = c.Input
 	cmd.Stdout = c.Output
 	cmd.Stderr = c.Error

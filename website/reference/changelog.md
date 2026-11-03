@@ -4,6 +4,13 @@ What each release brought, newest first. Every release's archives are on
 [GitHub](https://github.com/bitbyone/unibox/releases); `brew upgrade
 unibox` or `scoop update unibox` takes the latest.
 
+## Unreleased
+
+- herdr shows a sandboxed agent's state by `HERDR_AGENT` on the session's
+  `sbx exec`, as herdr asks of a wrapper, instead of unibox's plugin and
+  its observer, which did not work. `unibox herdr` is gone; the first
+  command after upgrading unlinks the plugin.
+
 ## 0.6 <Badge type="tip" text="2026-11-02" />
 
 - A person keeps who their commits are by, for every env, an env or a

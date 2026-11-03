@@ -707,6 +707,10 @@ func TestATaskWorksOnTheForgesDefaultBranchAndRunsTheAgentChosen(t *testing.T) {
 	if got := ran(Request{Task: "refunds", Agent: "codex"}); got != "codex --dangerously-bypass-approvals-and-sandbox|Codex" {
 		t.Fatalf("ran %q", got)
 	}
+	// herdr, which sees sbx and not the agent, is told which it is.
+	if !slices.Equal(f.hostEnv, []string{"HERDR_AGENT=codex"}) {
+		t.Fatalf("sbx was given %q", f.hostEnv)
+	}
 	if got := ran(Request{Task: "refunds"}); !strings.HasPrefix(got, "codex ") {
 		t.Fatalf("resumed %q", got)
 	}

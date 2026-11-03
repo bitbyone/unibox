@@ -16,7 +16,7 @@ for running sessions and unpushed work: one that has either stops it, and
 nothing is removed, unless --force discards them. A mounted directory of
 the host is never deleted, and a sandbox unibox adopted is only forgotten.
 
---all goes on to the herdr plugin and unibox's state, configuration and
+--all goes on to unibox's state, configuration and
 your args. The env files, the kits and your secrets in sbx stay: they are
 the team's and sbx's. So do the tokens kept for an env or a sandbox, in
 the system's keychain or, on Windows, in unibox's secrets directory: they
@@ -31,7 +31,7 @@ are yours.`, RunE: func(cmd *cobra.Command, args []string) error {
 		}
 		what := []string{fmt.Sprintf("%d sandboxes and their %d tasks", len(s.Sandboxes), tasks)}
 		if opts.All {
-			what = append(what, "the herdr plugin, unibox's state, configuration and your args")
+			what = append(what, "unibox's state, configuration and your args")
 		}
 		question := "Remove " + strings.Join(what, "; ")
 		if opts.Force {
@@ -52,7 +52,7 @@ are yours.`, RunE: func(cmd *cobra.Command, args []string) error {
 		return o.success("every sandbox and task removed")
 	}}
 	f := c.Flags()
-	f.BoolVar(&opts.All, "all", false, "Also the herdr plugin and unibox's state, configuration and your args")
+	f.BoolVar(&opts.All, "all", false, "Also unibox's state, configuration and your args")
 	f.BoolVar(&opts.Force, "force", false, "Remove sandboxes with running sessions or unpushed work, discarding it")
 	return c
 }
