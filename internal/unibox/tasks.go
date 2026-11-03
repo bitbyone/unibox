@@ -1006,6 +1006,7 @@ func (m *Manager) removeTask(ctx context.Context, name, task string, force bool)
 		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"rm", "-rf", "--", removed.Directory}}), m.Log); err != nil {
 			return err
 		}
+		m.removeConversations(ctx, b, removed)
 	}
 	// Only this task's record goes; a session started meanwhile in another
 	// task of the sandbox has recorded its run in the same state.

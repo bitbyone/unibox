@@ -48,10 +48,12 @@ const codexHadSession = `grep -rqsF --include='rollout-*.jsonl' "\"cwd\":\"$dir\
 // several tasks is another task's. A session's workspace.yaml keeps the
 // directory it began in, its events.jsonl is written to as it goes on, so
 // the newest of those is the last; the test leaves its id in $session.
+// copilot writes workspace.yaml as it starts and events.jsonl only once
+// there is a conversation, and refuses to resume a session without one.
 const copilotHadSession = `{ session= newest=
 for w in "${COPILOT_HOME:-$HOME/.copilot}"/session-state/*/workspace.yaml; do
 grep -qxF "cwd: $dir" "$w" 2>/dev/null || continue
-e=${w%/workspace.yaml}/events.jsonl; [ -e "$e" ] || e=$w
+e=${w%/workspace.yaml}/events.jsonl; [ -s "$e" ] || continue
 if [ -z "$newest" ] || [ "$e" -nt "$newest" ]; then newest=$e; session=${w%/workspace.yaml}; session=${session##*/}; fi
 done
 [ -n "$session" ]; }`

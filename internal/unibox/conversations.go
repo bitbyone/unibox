@@ -41,18 +41,33 @@ func conversationDirs(t api.Task) []string {
 // paths, the conversations claude, codex and copilot had in dirs, and
 // nothing when they had none.
 func conversationsScript(dirs []string) string {
-	return "set -u\nfor dir in " + quoteArgs(dirs) + `; do
+	return "set -u\n" + listConversations(dirs) + ` | sort -u > /tmp/unibox-conversations.$$
+if [ -s /tmp/unibox-conversations.$$ ]; then tar -czPf - -T /tmp/unibox-conversations.$$; fi
+status=$?
+rm -f /tmp/unibox-conversations.$$
+exit $status
+`
+}
+
+// listConversations is a guest shell loop printing the files and
+// directories of the conversations claude, codex and copilot had in dirs,
+// one a line.
+func listConversations(dirs []string) string {
+	return "for dir in " + quoteArgs(dirs) + `; do
 c="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(printf %s "$dir" | sed 's/[^A-Za-z0-9]/-/g')"
 [ ! -d "$c" ] || printf '%s\n' "$c"
 grep -rlsF --include='rollout-*.jsonl' "\"cwd\":\"$dir\"" "${CODEX_HOME:-$HOME/.codex}/sessions"
 for w in "${COPILOT_HOME:-$HOME/.copilot}"/session-state/*/workspace.yaml; do
 grep -qxF "cwd: $dir" "$w" 2>/dev/null && printf '%s\n' "${w%/workspace.yaml}"
 done
-done | sort -u > /tmp/unibox-conversations.$$
-if [ -s /tmp/unibox-conversations.$$ ]; then tar -czPf - -T /tmp/unibox-conversations.$$; fi
-status=$?
-rm -f /tmp/unibox-conversations.$$
-exit $status
+done`
+}
+
+// removeConversationsScript deletes a task's conversations in the guest,
+// so a task made later under the same name starts its agent afresh rather
+// than continuing the one removed.
+func removeConversationsScript(dirs []string) string {
+	return "set -u\n" + listConversations(dirs) + ` | while IFS= read -r c; do rm -rf -- "$c"; done
 `
 }
 
@@ -102,6 +117,14 @@ func (m *Manager) restoreConversations(ctx context.Context, b api.Sandbox, t api
 	}
 	if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", restoreConversationsScript}, Input: bytes.NewReader(kept)}), m.Log); err != nil {
 		fmt.Fprintf(m.Log, "unibox: the conversations of task %s were not put back; its agent starts afresh: %v\n", t.ID, err)
+	}
+}
+
+// removeConversations deletes a removed task's conversations in its
+// sandbox. A failure is told and nothing more: the task is gone already.
+func (m *Manager) removeConversations(ctx context.Context, b api.Sandbox, t api.Task) {
+	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", removeConversationsScript(conversationDirs(t))}}), m.Log); err != nil {
+		fmt.Fprintf(m.Log, "unibox: the conversations of task %s stayed in sandbox %s: %v\n", t.ID, b.Name, err)
 	}
 }
 

@@ -1191,6 +1191,13 @@ func TestATasksConversationsOutliveARecreateOfItsSandbox(t *testing.T) {
 	if _, err := os.Stat(m.Paths.conversationsFile("pricing")); !os.IsNotExist(err) {
 		t.Fatalf("the kept conversations stayed: %v", err)
 	}
+	// And so does the sandbox's, so a task of the same name starts afresh.
+	if _, err := os.Stat(conversation("pricing")); !os.IsNotExist(err) {
+		t.Fatalf("the sandbox's conversations stayed: %v", err)
+	}
+	if b, err := os.ReadFile(conversation("pricing-2")); err != nil || string(b) != "pricing-2's\n" {
+		t.Fatalf("another task's conversations went: %q %v", b, err)
+	}
 }
 
 func TestCodexContinuesASessionRecordedInItsDirectory(t *testing.T) {
@@ -1242,6 +1249,12 @@ func TestCopilotResumesTheLastSessionOfItsDirectoryNotTheLastOfAll(t *testing.T)
 		t.Fatalf("%q", got)
 	}
 	if got := resumed("/work/fresh"); got != "" {
+		t.Fatalf("%q", got)
+	}
+	// A session copilot started and left before any conversation has no
+	// events, and copilot will not resume it.
+	write(t, filepath.Join(home, "session-state", "empty", "workspace.yaml"), "id: empty\ncwd: /work/empty\n")
+	if got := resumed("/work/empty"); got != "" {
 		t.Fatalf("%q", got)
 	}
 }
