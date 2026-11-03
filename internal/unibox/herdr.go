@@ -204,7 +204,16 @@ type observed struct {
 	State string
 }
 
-func (m *Manager) observeOnce(ctx context.Context, socket, stateDir string, previous map[string]observed) error {
+// observeOnce reports each active run's agent to herdr. A pane's failure is
+// logged when it differs from the one before, not every second, and the
+// pane is tried again at the next tick.
+func (m *Manager) observeOnce(ctx context.Context, socket, stateDir string, previous map[string]observed, failed map[string]string) error {
+	fail := func(pane, what string, err error) {
+		if msg := what + ": " + err.Error(); failed[pane] != msg {
+			failed[pane] = msg
+			fmt.Fprintf(m.Log, "observer: pane %s: %s\n", pane, msg)
+		}
+	}
 	s, err := m.Paths.ReadState()
 	if err != nil {
 		return err
@@ -230,6 +239,7 @@ func (m *Manager) observeOnce(ctx context.Context, socket, stateDir string, prev
 	for pane, run := range current {
 		b, err := commandOutput(herdrCommand(ctx, socket, "pane", "read", pane, "--source", "detection", "--raw"))
 		if err != nil {
+			fail(pane, "reading the pane", err)
 			continue
 		}
 		file := filepath.Join(stateDir, "screen-"+digest(pane)[:16]+".txt")
@@ -239,13 +249,18 @@ func (m *Manager) observeOnce(ctx context.Context, socket, stateDir string, prev
 		result, err := commandOutput(herdrCommand(ctx, socket, "agent", "explain", "--file", file, "--agent", run.Agent, "--json"))
 		os.Remove(file)
 		if err != nil {
+			fail(pane, "explaining "+run.Agent+"'s state", err)
 			continue
 		}
 		var status struct {
 			State string `json:"state"`
 			Skip  bool   `json:"skip_state_update"`
 		}
-		if err = decodeHerdr(result, &status); err != nil || status.Skip {
+		if err = decodeHerdr(result, &status); err != nil {
+			fail(pane, "reading herdr's explanation", err)
+			continue
+		}
+		if status.Skip {
 			continue
 		}
 		switch status.State {
@@ -257,11 +272,14 @@ func (m *Manager) observeOnce(ctx context.Context, socket, stateDir string, prev
 			continue
 		}
 		if _, err = commandOutput(herdrCommand(ctx, socket, "pane", "report-agent", pane, "--source", "unibox", "--agent", run.Agent, "--state", status.State)); err != nil {
+			fail(pane, "reporting the agent", err)
 			continue
 		}
 		if _, err = commandOutput(herdrCommand(ctx, socket, "pane", "report-metadata", pane, "--source", "unibox", "--applies-to-source", "unibox", "--title", run.Sandbox)); err != nil {
+			fail(pane, "reporting the sandbox", err)
 			continue
 		}
+		delete(failed, pane)
 		previous[pane] = observed{run, status.State}
 	}
 	return nil
@@ -277,7 +295,7 @@ func (m *Manager) Observe(ctx context.Context) error {
 		return nil
 	}
 	defer lock.Close()
-	previous := map[string]observed{}
+	previous, failed := map[string]observed{}, map[string]string{}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -288,7 +306,7 @@ func (m *Manager) Observe(ctx context.Context) error {
 			return nil
 		}
 		step, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err = m.observeOnce(step, socket, state, previous)
+		err = m.observeOnce(step, socket, state, previous, failed)
 		cancel()
 		if err != nil {
 			fmt.Fprintln(m.Log, "observer:", err)
