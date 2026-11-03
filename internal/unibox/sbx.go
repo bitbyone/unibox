@@ -678,5 +678,5 @@ func terminalEnv() []string {
 			env = append(env, key+"="+v)
 		}
 	}
-	return env
+	return append(env, herdrTerminalEnv()...)
 }

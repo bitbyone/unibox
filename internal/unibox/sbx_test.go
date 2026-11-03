@@ -259,3 +259,41 @@ func TestSBXTellsAnInteractiveSessionItsTerminal(t *testing.T) {
 		t.Fatalf("a script is told the terminal: %q", script)
 	}
 }
+
+func TestSBXTellsCopilotItDrawsInHerdr(t *testing.T) {
+	config := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("HERDR_CONFIG_PATH", config)
+	t.Setenv("TERM_PROGRAM", "herdr")
+	t.Setenv("TERM_PROGRAM_VERSION", "0.9.5")
+	r := &SBX{}
+	session := func() []string {
+		return r.Exec(context.Background(), "dev", Command{Args: []string{"copilot"}, Interactive: true}).Args
+	}
+	if args := session(); slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "COPILOT_") }) {
+		t.Fatalf("told herdr outside a herdr pane: %q", args)
+	}
+	t.Setenv("HERDR_PANE_ID", "w1:p1")
+	if args := session(); !slices.Contains(args, "COPILOT_MULTIPLEXER=herdr") || !slices.Contains(args, "COPILOT_INLINE_IMAGES_HERDR=1") {
+		t.Fatalf("herdr 0.9 draws images by default, yet Copilot was not told: %q", args)
+	}
+	t.Setenv("TERM_PROGRAM_VERSION", "0.8.0")
+	if args := session(); slices.Contains(args, "COPILOT_INLINE_IMAGES_HERDR=1") {
+		t.Fatalf("herdr before 0.9 draws no images by default: %q", args)
+	}
+	if err := os.WriteFile(config, []byte("[experimental]\nkitty_graphics = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if args := session(); !slices.Contains(args, "COPILOT_INLINE_IMAGES_HERDR=1") {
+		t.Fatalf("experimental.kitty_graphics ignored: %q", args)
+	}
+	if err := os.WriteFile(config, []byte("[terminal]\nkitty_graphics = false\n[experimental]\nkitty_graphics = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if args := session(); slices.Contains(args, "COPILOT_INLINE_IMAGES_HERDR=1") {
+		t.Fatalf("terminal.kitty_graphics = false ignored: %q", args)
+	}
+	t.Setenv("COPILOT_INLINE_IMAGES_HERDR", "1")
+	if args := session(); !slices.Contains(args, "COPILOT_INLINE_IMAGES_HERDR=1") {
+		t.Fatalf("the host's own value lost: %q", args)
+	}
+}
