@@ -519,7 +519,8 @@ func resolveMounted(ctx context.Context, req Request) ([]api.Repository, []api.N
 		if info, statErr := os.Stat(path); err != nil || statErr != nil || !info.IsDir() {
 			return nil, nil, fmt.Errorf("--mount takes directories of the host, and %s is not one", in.Source)
 		}
-		if strings.Contains(path, ":") {
+		// sbx takes the colon of a Windows drive, C:\..., for the path's own.
+		if strings.Contains(path[len(filepath.VolumeName(path)):], ":") {
 			return nil, nil, fmt.Errorf("%s has a colon in its path, which a mount cannot name; mount a directory without one", path)
 		}
 		r := api.Repository{Name: in.Name, HostPath: path, Author: req.Author, Mounted: true, Context: in.Context}
