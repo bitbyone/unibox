@@ -160,10 +160,7 @@ func GHLoginWay(ctx context.Context, service string) (TokenWay, bool) {
 		return TokenWay{}, false
 	}
 	// sbx runs it without the person's PATH, so gh is named by its path.
-	if strings.ContainsAny(gh, " '\"") {
-		gh = Quote(gh)
-	}
-	return TokenWay{Name: "Your gh login", Run: gh + " auth token", Hint: "sbx runs gh auth token on this machine whenever a sandbox needs the token: " + what}, true
+	return TokenWay{Name: "Your gh login", Run: hostQuote(gh) + " auth token", Hint: "sbx runs gh auth token on this machine whenever a sandbox needs the token: " + what}, true
 }
 
 // TokenGuides are where an env's tokens are made: unibox's own for the

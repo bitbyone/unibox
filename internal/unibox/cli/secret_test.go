@@ -1535,10 +1535,15 @@ func TestAGitHubTokenComesFromTheGhLoginWhereGhIsSignedIn(t *testing.T) {
 	log := fakeSBX(t)
 	t.Setenv("ACCESSIBLE", "1")
 	// gh is a stand-in, signed in while a file says so; it never prints a
-	// token, as unibox asks it only whether it is signed in.
-	bin := t.TempDir()
+	// token, as unibox asks it only whether it is signed in. It lies where
+	// gh does on Windows, under a directory with a space in its name.
+	bin := filepath.Join(t.TempDir(), "Program Files")
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	signedIn := filepath.Join(bin, "signed-in")
 	gh := filepath.Join(bin, "gh")
+	token := unibox.Quote(gh) + " auth token"
 	if err := testenv.WriteExecutable(gh, []byte("#!/bin/sh\n[ \"$1 $2\" = \"auth status\" ] && [ -f "+unibox.Quote(signedIn)+" ]\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -1563,14 +1568,14 @@ func TestAGitHubTokenComesFromTheGhLoginWhereGhIsSignedIn(t *testing.T) {
 	if _, said, err := runAt(t, paths, "3\n", "secret", "set", "github"); err != nil || !strings.Contains(said, "your whole gh login") {
 		t.Fatalf("%v\n%s", err, said)
 	}
-	if c := calls(t, log); !strings.Contains(c, "secret set github --command "+gh+" auth token\n") {
+	if c := calls(t, log); !strings.Contains(c, "secret set github --command "+token+"\n") {
 		t.Fatalf("%s", c)
 	}
 	// An env's own token is the same command, kept in config.yaml.
-	if out, _, err := runAt(t, paths, "3\n", "secret", "set", "copilot", "--scope", "env"); err != nil || !strings.Contains(out, "which sbx reads with "+gh+" auth token") {
+	if out, _, err := runAt(t, paths, "3\n", "secret", "set", "copilot", "--scope", "env"); err != nil || !strings.Contains(out, "which sbx reads with "+token) {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); !strings.Contains(string(cfg), gh+" auth token") {
+	if cfg, _ := os.ReadFile(filepath.Join(paths.Config, "config.yaml")); !strings.Contains(string(cfg), strings.ReplaceAll(token, "'", "''")) {
 		t.Fatalf("%s", cfg)
 	}
 	// A new token to make is not one gh has, nor is one the list has said

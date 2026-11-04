@@ -147,3 +147,16 @@ func guestOutput(ctx context.Context, r Runtime, name string, args ...string) (s
 	return strings.TrimSpace(string(b)), err
 }
 func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
+
+// hostQuote quotes s for the shell sbx runs a host command in, which is
+// cmd.exe on Windows: it takes no single quotes, and a Windows path cannot
+// hold a double quote. A word with nothing either shell reads is left as it is.
+func hostQuote(s string) string {
+	if !strings.ContainsAny(s, " \t'\"`$&|;<>()^%!=,*?[]{}~#") {
+		return s
+	}
+	if runtime.GOOS == "windows" {
+		return `"` + s + `"`
+	}
+	return Quote(s)
+}
