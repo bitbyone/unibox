@@ -437,7 +437,12 @@ replaces.
 
 - **Which tokens an env needs** is the union of `credentials[].service`
   over its kits, read with `sbx kit inspect --json` (a local kit is
-  built first, which takes seconds), and the services its bindings name.
+  built first, which the first time takes minutes and fails as the
+  build fails; init reads the kits once, cached, and stops at the first
+  that does not build), and the services its bindings name. A local
+  kit's files checked out with CRLF (git on Windows) build into a
+  failing Linux image, so init, create and doctor refuse them first
+  (`lineendings.go`), and unibox clones with `core.autocrlf=false`.
   `optional` is read from the kit's YAML, as inspect drops it.
 - **Which sbx has** is `sbx secret ls --json`: name, scope and a mask
   (`(stored)`, `(oauth configured)`), never a value.

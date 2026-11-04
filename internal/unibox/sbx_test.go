@@ -57,9 +57,12 @@ func TestSBXChecksSSHForwardingAndReadsWhatItLists(t *testing.T) {
 	bin := t.TempDir()
 	settings := filepath.Join(t.TempDir(), "settings")
 	write(t, settings, `{"value":true}`)
+	version := filepath.Join(t.TempDir(), "version")
+	write(t, version, "0.48.0")
 	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
 case "$1 $2" in
 settings*) cat `+Quote(settings)+` ;;
+"version ") echo "sbx version v$(cat `+Quote(version)+`) abc" ;;
 ls*) echo '[{"name":"dev","id":"vm-id","status":"stopped","agent":"copilot"}]' ;;
 "kit inspect") echo "Cached kit ./kits/agent"; echo '{"kind":"sandbox","name":"agent","sandbox":{"entrypoint":["copilot"],"command":{"default":["--yolo"]}},"credentials":[{"service":"copilot","optional":false}]}' ;;
 "secret ls") echo '[{"scope":"global","type":"service","name":"github"}]' ;;
@@ -68,6 +71,10 @@ esac
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	r := &SBX{}
 	ctx := context.Background()
+	if err := r.Available(ctx); err == nil || !strings.Contains(err.Error(), "0.48.0 is older than") {
+		t.Fatalf("an old sbx was accepted: %v", err)
+	}
+	write(t, version, MinSBXVersion)
 	if err := r.Available(ctx); err == nil {
 		t.Fatal("forwarding was accepted")
 	}

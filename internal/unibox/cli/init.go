@@ -303,6 +303,11 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	if !sbx.Present() {
 		return fmt.Errorf("sbx is not installed; install Docker Sandboxes, then run unibox init again")
 	}
+	// Before anything is asked: an older sbx would take the answers and
+	// fail at the walk's last step.
+	if err := unibox.RequireVersion(ctx, sbx); err != nil {
+		return err
+	}
 	var signedIn bool
 	if err := o.working("asking sbx whether it is signed in", func() (err error) {
 		signedIn, err = sbx.SignedIn(ctx)
@@ -360,16 +365,23 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 		envs = append(envs, env)
 	}
+	// Reading a kit of files has sbx build it, which the first time takes
+	// minutes and may fail; the spinner says so, and a kit that does not
+	// build stops the walk here rather than at the sandbox.
 	claude, pastes := false, false
-	if err = o.working("reading which agents the envs run", func() error {
-		for _, env := range envs {
-			agents := o.manager.EnvAgents(ctx, env)
-			claude = claude || slices.Contains(agents, "claude")
-			pastes = pastes || slices.Contains(agents, "claude") || slices.Contains(agents, "codex")
+	for _, env := range envs {
+		if err = unibox.CheckLineEndings(env); err != nil {
+			return err
 		}
-		return nil
-	}); err != nil {
-		return err
+		var agents []string
+		if err = o.working("building and reading the kits of env "+env.Name+" (the first time takes minutes)", func() (err error) {
+			agents, err = o.manager.EnvAgents(ctx, env)
+			return err
+		}); err != nil {
+			return err
+		}
+		claude = claude || slices.Contains(agents, "claude")
+		pastes = pastes || slices.Contains(agents, "claude") || slices.Contains(agents, "codex")
 	}
 	if claude {
 		if err := o.askSBXSetting(cmd, "claude_remote_control", "Claude remote control", "Claude Code's /remote-control lets claude.ai and the Claude app drive a session in a sandbox. Claude signs that channel in with a session token of its own, not your credentials.", []pick{

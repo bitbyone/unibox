@@ -177,7 +177,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
   process). `GOOS=windows go vet ./...` checks it from any machine.
 - **sbx's JSON changes shape between releases** (0.48 made `ls` bare
   lists); read a list through `sbxList`, which takes either. The oldest
-  sbx unibox was checked against is `MinSBXVersion`; raise it when unibox
+  sbx unibox was checked against is `MinSBXVersion`, which `SBX.Available` and init refuse below; raise it when unibox
   starts relying on something newer.
 - **The SSH agent is the user's call.** sbx forwards it by default; unibox
   refuses that until `ssh_agent` in config.yaml says yes or no (`init`

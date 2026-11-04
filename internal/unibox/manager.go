@@ -520,6 +520,9 @@ func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[
 	if chosen, err := m.SBX.NetworkPolicyChosen(ctx); err == nil && !chosen {
 		return Fail(4, "network_policy", "%s", NetworkPolicyUnchosen)
 	}
+	if err := CheckLineEndings(env); err != nil {
+		return err
+	}
 	file, files, done, err := m.createFiles(env, b.Name, args, m.Log)
 	defer done()
 	if err != nil {
@@ -551,7 +554,7 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
 		return err
 	}
-	b.Agent, b.AgentCommand, b.Agents = m.agentOf(ctx, env)
+	m.recordAgent(ctx, b, env)
 	m.installedAgents(ctx, b)
 	for i := range b.Tasks {
 		b.Tasks[i].State = "pending"
@@ -569,11 +572,18 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 // agentOf reads which agent an env's sandbox runs and how: the workload
 // kit's entrypoint and default arguments. The kit the env's agent names is
 // read first; the first kit of the sandbox kind is the workload, the
-// default agent, and every such kit's agent is one a task may choose.
-func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string, map[string][]string) {
-	kits := slices.Clone(env.SBX.Kits)
-	slices.SortStableFunc(kits, func(a, b EnvKit) int {
-		ma, mb := kitName(a.Source) == env.SBX.Agent, kitName(b.Source) == env.SBX.Agent
+// default agent, and every such kit's agent is one a task may choose. The
+// kits are read as the secrets read them, cached, so a kit sbx has to
+// build is built once; a kit sbx could not read is the error, beside
+// whatever the others said.
+func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string, map[string][]string, error) {
+	kits, err := m.readKits(ctx, env)
+	order := make([]int, len(kits))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		ma, mb := kitName(env.SBX.Kits[a].Source) == env.SBX.Agent, kitName(env.SBX.Kits[b].Source) == env.SBX.Agent
 		switch {
 		case ma && !mb:
 			return -1
@@ -582,18 +592,9 @@ func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string, map[s
 		}
 		return 0
 	})
-	values, _ := m.Paths.LoadEnvValues()
 	id, command, all := "", []string(nil), map[string][]string{}
-	for _, k := range kits {
-		ref := k.Source
-		if k.Dir != "" {
-			ref = k.Dir
-		}
-		kit, err := m.SBX.KitInspect(ctx, ref, env.SBX.KitArgs(k, values.ArgsFor(env)))
-		if err != nil {
-			fmt.Fprintf(m.Log, "%v\n", err)
-			continue
-		}
+	for _, i := range order {
+		kit := kits[i]
 		if kit.Kind != "sandbox" || len(kit.Sandbox.Entrypoint) == 0 {
 			continue
 		}
@@ -607,11 +608,25 @@ func (m *Manager) agentOf(ctx context.Context, env Env) (string, []string, map[s
 			id, command = a, c
 		}
 	}
+	if err != nil {
+		return id, command, all, err
+	}
 	if id == "" {
 		fmt.Fprintf(m.Log, "no kit of env %s runs an agent; unibox run --shell opens a shell instead\n", env.Name)
-		return "", nil, nil
+		return "", nil, nil, nil
 	}
-	return id, command, all
+	return id, command, all, nil
+}
+
+// recordAgent keeps on a sandbox which agent its env runs. sbx has just
+// built the kits to make the sandbox, so one it cannot read now is told
+// and the sandbox kept.
+func (m *Manager) recordAgent(ctx context.Context, b *api.Sandbox, env Env) {
+	var err error
+	b.Agent, b.AgentCommand, b.Agents, err = m.agentOf(ctx, env)
+	if err != nil {
+		fmt.Fprintf(m.Log, "%v\n", err)
+	}
 }
 
 // kitName is a kit's name as an sbxenv's agent names it: the last part of
@@ -656,7 +671,7 @@ func (m *Manager) Create(ctx context.Context, req Request, adopt bool) (api.Sand
 		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
 			return b, err
 		}
-		b.Agent, b.AgentCommand, b.Agents = m.agentOf(ctx, env)
+		m.recordAgent(ctx, &b, env)
 		return b, m.saveBox(b)
 	}
 	return b, m.ensure(ctx, &b, env, false, false)
@@ -843,7 +858,9 @@ func (m *Manager) syncSBXSettings(ctx context.Context) error {
 }
 
 // EnvAgents are the agents an env's sandbox may run, by unibox's names.
-func (m *Manager) EnvAgents(ctx context.Context, env Env) []string {
-	_, _, all := m.agentOf(ctx, env)
-	return slices.Sorted(maps.Keys(all))
+// sbx builds a kit of files to read it, so the first read of an env may
+// take minutes, and a kit that does not build is the error.
+func (m *Manager) EnvAgents(ctx context.Context, env Env) ([]string, error) {
+	_, _, all, err := m.agentOf(ctx, env)
+	return slices.Sorted(maps.Keys(all)), err
 }

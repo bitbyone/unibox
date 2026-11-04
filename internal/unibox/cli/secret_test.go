@@ -43,6 +43,7 @@ case "$1 $2" in
 "policy log") echo '{"allowed":[],"blocked":[{"host":"pypi.org","reason":"no rule","count":3,"last_seen":"2025-01-01T10:00:00Z"},{"host":"x.org.dev.docker.internal","count":1}]}' ;;
 "policy ls") echo '{"rules":[{"id":"1","name":"kit:team","applies_to":"all","decision":"allow","resource_type":"network","resources":["gitlab.example.com"],"status":"active","provenance":{"created_via":"provisioned"}},{"id":"2","applies_to":"sandbox:dev","decision":"deny","resource_type":"network","resources":["ads.example.com"],"status":"active","editable":true,"provenance":{"created_via":"added"}},{"id":"3","applies_to":"all","decision":"allow","resource_type":"filesystem:read","resources":["/"]}]}' ;;
 "kit inspect")
+	if [ -f ` + unibox.Quote(filepath.Join(dir, "kit-fails")) + ` ]; then echo "error: building kit: process \"/bin/sh -c set -e\r\" did not complete" >&2; exit 1; fi
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "kit-oauth")) + ` ]; then echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","oauth":{"tokenEndpoint":"x"}},{"service":"openai","oauth":{"tokenEndpoint":"x"}}]}'; elif [ -f ` + unibox.Quote(filepath.Join(dir, "kit-claude")) + ` ]; then echo '{"kind":"sandbox","name":"agent","sandbox":{"entrypoint":["claude"]},"credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}'; else echo '{"kind":"sandbox","name":"agent","credentials":[{"service":"anthropic","description":"An Anthropic API key"}]}'; fi ;;
 "secret ls")
 	printf '{"secrets":['; sep=''
@@ -432,6 +433,59 @@ func TestAnAgentsTokenIsASubscriptionsOrAnAPIKey(t *testing.T) {
 	// An API key is typed at sbx's prompt.
 	if _, _, err := runAt(t, paths, "2\n", "secret", "set", "openai"); err != nil || !strings.Contains(calls(t, log), "secret set openai\n") {
 		t.Fatalf("%v\n%s", err, calls(t, log))
+	}
+}
+
+func TestInitRefusesAnOldSbxBeforeAskingAnything(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "version"), []byte("0.48.0"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, said, err := runAt(t, paths, "1\n1\n1\nperson\ny\n2\nn\n", "init", repo)
+	if err == nil || !strings.Contains(err.Error(), "0.48.0 is older than the "+unibox.MinSBXVersion) {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if c := calls(t, log); c != "version\n" {
+		t.Fatalf("init went on with an old sbx:\n%s", c)
+	}
+	if cfg, _ := paths.LoadConfig(); len(cfg.Envs) != 0 {
+		t.Fatalf("%+v", cfg.Envs)
+	}
+}
+
+func TestInitStopsAtKitsSbxCannotBuild(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	repo := filepath.Dir(filepath.Dir(file))
+	// As git on Windows checks it out: the build would fail in Linux, so
+	// the walk stops before sbx spends minutes on it.
+	dockerfile := filepath.Join(repo, "kits", "agent", "agent.dockerfile")
+	if err := os.WriteFile(dockerfile, []byte("FROM x\r\nRUN <<'SH'\r\nset -e\r\nSH\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, said, err := runAt(t, paths, "1\n1\n1\nperson\ny\n2\nn\n", "init", repo)
+	if err == nil || !strings.Contains(err.Error(), "Windows line endings in "+dockerfile) || !strings.Contains(err.Error(), "core.autocrlf false") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if c := calls(t, log); strings.Contains(c, "kit inspect") {
+		t.Fatalf("sbx was asked to build the kit:\n%s", c)
+	}
+	// A kit that does not build for another reason stops the walk too,
+	// with what sbx said, rather than going on to the secrets.
+	if err := os.WriteFile(dockerfile, []byte("FROM x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "kit-fails"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, said, err = runAt(t, paths, "1\n1\n1\nperson\ny\n2\nn\n", "init", repo)
+	if err == nil || !strings.Contains(err.Error(), "building kit") || strings.Contains(said, "4/5") {
+		t.Fatalf("%v\n%s", err, said)
 	}
 }
 

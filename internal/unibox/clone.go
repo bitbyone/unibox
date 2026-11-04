@@ -117,7 +117,9 @@ func (p Paths) Clone(ctx context.Context, address string, ask bool, in io.Reader
 	if err = os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return "", false, err
 	}
-	c := userGit(ctx, ask, "clone", "--", address, dir)
+	// The files as the repository has them: git on Windows would give
+	// them CRLF endings, and the kits built from them would fail in Linux.
+	c := userGit(ctx, ask, "clone", "-c", "core.autocrlf=false", "--", address, dir)
 	c.Stdin, c.Stdout, c.Stderr = in, out, out
 	if err = c.Run(); err != nil {
 		_ = os.RemoveAll(dir)

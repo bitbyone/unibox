@@ -146,6 +146,9 @@ func (r *SBX) Available(ctx context.Context) error {
 	if _, err := exec.LookPath("sbx"); err != nil {
 		return fmt.Errorf("sbx is not installed; install Docker Sandboxes, then unibox init signs you in")
 	}
+	if err := RequireVersion(ctx, r); err != nil {
+		return err
+	}
 	forwarding, err := sbxForwarding(ctx)
 	if err != nil {
 		return err
@@ -235,6 +238,20 @@ func envArgs(verb, name, args string, files []string) []string {
 // MinSBXVersion is the oldest sbx unibox was checked against: sbxenv
 // files, args files, kit args and mounts as unibox uses them.
 const MinSBXVersion = "0.50.0"
+
+// RequireVersion refuses an sbx older than MinSBXVersion: an older one
+// takes the env's files in a form it does not know, or reads them
+// otherwise, and fails late, after the user has answered and waited.
+func RequireVersion(ctx context.Context, r Runtime) error {
+	version, err := r.Version(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot tell which sbx is installed: %w", err)
+	}
+	if !VersionAtLeast(version, MinSBXVersion) {
+		return Fail(4, "sbx_outdated", "sbx %s is older than the %s unibox needs; update Docker Sandboxes, then run unibox again", version, MinSBXVersion)
+	}
+	return nil
+}
 
 var semver = regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
 

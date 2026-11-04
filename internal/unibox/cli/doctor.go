@@ -170,6 +170,9 @@ func (o *options) doctorCommand() *cobra.Command {
 				continue
 			}
 			add(area, "files", "pass", strings.Join(env.SBX.Files, ", "), "")
+			if err := unibox.CheckLineEndings(env); err != nil {
+				add(area, "line endings", "fail", err.Error(), "")
+			}
 			values, _ := o.paths.LoadEnvValues()
 			mine := values.ArgsFor(env)
 			if missing := env.SBX.Missing(mine); len(missing) > 0 {
