@@ -37,6 +37,10 @@ git clone https://github.com/bitbyone/unibox
 cd unibox && make install     # into ~/.local/bin
 ```
 
+On Windows that is `%USERPROFILE%\.local\bin\unibox.exe`; `make` there
+needs a POSIX `sh` on `PATH`, such as Git's. Put the directory on your `PATH` ahead of Scoop's, or
+`make install` says which unibox runs instead.
+
 ```term
 $ unibox version
 0.2

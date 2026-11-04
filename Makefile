@@ -1,4 +1,10 @@
+# Windows sets no HOME and runs a program only from a file named .exe.
+ifeq ($(OS),Windows_NT)
+EXE := .exe
+HOME ?= $(subst \,/,$(USERPROFILE))
+endif
 PREFIX ?= $(HOME)/.local
+BIN := unibox$(EXE)
 
 .PHONY: build test test-fast install uninstall clean fmt dist
 
@@ -8,7 +14,7 @@ VERSION ?= $(shell git describe --tags --exact-match --match 'v[0-9]*.[0-9]*' 2>
 LDFLAGS := $(if $(VERSION),-X github.com/tobola/unibox/internal/version.Version=$(VERSION))
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o unibox ./cmd/unibox
+	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/unibox
 
 test:
 	go test -race ./...
@@ -19,19 +25,27 @@ test-fast:
 fmt:
 	gofmt -w .
 
+# install says so when unibox on PATH is another one, such as brew's or
+# Scoop's, which goes on running in place of the one installed.
 install: build
 	install -d "$(PREFIX)/bin"
-	@if ! cmp -s unibox "$(PREFIX)/bin/unibox" || [ ! -x "$(PREFIX)/bin/unibox" ]; then \
-		install -m 0755 unibox "$(PREFIX)/bin/unibox"; \
+	@if ! cmp -s $(BIN) "$(PREFIX)/bin/$(BIN)" || [ ! -x "$(PREFIX)/bin/$(BIN)" ]; then \
+		install -m 0755 $(BIN) "$(PREFIX)/bin/$(BIN)"; \
 		echo "installed unibox"; \
+	fi
+	@onpath=$$(command -v unibox || true); \
+	if [ -z "$$onpath" ]; then \
+		echo "$(PREFIX)/bin is not on PATH; add it to run unibox"; \
+	elif ! cmp -s "$$onpath" "$(PREFIX)/bin/$(BIN)"; then \
+		echo "unibox on PATH is $$onpath, not the one installed in $(PREFIX)/bin"; \
 	fi
 
 # uninstall removes only the binary install put there: config, state and
 # sandboxes stay, for unibox from brew or Scoop to carry on with.
 uninstall:
-	@if [ -e "$(PREFIX)/bin/unibox" ]; then \
-		rm -f "$(PREFIX)/bin/unibox"; \
-		echo "removed $(PREFIX)/bin/unibox"; \
+	@if [ -e "$(PREFIX)/bin/$(BIN)" ]; then \
+		rm -f "$(PREFIX)/bin/$(BIN)"; \
+		echo "removed $(PREFIX)/bin/$(BIN)"; \
 	fi
 
 # dist builds a release for every system unibox runs on, without cgo so
@@ -55,4 +69,4 @@ dist:
 	cd dist && if command -v sha256sum >/dev/null; then sha256sum *.tar.gz *.zip; else shasum -a 256 *.tar.gz *.zip; fi > checksums.txt
 
 clean:
-	rm -rf unibox dist
+	rm -rf $(BIN) dist
