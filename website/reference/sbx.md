@@ -26,7 +26,7 @@ verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 | `network ls` | `sbx policy ls --json --type network`, `sbx policy log --json --type network --limit 500` |
 | `network allow`/`deny` | `sbx policy allow/deny network --sandbox <sandbox> [--protocol <p>] <hosts>` |
 | `network rm` | `sbx policy rm network --force --resource <hosts> [--sandbox <sandbox>]` |
-| `doctor` | `sbx version`, `sbx diagnose --format json` |
+| `doctor` | `sbx --version`, `sbx diagnose --format json` |
 | `prune` | `sbx ls --json`, `sbx umount` of a mount no task has |
 
 Unibox removes only sandboxes it created; an adopted one only with
