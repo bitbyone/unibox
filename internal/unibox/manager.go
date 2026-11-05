@@ -854,7 +854,31 @@ func (m *Manager) syncSBXSettings(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return m.syncSandboxSSH(ctx)
+}
+
+// syncSandboxSSH turns sbx's SSH endpoint back on where config.yaml says
+// it is on and sbx lost it, as a reset or a new install of sbx does: sbx
+// serves it only from a daemon restarted with it, which unibox does while
+// no sandbox runs, and says how to otherwise.
+func (m *Manager) syncSandboxSSH(ctx context.Context) error {
+	on, said := m.Config.EditorSSH()
+	if !said || !on {
+		return nil
+	}
+	if serving, err := m.SBX.EditorSSH(ctx); err != nil || serving {
+		return nil
+	}
+	boxes, err := m.SBX.List(ctx)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(boxes, func(b Box) bool { return b.State == "running" }) {
+		fmt.Fprintln(m.Log, "sbx serves no SSH, though config.yaml says ssh_sandbox; unibox config set ssh_sandbox true turns it on, restarting sbx's daemon, once no sandbox runs")
+		return nil
+	}
+	m.progress("turning sbx's SSH endpoint back on")
+	return m.SBX.SetEditorSSH(ctx, true)
 }
 
 // EnvAgents are the agents an env's sandbox may run, by unibox's names.

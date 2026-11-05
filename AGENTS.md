@@ -183,9 +183,15 @@ about it. Keep command output short: pipe through `head`, `tail` or
   refuses that until `ssh_agent` in config.yaml says yes or no (`init`
   asks, recommending no) and sets sbx to match. With it, sessions get
   `GIT_SSH_COMMAND` with `StrictHostKeyChecking=accept-new`. Editors
-  over SSH (`editor_ssh`, `ssh <sandbox>.sbx`) are asked alike; turning
-  it on restarts sbx's daemon, which serves SSH only from a start with
-  `feature.ssh` on.
+  over SSH (`ssh_sandbox`, `ssh <sandbox>.sbx`, for every sandbox) are
+  asked alike; turning it on restarts sbx's daemon, which serves SSH only
+  from a start with `feature.ssh` on, and a start that finds it lost
+  turns it on again while no sandbox runs (`syncSandboxSSH`).
+- **`unibox config` alone is the settings in tabs** (`settingsui.go`):
+  Global, then each env with what it has of its own over Global - its
+  `stop_idle`, author, co-author, CPUs and memory - and its args. sbx's
+  settings are its daemon's, so they are Global's alone. A list's `tabs`
+  turn by ←/→ as the action `tab:N`, which the command builds anew.
 - **A noun alone at a terminal is a list to act in**, and `unibox`
   alone is `unibox sandbox` (help elsewhere, or before init). `unibox port`
   switches a running sandbox's ports, `unibox task` (and `resume` without

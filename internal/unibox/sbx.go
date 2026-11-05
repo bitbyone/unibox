@@ -96,12 +96,19 @@ func (r *SBX) SetEditorSSH(ctx context.Context, on bool) error {
 		return fmt.Errorf("sbx did not change feature.ssh: %w", err)
 	}
 	if err := runQuiet(hostCommand(ctx, "sbx", "daemon", "restart")); err != nil {
-		return fmt.Errorf("sbx changed feature.ssh, but its daemon did not restart; unibox config set editor_ssh %t tries again: %w", on, err)
+		return fmt.Errorf("sbx changed feature.ssh, but its daemon did not restart; unibox config set ssh_sandbox %t tries again: %w", on, err)
 	}
 	if on {
-		if err := runQuiet(hostCommand(ctx, "sbx", "setup", "ssh")); err != nil {
-			return fmt.Errorf("sbx serves SSH, but did not add its host entry to your SSH client's configuration; unibox config set editor_ssh true tries again: %w", err)
-		}
+		return r.SetupSSHClient(ctx)
+	}
+	return nil
+}
+
+// SetupSSHClient has sbx write its host entry into the SSH client's
+// configuration, as ssh <sandbox>.sbx needs; sbx setup ssh is idempotent.
+func (r *SBX) SetupSSHClient(ctx context.Context) error {
+	if err := runQuiet(hostCommand(ctx, "sbx", "setup", "ssh")); err != nil {
+		return fmt.Errorf("sbx did not add its host entry to your SSH client's configuration; unibox config set ssh_sandbox true tries again: %w", err)
 	}
 	return nil
 }

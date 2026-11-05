@@ -148,11 +148,28 @@ func (o *options) confirm(question string) error {
 }
 
 func (o *options) configCommand() *cobra.Command {
-	c := &cobra.Command{Use: "config", Short: "Read or change unibox's own configuration"}
+	var envFlag string
+	c := &cobra.Command{Use: "config", Args: cobra.NoArgs, Short: "Read or change unibox's own configuration", Long: `Read or change unibox's own configuration. Alone at a terminal it is a
+list of the settings in tabs: Global, for every env, and one for each env
+with what it has of its own over them and the args it asks for.`, RunE: func(cmd *cobra.Command, args []string) error {
+		if o.json || !o.interactive {
+			return o.runStep(cmd, "config", "get")
+		}
+		return o.settingsUI(cmd)
+	}}
+	c.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Env whose own stop_idle is read or changed, over every env's")
 	c.AddCommand(&cobra.Command{Use: "get [key]", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		var value any = cfg
 		switch {
+		case envFlag != "":
+			if len(args) != 1 || args[0] != "stop_idle" {
+				return errors.New("only stop_idle is said per env; leave -e out for the others")
+			}
+			if _, ok := cfg.Envs[envFlag]; !ok {
+				return fmt.Errorf("no env %s; unibox env ls lists them", envFlag)
+			}
+			value, _ = cfg.StopIdleFor(envFlag)
 		case len(args) == 1 && unibox.SBXSettings[args[0]] != "":
 			v, err := o.manager.SBX.Setting(cmd.Context(), unibox.SBXSettings[args[0]])
 			if err != nil {
@@ -183,13 +200,14 @@ func (o *options) configCommand() *cobra.Command {
 	c.AddCommand(&cobra.Command{Use: "set key value", Args: cobra.ExactArgs(2), Short: "Change a setting", Long: `Change a setting of unibox's own configuration. The keys:
 
   default_env  the env a sandbox is created from when none is named
-  stop_idle    whether a sandbox is stopped when its last session ends
+  stop_idle    whether a sandbox is stopped when its last session ends;
+               with -e for one env, over every env's
   update_check whether unibox tells of a newer unibox or sbx and of new
                commits in the env repositories: releases asked daily,
                repositories fetched every 4 hours, in the background
                (UNIBOX_NO_UPDATE_CHECK=1 stops it too)
   ssh_agent    whether sandboxes may use your SSH agent (sbx is set to match)
-  editor_ssh   whether editors and apps reach sandboxes as ssh <sandbox>.sbx
+  ssh_sandbox  whether editors and apps reach sandboxes as ssh <sandbox>.sbx
                (sbx is set to match, its daemon restarted)
   remember_host_commands
                whether approving an env's host commands covers their later
@@ -203,9 +221,16 @@ func (o *options) configCommand() *cobra.Command {
                (sbx's setting)
   clipboard_text_copy
                whether text an agent copies reaches this computer's
-               clipboard, which lets the sandbox write it (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false", RunE: func(cmd *cobra.Command, args []string) error {
+               clipboard, which lets the sandbox write it (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false\n  unibox config set stop_idle true -e dev", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		key, value := args[0], args[1]
+		if envFlag != "" {
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("%s must be true or false", key)
+			}
+			return o.setEnvStopIdle(key, envFlag, &v)
+		}
 		switch key {
 		case "remember_host_commands", "claude_remote_control", "clipboard_image_paste", "clipboard_text_copy":
 			v, err := strconv.ParseBool(value)
@@ -221,7 +246,7 @@ func (o *options) configCommand() *cobra.Command {
 				return fmt.Errorf("there is no env %s; unibox env ls lists them", value)
 			}
 			cfg.DefaultEnv = value
-		case "editor_ssh":
+		case "ssh_sandbox", "editor_ssh":
 			v, err := strconv.ParseBool(value)
 			if err != nil {
 				return fmt.Errorf("%s must be true or false", key)
@@ -262,6 +287,9 @@ func (o *options) configCommand() *cobra.Command {
 	}})
 	c.AddCommand(&cobra.Command{Use: "unset key", Args: cobra.ExactArgs(1), Short: "Forget a setting, back to its default", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
+		if envFlag != "" {
+			return o.setEnvStopIdle(args[0], envFlag, nil)
+		}
 		switch args[0] {
 		case "remember_host_commands", "claude_remote_control", "clipboard_image_paste", "clipboard_text_copy":
 			if err := o.manager.SBX.SetSetting(cmd.Context(), unibox.SBXSettings[args[0]], ""); err != nil {
@@ -281,7 +309,7 @@ func (o *options) configCommand() *cobra.Command {
 			}
 			cfg = o.manager.Config
 			cfg.SSHAgentOn = nil
-		case "editor_ssh":
+		case "ssh_sandbox", "editor_ssh":
 			if err := o.setEditorSSH(cmd, false); err != nil {
 				return err
 			}
@@ -298,7 +326,27 @@ func (o *options) configCommand() *cobra.Command {
 	return c
 }
 
-const configKeys = "default_env, stop_idle, update_check, ssh_agent, editor_ssh, remember_host_commands, claude_remote_control, clipboard_image_paste and clipboard_text_copy"
+// setEnvStopIdle keeps an env's own stop_idle, or forgets it with nil, so
+// every env's stands for it again.
+func (o *options) setEnvStopIdle(key, env string, v *bool) error {
+	if key != "stop_idle" {
+		return errors.New("only stop_idle is said per env; leave -e out for the others")
+	}
+	cfg := o.manager.Config
+	e, ok := cfg.Envs[env]
+	if !ok {
+		return fmt.Errorf("no env %s; unibox env ls lists them", env)
+	}
+	e.StopIdle = v
+	cfg.Envs[env] = e
+	if err := o.paths.SaveConfig(cfg); err != nil {
+		return err
+	}
+	o.manager.Config = cfg
+	return o.success("configuration updated")
+}
+
+const configKeys = "default_env, stop_idle, update_check, ssh_agent, ssh_sandbox, remember_host_commands, claude_remote_control, clipboard_image_paste and clipboard_text_copy"
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {
@@ -311,7 +359,7 @@ func configValue(c unibox.Config, key string) (any, error) {
 	case "ssh_agent":
 		on, _ := c.SSHAgent()
 		return on, nil
-	case "editor_ssh":
+	case "ssh_sandbox", "editor_ssh":
 		on, _ := c.EditorSSH()
 		return on, nil
 	}

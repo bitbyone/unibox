@@ -45,7 +45,9 @@ type fakeRuntime struct {
 	failCreate, failUnmount, keepMounted bool
 	unavailable                          error
 	sshAgent                             bool
-	settings                             map[string]string
+	// servesSSH is sbx's feature.ssh.
+	servesSSH bool
+	settings  map[string]string
 	// hostEnv is what the last session gave sbx's own process.
 	hostEnv []string
 }
@@ -76,8 +78,19 @@ func (f *fakeRuntime) SetSSHForwarding(_ context.Context, on bool) error {
 }
 func (f *fakeRuntime) Diagnose(context.Context) ([]RuntimeCheck, error) { return nil, nil }
 func (f *fakeRuntime) SignedIn(context.Context) (bool, error)           { return true, nil }
-func (f *fakeRuntime) EditorSSH(context.Context) (bool, error)          { return false, nil }
-func (f *fakeRuntime) SetEditorSSH(context.Context, bool) error         { return nil }
+func (f *fakeRuntime) EditorSSH(context.Context) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.servesSSH, nil
+}
+func (f *fakeRuntime) SetEditorSSH(_ context.Context, on bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record(fmt.Sprint("ssh ", on))
+	f.servesSSH = on
+	return nil
+}
+func (f *fakeRuntime) SetupSSHClient(context.Context) error { return nil }
 func (f *fakeRuntime) NetworkPolicyChosen(context.Context) (bool, error) {
 	return !f.policyUnchosen, nil
 }

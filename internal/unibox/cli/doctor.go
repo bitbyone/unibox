@@ -78,7 +78,7 @@ func (o *options) doctorCommand() *cobra.Command {
 					hint = "unibox network init chooses it"
 				}
 				if c.Name == "SSH client config" && c.Status != "pass" {
-					hint = "unibox config set editor_ssh true sets it up"
+					hint = "unibox config set ssh_sandbox true sets it up"
 				}
 				add("sbx", c.Name, c.Status, c.Message, hint)
 				if c.Name == "Global network policy" && c.Status == "fail" {
@@ -155,8 +155,8 @@ func (o *options) doctorCommand() *cobra.Command {
 				case err != nil:
 					add("sbx", "editor SSH", "warn", err.Error(), "")
 				case serving != on:
-					add("sbx", "editor SSH", "warn", fmt.Sprintf("your config.yaml says %t, sbx's feature.ssh %t", on, serving), fmt.Sprintf("unibox config set editor_ssh %t sets sbx to match", on))
-					fix("config", "set", "editor_ssh", strconv.FormatBool(on))
+					add("sbx", "editor SSH", "warn", fmt.Sprintf("your config.yaml says %t, sbx's feature.ssh %t", on, serving), fmt.Sprintf("unibox config set ssh_sandbox %t sets sbx to match", on))
+					fix("config", "set", "ssh_sandbox", strconv.FormatBool(on))
 				case on:
 					add("sbx", "editor SSH", "pass", "editors reach a sandbox as ssh <sandbox>.sbx", "")
 				default:

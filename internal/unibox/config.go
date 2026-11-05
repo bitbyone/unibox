@@ -49,7 +49,10 @@ type Config struct {
 	SSHAgentOn *bool `yaml:"ssh_agent,omitempty" json:"ssh_agent,omitempty"`
 	// EditorSSHOn says editors and desktop apps may reach sandboxes over
 	// sbx's SSH endpoint, as ssh <sandbox>.sbx; sbx is set to match.
-	EditorSSHOn *bool `yaml:"editor_ssh,omitempty" json:"editor_ssh,omitempty"`
+	EditorSSHOn *bool `yaml:"ssh_sandbox,omitempty" json:"ssh_sandbox,omitempty"`
+	// LegacyEditorSSH is ssh_sandbox's name before 0.7, read and dropped
+	// at the next write.
+	LegacyEditorSSH *bool `yaml:"editor_ssh,omitempty" json:"-"`
 	// RememberHostCommands, ClaudeRemoteControl, ClipboardImagePaste and
 	// ClipboardTextCopy are sbx's settings as the person said them here; unibox sets sbx to
 	// match before it makes or starts a sandbox. Unsaid, sbx's own stands.
@@ -223,6 +226,10 @@ func (p Paths) LoadConfig() (Config, error) {
 			}
 		}
 	}
+	if c.EditorSSHOn == nil {
+		c.EditorSSHOn = c.LegacyEditorSSH
+	}
+	c.LegacyEditorSSH = nil
 	if r, ok := c.Runtimes["sbx"]; ok {
 		if c.StopIdleSandbox == nil {
 			c.StopIdleSandbox = r.StopIdle
@@ -384,6 +391,19 @@ func (c Config) EditorSSH() (on, said bool) {
 }
 
 func (c Config) StopIdle() bool { return c.StopIdleSandbox == nil || *c.StopIdleSandbox }
+
+// StopIdleFor says whether a sandbox of env is stopped when its last
+// session ends, and where that is said: the env's own, every env's
+// (global), or unibox's default.
+func (c Config) StopIdleFor(env string) (on bool, from string) {
+	if own := c.Envs[env].StopIdle; own != nil {
+		return *own, "env"
+	}
+	if c.StopIdleSandbox != nil {
+		return *c.StopIdleSandbox, "global"
+	}
+	return true, "default"
+}
 
 type Failure struct {
 	Status        int

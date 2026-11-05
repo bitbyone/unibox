@@ -6,6 +6,15 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `unibox config` alone at a terminal is the settings in tabs: Global,
+  then each env with its own over Global and its args, to change in place.
+- `stop_idle` can be an env's own (`unibox config set stop_idle false -e
+  dev`).
+- `editor_ssh` is `ssh_sandbox` now, as it lets anything SSH into every
+  sandbox, not editors alone; the old key is read and written anew. A
+  sandbox started while none runs turns sbx's SSH back on when sbx lost
+  it, and `init` that finds it on writes the SSH client's entry too.
+
 - At a terminal unibox tells, after a command and in every list's right
   corner, when an env repository has new commits or a newer unibox or sbx
   is out, with the command that brings it. It asks in the background, at

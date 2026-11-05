@@ -27,6 +27,9 @@ type EnvConfig struct {
 	// Source is the address unibox cloned Repo from; a repository of the
 	// user's own has none, and is pulled only while it is clean.
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
+	// StopIdle is the person's stop_idle for this env's sandboxes, over
+	// the one for every env.
+	StopIdle *bool `yaml:"stop_idle,omitempty" json:"stop_idle,omitempty"`
 }
 
 // EnvSecret is how an env's own token is read on the host.

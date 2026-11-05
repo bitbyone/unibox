@@ -46,6 +46,10 @@ type listModel struct {
 	width, height int
 	// context stands in the title's corner: where commands work.
 	context string
+	// tabs stand in the title's place, tab the one shown; another is
+	// chosen as the action "tab:N", whose list the command builds anew.
+	tabs []string
+	tab  int
 	// query narrows the rows to those it matches, fuzzily, typed after /
 	// while filtering.
 	query     string
@@ -131,6 +135,16 @@ func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.cursor = min(m.cursor+1, max(len(m.visible())-1, 0))
 		return m, nil
+	case "left", "h", "shift+tab", "right", "l", "tab":
+		if len(m.tabs) < 2 {
+			break
+		}
+		step := 1
+		if k := key.String(); k == "left" || k == "h" || k == "shift+tab" {
+			step = len(m.tabs) - 1
+		}
+		m.chosen = &listAction{name: fmt.Sprintf("tab:%d", (m.tab+step)%len(m.tabs)), any: true}
+		return m, tea.Quit
 	}
 	for i, a := range m.actions {
 		if a.key != key.String() || (!a.any && len(m.visible()) == 0) {
@@ -172,12 +186,19 @@ func (m listModel) View() string {
 			foot = strings.Split(m.note, "\n")
 		}
 		help := []string{"↑/↓ j/k", "move", "/", "filter"}
+		if len(m.tabs) > 1 {
+			help = append(help, "←/→ h/l", "tab")
+		}
 		for _, a := range m.actions {
 			help = append(help, displayKey(a.key), a.help)
 		}
 		foot = append(foot, helpLines(m.width, append(help, "q", "quit")...)...)
 	}
-	lines := []string{titleLine(listTitle.Render(m.title), m.context, m.width), noticeLine(m.width)}
+	title := listTitle.Render(m.title)
+	if len(m.tabs) > 0 {
+		title = tabBar(m.tabs, m.tab)
+	}
+	lines := []string{titleLine(title, m.context, m.width), noticeLine(m.width)}
 	visible := m.visible()
 	if m.filtering || m.query != "" {
 		typing := ""
@@ -316,4 +337,17 @@ func (o *options) printRows(m listModel) error {
 		fmt.Fprintln(w, strings.Join(cells, "\t"))
 	}
 	return w.Flush()
+}
+
+// tabBar draws tabs in a row, the one shown as a list's title is.
+func tabBar(tabs []string, shown int) string {
+	out := make([]string, len(tabs))
+	for i, t := range tabs {
+		if i == shown {
+			out[i] = listTitle.Render("[" + t + "]")
+		} else {
+			out[i] = portHelp.Render(" " + t + " ")
+		}
+	}
+	return strings.Join(out, " ")
 }

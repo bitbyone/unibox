@@ -249,14 +249,16 @@ every key you have; while it does, unibox refuses to run until you say
 whether sandboxes may use it (`unibox config set ssh_agent false`, or
 `true`), and sets sbx to match. `init` asks, recommending no.
 
-## Editors over SSH
+## SSH into sandboxes
 
 sbx can serve each sandbox to editors and desktop apps (VS Code, Cursor,
-Orca, T3 Code) as `ssh <sandbox>.sbx`. `init` asks; `unibox config set
-editor_ssh true` turns it on later: unibox sets sbx's `feature.ssh`,
+Orca, T3 Code) as `ssh <sandbox>.sbx`. It is sbx's for every sandbox of
+the machine, never one alone. `init` asks; `unibox config set
+ssh_sandbox true` turns it on later: unibox sets sbx's `feature.ssh`,
 restarts its daemon, which serves SSH only when started with it, and has
 `sbx setup ssh` add the host entry to your SSH client's configuration.
-Open a task's directory under `/work/<task>/<repo>`. An editor's session
+Should sbx lose it, as after a reset, the next sandbox started while none
+runs turns it on again. Open a task's directory under `/work/<task>/<repo>`. An editor's session
 is not unibox's, so `unibox config set stop_idle false` keeps a sandbox
 running for it.
 

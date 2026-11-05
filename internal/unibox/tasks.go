@@ -573,7 +573,7 @@ func (m *Manager) finishRun(b api.Sandbox, run api.Run, lease, usage, taskLock *
 // stopIdle stops a sandbox no session uses any longer, when the person
 // has unibox do so.
 func (m *Manager) stopIdle(b api.Sandbox) {
-	if !m.Config.StopIdle() {
+	if on, _ := m.Config.StopIdleFor(b.Env); !on {
 		return
 	}
 	guard, err := m.guard(b.Name)

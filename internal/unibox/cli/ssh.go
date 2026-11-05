@@ -125,7 +125,9 @@ func (o *options) askEditorSSH(cmd *cobra.Command) error {
 				return err
 			}
 			o.manager.Config = cfg
-			return nil
+			// sbx serving SSH says nothing of the SSH client's own
+			// configuration, which only sbx setup ssh writes.
+			return sbx.SetupSSHClient(cmd.Context())
 		}
 	}
 	choice, err := o.askPick("Editors over SSH", "VS Code, Cursor, Orca and other apps reach a sandbox as ssh <sandbox>.sbx. sbx serves it to your user alone, signed in to Docker, and adds the host entry to your SSH client's configuration. An editor's session is not unibox's: unibox config set stop_idle false keeps a sandbox running for it.", []pick{

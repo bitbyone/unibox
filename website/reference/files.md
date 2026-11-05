@@ -68,7 +68,7 @@ context:
 stop_idle: true
 update_check: true                # tell of newer releases and env commits
 ssh_agent: false
-editor_ssh: true
+ssh_sandbox: true                 # ssh <sandbox>.sbx, for every sandbox
 remember_host_commands: true      # sbx's settings, set to match at each start
 claude_remote_control: true
 clipboard_image_paste: true       # agents paste images from your clipboard

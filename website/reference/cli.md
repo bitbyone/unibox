@@ -459,18 +459,26 @@ set what it set up, and sets it without asking only where nothing is set.
 ### `unibox config`
 
 ```
-unibox config get [key]
-unibox config set <key> <value>
-unibox config unset <key>
+unibox config                        # at a terminal: the settings in tabs
+unibox config get [key] [-e env]
+unibox config set <key> <value> [-e env]
+unibox config unset <key> [-e env]
 ```
+
+Alone at a terminal, `config` is a list of the settings in tabs: Global,
+for every env, then one per env with what it has of its own over Global
+(`stop_idle`, author, co-author, CPUs, memory) and the args it asks for.
+←/→ turns the tabs, enter changes the row's setting, `d` takes the wider
+one again, `a` adds a value. sbx's settings are for every sandbox, so
+they are Global's alone. `-e` says an env's own `stop_idle`.
 
 | Key | Meaning |
 | --- | --- |
 | `default_env` | env a sandbox is created from when none is named |
-| `stop_idle` | stop a sandbox when its last session ends (default `true`) |
+| `stop_idle` | stop a sandbox when its last session ends (default `true`); `-e` for one env's own |
 | `update_check` | tell of a newer unibox or sbx and of new commits in the env repositories, asked in the background (default `true`; `UNIBOX_NO_UPDATE_CHECK=1` stops it for a run) |
 | `ssh_agent` | may sandboxes use your SSH agent; sbx is set to match ([Security](./security#your-ssh-agent)) |
-| `editor_ssh` | may editors and apps reach a sandbox as `ssh <sandbox>.sbx`; sbx is set to match and its daemon restarted |
+| `ssh_sandbox` | may editors and apps reach a sandbox as `ssh <sandbox>.sbx`, every sandbox alike (`editor_ssh` before 0.7); sbx is set to match and its daemon restarted |
 | `remember_host_commands` | sbx's `env.rememberHostCommands`: approving an env's host commands covers later runs (default `false`) |
 | `claude_remote_control` | sbx's `claude.remoteControl`: Claude Code's `/remote-control` works in sandboxes, so claude.ai and its app drive a session (default `false`) |
 | `clipboard_image_paste` | sbx's `clipboard.imagePaste`: agents paste images from your clipboard with Ctrl+V, which lets processes in a sandbox read images you copy; text pastes either way (default `false`) |

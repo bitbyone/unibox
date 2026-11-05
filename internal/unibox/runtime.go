@@ -76,6 +76,8 @@ type Runtime interface {
 	// or off and the entry out.
 	EditorSSH(ctx context.Context) (bool, error)
 	SetEditorSSH(ctx context.Context, on bool) error
+	// SetupSSHClient writes the host entry ssh <sandbox>.sbx needs.
+	SetupSSHClient(ctx context.Context) error
 	// AllowSSHAgent records the user's leave for sandboxes to use their
 	// SSH agent, which Available holds sbx's forwarding to.
 	AllowSSHAgent(on bool)
