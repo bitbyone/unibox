@@ -392,7 +392,7 @@ func (m *Manager) RemoveRepository(ctx context.Context, task, repo string, force
 			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", unmountedScript(part)}}), m.Log); err != nil {
 				return t, err
 			}
-			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", `[ ! -d "$1" ] || rmdir -- "$1"`, "bash", dir}}), m.Log); err != nil {
+			if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"sh", "-c", `[ ! -d "$1" ] || rmdir -- "$1"`, "sh", dir}}), m.Log); err != nil {
 				return t, err
 			}
 		} else if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"rm", "-rf", "--", dir}}), m.Log); err != nil {
@@ -994,7 +994,7 @@ func (m *Manager) removeTask(ctx context.Context, name, task string, force bool)
 			}
 			// sbx made the mount points as root; rmdir takes only
 			// empty ones.
-			points := []string{"bash", "-c", `for d; do [ ! -d "$d" ] || rmdir -- "$d"; done`, "bash"}
+			points := []string{"sh", "-c", `for d; do [ ! -d "$d" ] || rmdir -- "$d"; done`, "sh"}
 			for _, mt := range mounts(removed) {
 				points = append(points, mt[1])
 			}

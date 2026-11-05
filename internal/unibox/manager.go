@@ -551,7 +551,7 @@ func (m *Manager) create(ctx context.Context, b *api.Sandbox, env Env, args map[
 // ready makes a sandbox sbx created ready for tasks, and records it.
 func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, fingerprint string) error {
 	b.ID = box.ID
-	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
+	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"sh", "-c", setupScript}}), m.Log); err != nil {
 		return err
 	}
 	m.recordAgent(ctx, b, env)
@@ -668,7 +668,7 @@ func (m *Manager) Create(ctx context.Context, req Request, adopt bool) (api.Sand
 		if args, err := m.args(env); err == nil {
 			b.Fingerprint, _ = m.fingerprint(env, b.Name, args)
 		}
-		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"bash", "-c", setupScript}}), m.Log); err != nil {
+		if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{User: "root", Args: []string{"sh", "-c", setupScript}}), m.Log); err != nil {
 			return b, err
 		}
 		m.recordAgent(ctx, &b, env)

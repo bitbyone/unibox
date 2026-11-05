@@ -84,7 +84,11 @@ type Runtime interface {
 }
 
 type Command struct {
-	Args            []string
+	Args []string
+	// User "root" runs a command as root, but with the agent's HOME. A bash
+	// sbx starts reads ~/.bashrc even for -c, as one started over ssh does,
+	// and the agent's activates mise, which would leave root's files in the
+	// agent's home; so a command as root runs in sh.
 	Directory, User string
 	Interactive     bool
 	// HostEnv is for sbx's own process on the host; the guest never sees it.
