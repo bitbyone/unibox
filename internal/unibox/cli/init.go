@@ -339,6 +339,14 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	}, "no"); err != nil {
 		return err
 	}
+	// Since sbx 0.51 text an agent copies stays in the sandbox until told
+	// otherwise, whatever the agent.
+	if err := o.askSBXSetting(cmd, "clipboard_text_copy", "Copying text", "Agents copy text, such as a command or a reply, to your clipboard. sbx lets it out of a sandbox only when let to, and then any process in a sandbox can put what you next paste here.", []pick{
+		{"yes", "Yes - copy text to my clipboard"},
+		{"no", "No - keep it in the sandbox"},
+	}, "yes"); err != nil {
+		return err
+	}
 	if err := sbx.Available(ctx); err != nil {
 		return err
 	}

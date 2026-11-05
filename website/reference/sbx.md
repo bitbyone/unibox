@@ -22,6 +22,7 @@ verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 | SSH agent | `sbx settings get/set ssh.agentForwardingEnabled`, `sbx daemon restart` |
 | `remember_host_commands`, `doctor` | `sbx settings get/set/unset env.rememberHostCommands` |
 | `clipboard_image_paste`, `doctor` | `sbx settings get/set/unset clipboard.imagePaste` |
+| `clipboard_text_copy`, `doctor` | `sbx settings get/set/unset clipboard.textCopy` |
 | `network ls` | `sbx policy ls --json --type network`, `sbx policy log --json --type network --limit 500` |
 | `network allow`/`deny` | `sbx policy allow/deny network --sandbox <sandbox> [--protocol <p>] <hosts>` |
 | `network rm` | `sbx policy rm network --force --resource <hosts> [--sandbox <sandbox>]` |

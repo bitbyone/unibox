@@ -50,12 +50,13 @@ type Config struct {
 	// EditorSSHOn says editors and desktop apps may reach sandboxes over
 	// sbx's SSH endpoint, as ssh <sandbox>.sbx; sbx is set to match.
 	EditorSSHOn *bool `yaml:"editor_ssh,omitempty" json:"editor_ssh,omitempty"`
-	// RememberHostCommands, ClaudeRemoteControl and ClipboardImagePaste
-	// are sbx's settings as the person said them here; unibox sets sbx to
+	// RememberHostCommands, ClaudeRemoteControl, ClipboardImagePaste and
+	// ClipboardTextCopy are sbx's settings as the person said them here; unibox sets sbx to
 	// match before it makes or starts a sandbox. Unsaid, sbx's own stands.
 	RememberHostCommands *bool `yaml:"remember_host_commands,omitempty" json:"remember_host_commands,omitempty"`
 	ClaudeRemoteControl  *bool `yaml:"claude_remote_control,omitempty" json:"claude_remote_control,omitempty"`
 	ClipboardImagePaste  *bool `yaml:"clipboard_image_paste,omitempty" json:"clipboard_image_paste,omitempty"`
+	ClipboardTextCopy    *bool `yaml:"clipboard_text_copy,omitempty" json:"clipboard_text_copy,omitempty"`
 	// Ports are the person's for every env: their own, or another mapping
 	// or switch of a port the teams name, under each env's own.
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`
@@ -396,6 +397,7 @@ var SBXSettings = map[string]string{
 	"remember_host_commands": "env.rememberHostCommands",
 	"claude_remote_control":  "claude.remoteControl",
 	"clipboard_image_paste":  "clipboard.imagePaste",
+	"clipboard_text_copy":    "clipboard.textCopy",
 }
 
 // SBXSetting is a setting of sbx's as the person said it in config.yaml,
@@ -408,6 +410,8 @@ func (c *Config) SBXSetting(key string) **bool {
 		return &c.ClaudeRemoteControl
 	case "clipboard_image_paste":
 		return &c.ClipboardImagePaste
+	case "clipboard_text_copy":
+		return &c.ClipboardTextCopy
 	}
 	return nil
 }

@@ -117,6 +117,18 @@ func (o *options) doctorCommand() *cobra.Command {
 					add("sbx", "pasting images", "warn", "agents paste text alone; an image pasted with Ctrl+V does nothing", "unibox config set clipboard_image_paste true lets them paste images, false says text alone")
 				}
 			}
+			// Copying out of a sandbox is off since sbx 0.51 until said, and
+			// a copy that never reaches the clipboard says nothing either.
+			if copying, err := sbx.Setting(ctx, "clipboard.textCopy"); err == nil {
+				switch said := o.manager.Config.ClipboardTextCopy; {
+				case copying == "true":
+					add("sbx", "copying text", "pass", "text copied in an agent reaches your clipboard", "")
+				case said != nil && !*said:
+					add("sbx", "copying text", "pass", "text copied in an agent stays in the sandbox, as config.yaml says", "")
+				default:
+					add("sbx", "copying text", "warn", "text copied in an agent never reaches your clipboard", "unibox config set clipboard_text_copy true lets it, false says it stays in the sandbox")
+				}
+			}
 			allowed, said := o.manager.Config.SSHAgent()
 			forwarding, err := sbx.SSHForwarding(ctx)
 			switch {

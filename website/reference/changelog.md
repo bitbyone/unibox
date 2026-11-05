@@ -13,6 +13,9 @@ unibox` or `scoop update unibox` takes the latest.
 - A team's `unibox.yaml` no longer gives a token a variable, placeholder
   and hosts of its own: where a token goes is its kit's to say, so it
   works the same for anyone using sbx alone.
+- `clipboard_text_copy` says whether text an agent copies reaches your
+  clipboard, which sbx 0.51 stopped doing until told; `init` asks it and
+  doctor says while it is off and unsaid.
 
 ## 0.6 <Badge type="tip" text="2026-11-02" />
 

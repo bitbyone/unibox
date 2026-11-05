@@ -209,7 +209,7 @@ func TestATokenSbxDidNotStoreSaysHowToGoOn(t *testing.T) {
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// sbx has said why on the terminal; its exit status is not repeated.
-	_, _, err := runAt(t, paths, "1\n2\n1\nperson\ny\n2\n", "init", repo)
+	_, _, err := runAt(t, paths, "1\n2\n1\n1\nperson\ny\n2\n", "init", repo)
 	if err == nil || err.Error() != "sbx did not store the anthropic token; run unibox init again to go on where you left off, or unibox secret to set the tokens still missing" {
 		t.Fatalf("%v", err)
 	}
@@ -280,7 +280,7 @@ func TestDoctorChecksSbxsVersionAndPlansEachEnv(t *testing.T) {
 	}
 	// An env is planned only once its args are given.
 	out, _, _ := run(t, paths, "", "doctor")
-	if !strings.Contains(out, "0.50.0") || !strings.Contains(out, "sbx asks before an env's host commands run") || !strings.Contains(out, "unibox config set clipboard_image_paste true") || strings.Contains(calls(t, log), "env plan") {
+	if !strings.Contains(out, "0.50.0") || !strings.Contains(out, "sbx asks before an env's host commands run") || !strings.Contains(out, "unibox config set clipboard_image_paste true") || !strings.Contains(out, "unibox config set clipboard_text_copy true") || strings.Contains(calls(t, log), "env plan") {
 		t.Fatalf("%s", out)
 	}
 	if _, _, err := run(t, paths, "", "var", "set", "-e", "team", "user", "me"); err != nil {
@@ -345,7 +345,7 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the one file is taken without asking; the arg; store
 	// the secrets; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n1\n1\nperson\ny\n2\nn\n", "init", repo)
+	_, said, err := runAt(t, paths, "1\n1\n1\n1\nperson\ny\n2\nn\n", "init", repo)
 	// The only env is what commands take already, so nothing is asked.
 	if err != nil || strings.Contains(said, "as the current context") {
 		t.Fatalf("%v\n%s", err, said)
@@ -395,7 +395,7 @@ func TestInitTakesEditorsOverSSHThatSbxHasOnAlready(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; the arg; store the secrets; no sandbox yet - and no
 	// question about editors.
-	if _, said, err := runAt(t, paths, "1\n1\nperson\ny\n2\nn\n", "init", repo); err != nil || strings.Contains(said, "Editors over SSH") {
+	if _, said, err := runAt(t, paths, "1\n1\n1\nperson\ny\n2\nn\n", "init", repo); err != nil || strings.Contains(said, "Editors over SSH") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if cfg, _ := paths.LoadConfig(); func() bool { on, said := cfg.EditorSSH(); return !on || !said }() {
@@ -416,7 +416,7 @@ func TestAnAgentsTokenIsASubscriptionsOrAnAPIKey(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent and editors: no; the arg; store the tokens: Claude's of
 	// the subscription, Codex's by signing in, gitlab's typed; no sandbox.
-	_, said, err := runAt(t, paths, "1\n2\n1\nperson\ny\n1\n1\nn\ny\n", "init", repo)
+	_, said, err := runAt(t, paths, "1\n2\n1\n1\nperson\ny\n1\n1\nn\ny\n", "init", repo)
 	if err != nil || !strings.Contains(said, "run /login in it the first time it starts") {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -496,7 +496,7 @@ func TestInitAwayFromARepositoryAsksForTheFile(t *testing.T) {
 	file := teamEnv(t)
 	// SSH agent: no; the file; its name as it says; the arg; no secrets
 	// stored; no sandbox.
-	_, said, err := runAt(t, paths, "1\n2\n1\n"+file+"\n\nperson\nn\nn\n", "init", t.TempDir())
+	_, said, err := runAt(t, paths, "1\n2\n1\n1\n"+file+"\n\nperson\nn\nn\n", "init", t.TempDir())
 	if err != nil || !strings.Contains(said, "no sbxenv file in") || !strings.Contains(said, "later: unibox secret set -e team") {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -540,7 +540,7 @@ func TestInitFindsEveryEnvOfTheRepository(t *testing.T) {
 	// SSH agent: no; both files as offered; review's name, as its own does
 	// not make one; dev as the default, review being added first; dev's arg;
 	// no sandboxes.
-	_, said, err := runAt(t, paths, "1\n2\n1\n0\nreview\n2\nme\nn\nn\n", "init")
+	_, said, err := runAt(t, paths, "1\n2\n1\n1\n0\nreview\n2\nme\nn\nn\n", "init")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -607,7 +607,7 @@ func TestASecondTeamsSandboxOfTheSameNameIsNamedByThePerson(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	t.Setenv("ACCESSIBLE", "1")
-	if _, said, err := runAt(t, paths, "1\n1\n1\nweb\nweb-dev\nn\n", "init", second); err != nil || !strings.Contains(said, "Sandbox name for env web") || !strings.Contains(said, "env web, sandboxes/web.sbxenv.yaml: added") {
+	if _, said, err := runAt(t, paths, "1\n1\n1\n1\nweb\nweb-dev\nn\n", "init", second); err != nil || !strings.Contains(said, "Sandbox name for env web") || !strings.Contains(said, "env web, sandboxes/web.sbxenv.yaml: added") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if cfg, _ := paths.LoadConfig(); cfg.Envs["web"].Name != "web-dev" {
@@ -858,13 +858,13 @@ func TestRememberingHostCommandsIsSbxsSetting(t *testing.T) {
 	if _, _, err := run(t, paths, "", "config", "set", "remember_host_commands", "yes"); err == nil {
 		t.Fatal("a value that is no bool went through")
 	}
-	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}, {"config", "set", "claude_remote_control", "true"}, {"config", "set", "clipboard_image_paste", "true"}} {
+	for _, args := range [][]string{{"config", "set", "remember_host_commands", "true"}, {"config", "unset", "remember_host_commands"}, {"config", "set", "claude_remote_control", "true"}, {"config", "set", "clipboard_image_paste", "true"}, {"config", "set", "clipboard_text_copy", "false"}} {
 		if _, _, err := run(t, paths, "", args...); err != nil {
 			t.Fatal(err)
 		}
 	}
 	calls, _ := os.ReadFile(log)
-	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") || !strings.Contains(string(calls), "settings set claude.remoteControl true\n") || !strings.Contains(string(calls), "settings set clipboard.imagePaste true\n") {
+	if !strings.Contains(string(calls), "settings set env.rememberHostCommands true\n") || !strings.Contains(string(calls), "settings unset env.rememberHostCommands\n") || !strings.Contains(string(calls), "settings set claude.remoteControl true\n") || !strings.Contains(string(calls), "settings set clipboard.imagePaste true\n") || !strings.Contains(string(calls), "settings set clipboard.textCopy false\n") {
 		t.Fatalf("%s", calls)
 	}
 	if cfg, _ := paths.LoadConfig(); cfg.ClipboardImagePaste == nil || !*cfg.ClipboardImagePaste {
@@ -880,19 +880,22 @@ func TestInitAsksAboutClaudesRemoteControlForAnEnvThatRunsIt(t *testing.T) {
 	}
 	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
-	// SSH agent, editors, host commands; remote control and pasting
-	// images: yes; the arg; the secrets: later; no sandbox yet.
-	_, said, err := runAt(t, paths, "1\n1\n1\n1\n1\nperson\nn\n2\nn\n", "init", repo)
-	if err != nil || !strings.Contains(said, "Claude remote control") || !strings.Contains(said, "Pasting images") {
+	// SSH agent, editors, host commands, copying text; remote control and
+	// pasting images: yes; the arg; the secrets: later; no sandbox yet.
+	_, said, err := runAt(t, paths, "1\n1\n1\n1\n1\n1\nperson\nn\n2\nn\n", "init", repo)
+	if err != nil || !strings.Contains(said, "Claude remote control") || !strings.Contains(said, "Pasting images") || !strings.Contains(said, "Copying text") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if cfg, _ := paths.LoadConfig(); cfg.ClipboardImagePaste == nil || !*cfg.ClipboardImagePaste {
 		t.Fatalf("%v", cfg.ClipboardImagePaste)
 	}
+	if cfg, _ := paths.LoadConfig(); cfg.ClipboardTextCopy == nil || !*cfg.ClipboardTextCopy {
+		t.Fatalf("%v", cfg.ClipboardTextCopy)
+	}
 	if cfg, _ := paths.LoadConfig(); cfg.ClaudeRemoteControl == nil || !*cfg.ClaudeRemoteControl {
 		t.Fatalf("%v", cfg.ClaudeRemoteControl)
 	}
-	if c := calls(t, log); !strings.Contains(c, "settings set claude.remoteControl true\n") || !strings.Contains(c, "settings set env.rememberHostCommands false\n") {
+	if c := calls(t, log); !strings.Contains(c, "settings set claude.remoteControl true\n") || !strings.Contains(c, "settings set clipboard.textCopy true\n") || !strings.Contains(c, "settings set env.rememberHostCommands false\n") {
 		t.Fatalf("%s", c)
 	}
 }
@@ -907,7 +910,7 @@ func TestTheTeamsPortsComeFromItsFilesUnderYours(t *testing.T) {
 	}
 	// SSH agent: no; editors: no; host commands: ask; the arg; store the
 	// secrets; no sandbox yet. The walk asks nothing of ports.
-	_, said, err := runAt(t, paths, "1\n2\n1\nperson\ny\n2\nn\n", "init", filepath.Dir(filepath.Dir(file)))
+	_, said, err := runAt(t, paths, "1\n2\n1\n1\nperson\ny\n2\nn\n", "init", filepath.Dir(filepath.Dir(file)))
 	if err != nil {
 		t.Fatalf("%v\n%s", err, said)
 	}
@@ -1611,7 +1614,7 @@ func TestInitKeepsEachEnvsTokensForItAlone(t *testing.T) {
 	// A keychain that keeps nothing now, as one without a session's bus,
 	// has sbx keep the tokens for every sandbox, and says why.
 	failing := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
-	if _, said, err := runAt(t, failing, "1\n1\n1\nperson\nn\nn\n", "init", filepath.Dir(filepath.Dir(teamEnv(t)))); err != nil || !strings.Contains(said, "keeps nothing now") || !strings.Contains(said, "keeps it for every sandbox") {
+	if _, said, err := runAt(t, failing, "1\n1\n1\n1\nperson\nn\nn\n", "init", filepath.Dir(filepath.Dir(teamEnv(t)))); err != nil || !strings.Contains(said, "keeps nothing now") || !strings.Contains(said, "keeps it for every sandbox") {
 		t.Fatalf("%v\n%s", err, said)
 	}
 	if err := os.WriteFile(works, nil, 0o600); err != nil {
@@ -1621,7 +1624,7 @@ func TestInitKeepsEachEnvsTokensForItAlone(t *testing.T) {
 	repo := filepath.Dir(filepath.Dir(teamEnv(t)))
 	// SSH agent: no; editors: yes; the arg; store the secrets: Claude signs
 	// in itself, gitlab's is typed into the keychain; no sandbox yet.
-	out, said, err := runAt(t, paths, "1\n1\n1\nperson\ny\n1\ngitlab-token\nn\n", "init", repo)
+	out, said, err := runAt(t, paths, "1\n1\n1\n1\nperson\ny\n1\ngitlab-token\nn\n", "init", repo)
 	if err != nil || !strings.Contains(said, "each is kept for its env alone") || !strings.Contains(out+said, "nothing is stored for anthropic") {
 		t.Fatalf("%v\n%s\n%s", err, out, said)
 	}

@@ -819,13 +819,15 @@ ssh_agent: false
 ```
 
 unagit writes this file only through `unibox config set` and the commands,
-never by hand. `remember_host_commands`, `claude_remote_control` and
-`clipboard_image_paste` are
+never by hand. `remember_host_commands`, `claude_remote_control`,
+`clipboard_image_paste` and `clipboard_text_copy` are
 sbx's settings (`env.rememberHostCommands`, `claude.remoteControl`,
-`clipboard.imagePaste`) the
+`clipboard.imagePaste`, `clipboard.textCopy`) the
 person may say here: unibox sets sbx to match before it creates or starts
 a sandbox, so the file can be edited by hand. Left out, sbx's own stand. init asks
-for `remember_host_commands` after editors over SSH, and for
+for `remember_host_commands` and `clipboard_text_copy` after editors over
+SSH (sbx 0.51 keeps text an agent copies in the sandbox until told
+otherwise, whatever the agent), and for
 `claude_remote_control` once an env it sets up runs claude, and for
 `clipboard_image_paste` once one runs claude or codex, which paste images
 with Ctrl+V; sbx serves them none until told to. doctor says so while it
