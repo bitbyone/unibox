@@ -2,6 +2,7 @@ package unibox
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -321,5 +322,16 @@ func TestMountsAreReadFromWhatSbxListsWithTheirTargets(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestACanceledCreationIsSaidSoAndExitsAsSbxDid(t *testing.T) {
+	bin := t.TempDir()
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte("#!/bin/sh\nexit 130\n"))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	err := (&SBX{}).EnvCreate(context.Background(), "dev", "", []string{"a.sbxenv.yaml"}, false, nil, io.Discard, io.Discard)
+	f, ok := errors.AsType[*Failure](err)
+	if !ok || f.Status != 130 || !strings.Contains(f.Message, "was canceled") {
+		t.Fatalf("%v", err)
 	}
 }

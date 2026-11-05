@@ -216,6 +216,11 @@ func (r *SBX) EnvCreate(ctx context.Context, name, args string, files []string, 
 	cmd := hostCommand(ctx, "sbx", argv...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
 	if err := cmd.Run(); err != nil {
+		// sbx exits 130 when the person cancels (0.51), which is no
+		// failure to look into: the next create or run goes on with it.
+		if exit, ok := errors.AsType[*exec.ExitError](err); ok && exit.ExitCode() == 130 {
+			return Fail(130, "canceled", "creating sandbox %s was canceled; unibox run or unibox sandbox create makes it when you are ready", name)
+		}
 		return fmt.Errorf("sbx env create did not create sandbox %s; see what it said above, then retry: %w", name, err)
 	}
 	return nil
