@@ -11,7 +11,7 @@ verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 | --- | --- |
 | create a sandbox | `sbx env create --name <sandbox> --env-args-file <file> <files...>`, on your terminal |
 | `doctor`'s env check | `sbx env plan` with the same files and args |
-| agent and tokens of an env | `sbx kit inspect --json`, with `--kit-arg` from your values |
+| agent and tokens of an env | `sbx kit inspect --json --resolved`, with `--kit-arg` from your values |
 | stored tokens | `sbx secret ls --json` |
 | `secret set` | `sbx secret set <service> [--command <cmd>]`, on your terminal |
 | mount a task | `sbx mount <sandbox> <host>:/work/<task>/<repo>`; `sbx umount` |

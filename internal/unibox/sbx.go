@@ -352,10 +352,12 @@ func (c KitCredential) Domains() []string {
 }
 
 // KitInspect reads a kit as sbx resolves it: a registry reference or a
-// local directory. sbx says what it cached before the JSON.
+// local directory, with the parent it extends merged in (--resolved, sbx
+// 0.51), so a token the parent asks for is needed too. sbx says what it
+// cached before the JSON.
 func (r *SBX) KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error) {
 	var k Kit
-	argv := []string{"kit", "inspect", "--json"}
+	argv := []string{"kit", "inspect", "--json", "--resolved"}
 	for _, name := range sortedKeys(args) {
 		argv = append(argv, "--kit-arg", name+"="+args[name])
 	}
