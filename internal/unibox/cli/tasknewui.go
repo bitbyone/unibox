@@ -415,7 +415,7 @@ func (m taskPickModel) View() string {
 	}
 	lines := []string{
 		titleLine(title, corner, m.width),
-		"",
+		noticeLine(m.width),
 		"  branch  " + field("branch", m.branch, "none: each its ref, its checkout's branch or the forge's default"),
 	}
 	if m.adding == "" {

@@ -177,7 +177,7 @@ func (m listModel) View() string {
 		}
 		foot = append(foot, helpLines(m.width, append(help, "q", "quit")...)...)
 	}
-	lines := []string{titleLine(listTitle.Render(m.title), m.context, m.width), ""}
+	lines := []string{titleLine(listTitle.Render(m.title), m.context, m.width), noticeLine(m.width)}
 	visible := m.visible()
 	if m.filtering || m.query != "" {
 		typing := ""

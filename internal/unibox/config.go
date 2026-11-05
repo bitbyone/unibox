@@ -57,6 +57,10 @@ type Config struct {
 	ClaudeRemoteControl  *bool `yaml:"claude_remote_control,omitempty" json:"claude_remote_control,omitempty"`
 	ClipboardImagePaste  *bool `yaml:"clipboard_image_paste,omitempty" json:"clipboard_image_paste,omitempty"`
 	ClipboardTextCopy    *bool `yaml:"clipboard_text_copy,omitempty" json:"clipboard_text_copy,omitempty"`
+	// UpdateCheck says whether unibox asks, at most daily, whether a newer
+	// unibox or sbx is out and the env repositories have new commits;
+	// unsaid, it does.
+	UpdateCheck *bool `yaml:"update_check,omitempty" json:"update_check,omitempty"`
 	// Ports are the person's for every env: their own, or another mapping
 	// or switch of a port the teams name, under each env's own.
 	Ports map[string]Port `yaml:"ports,omitempty" json:"ports,omitempty"`

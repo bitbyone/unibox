@@ -240,6 +240,14 @@ about it. Keep command output short: pipe through `head`, `tail` or
   is let go and before an idle sandbox stops; with work the forge lacks it
   stays and says so. Unibox's own AGENTS.md and its CLAUDE.md link are no
   such work.
+- **What is newer is told, never waited on.** A command at a terminal
+  claims a due check (`ClaimCheck`) and starts `unibox update-check`, a
+  hidden command, as a process of its own; it asks GitHub for unibox's and
+  sbx's releases daily and fetches the env repositories every four hours
+  without prompts, into `~/.cache/unibox/updates.json`. Commands tell what
+  the last one found after they finish and lists in the line under their
+  title (`noticeLine`); doctor asks there and then. Tests never check:
+  testenv sets `UNIBOX_NO_UPDATE_CHECK`.
 - **unibox 1 is set aside, not migrated.** Its `state.json` becomes
   `state.v1.json` with the old sandboxes named once; its config.yaml keys
   are read and dropped at the next write.

@@ -119,3 +119,16 @@ func TestAListSaysWhatLiesBeyondItsRowsAndWhereCommandsWork(t *testing.T) {
 		t.Fatalf("%s", v)
 	}
 }
+
+func TestAnUpdateStandsInTheRightCornerUnderTheTitle(t *testing.T) {
+	t.Parallel()
+	if got := rightAligned("unibox 0.8 available", 30); got != strings.Repeat(" ", 9)+"unibox 0.8 available" {
+		t.Fatalf("%q", got)
+	}
+	if got := rightAligned("unibox 0.8 available · run brew upgrade unibox", 20); lipgloss.Width(got) != 19 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("%q", got)
+	}
+	if rightAligned("", 30) != "" {
+		t.Fatal("no update drew a line")
+	}
+}

@@ -135,7 +135,7 @@ func (m tasksModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(titleLine(listTitle.Render("Tasks"), m.context, m.width) + "\n\n")
+	b.WriteString(titleLine(listTitle.Render("Tasks"), m.context, m.width) + "\n" + noticeLine(m.width) + "\n")
 	cols := [][]string{{"TASK", "SANDBOX", "AGENT", "STATE", "SESSIONS", "REPOSITORIES"}}
 	for _, r := range m.rows {
 		name := r.ID

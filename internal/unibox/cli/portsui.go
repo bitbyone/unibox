@@ -224,7 +224,7 @@ func (m portsModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n", titleLine(listTitle.Render("Ports of sandbox "+m.sandbox+", until it next starts"), m.context, m.width))
+	fmt.Fprintf(&b, "%s\n%s\n", titleLine(listTitle.Render("Ports of sandbox "+m.sandbox+", until it next starts"), m.context, m.width), noticeLine(m.width))
 	nameW, specW, startW, urlW := 4, 7, 0, 0
 	url := func(r unibox.PortState) string { return cmp.Or(strings.Join(portURLs(r), " "), "-") }
 	for _, r := range m.rows {

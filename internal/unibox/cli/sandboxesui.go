@@ -91,7 +91,7 @@ func (m sandboxesModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(titleLine(listTitle.Render("Sandboxes"), m.context, m.width) + "\n\n")
+	b.WriteString(titleLine(listTitle.Render("Sandboxes"), m.context, m.width) + "\n" + noticeLine(m.width) + "\n")
 	cols := [][]string{{"SANDBOX", "ENV", "AGENT", "STATE", "TASKS", "SESSIONS"}}
 	for _, r := range m.rows {
 		state := r.State

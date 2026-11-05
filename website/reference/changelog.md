@@ -6,6 +6,13 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- At a terminal unibox tells, after a command and in every list's right
+  corner, when an env repository has new commits or a newer unibox or sbx
+  is out, with the command that brings it. It asks in the background, at
+  most daily for releases and every four hours for the repositories;
+  `update_check: false` or `UNIBOX_NO_UPDATE_CHECK` stops it. doctor asks
+  there and then, and checks your own checkouts of env repositories too.
+
 - herdr shows a sandboxed agent's state by `HERDR_AGENT` on the session's
   `sbx exec`, as herdr asks of a wrapper, instead of unibox's plugin and
   its observer, which did not work. `unibox herdr` is gone; the first

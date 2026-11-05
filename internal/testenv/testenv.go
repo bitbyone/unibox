@@ -121,6 +121,9 @@ func Isolate() func() {
 		"GIT_CONFIG_GLOBAL":   gitconfig,
 		"GIT_CONFIG_NOSYSTEM": "1",
 		"GIT_TERMINAL_PROMPT": "0",
+		// A run asks no network what is newer, nor starts the test binary
+		// to: a test that wants the check clears it.
+		"UNIBOX_NO_UPDATE_CHECK": "1",
 	}
 	for key, value := range goEnv {
 		set[key] = value

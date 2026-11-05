@@ -32,7 +32,30 @@ unibox sandbox recreate dev   # apply the changed env to the sandbox
 unibox init                   # add a new sbxenv file as an env
 ```
 
-`unibox doctor` says when a cloned env repository is behind its remote.
+## Told what is newer
+
+At a terminal unibox tells you, after a command and in the right corner
+under every list's title, when the env repositories have new commits, or
+a newer unibox or sbx is out, with what brings it:
+
+```term
+$ unibox env ls
+...
+unibox 0.8 available · run brew upgrade unibox
+agent-sandboxes has 3 new commit(s) · run unibox env update dev
+```
+
+It asks in the background and the command never waits on it: GitHub for
+the releases once a day, `git fetch` of the env repositories every four
+hours, which never asks for a passphrase or a password - a remote that
+would is passed over. A nightly unibox is offered nightlies, a stable one
+stable releases. `unibox doctor` asks GitHub there and then, and fetches
+every env repository.
+
+```sh
+unibox config set update_check false   # never ask
+UNIBOX_NO_UPDATE_CHECK=1 unibox ...    # not this time, as in CI
+```
 
 ## Your values
 

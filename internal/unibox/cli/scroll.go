@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // A list is a part of the terminal below the prompt, not all of it: its
@@ -107,4 +108,21 @@ func titleLine(title, corner string, width int) string {
 		gap = max(width-1-lipgloss.Width(title)-lipgloss.Width(corner), 3)
 	}
 	return title + strings.Repeat(" ", gap) + corner
+}
+
+// updateNotice is what the last check found newer - unibox, sbx, an env
+// repository - one short line, set before a list is drawn and never while.
+var updateNotice string
+
+// noticeLine stands under every list's title, empty but for an update,
+// which it shows in its right corner, under the context.
+func noticeLine(width int) string { return rightAligned(updateNotice, width) }
+
+// rightAligned stands s at the right of a line width wide, cut to fit.
+func rightAligned(s string, width int) string {
+	if s == "" || width <= 0 {
+		return s
+	}
+	s = ansi.Truncate(s, width-1, "…")
+	return strings.Repeat(" ", max(width-1-lipgloss.Width(s), 0)) + s
 }

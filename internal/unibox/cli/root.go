@@ -60,13 +60,15 @@ func (o *options) root() *cobra.Command {
 		m.In, m.Out, m.Err = in, out, errout
 		o.manager = m
 		m.RemoveHerdrPlugin(cmd.Context())
+		o.prepareUpdates(cmd)
 		return nil
 	}
+	root.PersistentPostRun = func(cmd *cobra.Command, args []string) { o.tellUpdates(cmd) }
 	// What a command works on is a word of a group (unibox task rm); only
 	// the everyday ones stand alone.
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
 		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.authorCommand(), o.coAuthorCommand(), o.secretCommand(), o.portCommand(), o.networkCommand(), o.repoCommand(),
-		o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand())
+		o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand(), o.updateCheckCommand())
 	// Alone at a terminal, unibox is its sandboxes, the list one acts in
 	// most; anywhere else, or before init, it says how it is used.
 	root.Args = cobra.NoArgs
@@ -182,6 +184,10 @@ func (o *options) configCommand() *cobra.Command {
 
   default_env  the env a sandbox is created from when none is named
   stop_idle    whether a sandbox is stopped when its last session ends
+  update_check whether unibox tells of a newer unibox or sbx and of new
+               commits in the env repositories: releases asked daily,
+               repositories fetched every 4 hours, in the background
+               (UNIBOX_NO_UPDATE_CHECK=1 stops it too)
   ssh_agent    whether sandboxes may use your SSH agent (sbx is set to match)
   editor_ssh   whether editors and apps reach sandboxes as ssh <sandbox>.sbx
                (sbx is set to match, its daemon restarted)
@@ -227,7 +233,7 @@ func (o *options) configCommand() *cobra.Command {
 				return o.success("editors reach a sandbox as ssh <sandbox>.sbx")
 			}
 			return o.success("configuration updated")
-		case "stop_idle", "ssh_agent":
+		case "stop_idle", "ssh_agent", "update_check":
 			v, err := strconv.ParseBool(value)
 			if err != nil {
 				return fmt.Errorf("%s must be true or false", key)
@@ -241,7 +247,11 @@ func (o *options) configCommand() *cobra.Command {
 				}
 				return o.success("configuration updated")
 			}
-			cfg.StopIdleSandbox = &v
+			if key == "update_check" {
+				cfg.UpdateCheck = &v
+			} else {
+				cfg.StopIdleSandbox = &v
+			}
 		default:
 			return fmt.Errorf("unknown configuration key %q; the keys are %s", key, configKeys)
 		}
@@ -262,6 +272,8 @@ func (o *options) configCommand() *cobra.Command {
 			cfg.DefaultEnv = ""
 		case "stop_idle":
 			cfg.StopIdleSandbox = nil
+		case "update_check":
+			cfg.UpdateCheck = nil
 		case "ssh_agent":
 			// Unsaid, a forwarding sbx is refused; so it is turned off.
 			if err := o.setSSHAgent(cmd, false); err != nil {
@@ -286,7 +298,7 @@ func (o *options) configCommand() *cobra.Command {
 	return c
 }
 
-const configKeys = "default_env, stop_idle, ssh_agent, editor_ssh, remember_host_commands, claude_remote_control, clipboard_image_paste and clipboard_text_copy"
+const configKeys = "default_env, stop_idle, update_check, ssh_agent, editor_ssh, remember_host_commands, claude_remote_control, clipboard_image_paste and clipboard_text_copy"
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {

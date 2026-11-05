@@ -657,7 +657,7 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	}
 	git("add", ".")
 	git("commit", "-qm", "mirror")
-	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "1 commit(s) behind its remote") {
+	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "1 new commit(s) on its remote") {
 		t.Fatalf("%s", out)
 	}
 	out, _, err = run(t, paths, "", "env", "update")

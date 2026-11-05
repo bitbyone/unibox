@@ -93,6 +93,9 @@ func (o *options) doctorCommand() *cobra.Command {
 			} else {
 				add("sbx", "for unibox", "pass", version+", new enough", "")
 			}
+			if o.manager.Config.UpdateChecks() {
+				o.doctorReleases(ctx, add)
+			}
 			if remember, err := sbx.Setting(ctx, "env.rememberHostCommands"); err == nil {
 				if said := o.manager.Config.RememberHostCommands; said != nil && *said && remember == "true" {
 					add("sbx", "host commands", "pass", "sbx runs an env's host commands again without asking, as config.yaml says", "")
@@ -244,7 +247,7 @@ func (o *options) doctorCommand() *cobra.Command {
 				fix("sandbox", "recreate", sandbox)
 				checks[len(checks)-1].Cost = "it discards what the sandbox holds outside its tasks"
 			}
-			if repo := env.Config.Repo; env.Config.Source != "" && repo != "" {
+			if repo := env.Config.Repo; repo != "" {
 				if _, done := behind[repo]; !done {
 					var n int
 					err := o.working("asking the remote of "+repo, func() (err error) {
@@ -256,12 +259,12 @@ func (o *options) doctorCommand() *cobra.Command {
 					behind[repo] = n
 					switch {
 					case err != nil:
-						add(area, "clone", "warn", err.Error(), "")
+						add(area, "repository", "warn", err.Error(), "")
 					case n > 0:
-						add(area, "clone", "warn", fmt.Sprintf("%d commit(s) behind its remote", n), "unibox env update")
+						add(area, "repository", "warn", fmt.Sprintf("%d new commit(s) on its remote", n), "unibox env update "+name)
 						fix("env", "update", name)
 					default:
-						add(area, "clone", "pass", "as its remote", "")
+						add(area, "repository", "pass", "as its remote", "")
 					}
 				}
 			}

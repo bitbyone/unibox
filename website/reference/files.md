@@ -14,6 +14,7 @@ default to these, on Windows too:
 | `~/.config/unibox/state.lock`, `locks/` | locks between concurrent unibox commands |
 | `~/.cache/unibox/args/` | the args and resources files for one `sbx env create`, removed after |
 | `~/.cache/unibox/kits/` | what `sbx kit inspect` said of the env's kits |
+| `~/.cache/unibox/updates.json` | what the last check found newer, and when it asked |
 | `~/.local/share/unibox/repos/<host>/<path>` | env repositories `unibox init` cloned; `destroy --all` keeps them |
 | `~/.local/share/unibox/conversations/<task>.tar.gz` | the task's agents' conversations, kept after each session and before a recreate (mode `0600`); removed with the task |
 
@@ -65,6 +66,7 @@ sandboxes:                        # one sandbox's own, dropped with it
 context:
   sandbox: dev
 stop_idle: true
+update_check: true                # tell of newer releases and env commits
 ssh_agent: false
 editor_ssh: true
 remember_host_commands: true      # sbx's settings, set to match at each start
