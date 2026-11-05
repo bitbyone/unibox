@@ -206,7 +206,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   list's rows scroll within `listRoom` (`scroll.go`): at most
   `listMaxLines`, fewer on a short terminal, never under `listMinLines`,
   with a line above and below saying how many more lie there
-  (`scrolled`). Every list's title has the context in its right corner
+  (`scrolled`). A list with `reload` reads its rows again every
+  `reloadEvery` (the network list, for refused hosts), never while it
+  asks about a row nor after it ends (`reloads`), as an action changes
+  what it reads. Every list's title has the context in its right corner
   (`contextCorner`, `titleLine`), where it matters or not. Nothing may write to the terminal while a list is drawn. An action that takes the terminal or asks
   more ends the list and runs as its command would; without a terminal
   or with `--json` the noun lists as `ls` does.

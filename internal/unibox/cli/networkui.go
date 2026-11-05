@@ -11,13 +11,14 @@ import (
 )
 
 // networkUI is unibox network at a terminal: a sandbox's own rules and the
-// hosts it was refused lately, to allow or deny by a key: any host typed,
-// the refused one under the cursor offered.
+// hosts it was refused lately, read again every few seconds, to allow or
+// deny by a key: any host typed, the refused one under the cursor offered.
 func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 	ctx := cmd.Context()
 	var rules []api.NetworkRule
 	blocked := map[string]bool{}
-	build := func() (listModel, error) {
+	var build func() (listModel, error)
+	build = func() (listModel, error) {
 		v, err := o.manager.Network(ctx, sandbox)
 		if err != nil {
 			return listModel{}, err
@@ -46,6 +47,9 @@ func (o *options) networkUI(cmd *cobra.Command, sandbox string) error {
 			m.rows = append(m.rows, []string{portOff.Render("refused"), b.Host, "", portOff.Render(fmt.Sprintf("%d×, %s", b.Count, ago(b.LastSeen)))})
 			m.ids = append(m.ids, b.Host)
 		}
+		// Hosts are refused while the agent works, so the list shows them
+		// as they come.
+		m.reload = build
 		return m, nil
 	}
 	act := func(action, id string) (string, error) {

@@ -204,3 +204,36 @@ func TestKeysWiderThanTheTerminalWrapBetweenKeysAndNoneIsLost(t *testing.T) {
 		t.Fatalf("%s", v)
 	}
 }
+
+func TestAListReadAgainKeepsTheCursorOnItsRow(t *testing.T) {
+	t.Parallel()
+	fresh := listModel{title: "hosts", header: []string{"HOST"}, rows: [][]string{{"new"}, {"a"}, {"b"}}, ids: []string{"new", "a", "b"}}
+	reads := 0
+	m := listModel{title: "hosts", header: []string{"HOST"}, rows: [][]string{{"a"}, {"b"}}, ids: []string{"a", "b"},
+		actions: []listAction{{key: "d", name: "rm", help: "remove", confirm: "remove %s?"}},
+		reload:  func() (listModel, error) { reads++; return fresh, nil }, reloads: &reloads{}}
+	m = listKeys(m, "j")
+	if m.Init() == nil {
+		t.Fatal("a list with reload schedules no reading")
+	}
+	var tm tea.Model
+	tm, cmd := m.Update(reloadTick{})
+	tm, _ = tm.Update(cmd())
+	got := tm.(listModel)
+	if len(got.rows) != 3 || got.id() != "b" {
+		t.Fatalf("after a reading the rows are %v and the cursor on %q, not on b", got.ids, got.id())
+	}
+	// A question about a row keeps the rows it asks about.
+	asking := listKeys(got, "d")
+	if _, cmd := asking.Update(reloadTick{}); cmd == nil || reads != 1 {
+		t.Fatalf("a reading started while a question was asked, or no next one was scheduled")
+	}
+	if after, _ := asking.Update(reloaded{m: listModel{rows: [][]string{}, ids: []string{}}}); len(after.(listModel).rows) != 3 {
+		t.Fatal("a reading replaced the rows a question was about")
+	}
+	// Once the list has ended, nothing is read again.
+	got.reloads.stop()
+	if _, cmd := got.Update(reloadTick{}); cmd == nil || cmd() != nil || reads != 1 {
+		t.Fatal("a reading ran after the list ended")
+	}
+}

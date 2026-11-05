@@ -45,7 +45,10 @@ $ unibox network allow jitpack.io
 
 `network ls` lists the hosts the sandbox was refused recently, which is
 usually the quickest way to see what to allow. `--all` adds the env's and
-sbx's default hosts.
+sbx's default hosts. `unibox network` alone at a terminal is the same as a
+list to act in, read again every few seconds, so a host the agent is
+refused while you watch shows up there: `a` allows the one under the
+cursor.
 
 ## Block or remove
 

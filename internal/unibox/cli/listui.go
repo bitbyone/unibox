@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"text/tabwriter"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -54,6 +56,67 @@ type listModel struct {
 	// while filtering.
 	query     string
 	filtering bool
+	// reload, when set, reads the rows again every reloadEvery while the
+	// list is shown, for what changes on its own, such as the hosts a
+	// sandbox was refused.
+	reload  func() (listModel, error)
+	reloads *reloads
+}
+
+// reloadEvery is how often a list with reload reads its rows again.
+const reloadEvery = 3 * time.Second
+
+// reloads keeps a list's reading in the background from overlapping
+// what follows it: an action changes what reload reads, so once the list
+// ends, a reading under way is waited for and no other starts.
+type reloads struct {
+	mu      sync.Mutex
+	stopped bool
+}
+
+func (r *reloads) stop() {
+	r.mu.Lock()
+	r.stopped = true
+	r.mu.Unlock()
+}
+
+type reloadTick struct{}
+
+type reloaded struct {
+	m   listModel
+	err error
+}
+
+func (m listModel) nextReload() tea.Cmd {
+	if m.reload == nil {
+		return nil
+	}
+	return tea.Tick(reloadEvery, func(time.Time) tea.Msg { return reloadTick{} })
+}
+
+func (m listModel) readAgain() tea.Cmd {
+	reload, r := m.reload, m.reloads
+	return func() tea.Msg {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.stopped {
+			return nil
+		}
+		fresh, err := reload()
+		return reloaded{fresh, err}
+	}
+}
+
+// takeRows takes a fresh reading's rows, keeping the cursor on the row it
+// was on, and the filter, the question asked and the note as they are.
+func (m listModel) takeRows(fresh listModel) listModel {
+	at := m.id()
+	m.title, m.header, m.rows, m.ids = fresh.title, fresh.header, fresh.rows, fresh.ids
+	if i := slices.Index(m.ids, at); i >= 0 {
+		m.cursor = max(slices.Index(m.visible(), i), 0)
+	}
+	m.cursor = min(m.cursor, max(len(m.visible())-1, 0))
+	return m
 }
 
 // visible are the indexes of the rows the query leaves, the best match
@@ -92,12 +155,30 @@ func (m listModel) filter(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m listModel) Init() tea.Cmd { return nil }
+func (m listModel) Init() tea.Cmd { return m.nextReload() }
 
 func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if size, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width, m.height = size.Width, size.Height
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
 		return m, nil
+	case reloadTick:
+		if m.chosen != nil || m.done {
+			return m, nil
+		}
+		// While a question about a row waits for its answer, the rows stay
+		// as they were asked about.
+		if m.pending != nil {
+			return m, m.nextReload()
+		}
+		return m, m.readAgain()
+	case reloaded:
+		// A reading that failed leaves the rows as they were; the next may
+		// not.
+		if msg.err == nil && m.pending == nil {
+			m = m.takeRows(msg.m)
+		}
+		return m, m.nextReload()
 	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -246,8 +327,14 @@ func displayKey(k string) string {
 func (o *options) runList(cmd *cobra.Command, m listModel) (*listAction, listModel, error) {
 	m.cursor = min(m.cursor, max(len(m.visible())-1, 0))
 	m.context = o.contextCorner()
+	if m.reload != nil {
+		m.reloads = &reloads{}
+	}
 	lipgloss.HasDarkBackground()
 	out, err := tea.NewProgram(m, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(cmd.Context())).Run()
+	if m.reloads != nil {
+		m.reloads.stop()
+	}
 	if err != nil {
 		return nil, m, err
 	}
