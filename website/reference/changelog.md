@@ -16,6 +16,9 @@ unibox` or `scoop update unibox` takes the latest.
 - `clipboard_text_copy` says whether text an agent copies reaches your
   clipboard, which sbx 0.51 stopped doing until told; `init` asks it and
   doctor says while it is off and unsaid.
+- unibox needs sbx 0.51 or newer. doctor and `unibox prune` read a
+  sandbox's mounts from sbx, so they check and tidy stopped sandboxes
+  too, without starting one.
 
 ## 0.6 <Badge type="tip" text="2026-11-02" />
 

@@ -40,6 +40,9 @@ type Runtime interface {
 	SecretSetSandbox(ctx context.Context, service, sandbox, command string) error
 	SecretRemoveSandbox(ctx context.Context, service, sandbox string) error
 	Mount(ctx context.Context, sandbox, host, target string) error
+	// Mounts are a sandbox's host bind mounts as host path and target,
+	// running or stopped.
+	Mounts(ctx context.Context, sandbox string) ([][2]string, error)
 	Unmount(ctx context.Context, sandbox, host, target string) error
 	PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error)
 	PublishPort(ctx context.Context, sandbox, spec string, log io.Writer) error

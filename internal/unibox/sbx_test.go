@@ -304,3 +304,21 @@ func TestSBXTellsCopilotItDrawsInHerdr(t *testing.T) {
 		t.Fatalf("the host's own value lost: %q", args)
 	}
 }
+
+func TestMountsAreReadFromWhatSbxListsWithTheirTargets(t *testing.T) {
+	t.Parallel()
+	got := parseMounts([]string{
+		"/Users/me/.gradle/caches:/opt/gradle-host-cache:ro",
+		"/Users/me/My Work/app:/work/t/app",
+		`C:\Users\me\app:/work/t/app`,
+		"no target",
+	})
+	want := [][2]string{
+		{"/Users/me/.gradle/caches", "/opt/gradle-host-cache"},
+		{"/Users/me/My Work/app", "/work/t/app"},
+		{`C:\Users\me\app`, "/work/t/app"},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%q", got)
+	}
+}

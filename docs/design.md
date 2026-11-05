@@ -21,9 +21,9 @@ says what went and why; [sbx-pivot.md](sbx-pivot.md) is the plan of the
 change, with what each phase actually did.
 
 Checked against sbx 0.49.2 on macOS (Apple Silicon); the oldest release
-unibox accepts (`MinSBXVersion`) is 0.50.0, whose kit-declared host mounts
-the teams' kits use and which stops sbx's own host git from running what a
-workspace's .git configures. It builds without cgo for Linux, macOS
+unibox accepts (`MinSBXVersion`) is 0.51.0, which lists a sandbox's host
+mounts, after 0.50's kit-declared host mounts the teams' kits use and its
+stop to sbx's own host git running what a workspace's .git configures. It builds without cgo for Linux, macOS
 and Windows on amd64 and arm64 ([Platforms](#platforms-and-releases)). What sbx was found to do, with when and
 how, is in [What was verified about sbx](#what-was-verified-about-sbx);
 some of it was checked against 0.47 for unibox 1 and is kept because the
@@ -717,7 +717,7 @@ as init runs its steps; one needing a value or a choice (an arg, the SSH
 agent yes or no) stays a hint:
 
 - **sbx**: installed; its own `sbx diagnose` (details that may name the
-  user's account left out); a version of at least `MinSBXVersion` (0.50.0),
+  user's account left out); a version of at least `MinSBXVersion` (0.51.0),
   an older one a failure; `env.rememberHostCommands`
   (on is a warning: sbx would run an env's host commands again without
   asking); the SSH agent against the user's decision.
@@ -725,11 +725,12 @@ agent yes or no) stays a hint:
   that the env does not declare; `sbx env plan` with the complete args,
   its summary line or the first line of its error; each secret stored or
   missing (optional ones a warning); a change since its sandbox was made.
-- **the sandboxes**: one sbx no longer has; in a running one, the mounts
-  under `/work` compared with the tasks'. sbx lists no mounts; the
-  sandbox's `/proc/self/mountinfo` does, and a virtiofs mount's root is
-  the host path (verified), so a stray mount is unmounted exactly by
-  `unibox prune`, which does so for every running sandbox, under each
+- **the sandboxes**: one sbx no longer has; in a running or stopped one,
+  the mounts under `/work` compared with the tasks'. `sbx ls --json`
+  lists each sandbox's host mounts as `HOST:TARGET[:ro]` (0.51), so a
+  stray mount is unmounted exactly by `unibox prune`, which does so for
+  every sandbox sbx keeps, a stopped one's by taking it out of what its
+  next start restores, under each
   one's guard so a busy sandbox is passed and named. A task's mount the sandbox lacks is a
   warning - its next `resume` mounts it again, as after a recreation; a
   mounted host directory that is gone is a failure, since the sandbox
@@ -1019,9 +1020,11 @@ removed.
 - **Mounts are kept across stop and start**, and a saved mount whose host
   path is gone fails the start until it is removed with `sbx umount` while
   stopped. Removing a task therefore unmounts before anything else, and
-  doctor checks every mounted host path exists. sbx lists no mounts;
-  `/proc/self/mountinfo` in a running sandbox shows each with its target,
-  and the root of a virtiofs mount there is the host path.
+  doctor checks every mounted host path exists. Since 0.51 `sbx ls --json`
+  lists a sandbox's mounts, running or stopped, as `HOST:TARGET[:ro]`, the
+  kits' and skills' beside the tasks' (verified); before it only
+  `/proc/self/mountinfo` in a running sandbox showed them. `sbx umount`
+  takes a stopped sandbox's mount out of what its next start restores.
 - **A kit's ports (`port@1`) get new host ports at every start**
   (49226 became 49228), which is why unibox's named ports stay the user's.
 - **The network policy** (`sbx policy ls --json --type network`) is

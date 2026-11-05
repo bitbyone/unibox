@@ -104,8 +104,8 @@ func (m *Manager) checkRemovable(ctx context.Context, b api.Sandbox) error {
 	return m.safeBox(ctx, b)
 }
 
-// PruneMounts unmounts what a running sandbox has mounted under /work
-// that no task of it has any longer, as a task removed outside unibox
+// PruneMounts unmounts what a sandbox, running or stopped, has mounted
+// under /work that no task of it has any longer, as a task removed outside unibox
 // leaves behind, each as "sandbox: host at target". A sandbox another
 // command is busy with is left for the next prune and named in busy.
 func (m *Manager) PruneMounts(ctx context.Context) (unmounted, busy []string, err error) {
@@ -114,7 +114,9 @@ func (m *Manager) PruneMounts(ctx context.Context) (unmounted, busy []string, er
 		return nil, nil, err
 	}
 	for _, b := range boxes {
-		if b.State != "running" {
+		// sbx takes a stopped sandbox's mount out of what its next start
+		// restores.
+		if b.State != "running" && b.State != "stopped" {
 			continue
 		}
 		guard, err := m.guard(b.Name)

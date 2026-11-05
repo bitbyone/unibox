@@ -126,9 +126,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
   with `rmdir` as root - never `rm -rf` over a mount. A task whose
   mounted checkout the host moved off its branch is refused, not switched
   back (`checkMountedBranches`). `--clone` clones from the forge inside
-  instead. sbx lists no mounts; a running sandbox's
-  `/proc/self/mountinfo` does, with the host path as the mount's root,
-  which doctor compares with the tasks.
+  instead. `sbx ls --json` lists a sandbox's mounts, running or stopped
+  (`SBX.Mounts`), which doctor compares with the tasks and `prune`
+  unmounts when no task has them.
 - **The agent is the kit's.** Its entrypoint names it; unibox runs it
   with `sbx exec` in the task's directory and prepares it before every
   session: claude's trust in `~/.claude.json`, copilot's

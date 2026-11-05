@@ -237,7 +237,7 @@ func envArgs(verb, name, args string, files []string) []string {
 
 // MinSBXVersion is the oldest sbx unibox was checked against: sbxenv
 // files, args files, kit args and mounts as unibox uses them.
-const MinSBXVersion = "0.50.0"
+const MinSBXVersion = "0.51.0"
 
 // RequireVersion refuses an sbx older than MinSBXVersion: an older one
 // takes the env's files in a form it does not know, or reads them
@@ -522,6 +522,42 @@ func (r *SBX) Mount(ctx context.Context, sandbox, host, target string) error {
 		return fmt.Errorf("sbx did not mount %s at %s: %w", host, target, err)
 	}
 	return nil
+}
+
+// Mounts are what sbx ls says a sandbox has mounted from the host, as
+// HOST:TARGET with :ro after a read-only one (sbx 0.51). Only the drive's
+// colon of a Windows path comes before the target's, which has none.
+func (r *SBX) Mounts(ctx context.Context, sandbox string) ([][2]string, error) {
+	b, err := commandOutput(hostCommand(ctx, "sbx", "ls", "--json"))
+	if err != nil {
+		return nil, err
+	}
+	sandboxes, err := sbxList[struct {
+		Name   string
+		Mounts []string
+	}](b, "sandboxes")
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse sbx sandbox list; update sbx: %w", err)
+	}
+	for _, v := range sandboxes {
+		if v.Name == sandbox {
+			return parseMounts(v.Mounts), nil
+		}
+	}
+	return nil, fmt.Errorf("sbx has no sandbox %s; unibox sandbox recreate %s makes it again", sandbox, sandbox)
+}
+
+func parseMounts(specs []string) [][2]string {
+	out := [][2]string{}
+	for _, s := range specs {
+		s = strings.TrimSuffix(strings.TrimSuffix(s, ":ro"), ":rw")
+		at := strings.LastIndex(s, ":")
+		if at <= 0 || !strings.HasPrefix(s[at+1:], "/") {
+			continue
+		}
+		out = append(out, [2]string{s[:at], s[at+1:]})
+	}
+	return out
 }
 
 // Unmount names the mount as it was made: sbx takes one with a target back

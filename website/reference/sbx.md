@@ -2,7 +2,7 @@
 
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) does the
 work: each sandbox is a micro-VM with its own kernel, Docker Engine and
-disk, persistent until removed. Unibox needs **sbx 0.50.0 or newer**,
+disk, persistent until removed. Unibox needs **sbx 0.51.0 or newer**,
 verified on macOS (Apple Silicon); `unibox doctor` fails on an older one.
 
 ## Commands unibox runs
@@ -55,8 +55,9 @@ secret overrides any other `Authorization` to github.com.
 
 **Mounts.** `sbx mount` is live and writable, kept across stop and start;
 a mount whose host path is gone fails the start, so `task rm` unmounts
-first and `doctor` checks paths. sbx lists no mounts; `doctor` reads
-`/proc/self/mountinfo` in the sandbox. A mount's parent directories are
+first and `doctor` checks paths. `sbx ls --json` lists each sandbox's
+mounts, running or stopped, which `doctor` compares with the tasks and
+`prune` unmounts. A mount's parent directories are
 root's, so the agent cannot write beside the repository.
 
 **Ports.** `sbx ports` publishes live on loopback; a taken host port is

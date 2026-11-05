@@ -283,7 +283,7 @@ func (o *options) doctorCommand() *cobra.Command {
 					add("Sandboxes", b.Name, "warn", "sbx no longer has it", "unibox prune forgets it, or unibox sandbox recreate "+b.Name+" makes it again")
 					continue
 				}
-				if b.State == "running" {
+				if b.State == "running" || b.State == "stopped" {
 					var missing [][2]string
 					var stray [][2]string
 					err := o.working("reading the mounts of sandbox "+b.Name, func() error {

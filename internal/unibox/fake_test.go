@@ -39,7 +39,7 @@ type fakeRuntime struct {
 	// creates no sandbox.
 	policyUnchosen bool
 	// mounted is what each sandbox has mounted, host and target, which
-	// the guest's /proc/self/mountinfo shows.
+	// sbx ls shows.
 	mounted                              map[string][][2]string
 	next                                 int
 	failCreate, failUnmount, keepMounted bool
@@ -262,6 +262,13 @@ func (f *fakeRuntime) Mount(_ context.Context, sandbox, host, target string) err
 }
 
 // Unmount leaves the empty mount point sbx leaves.
+func (f *fakeRuntime) Mounts(_ context.Context, sandbox string) ([][2]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// A kit's mount, which is no task's, stands beside the tasks'.
+	return append([][2]string{{"/cache", "/home/agent/.cache/x"}}, f.mounted[sandbox]...), nil
+}
+
 func (f *fakeRuntime) Unmount(_ context.Context, sandbox, host, target string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -349,15 +356,6 @@ func (f *fakeRuntime) Exec(ctx context.Context, name string, c Command) *exec.Cm
 		args[i] = replace(a)
 	}
 	f.mu.Lock()
-	if slices.Contains(c.Args, "/proc/self/mountinfo") {
-		info := "99 69 0:29 / / rw,relatime - overlay overlay rw\n"
-		for i, mt := range f.mounted[name] {
-			info += fmt.Sprintf("%d 99 0:55 %s %s rw,nosuid - virtiofs host rw\n", 100+i, strings.ReplaceAll(mt[0], " ", `\040`), strings.ReplaceAll(mt[1], " ", `\040`))
-		}
-		at := filepath.Join(f.root, name+".mountinfo")
-		_ = os.WriteFile(at, []byte(info), 0o600)
-		args = []string{"cat", at}
-	}
 	f.record("exec " + name + " " + strings.Join(c.Args, " "))
 	if c.Interactive {
 		f.hostEnv = slices.Clone(c.HostEnv)
