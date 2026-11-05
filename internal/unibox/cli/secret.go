@@ -183,10 +183,6 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			switch {
 			case way.SignIn:
 				set = func() error { return o.manager.SBX.SecretSignIn(cmd.Context(), service, o.input, o.output, o.log) }
-			case way.Env != "":
-				set = func() error {
-					return o.manager.SBX.SecretSetCustom(cmd.Context(), way.Env, way.Placeholder, way.Hosts, o.input, o.output, o.log)
-				}
 			}
 			if err := set(); err != nil {
 				return tokenNotStored{err}
@@ -236,10 +232,6 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			}
 			return o.success(fmt.Sprintf("%s takes the %s %s token again", scope, over, strings.Join(args, ", ")))
 		}
-		guides, err := unibox.TokenGuides(env.Config.Files)
-		if err != nil {
-			return err
-		}
 		secrets, err := o.manager.SBX.Secrets(cmd.Context())
 		if err != nil {
 			return err
@@ -247,20 +239,10 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 		removed := []string{}
 		for _, service := range args {
 			for _, s := range secrets {
-				if s.Scope != "global" {
+				if s.Scope != "global" || s.Type == "custom" || s.Name != service {
 					continue
 				}
-				switch {
-				case s.Type != "custom" && s.Name == service:
-					err = o.manager.SBX.SecretRemove(cmd.Context(), service, "")
-				case s.Type == "custom" && slices.ContainsFunc(guides[service].AllWays(), func(w unibox.TokenWay) bool { return w.Env != "" && w.Env == s.Env }):
-					// A subscription's token kept in a variable is the
-					// service's too.
-					err = o.manager.SBX.SecretRemove(cmd.Context(), "", s.Placeholder)
-				default:
-					continue
-				}
-				if err != nil {
+				if err := o.manager.SBX.SecretRemove(cmd.Context(), service, ""); err != nil {
 					return err
 				}
 				removed = append(removed, service)
@@ -489,12 +471,6 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		case way.SignIn:
 			fmt.Fprintf(o.log, "sbx keeps the %s sign-in for every sandbox, not for %s alone\n", way.Name, scope)
 			if err := o.manager.SBX.SecretSignIn(ctx, service, o.input, o.output, o.log); err != nil {
-				return tokenNotStored{err}
-			}
-			return o.success(fmt.Sprintf("sbx has stored %s for every sandbox", service))
-		case way.Env != "":
-			fmt.Fprintf(o.log, "sbx keeps %s for every sandbox, not for %s alone\n", way.Name, scope)
-			if err := o.manager.SBX.SecretSetCustom(ctx, way.Env, way.Placeholder, way.Hosts, o.input, o.output, o.log); err != nil {
 				return tokenNotStored{err}
 			}
 			return o.success(fmt.Sprintf("sbx has stored %s for every sandbox", service))

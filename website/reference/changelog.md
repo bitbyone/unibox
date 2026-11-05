@@ -10,6 +10,9 @@ unibox` or `scoop update unibox` takes the latest.
   `sbx exec`, as herdr asks of a wrapper, instead of unibox's plugin and
   its observer, which did not work. `unibox herdr` is gone; the first
   command after upgrading unlinks the plugin.
+- A team's `unibox.yaml` no longer gives a token a variable, placeholder
+  and hosts of its own: where a token goes is its kit's to say, so it
+  works the same for anyone using sbx alone.
 
 ## 0.6 <Badge type="tip" text="2026-11-02" />
 

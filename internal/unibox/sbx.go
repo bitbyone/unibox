@@ -402,23 +402,6 @@ func (r *SBX) Secrets(ctx context.Context) ([]Secret, error) {
 	return list, nil
 }
 
-// SecretSetCustom has sbx ask on the terminal for a token it keeps as a
-// custom secret: the sandbox sees placeholder in env, and the proxy puts
-// the token in its place on requests to hosts. The value goes to sbx
-// alone.
-func (r *SBX) SecretSetCustom(ctx context.Context, env, placeholder string, hosts []string, in io.Reader, out, errout io.Writer) error {
-	args := []string{"secret", "set-custom", "--env", env, "--placeholder", placeholder}
-	for _, h := range hosts {
-		args = append(args, "--host", h)
-	}
-	cmd := hostCommand(ctx, "sbx", args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, out, errout
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sbx did not store the token for %s", env)
-	}
-	return nil
-}
-
 func (r *SBX) SecretSetSandbox(ctx context.Context, service, sandbox, command string) error {
 	// A sandbox sbx env rm removed and env create made again under its
 	// name keeps getting the global token after a set alone, though sbx

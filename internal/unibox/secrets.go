@@ -49,9 +49,6 @@ type NeededSecret struct {
 	// keychain.
 	Scope string `json:"scope,omitempty"`
 	Own   string `json:"own,omitempty"`
-	// Variable is the variable a token kept the way a subscription's is
-	// stands in, for one stored so.
-	Variable string `json:"variable,omitempty"`
 	// Page is where the token is made, and Hint what to make there.
 	Page string `json:"page,omitempty"`
 	Hint string `json:"hint,omitempty"`
@@ -88,12 +85,6 @@ type TokenWay struct {
 	// does with a subscription (/login); sbx keeps the sign-in, and
 	// nothing is stored now.
 	Agent bool `yaml:"agent"`
-	// Env, Placeholder and Hosts keep the token as a custom secret: the
-	// sandbox sees Placeholder in Env, and the proxy replaces it on
-	// requests to Hosts.
-	Env         string   `yaml:"env"`
-	Placeholder string   `yaml:"placeholder"`
-	Hosts       []string `yaml:"hosts"`
 }
 
 // AllWays are the ways a guide offers, a guide of one page or command as
@@ -276,15 +267,6 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 		}
 		if c, ok := m.Config.Sandboxes[sandbox].Secrets[service]; ok && c.Command != "" {
 			l.Stored, l.Scope, l.Own = true, "sandbox "+sandbox, ownText(c)
-		}
-		// A token kept the way a subscription's is, in a variable, stands
-		// for the service's.
-		for _, w := range guides[service].AllWays() {
-			for _, s := range secrets {
-				if !l.Stored && w.Env != "" && s.Type == "custom" && s.Env == w.Env && (s.Scope == "global" || s.Scope == sandbox) {
-					l.Stored, l.Scope, l.Variable = true, s.Scope+", "+w.Name, s.Env
-				}
-			}
 		}
 		out = append(out, l)
 	}
@@ -822,12 +804,6 @@ func (m *Manager) SecretOverview(ctx context.Context) (out []SecretUse, skipped 
 				switch {
 				case !l.Stored:
 					r = row("", l.Service, "missing")
-				case l.Variable != "":
-					scope, _, _ := strings.Cut(l.Scope, ", ")
-					if scope != "global" {
-						scope = "sbx sandbox " + scope
-					}
-					r = row(scope, l.Variable, "variable")
 				case l.Own != "":
 					r = row(l.Scope, l.Service, l.Own)
 				case l.Scope == "global":

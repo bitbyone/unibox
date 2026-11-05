@@ -34,7 +34,6 @@ type Runtime interface {
 	Secrets(ctx context.Context) ([]Secret, error)
 	SecretSet(ctx context.Context, service, command string, in io.Reader, out, errout io.Writer) error
 	SecretSignIn(ctx context.Context, service string, in io.Reader, out, errout io.Writer) error
-	SecretSetCustom(ctx context.Context, env, placeholder string, hosts []string, in io.Reader, out, errout io.Writer) error
 	SecretRemove(ctx context.Context, service, placeholder string) error
 	// SecretSetSandbox and SecretRemoveSandbox keep and forget a token of
 	// one sandbox's own, read by a command on the host.

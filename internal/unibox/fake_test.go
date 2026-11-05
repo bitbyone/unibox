@@ -205,14 +205,6 @@ func (f *fakeRuntime) Secrets(context.Context) ([]Secret, error) {
 	return slices.Clone(f.secrets), nil
 }
 
-func (f *fakeRuntime) SecretSetCustom(_ context.Context, env, placeholder string, _ []string, _ io.Reader, _, _ io.Writer) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.record("secret set-custom " + env)
-	f.secrets = append(f.secrets, Secret{Scope: "global", Type: "custom", Env: env, Placeholder: placeholder})
-	return nil
-}
-
 func (f *fakeRuntime) SecretSetSandbox(_ context.Context, service, sandbox, command string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
