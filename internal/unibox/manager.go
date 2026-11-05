@@ -685,7 +685,7 @@ func (m *Manager) safeBox(ctx context.Context, b api.Sandbox) error {
 	}
 	for _, t := range b.Tasks {
 		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(safeToRemoveScript(t))}), m.Log); err != nil {
-			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before recreating or removing the sandbox, or discard it with --force", t.ID)
+			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before recreating or removing the sandbox, or discard it with --force", t.Name())
 		}
 	}
 	return nil

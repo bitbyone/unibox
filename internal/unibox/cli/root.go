@@ -541,7 +541,7 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			if err := o.manager.Remove(ctx, t.Sandbox, t.ID, false); err != nil {
 				fmt.Fprintln(o.log, err)
 			} else {
-				fmt.Fprintf(o.log, "removed task %s\n", t.ID)
+				fmt.Fprintf(o.log, "removed task %s\n", t.Name())
 			}
 		}
 	}

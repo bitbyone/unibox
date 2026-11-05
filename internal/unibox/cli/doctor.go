@@ -311,7 +311,7 @@ func (o *options) doctorCommand() *cobra.Command {
 							continue
 						}
 						if _, err := os.Stat(r.HostPath); err != nil {
-							add("Sandboxes", b.Name, "fail", "task "+t.ID+" mounts "+r.HostPath+", which is gone, so the sandbox cannot start", "unibox task rm "+t.ID)
+							add("Sandboxes", b.Name, "fail", "task "+t.Name()+" mounts "+r.HostPath+", which is gone, so the sandbox cannot start", "unibox task rm "+t.Name())
 						}
 					}
 				}

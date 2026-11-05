@@ -147,7 +147,7 @@ done
 func safeToRemoveScript(t api.Task) string {
 	var b strings.Builder
 	b.WriteString("set -eu\nexport GIT_TERMINAL_PROMPT=0\n")
-	fmt.Fprintf(&b, "echo %s\n", Quote("checking task "+t.ID+" for work not on the forge"))
+	fmt.Fprintf(&b, "echo %s\n", Quote("checking task "+t.Name()+" for work not on the forge"))
 	for _, r := range t.Repositories {
 		b.WriteString(repoCheck(t, r))
 	}

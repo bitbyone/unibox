@@ -186,3 +186,12 @@ type Error struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 }
+
+// Name is what the person calls the task: the alias they gave it, else
+// its ID. Either finds it, so a message names it as the person knows it.
+func (t Task) Name() string {
+	if t.Alias != "" {
+		return t.Alias
+	}
+	return t.ID
+}

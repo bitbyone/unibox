@@ -291,7 +291,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 		case i < 0:
 			added = append(added, nr)
 		case digest(t.Repositories[i]) != digest(nr):
-			return t, nil, fmt.Errorf("task %s already has a repository named %s; give the new one another name with --repo name=source", t.ID, nr.Name)
+			return t, nil, fmt.Errorf("task %s already has a repository named %s; give the new one another name with --repo name=source", t.Name(), nr.Name)
 		}
 	}
 	if len(added) == 0 {
@@ -307,7 +307,7 @@ func (m *Manager) AddRepositories(ctx context.Context, req Request) (api.Task, [
 	defer usage.Close()
 	part := t
 	part.Repositories = added
-	fmt.Fprintf(m.Log, "adding %d repositories to task %s\n", len(added), t.ID)
+	fmt.Fprintf(m.Log, "adding %d repositories to task %s\n", len(added), t.Name())
 	if err = m.mountTask(ctx, b, part); err != nil {
 		return t, nil, err
 	}
@@ -358,10 +358,10 @@ func (m *Manager) RemoveRepository(ctx context.Context, task, repo string, force
 	t := b.Tasks[i]
 	j := slices.IndexFunc(t.Repositories, func(r api.Repository) bool { return r.Name == repo })
 	if j < 0 {
-		return t, fmt.Errorf("task %s has no repository %s; unibox task ls lists what it holds", t.ID, repo)
+		return t, fmt.Errorf("task %s has no repository %s; unibox task ls lists what it holds", t.Name(), repo)
 	}
 	if len(t.Repositories) == 1 {
-		return t, fmt.Errorf("%s is the only repository of task %s; unibox task rm %s removes the task", repo, t.ID, t.ID)
+		return t, fmt.Errorf("%s is the only repository of task %s; unibox task rm %s removes the task", repo, t.Name(), t.Name())
 	}
 	r := t.Repositories[j]
 	part := t
@@ -379,7 +379,7 @@ func (m *Manager) RemoveRepository(ctx context.Context, task, repo string, force
 		if !force {
 			check := "set -eu\nexport GIT_TERMINAL_PROMPT=0\n" + repoCheck(part, r)
 			if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(check)}), m.Log); err != nil {
-				return t, Fail(4, "unpushed_work", "%s in task %s may contain unpushed work; preserve it before removing it, or discard it with unibox task rm-repo --force %s %s", repo, t.ID, t.ID, repo)
+				return t, Fail(4, "unpushed_work", "%s in task %s may contain unpushed work; preserve it before removing it, or discard it with unibox task rm-repo --force %s %s", repo, t.Name(), t.Name(), repo)
 			}
 		}
 		dir := path.Join(t.Directory, r.Name)
@@ -445,9 +445,9 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 		// A shell joins a task whose agent works in it: the task is ready,
 		// so nothing is prepared that the agent could be in the middle of.
 		if !(resume && req.Shell && t.State == "ready") {
-			return b, t, nil, nil, fmt.Errorf("task %s already has an active session; wait for it to finish, or join it with unibox resume %s --shell", t.ID, t.ID)
+			return b, t, nil, nil, fmt.Errorf("task %s already has an active session; wait for it to finish, or join it with unibox resume %s --shell", t.Name(), t.Name())
 		}
-		fmt.Fprintf(m.Log, "joining task %s beside its running session\n", t.ID)
+		fmt.Fprintf(m.Log, "joining task %s beside its running session\n", t.Name())
 		taskLock = nil
 	}
 	success := false
@@ -475,14 +475,14 @@ func (m *Manager) prepare(ctx context.Context, req Request, resume bool) (api.Sa
 	}
 	// The agent asked for, else the one the task ran last, else the env's.
 	t.Agent = cmp.Or(req.Agent, t.Agent, b.Agent)
-	m.progress("preparing task " + t.ID)
+	m.progress("preparing task " + t.Name())
 	if !resume || t.State != "ready" {
 		t.State = "preparing"
 		replaceTask(&b, t)
 		if err = m.claimTask(b, t.ID); err != nil {
 			return b, t, nil, nil, err
 		}
-		fmt.Fprintf(m.Log, "preparing task %s\n", t.ID)
+		fmt.Fprintf(m.Log, "preparing task %s\n", t.Name())
 		if err = m.mountTask(ctx, b, t); err != nil {
 			return b, t, nil, nil, err
 		}
@@ -664,10 +664,10 @@ func (m *Manager) Run(ctx context.Context, req Request, in io.Reader, out, errou
 		after = func() {
 			m.keepConversations(ctx, b, t)
 			if err := m.removeTask(context.WithoutCancel(ctx), b.Name, t.ID, false); err != nil {
-				fmt.Fprintf(m.Log, "task %s kept: %v; unibox task rm %s removes it once its work is safe\n", t.ID, err, t.ID)
+				fmt.Fprintf(m.Log, "task %s kept: %v; unibox task rm %s removes it once its work is safe\n", t.Name(), err, t.Name())
 				return
 			}
-			fmt.Fprintf(m.Log, "removed task %s\n", t.ID)
+			fmt.Fprintf(m.Log, "removed task %s\n", t.Name())
 		}
 	}
 	defer m.finishRun(b, run, lease, usage, taskLock, after)
@@ -978,7 +978,7 @@ func (m *Manager) removeTask(ctx context.Context, name, task string, force bool)
 	// Its clones are checked for unpushed work before anything goes.
 	if exists && !force {
 		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(safeToRemoveScript(removed))}), m.Log); err != nil {
-			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before removing it, or discard it with unibox task rm --force %s", task, task)
+			return Fail(4, "unpushed_work", "task %s may contain unpushed work; preserve it before removing it, or discard it with unibox task rm --force %s", removed.Name(), removed.Name())
 		}
 	}
 	if exists {

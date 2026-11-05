@@ -101,7 +101,7 @@ func (m *Manager) keepConversations(ctx context.Context, b api.Sandbox, t api.Ta
 		err = writePrivate(m.Paths.conversationsFile(t.ID), out)
 	}
 	if err != nil {
-		fmt.Fprintf(m.Log, "unibox: the conversations of task %s were not kept on this computer: %v\n", t.ID, err)
+		fmt.Fprintf(m.Log, "unibox: the conversations of task %s were not kept on this computer: %v\n", t.Name(), err)
 	}
 }
 
@@ -116,7 +116,7 @@ func (m *Manager) restoreConversations(ctx context.Context, b api.Sandbox, t api
 		return
 	}
 	if err = runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", restoreConversationsScript}, Input: bytes.NewReader(kept)}), m.Log); err != nil {
-		fmt.Fprintf(m.Log, "unibox: the conversations of task %s were not put back; its agent starts afresh: %v\n", t.ID, err)
+		fmt.Fprintf(m.Log, "unibox: the conversations of task %s were not put back; its agent starts afresh: %v\n", t.Name(), err)
 	}
 }
 
@@ -124,7 +124,7 @@ func (m *Manager) restoreConversations(ctx context.Context, b api.Sandbox, t api
 // sandbox. A failure is told and nothing more: the task is gone already.
 func (m *Manager) removeConversations(ctx context.Context, b api.Sandbox, t api.Task) {
 	if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-c", removeConversationsScript(conversationDirs(t))}}), m.Log); err != nil {
-		fmt.Fprintf(m.Log, "unibox: the conversations of task %s stayed in sandbox %s: %v\n", t.ID, b.Name, err)
+		fmt.Fprintf(m.Log, "unibox: the conversations of task %s stayed in sandbox %s: %v\n", t.Name(), b.Name, err)
 	}
 }
 

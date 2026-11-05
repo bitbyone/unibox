@@ -620,7 +620,7 @@ func checkMountedBranches(ctx context.Context, t api.Task) error {
 		if current != "" {
 			on, other = "branch "+current, "a task on "+current
 		}
-		return Fail(4, "branch_moved", "task %s works on branch %s, but %s is on %s now; switch it back with git -C %s switch %s, or start %s with unibox run in it", t.ID, r.Branch, r.HostPath, on, Quote(r.HostPath), r.Branch, other)
+		return Fail(4, "branch_moved", "task %s works on branch %s, but %s is on %s now; switch it back with git -C %s switch %s, or start %s with unibox run in it", t.Name(), r.Branch, r.HostPath, on, Quote(r.HostPath), r.Branch, other)
 	}
 	return nil
 }

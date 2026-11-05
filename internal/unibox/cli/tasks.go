@@ -285,11 +285,11 @@ func (o *options) addRepoCommand() *cobra.Command {
 			return o.write(map[string]any{"api_version": api.Version, "task": t, "added": added})
 		}
 		if len(added) == 0 {
-			fmt.Fprintf(o.output, "task %s already holds these repositories\n", t.ID)
+			fmt.Fprintf(o.output, "task %s already holds these repositories\n", t.Name())
 			return nil
 		}
 		for _, r := range added {
-			fmt.Fprintf(o.output, "added %s to task %s at %s/%s\n", r.Name, t.ID, t.Directory, r.Name)
+			fmt.Fprintf(o.output, "added %s to task %s at %s/%s\n", r.Name, t.Name(), t.Directory, r.Name)
 		}
 		return nil
 	}}
@@ -314,7 +314,7 @@ func (o *options) removeRepoCommand() *cobra.Command {
 		if o.json {
 			return o.write(map[string]any{"api_version": api.Version, "task": t})
 		}
-		return o.success("removed " + args[1] + " from task " + t.ID)
+		return o.success("removed " + args[1] + " from task " + t.Name())
 	}}
 	c.Flags().BoolVar(&force, "force", false, "Remove a clone with its unpushed work, discarding it")
 	return c

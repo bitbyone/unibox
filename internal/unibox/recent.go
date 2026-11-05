@@ -91,7 +91,7 @@ func (p Paths) ForgetRecent(env, source string) error {
 			b := s.Sandboxes[name]
 			for _, t := range b.Tasks {
 				if (env == "" || b.Env == env) && slices.ContainsFunc(t.Repositories, func(r api.Repository) bool { return r.HostPath == source || r.URL == source }) {
-					return fmt.Errorf("task %s holds %s, which is offered while it does; unibox task rm %s removes the task", t.ID, source, t.ID)
+					return fmt.Errorf("task %s holds %s, which is offered while it does; unibox task rm %s removes the task", t.Name(), source, t.Name())
 				}
 			}
 		}

@@ -827,7 +827,7 @@ func (o *options) addTaskRepos(cmd *cobra.Command, t api.Task) error {
 		return err
 	}
 	for _, r := range added {
-		fmt.Fprintf(o.log, "added %s to task %s at %s/%s\n", r.Name, t.ID, t.Directory, r.Name)
+		fmt.Fprintf(o.log, "added %s to task %s at %s/%s\n", r.Name, t.Name(), t.Directory, r.Name)
 	}
 	return nil
 }
