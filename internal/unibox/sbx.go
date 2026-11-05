@@ -255,11 +255,15 @@ func RequireVersion(ctx context.Context, r Runtime) error {
 
 var semver = regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
 
-// Version is the release of sbx, as sbx version prints it.
+// Version is the release of sbx, as sbx --version prints it: since 0.51
+// without starting the daemon, which sbx version may. An older sbx, which
+// unibox refuses, says its release by sbx version.
 func (r *SBX) Version(ctx context.Context) (string, error) {
-	b, err := commandOutput(hostCommand(ctx, "sbx", "version"))
-	if err != nil {
-		return "", err
+	b, err := commandOutput(hostCommand(ctx, "sbx", "--version"))
+	if err != nil || !semver.Match(b) {
+		if b, err = commandOutput(hostCommand(ctx, "sbx", "version")); err != nil {
+			return "", err
+		}
 	}
 	m := semver.FindStringSubmatch(string(b))
 	if m == nil {

@@ -63,6 +63,7 @@ func TestSBXChecksSSHForwardingAndReadsWhatItLists(t *testing.T) {
 case "$1 $2" in
 settings*) cat `+Quote(settings)+` ;;
 "version ") echo "sbx version v$(cat `+Quote(version)+`) abc" ;;
+"--version ") case "$(cat `+Quote(version)+`)" in 0.48.*) ;; *) echo "sbx version v$(cat `+Quote(version)+`) abc" ;; esac ;;
 ls*) echo '[{"name":"dev","id":"vm-id","status":"stopped","agent":"copilot"}]' ;;
 "kit inspect") echo "Cached kit ./kits/agent"; echo '{"kind":"sandbox","name":"agent","sandbox":{"entrypoint":["copilot"],"command":{"default":["--yolo"]}},"credentials":[{"service":"copilot","optional":false}]}' ;;
 "secret ls") echo '[{"scope":"global","type":"service","name":"github"}]' ;;

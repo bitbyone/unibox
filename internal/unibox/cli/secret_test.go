@@ -31,7 +31,7 @@ echo "$*" >> ` + unibox.Quote(log) + `
 case "$1 $2" in
 "settings get")
 	if [ "$3" = feature.ssh ] && [ -f ` + unibox.Quote(filepath.Join(dir, "editor-ssh")) + ` ]; then echo '{"value":{"enabled":true}}'; else echo '{"value":false}'; fi ;;
-"version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.51.0) 1234abc" ;;
+"version "|"--version ") echo "sbx version v$(cat ` + unibox.Quote(filepath.Join(dir, "version")) + ` 2>/dev/null || echo 0.51.0) 1234abc" ;;
 "diagnose --format")
 	if [ -f ` + unibox.Quote(filepath.Join(dir, "policy-unchosen")) + ` ]; then echo '{"checks":[{"name":"Global network policy","status":"fail","message":"not initialized"}]}'; exit 1; fi
 	echo '{"checks":[]}' ;;
@@ -448,7 +448,7 @@ func TestInitRefusesAnOldSbxBeforeAskingAnything(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "0.48.0 is older than the "+unibox.MinSBXVersion) {
 		t.Fatalf("%v\n%s", err, said)
 	}
-	if c := calls(t, log); c != "version\n" {
+	if c := calls(t, log); c != "--version\n" {
 		t.Fatalf("init went on with an old sbx:\n%s", c)
 	}
 	if cfg, _ := paths.LoadConfig(); len(cfg.Envs) != 0 {
