@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -311,8 +310,7 @@ func (o *options) changeSetting(cmd *cobra.Command, key, env, now string) (strin
 		}
 	}
 	if risk := settingOf(key).risk; !on && risk != "" {
-		fmt.Fprintln(o.log, risk)
-		yes, err := o.askYes("Turn "+key+" on?", false)
+		yes, err := o.askYesAbout("Turn "+key+" on?", risk, false)
 		if err != nil || !yes {
 			return "", err
 		}

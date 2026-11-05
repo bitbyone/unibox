@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
@@ -58,11 +59,25 @@ func (o *options) runField(field huh.Field) (err error) {
 		}
 		f = f.WithWidth(width)
 	}
-	if err := f.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return errCancelled
+	if o.accessible() {
+		if err := f.Run(); err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				return errCancelled
+			}
+			return err
 		}
+		return nil
+	}
+	// huh leaves a question it was told to leave with an interrupt, which
+	// ends the program without drawing it away, so the question would stay
+	// above a list drawn again after it. Quitting draws the form's last
+	// view, which is nothing, in its place.
+	f.SubmitCmd, f.CancelCmd = tea.Quit, tea.Quit
+	if _, err := tea.NewProgram(f, tea.WithInput(o.input), tea.WithOutput(o.log)).Run(); err != nil {
 		return err
+	}
+	if f.State == huh.StateAborted {
+		return errCancelled
 	}
 	return nil
 }
@@ -180,8 +195,15 @@ func (o *options) askChoices(title, description string, options, preset []string
 
 // askYes asks a yes or no question.
 func (o *options) askYes(title string, preset bool) (bool, error) {
+	return o.askYesAbout(title, "", preset)
+}
+
+// askYesAbout asks a yes or no question with what to know before
+// answering it, which goes when the question does.
+func (o *options) askYesAbout(title, description string, preset bool) (bool, error) {
+	o.describe(description)
 	value := preset
-	if err := o.runField(huh.NewConfirm().Title(title).Value(&value)); err != nil {
+	if err := o.runField(huh.NewConfirm().Title(title).Description(description).Value(&value)); err != nil {
 		return false, err
 	}
 	return value, nil
