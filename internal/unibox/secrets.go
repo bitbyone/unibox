@@ -288,11 +288,17 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 // a list drawn again, and on disk for the next command - for a kit of
 // files until one of them changes, for a registry's until a day passes or,
 // pinned by digest, for good.
+//
+// A registry's kits are read side by side, a kit of files one after
+// another: sbx builds one in its builder sandbox, which the first build
+// creates, and builds started together each try to create it, all but
+// one refused as a conflict.
 func (m *Manager) readKits(ctx context.Context, env Env) ([]Kit, error) {
 	values, _ := m.Paths.LoadEnvValues()
 	kits := make([]Kit, len(env.SBX.Kits))
 	errs := make([]error, len(env.SBX.Kits))
 	var wg sync.WaitGroup
+	var building sync.Mutex
 	for i, k := range env.SBX.Kits {
 		ref := k.Source
 		if k.Dir != "" {
@@ -316,6 +322,10 @@ func (m *Manager) readKits(ctx context.Context, env Env) ([]Kit, error) {
 					m.kits.Store(key, kits[i])
 					return
 				}
+			}
+			if k.Dir != "" {
+				building.Lock()
+				defer building.Unlock()
 			}
 			if kits[i], errs[i] = m.SBX.KitInspect(ctx, ref, args); errs[i] != nil {
 				return

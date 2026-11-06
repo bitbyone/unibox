@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tobola/unibox/internal/testenv"
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -503,5 +504,60 @@ func TestATokenTypedAnewLeavesTheKeychainItemAnotherScopeReads(t *testing.T) {
 	}
 	if got := c.SharableSecrets(SecretScope{Env: "other"}, "gitlab"); len(got) != 2 || got[0] != (SecretScope{Env: "team"}) || got[1] != (SecretScope{Sandbox: "personal"}) {
 		t.Fatalf("%+v", got)
+	}
+}
+
+// buildingRuntime tells whether sbx was asked to build two kits of files at
+// once, which a builder sandbox not yet made refuses.
+type buildingRuntime struct {
+	*fakeRuntime
+	mu               sync.Mutex
+	building, most   int
+	registry, others int
+}
+
+func (b *buildingRuntime) KitInspect(ctx context.Context, ref string, args map[string]string) (Kit, error) {
+	local := filepath.IsAbs(ref)
+	b.mu.Lock()
+	if local {
+		b.building++
+		b.most = max(b.most, b.building)
+	} else {
+		b.registry++
+		b.others = max(b.others, b.registry)
+	}
+	b.mu.Unlock()
+	time.Sleep(20 * time.Millisecond)
+	b.mu.Lock()
+	if local {
+		b.building--
+	} else {
+		b.registry--
+	}
+	b.mu.Unlock()
+	return b.fakeRuntime.KitInspect(ctx, ref, args)
+}
+
+func TestKitsOfFilesAreBuiltOneAtATime(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	b := &buildingRuntime{fakeRuntime: f}
+	m.SBX = b
+	env := mustEnv(t, m)
+	env.SBX.Kits = nil
+	for i := range 4 {
+		env.SBX.Kits = append(env.SBX.Kits,
+			EnvKit{Source: "../kits/k" + fmt.Sprint(i), Dir: t.TempDir()},
+			EnvKit{Source: "docker.io/acme/k" + fmt.Sprint(i) + ":1"})
+	}
+	kits, err := m.readKits(context.Background(), env)
+	if err != nil || len(kits) != 8 {
+		t.Fatalf("%v %d", err, len(kits))
+	}
+	if b.most != 1 {
+		t.Fatalf("%d kits of files built at once", b.most)
+	}
+	if b.others < 2 {
+		t.Fatalf("a registry's kits were read one at a time")
 	}
 }
