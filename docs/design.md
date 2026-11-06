@@ -200,8 +200,8 @@ host                                   sandbox VM
   host. Forced or not, a mounted directory of the host is never deleted.
 - **Mounts outlive a stop** (verified), and a mount whose host path is
   gone stops the sandbox from starting; doctor names such a task. A
-  recreated sandbox has no mounts; preparing its tasks again mounts them
-  again.
+  recreated sandbox has no mounts; its tasks are pending, and each is
+  mounted again when it is resumed.
 
 ### A clone instead, when asked
 

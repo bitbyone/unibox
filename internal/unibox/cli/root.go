@@ -606,9 +606,10 @@ func (o *options) recreateCommand() *cobra.Command {
 	var force bool
 	c := &cobra.Command{Use: "recreate [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Create a sandbox again from its env as it is now, keeping its tasks", Long: `Remove a sandbox and create it again from its env's files and your args as
 they are now, after checking for running sessions and unpushed work. Its
-tasks come back: mounted directories are mounted again, clones are made
-again from the forge. What the sandbox held outside its tasks is lost, and
-with --force what its tasks' clones held that the forge lacks as well.`, RunE: func(cmd *cobra.Command, args []string) error {
+tasks are kept: each is prepared again when it is next resumed - its
+directories mounted, its clones made from the forge, its conversations put
+back. What the sandbox held outside its tasks is lost, and with --force
+what its tasks' clones held that the forge lacks as well.`, RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := o.sandboxName(first(args))
 		if err != nil {
 			return err

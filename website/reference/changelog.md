@@ -6,6 +6,10 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `sandbox recreate` no longer prepares every task again: each is mounted
+  or cloned, and given its conversations back, when it is next resumed,
+  so a recreate takes as long as sbx does.
+
 - `unibox config` alone at a terminal is the settings in tabs: Global,
   then each env with its own over Global and its args, to change in place.
 - `stop_idle` can be an env's own (`unibox config set stop_idle false -e

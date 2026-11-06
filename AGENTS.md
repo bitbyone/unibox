@@ -100,7 +100,9 @@ about it. Keep command output short: pipe through `head`, `tail` or
   an env and its host commands. A creation that did not finish is retried
   by the next `create` or `run`. The sandbox keeps a fingerprint of the
   files, kits and args; a change is told by doctor and the next start, and
-  applied only by `sandbox recreate`, which brings the tasks back.
+  applied only by `sandbox recreate`, which keeps the tasks pending: each
+  is prepared again - mounted, cloned, its conversations put back - by
+  its next resume, so a recreate costs nothing per task.
   `--adopt` takes over a sandbox made with sbx, which unibox then removes
   only when forced.
 - **Secrets are sbx's secrets, global unless a scope says otherwise.**

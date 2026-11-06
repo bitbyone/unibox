@@ -849,6 +849,75 @@ func TestATaskIsRemovedWhileAnotherTaskOfItsSandboxHasASession(t *testing.T) {
 	}
 }
 
+func TestARecreatedSandboxsTasksArePreparedWhenResumed(t *testing.T) {
+	t.Parallel()
+	remote, host := remoteFixture(t)
+	m, f := managerFixture(t)
+	url := "https://forge.invalid/team/payments.git"
+	f.remotes[url] = "file://" + remote
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, req := range []Request{
+		{Sandbox: "dev", Task: "cloned", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "main"}}},
+		{Sandbox: "dev", Task: "kept", Author: "Person <person@example.com>", Repositories: []RepoInput{{Source: url, Name: "payments", Branch: "main"}}},
+		{Sandbox: "dev", Task: "local", Repositories: []RepoInput{{Source: host, Name: "checkout"}}},
+	} {
+		if _, err := m.Prepare(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mounted := len(f.called("mount "))
+	if err := m.Recreate(ctx, "dev", false); err != nil {
+		t.Fatal(err)
+	}
+	// Nothing of a task is made again by the recreate itself.
+	if got := len(f.called("mount ")); got != mounted {
+		t.Fatalf("mounted %d times, %d before", got, mounted)
+	}
+	for _, task := range []string{"cloned", "kept", "local"} {
+		if _, err := os.Stat(filepath.Join(f.root, "dev", "work", task)); err == nil {
+			t.Fatalf("%s was prepared by the recreate", task)
+		}
+	}
+	if missing, stray, err := m.MountDrift(ctx, mustSandbox(t, m, "dev")); err != nil || len(missing) != 0 || len(stray) != 0 {
+		t.Fatalf("%v %v %v", missing, stray, err)
+	}
+	// A task never resumed since is removed as it is, with nothing to check.
+	if err := m.Remove(ctx, "dev", "cloned", false); err != nil {
+		t.Fatal(err)
+	}
+	// Resumed, a task is mounted or cloned again.
+	for _, task := range []string{"kept", "local"} {
+		_, _, usage, taskLock, err := m.prepare(ctx, Request{Sandbox: "dev", Task: task}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		usage.Close()
+		taskLock.Close()
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "dev", "work", "kept", "payments", ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(f.called("mount ")); got != mounted+1 {
+		t.Fatalf("mounted %d times, %d before", got, mounted)
+	}
+	b := mustSandbox(t, m, "dev")
+	if len(b.Tasks) != 2 || b.Tasks[0].State != "ready" || b.Tasks[1].State != "ready" {
+		t.Fatalf("%+v", b.Tasks)
+	}
+}
+
+func mustSandbox(t *testing.T, m *Manager, name string) api.Sandbox {
+	t.Helper()
+	b, err := m.sandbox(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func TestForceDiscardsWorkOnlyTheSandboxHas(t *testing.T) {
 	t.Parallel()
 	remote, _ := remoteFixture(t)
@@ -1153,18 +1222,32 @@ func TestATasksConversationsOutliveARecreateOfItsSandbox(t *testing.T) {
 	if !strings.Contains(string(listed), filepath.Base(filepath.Dir(conversation("pricing")))) || strings.Contains(string(listed), "pricing-2") {
 		t.Fatalf("%s", listed)
 	}
-	// A recreate keeps every task's before the sandbox goes, and the tasks
-	// get them back.
+	// A recreate keeps every task's before the sandbox goes. The tasks wait,
+	// neither cloned nor given them, until each is resumed, which gets its
+	// own back.
 	if err := m.Recreate(ctx, "dev", false); err != nil {
 		t.Fatal(err)
 	}
-	for _, task := range []string{"pricing", "pricing-2"} {
-		if b, err := os.ReadFile(conversation(task)); err != nil || string(b) != task+"'s\n" {
-			t.Fatalf("%s: %q %v", task, b, err)
+	b, err := m.sandbox("dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range b.Tasks {
+		if task.State != "pending" {
+			t.Fatalf("%s is %s", task.ID, task.State)
+		}
+		if _, err := os.Stat(filepath.Join(f.root, "dev", "work", task.ID)); err == nil {
+			t.Fatalf("%s was prepared by the recreate", task.ID)
 		}
 	}
 	if args := run(Request{Task: "pricing"}); args != "--dangerously-skip-permissions --continue" {
 		t.Fatalf("%q", args)
+	}
+	run(Request{Task: "pricing-2"})
+	for _, task := range []string{"pricing", "pricing-2"} {
+		if b, err := os.ReadFile(conversation(task)); err != nil || string(b) != task+"'s\n" {
+			t.Fatalf("%s: %q %v", task, b, err)
+		}
 	}
 	// sbx keeps claude's conversations on a disk a recreate leaves, so
 	// they may be there already: what is there stays, and nothing fails.

@@ -728,9 +728,11 @@ func (m *Manager) removeBox(ctx context.Context, b api.Sandbox) error {
 	return m.SBX.Remove(ctx, b.Name)
 }
 
-// Recreate creates a sandbox again from its env as it is now, and puts its
-// tasks back: their clones are checked for unpushed work first, unless
-// forced, and made again; their host directories are mounted again.
+// Recreate creates a sandbox again from its env as it is now, after its
+// tasks' clones are checked for unpushed work, unless forced. Its tasks are
+// kept, pending: each is prepared again - mounted, cloned from the forge,
+// given its conversations back - when it is next resumed, as a sandbox
+// may hold many and a session wants one.
 func (m *Manager) Recreate(ctx context.Context, name string, force bool) error {
 	l, err := m.guard(name)
 	if err != nil {
@@ -744,31 +746,7 @@ func (m *Manager) Recreate(ctx context.Context, name string, force bool) error {
 	if b.Adopted {
 		return fmt.Errorf("sandbox %s was adopted, so unibox does not know how it was made; recreate it with sbx, or remove it with unibox sandbox rm --force", name)
 	}
-	if err = m.ensure(ctx, &b, env, true, force); err != nil {
-		return err
-	}
-	return m.restoreTasks(ctx, &b, env)
-}
-
-// restoreTasks prepares a sandbox's tasks again after it was created anew.
-func (m *Manager) restoreTasks(ctx context.Context, b *api.Sandbox, env Env) error {
-	for i := range b.Tasks {
-		if err := m.mountTask(ctx, *b, b.Tasks[i]); err != nil {
-			return err
-		}
-		if err := runLogged(m.SBX.Exec(ctx, b.Name, Command{Args: []string{"bash", "-s"}, Input: strings.NewReader(prepareScript(b.Tasks[i]))}), m.Log); err != nil {
-			return err
-		}
-		if err := m.setAuthor(ctx, *b, &b.Tasks[i], m.author(env, b.Name, "")); err != nil {
-			return err
-		}
-		m.restoreConversations(ctx, *b, b.Tasks[i])
-		b.Tasks[i].State = "ready"
-		if err := m.saveBox(*b); err != nil {
-			return err
-		}
-	}
-	return nil
+	return m.ensure(ctx, &b, env, true, force)
 }
 
 func (m *Manager) List(ctx context.Context) ([]api.Sandbox, error) {

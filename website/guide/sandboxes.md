@@ -42,7 +42,6 @@ $ unibox sandbox recreate dev
 removing sandbox dev to create it again from env dev
 creating sandbox dev from env dev
 [dim]... sbx shows its plan and asks to approve it ...[/]
-mounted /Users/jdoe/code/api at /work/login/api in sandbox dev again
 sandbox recreated
 ```
 
@@ -51,9 +50,10 @@ With `--yes` sbx applies the env's plan without asking; with
 does not ask again for host commands it was shown before.
 
 This removes the sandbox and creates it again from the env as it is now.
-Tasks come back: mounts are mounted again, clones are cloned again from the
-forge, and the agents' conversations are put back, so a resumed task
-carries on where it was. Anything else in the sandbox, such as installed packages or Docker
+Tasks are kept, and each is prepared again when you next resume it: its
+directories mounted, its clones cloned again from the forge, its agents'
+conversations put back, so it carries on where it was, and a recreate
+does not wait on tasks you may not open soon. Anything else in the sandbox, such as installed packages or Docker
 images, is lost. It refuses while a session runs or a clone has unpushed
 work.
 
