@@ -1368,3 +1368,53 @@ func TestRunSaysWhatItDoesUntilTheAgentTakesTheTerminal(t *testing.T) {
 		t.Fatalf("%q", said)
 	}
 }
+
+func TestATaskOfNoRepositoryIsADirectoryOfItsOwn(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Prepare(ctx, Request{Sandbox: "dev", Bare: true}); err == nil || !strings.Contains(err.Error(), "needs a name") {
+		t.Fatalf("%v", err)
+	}
+	prepared, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "scratch", Bare: true})
+	if err != nil || prepared.Directory != "/work/scratch" || prepared.Task != "scratch" {
+		t.Fatalf("%v %+v", err, prepared)
+	}
+	if info, err := os.Stat(filepath.Join(f.root, "dev", "work", "scratch")); err != nil || !info.IsDir() {
+		t.Fatalf("%v", err)
+	}
+	// Asked again, it is the task there is.
+	if again, err := m.Prepare(ctx, Request{Sandbox: "dev", Task: "scratch", Bare: true}); err != nil || again.Task != "scratch" {
+		t.Fatalf("%v %+v", err, again)
+	}
+}
+
+func TestATaskOfOneContextRepositoryStartsAboveIt(t *testing.T) {
+	t.Parallel()
+	work := api.Task{Directory: "/work/t", Repositories: []api.Repository{{Name: "api"}}}
+	read := api.Task{Directory: "/work/t", Repositories: []api.Repository{{Name: "spec", Context: true}}}
+	if got := sessionDir(work, ""); got != "/work/t/api" {
+		t.Fatal(got)
+	}
+	if got := sessionDir(read, ""); got != "/work/t" {
+		t.Fatal(got)
+	}
+	if got := sessionDir(api.Task{Directory: "/work/t"}, ""); got != "/work/t" {
+		t.Fatal(got)
+	}
+}
+
+func TestAFreshTaskNameIsTwoWordsNoTaskHas(t *testing.T) {
+	t.Parallel()
+	taken := map[string]bool{}
+	for range 200 {
+		name := FreshTaskName(func(n string) bool { return taken[n] })
+		if taken[name] || ValidName(name) != nil || strings.Count(name, "-") < 1 {
+			t.Fatal(name)
+		}
+		taken[name] = true
+	}
+}

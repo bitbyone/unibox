@@ -105,6 +105,14 @@ $ unibox task new
 - A context repository keeps its `ref` whatever the branch.
 - A generated task name follows the first repository you picked by hand
   and work in, so two tasks on the same decisions stay apart.
+- A task may hold no repository: with nothing picked, enter starts one
+  that is a directory of its own, `/work/<task>`, named as typed after `t`
+  or with a name made up, such as `brave-otter`; `unibox task add-repo`
+  adds repositories to it later. An env whose index names none opens the
+  screen all the same.
+- A task's session starts in its one repository, but one only read - a
+  context repository alone - is no place to work, so it starts in the
+  task's directory above it.
 - Nothing is asked of a forge while you pick. As the task starts, unibox
   looks once, with git, whether the branch exists already in a repository
   worked in, and asks whether to work on it there.
@@ -137,7 +145,8 @@ and picked, on its own branch until a branch is typed. A checkout of a
 repository the index clones takes that row's place and name.
 
 Named, without the screen, `task new` takes those named and the `always`
-ones, with `--branch`, `--task` and `--no-push`.
+ones, with `--branch`, `--task` and `--no-push`; with none of them,
+`unibox task new --task scratch` is a task of no repository.
 
 ## In run
 

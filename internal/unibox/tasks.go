@@ -59,6 +59,9 @@ func checkNeeds(needs []api.Need) error {
 }
 
 func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume bool) (api.Task, error) {
+	if len(req.Repositories) == 0 && req.Bare {
+		return m.bareTask(req, b, resume)
+	}
 	if len(req.Repositories) == 0 && req.Task != "" {
 		for _, t := range b.Tasks {
 			if t.ID == req.Task {
@@ -112,6 +115,35 @@ func (m *Manager) task(ctx context.Context, req Request, b *api.Sandbox, resume 
 			if !containsRepositories(old.Repositories, own) {
 				return t, fmt.Errorf("task %s belongs to different repositories, branches or authors; choose another --task name", id)
 			}
+			t.Repositories = old.Repositories
+			if resume && old.State == "ready" {
+				return old, nil
+			}
+		}
+	}
+	return t, nil
+}
+
+// bareTask is a task of no repository, by the name asked for: its own
+// directory, which repositories can be added to later. A task of that name
+// in the sandbox is resumed, whatever it holds.
+func (m *Manager) bareTask(req Request, b *api.Sandbox, resume bool) (api.Task, error) {
+	if req.Task == "" {
+		return api.Task{}, fmt.Errorf("a task with no repository needs a name; pass --task <name>")
+	}
+	if err := ValidName(req.Task); err != nil {
+		return api.Task{}, err
+	}
+	state, err := m.Paths.ReadState()
+	if err != nil {
+		return api.Task{}, err
+	}
+	if other := taskOwner(state, req.Task); other != "" && other != b.Name {
+		return api.Task{}, fmt.Errorf("task %s already exists in sandbox %s; choose another --task name", req.Task, other)
+	}
+	t := api.Task{ID: req.Task, Sandbox: b.Name, Directory: "/work/" + req.Task, Repositories: []api.Repository{}, State: "pending"}
+	for _, old := range b.Tasks {
+		if old.ID == req.Task {
 			t.Repositories = old.Repositories
 			if resume && old.State == "ready" {
 				return old, nil

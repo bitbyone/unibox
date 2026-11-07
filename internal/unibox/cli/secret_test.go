@@ -1735,3 +1735,23 @@ func TestTheGitHubTokenIsOfferedTheSameAsTheCopilotToken(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestANewTaskOfNoRepositoryGoesOnPastThePick(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	// An env whose index names nothing still starts a task: with nothing
+	// picked it goes on to the sandbox, which the stand-in cannot make;
+	// the manager's tests prepare such a task.
+	if _, said, err := run(t, paths, "", "task", "new", "-e", "team", "--task", "scratch", "--shell"); err == nil || !strings.Contains(err.Error(), "sbx did not list the new sandbox team") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if _, _, err := run(t, paths, "", "task", "new", "-e", "team", "--task", "Not Valid"); err == nil || !strings.Contains(err.Error(), "invalid name") {
+		t.Fatalf("%v", err)
+	}
+}

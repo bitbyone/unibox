@@ -71,9 +71,10 @@ func instructionsScript(t api.Task, text string) string {
 }
 
 // sessionDir is where a task's session starts: above its repositories when
-// it is told of them, else in its one repository.
+// it is told of them, else in its one repository - one worked in, as one
+// only read is no place to work.
 func sessionDir(t api.Task, instructions string) string {
-	if len(t.Repositories) == 1 && instructions == "" {
+	if len(t.Repositories) == 1 && !t.Repositories[0].Context && instructions == "" {
 		return path.Join(t.Directory, t.Repositories[0].Name)
 	}
 	return t.Directory

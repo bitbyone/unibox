@@ -526,11 +526,20 @@ index, are searched with / and listed with r, and a adds the one under the
 cursor to the index in your config.yaml. Named, or without a terminal, the
 task takes those named and every one that says always - with no index
 names, those that say on as well - with --branch and --task. The task then
-runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  unibox task new payments adrs --branch feat/pricing\n  unibox task new spec --task pricing --shell"}
+runs as unibox run does.
+
+A task may hold no repository: nothing picked, it is a directory of its
+own, /work/<task>, named by --task or t, else with a name made up, such
+as brave-otter. Repositories can be added to it later (unibox task
+add-repo). A task of one context repository alone starts in its own
+directory too, as a repository only read is no place to work.`, Example: "  unibox task new\n  unibox task new .\n  unibox task new payments adrs --branch feat/pricing\n  unibox task new spec --task pricing --shell\n  unibox task new --task scratch"}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		req := unibox.Request{Sandbox: sandbox, Env: envFlag, Task: task, Agent: agent, Author: author, Shell: shell, Remove: remove}
 		o.defaultTarget(&req)
-		_, env, err := o.manager.Definition(req)
+		// A new task's name finds no sandbox, as no task has it yet.
+		probe := req
+		probe.Task = ""
+		_, env, err := o.manager.Definition(probe)
 		if err != nil {
 			return err
 		}
@@ -547,9 +556,6 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 			default:
 				return fmt.Errorf("%s is neither a directory nor a repository env %s names; unibox repo ls lists them", a, env.Name)
 			}
-		}
-		if len(env.Repos) == 0 && len(dirs) == 0 && !(len(args) == 0 && o.canAsk() && o.hasRecent(env.Name)) {
-			return fmt.Errorf("env %s names no repositories; unibox repo add adds one, or the team's unibox.yaml under repos:, or name a directory of yours: unibox task new .", env.Name)
 		}
 		rows := taskRows(cmd.Context(), env.Repos)
 		host, replaced, err := hostRows(cmd.Context(), dirs, rows)
@@ -574,7 +580,9 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 				return err
 			}
 		}
-		// The name the screen showed is the one the task gets.
+		// The name the screen showed is the one the task gets; --task is
+		// one typed before.
+		picked.task = cmp.Or(picked.task, task)
 		req.Task = cmp.Or(picked.taskName(), req.Task)
 		if err := o.confirmBranch(cmd, picked); err != nil {
 			return err
@@ -583,7 +591,10 @@ runs as unibox run does.`, Example: "  unibox task new\n  unibox task new .\n  u
 		// context repository is never pushed to.
 		req.Repositories = picked.inputs()
 		if len(req.Repositories) == 0 {
-			return fmt.Errorf("no repository picked; pick one with space, or name it: unibox task new <repo>")
+			// A task of none is a directory of its own, named as the
+			// screen showed, or anew without one.
+			req.Bare = true
+			req.Task = cmp.Or(req.Task, picked.bare, unibox.FreshTaskName(func(n string) bool { return o.taskNames()[n] }))
 		}
 		if o.json {
 			return fmt.Errorf("task new owns the terminal, as run does; use task check or prepare with --json")

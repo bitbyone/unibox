@@ -6,6 +6,12 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `task new` starts a task of no repository: with nothing picked it is a
+  directory of its own, named after `t` or `--task`, else with a name made
+  up such as `brave-otter`. An env whose index names none opens the screen
+  too. A task of one context repository alone starts in the task's
+  directory, not in the repository it only reads.
+
 - The copilot token is asked for before the github token, and an env or
   sandbox with a copilot token of its own offers *The copilot token* for
   github, so one token can be given for both. The team's `unibox.yaml`

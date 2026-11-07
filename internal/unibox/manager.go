@@ -193,7 +193,7 @@ func (m *Manager) taskSandbox(task string, preparing bool) (string, error) {
 // the request names it.
 func (m *Manager) Definition(req Request) (api.Sandbox, Env, error) {
 	if req.Sandbox == "" && req.Env == "" && req.Task != "" {
-		name, err := m.taskSandbox(m.taskID(req.Task), len(req.Repositories) > 0)
+		name, err := m.taskSandbox(m.taskID(req.Task), len(req.Repositories) > 0 || req.Bare)
 		if err != nil {
 			return api.Sandbox{}, Env{}, err
 		}

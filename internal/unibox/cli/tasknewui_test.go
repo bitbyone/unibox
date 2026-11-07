@@ -242,3 +242,26 @@ func TestRecentRepositoriesAreSearchedShownWhenAskedAndNamedInTheIndex(t *testin
 		t.Fatalf("%v\n%s", forgot, v)
 	}
 }
+
+func TestANewTaskOfNothingPickedIsADirectoryOfItsOwn(t *testing.T) {
+	t.Parallel()
+	repos := map[string]unibox.IndexedRepo{"spec": {URL: "https://forge.example.com/biz/spec.git", Default: unibox.RepoOff}}
+	var tm tea.Model = taskPickModel{env: "dev", rows: taskRows(context.Background(), repos), existing: map[string]bool{}, bare: "brave-otter"}
+	if v := tm.View(); !strings.Contains(v, "task brave-otter (generated)") || !strings.Contains(v, "a directory of its own") {
+		t.Fatalf("%s", v)
+	}
+	tm = taskKeys(tm, "enter")
+	if got := tm.(taskPickModel); !got.done || len(got.inputs()) != 0 || got.taskName() != "brave-otter" {
+		t.Fatalf("%+v", got)
+	}
+	// Repositories added to a task are picked first.
+	var adding tea.Model = taskPickModel{env: "dev", adding: "pricing", rows: taskRows(context.Background(), repos), existing: map[string]bool{}}
+	if got := taskKeys(adding, "enter").(taskPickModel); got.done || !strings.Contains(got.note, "pick a repository") {
+		t.Fatalf("%+v", got)
+	}
+	// An index of nothing says so.
+	var empty tea.Model = taskPickModel{env: "dev", existing: map[string]bool{}, bare: "calm-heron"}
+	if v := empty.View(); !strings.Contains(v, "the index names no repositories") {
+		t.Fatalf("%s", v)
+	}
+}

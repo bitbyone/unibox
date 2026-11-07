@@ -228,7 +228,10 @@ about it. Keep command output short: pipe through `head`, `tail` or
   task, cloned even beside mounted directories, as mount or clone is per
   repository (`RepoInput.Clone`); `context` ones (unsaid: `always`) keep
   their ref and are never pushed to. `task new` picks on one screen
-  (`taskPickModel`): roles, work branch, push per row, task name.
+  (`taskPickModel`): roles, work branch, push per row, task name. Nothing
+  picked is a task of no repository (`Request.Bare`), named as typed or
+  made up (`FreshTaskName`); a session starts in a task's one repository
+  only when it is worked in (`sessionDir`).
   `instructions:` of the env and each repository become the task's
   `/work/<task>/AGENTS.md` (`CLAUDE.md` a link) before each session.
   `task add-repo` mounts or clones as the task's first repositories were,

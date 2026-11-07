@@ -97,6 +97,9 @@ type Request struct {
 	// Clone clones them in it instead; with neither, a task mounts when
 	// every source is a directory of the host, and clones otherwise.
 	Mount, Clone bool
+	// Bare makes a task of the name asked for with no repository, where
+	// none is asked for: a directory of its own to work in.
+	Bare bool
 }
 
 // decide settles whether a request's repositories are mounted or cloned;

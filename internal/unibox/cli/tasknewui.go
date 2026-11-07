@@ -86,6 +86,8 @@ type taskPickModel struct {
 	input        string
 	// existing are the tasks unibox has, which a name of theirs resumes.
 	existing map[string]bool
+	// bare is the name a task of no repository gets unless one is typed.
+	bare string
 	// context stands in the title's corner after the task's name: where
 	// commands work.
 	context string
@@ -189,7 +191,7 @@ func (m taskPickModel) taskName() string {
 	}
 	repos := append(mounted, cloned...)
 	if len(repos) == 0 {
-		return ""
+		return m.bare
 	}
 	return unibox.TaskID(m.lead(), repos)
 }
@@ -272,11 +274,11 @@ func (m taskPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gaveUp = true
 		return m, tea.Quit
 	case "enter":
-		for _, r := range m.rows {
-			if r.picked {
-				m.done = true
-				return m, tea.Quit
-			}
+		// A new task may hold none, a directory of its own; repositories
+		// added to a task are picked.
+		if m.adding == "" || slices.ContainsFunc(m.rows, func(r taskRepo) bool { return r.picked }) {
+			m.done = true
+			return m, tea.Quit
 		}
 		m.note = "pick a repository with space first"
 	case "/":
@@ -488,7 +490,9 @@ func (m taskPickModel) View() string {
 		}
 		table = append(table, []string{box, r.name, role, from, branch, push, about})
 	}
-	if len(visible) == 0 && m.recentCount() > 0 && !m.showRecent && m.query == "" {
+	if len(m.rows) == 0 {
+		lines = append(lines, portHelp.Render("  the index names no repositories; unibox repo add names one"))
+	} else if len(visible) == 0 && m.recentCount() > 0 && !m.showRecent && m.query == "" {
 		lines = append(lines, portHelp.Render("  the index names nothing to add; r shows the repositories your tasks have held"))
 	} else if len(visible) == 0 {
 		lines = append(lines, portHelp.Render("  nothing matches"))
@@ -501,6 +505,9 @@ func (m taskPickModel) View() string {
 		lines = append(append(lines, rows[0]), scrolled(body[first:end], first, end, len(body))...)
 	}
 	summary := fmt.Sprintf("%d picked", picked)
+	if picked == 0 && m.adding == "" {
+		summary += " · the task is a directory of its own"
+	}
 	if m.branch != "" {
 		summary += fmt.Sprintf(" · branch %s in %d, pushed from %d", m.branch, working, pushed)
 	}
@@ -645,7 +652,8 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 		}
 		rows = append(rows, recentRows(ctx, recent, rows, taken)...)
 	}
-	m := taskPickModel{env: env.Name, branch: branch, rows: rows, existing: map[string]bool{}, context: o.contextCorner()}
+	m := taskPickModel{env: env.Name, branch: branch, rows: rows, existing: o.taskNames(), context: o.contextCorner()}
+	m.bare = unibox.FreshTaskName(func(n string) bool { return m.existing[n] })
 	m.name = func(name string, r unibox.IndexedRepo) (string, error) {
 		scope := unibox.Scope{Env: env.Name}
 		return o.scopeText(scope), o.manager.SetRepo(scope, name, r)
@@ -676,16 +684,6 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 	if !slices.ContainsFunc(m.rows, func(r taskRepo) bool { return !r.recent }) {
 		m.showRecent = true
 	}
-	if state, err := o.paths.ReadState(); err == nil {
-		for _, b := range state.Sandboxes {
-			for _, t := range b.Tasks {
-				m.existing[t.ID] = true
-				if t.Alias != "" {
-					m.existing[t.Alias] = true
-				}
-			}
-		}
-	}
 	if o.accessible() {
 		labels, preset := []string{}, []string{}
 		nameW := 0
@@ -699,20 +697,23 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 				preset = append(preset, label)
 			}
 		}
-		chosen, err := o.askChoices("Repositories for a new task in env "+env.Name, "", labels, preset, nil)
-		if err != nil {
-			return m, err
+		if len(labels) > 0 {
+			chosen, err := o.askChoices("Repositories for a new task in env "+env.Name, "", labels, preset, nil)
+			if err != nil {
+				return m, err
+			}
+			for i := range m.rows {
+				m.rows[i].picked = slices.Contains(chosen, labels[i])
+			}
 		}
-		for i := range m.rows {
-			m.rows[i].picked = slices.Contains(chosen, labels[i])
-		}
+		var err error
 		if m.branch, err = o.askText("Branch of the repositories worked in", "Empty keeps each its ref, its checkout's branch or the forge's default", "", nil); err != nil {
 			return m, err
 		}
 		if adding != nil {
 			return m, nil
 		}
-		if m.task, err = o.askText("Task name", "Empty names it after its repositories", "", func(s string) error {
+		if m.task, err = o.askText("Task name", "Empty names it after its repositories, or "+m.bare+" with none", "", func(s string) error {
 			if s == "" {
 				return nil
 			}
@@ -732,6 +733,22 @@ func (o *options) pickTask(cmd *cobra.Command, env unibox.Env, adding *api.Task,
 		return done, errCancelled
 	}
 	return done, nil
+}
+
+// taskNames are the names and aliases of every task unibox has.
+func (o *options) taskNames() map[string]bool {
+	out := map[string]bool{}
+	if state, err := o.paths.ReadState(); err == nil {
+		for _, b := range state.Sandboxes {
+			for _, t := range b.Tasks {
+				out[t.ID] = true
+				if t.Alias != "" {
+					out[t.Alias] = true
+				}
+			}
+		}
+	}
+	return out
 }
 
 // inputs are what a task is asked to hold from what was picked: a mounted
