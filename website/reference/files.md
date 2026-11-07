@@ -146,6 +146,8 @@ secrets:                        # where a service's token is made, for unibox se
     ways:                         # several ways; unibox asks which
       - {name: Claude subscription, command: claude setup-token, hint: prints a token to paste}
       - {name: API key, page: https://platform.claude.com/settings/keys}
+  github:
+    recommended: copilot          # the way the question starts on: a way's name, token, generate, gh or copilot
 resources:                      # what the env's sandboxes start from
   cpus: 50%
   memory: 16g

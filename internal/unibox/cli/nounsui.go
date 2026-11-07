@@ -418,11 +418,33 @@ func (o *options) setInScope(cmd *cobra.Command, env unibox.Env, sandbox, servic
 	if scope == "sandbox" {
 		target = unibox.SecretScope{Sandbox: sandbox}
 	}
+	for _, w := range o.manager.Config.SameServiceWays(target, service) {
+		picks = append(picks, pick{"same:" + w.ID, "the same as the " + w.ID + " token"})
+	}
 	for _, from := range o.manager.Config.SharableSecrets(target, service) {
 		picks = append(picks, pick{"same:" + strings.Replace(from.String(), " ", ":", 1), "the same as " + from.String() + "'s"})
 	}
 	picks = append(picks, pick{"command", "another command on this machine that prints it"})
-	how, err := o.askPick("How the "+service+" token of "+scope+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[scope]+" is kept", "", picks, "keychain")
+	// The question starts on the way the team recommends, where it is
+	// offered.
+	preset := "keychain"
+	guides, err := unibox.TokenGuides(env.Config.Files)
+	if err != nil {
+		return err
+	}
+	if r := guides[service].Recommended; r != "" {
+		value := map[string]string{"token": "keychain", "generate": "keychain", "gh": "gh"}[r]
+		if value == "" {
+			value = "same:" + r
+		}
+		for i, p := range picks {
+			if p.value == value {
+				preset = value
+				picks[i].label += " (recommended)"
+			}
+		}
+	}
+	how, err := o.askPick("How the "+service+" token of "+scope+" "+map[string]string{"env": env.Name, "sandbox": sandbox}[scope]+" is kept", "", picks, preset)
 	if err != nil {
 		return err
 	}

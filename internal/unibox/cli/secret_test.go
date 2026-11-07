@@ -1692,3 +1692,46 @@ func TestAScopesTokenIsTakenTheSameAsAnothersAndKeptApart(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestTheGitHubTokenIsOfferedTheSameAsTheCopilotToken(t *testing.T) {
+	fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	if _, _, err := run(t, paths, "", "env", "add", "team", file); err != nil {
+		t.Fatal(err)
+	}
+	// Without a copilot token of the env's own there is none to take.
+	if _, said, err := runAt(t, paths, "1\n", "secret", "set", "github", "--scope", "env", "--command", "read github"); err != nil || strings.Contains(said, "copilot") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if _, _, err := run(t, paths, "", "secret", "set", "copilot", "--scope", "env", "--command", "read copilot"); err != nil {
+		t.Fatal(err)
+	}
+	// The team recommends it, so the question starts on it.
+	if err := os.WriteFile(filepath.Join(filepath.Dir(file), "team.unibox.yaml"), []byte("secrets:\n  github:\n    recommended: copilot\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, said, err := runAt(t, paths, "\n", "secret", "set", "github", "--scope", "env")
+	if err != nil || !strings.Contains(said, "The copilot token (recommended)") || !strings.Contains(out, "which sbx reads with read copilot") {
+		t.Fatalf("%v\n%s\n%s", err, out, said)
+	}
+	cfg, _ := paths.LoadConfig()
+	if own := cfg.Envs["team"].Secrets["github"]; own.Command != "read copilot" {
+		t.Fatalf("%+v", cfg.Envs["team"].Secrets)
+	}
+	// The list's way to it names the service.
+	if _, _, err := run(t, paths, "", "secret", "set", "github", "--scope", "env", "-e", "team", "--same-as", "copilot"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "set", "gitlab", "--scope", "env", "-e", "team", "--same-as", "copilot"); err == nil || !strings.Contains(err.Error(), "keeps no copilot token") {
+		t.Fatalf("%v", err)
+	}
+	// A way the team recommends that is none of the service's is refused.
+	if err := os.WriteFile(filepath.Join(filepath.Dir(file), "team.unibox.yaml"), []byte("secrets:\n  gitlab:\n    recommended: copilot\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "secret", "set", "gitlab", "--scope", "env", "--command", "x"); err == nil || !strings.Contains(err.Error(), `recommended "copilot" is no way`) {
+		t.Fatalf("%v", err)
+	}
+}

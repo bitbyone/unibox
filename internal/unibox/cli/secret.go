@@ -206,7 +206,7 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 	_ = set.Flags().MarkHidden("typed")
 	// Said by a list that has asked already which scope's token to take
 	// the same as, as env:<name> or sandbox:<name>.
-	set.Flags().StringVar(&sameAs, "same-as", "", "Keep the same token as another env's or sandbox's, env:<name> or sandbox:<name>")
+	set.Flags().StringVar(&sameAs, "same-as", "", "Keep the same token as another env's or sandbox's, env:<name> or sandbox:<name>, or as another service's, such as copilot")
 	_ = set.Flags().MarkHidden("same-as")
 	c.AddCommand(set)
 	var rmEnvOnly bool
@@ -324,9 +324,21 @@ func (o *options) offerTokenPage(ctx context.Context, service string, guide unib
 	for i, w := range ways {
 		picks = append(picks, pick{strconv.Itoa(i), w.Name})
 	}
+	// The question starts on the way the team recommends, where it is
+	// offered, and on the first otherwise.
+	preset := picks[0].value
+	if picks[0].value == "have" && guide.Recommended == "token" {
+		picks[0].label += " (recommended)"
+	}
+	for i, w := range ways {
+		if guide.Recommends(w) {
+			preset = strconv.Itoa(i)
+			picks[len(picks)-len(ways)+i].label += " (recommended)"
+		}
+	}
 	way = ways[0]
 	if len(picks) > 1 {
-		choice, err := o.askPick("The "+service+" token", guide.Hint, picks, picks[0].value)
+		choice, err := o.askPick("The "+service+" token", guide.Hint, picks, preset)
 		if err != nil {
 			return way, err
 		}
@@ -453,7 +465,7 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 		if err != nil {
 			return err
 		}
-		others := []unibox.TokenWay{}
+		others := o.manager.Config.SameServiceWays(scope, service)
 		for _, from := range o.manager.Config.SharableSecrets(scope, service) {
 			v, _ := o.manager.Config.OwnSecret(from, service)
 			others = append(others, unibox.TokenWay{Name: "The same as " + from.String() + "'s", Keep: &v,
@@ -495,9 +507,18 @@ func (o *options) setOwnSecret(cmd *cobra.Command, env unibox.Env, scope unibox.
 }
 
 // keepSameAs has a scope keep the same token as another env's or
-// sandbox's, named as env:<name> or sandbox:<name>.
+// sandbox's, named as env:<name> or sandbox:<name>, or as another
+// service's token it keeps, named by the service.
 func (o *options) keepSameAs(cmd *cobra.Command, env unibox.Env, scope unibox.SecretScope, service, from string) error {
-	kind, name, _ := strings.Cut(from, ":")
+	kind, name, found := strings.Cut(from, ":")
+	if !found {
+		for _, w := range o.manager.Config.SameServiceWays(scope, service) {
+			if w.ID == from {
+				return o.keepOwnSecret(cmd.Context(), env, scope, service, *w.Keep)
+			}
+		}
+		return fmt.Errorf("%s keeps no %s token of its own for %s to take the same as", scope, from, service)
+	}
 	source := map[string]unibox.SecretScope{"env": {Env: name}, "sandbox": {Sandbox: name}}[kind]
 	v, ok := o.manager.Config.OwnSecret(source, service)
 	if name == "" || !ok {

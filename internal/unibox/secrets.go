@@ -64,6 +64,11 @@ type TokenGuide struct {
 	// claude setup-token, which prints it; unibox only names it.
 	Command string     `yaml:"command"`
 	Ways    []TokenWay `yaml:"ways"`
+	// Recommended is the way the team recommends, which the question
+	// starts on: a way's name, or token (one the person has), generate
+	// (one made on the page), gh (the person's gh login) or another
+	// service's token the same, such as copilot for github.
+	Recommended string `yaml:"recommended"`
 }
 
 // TokenWay is one way a token is made: a subscription's token a command
@@ -76,8 +81,12 @@ type TokenWay struct {
 	// Run is what sbx runs on the host for the token whenever it needs it,
 	// such as gh auth token, stored in place of a token typed in.
 	Run string `yaml:"-"`
-	// Keep is another scope's token, kept the same for this one.
+	// Keep is another scope's token, or another service's, kept the same
+	// for this one.
 	Keep *EnvSecret `yaml:"-"`
+	// ID is what the team's recommended names a way unibox offers by,
+	// where it is not the way's name.
+	ID string `yaml:"-"`
 	// SignIn has sbx sign the person in with their subscription, in the
 	// browser, rather than ask for a token.
 	SignIn bool `yaml:"sign_in"`
@@ -96,8 +105,39 @@ func (g TokenGuide) AllWays() []TokenWay {
 	if g.Page == "" && g.Command == "" {
 		return nil
 	}
-	return []TokenWay{{Name: "Generate a new token", Page: g.Page, Command: g.Command, Hint: g.Hint}}
+	return []TokenWay{{Name: "Generate a new token", ID: "generate", Page: g.Page, Command: g.Command, Hint: g.Hint}}
 }
+
+// Recommends says whether the team recommends w.
+func (g TokenGuide) Recommends(w TokenWay) bool {
+	return g.Recommended != "" && g.Recommended == cmp.Or(w.ID, w.Name)
+}
+
+// sameTokens are the services a token of another may be the same for:
+// one GitHub token can do Copilot's requests and git's alike, made with
+// both, so github offers to keep the copilot token, which is asked first.
+var sameTokens = map[string][]string{"github": {"copilot"}}
+
+// SameServiceWays are the ways a scope keeps a service's token the same as
+// another service's it keeps: github's the copilot token. The values are
+// unibox's never to read, so only a token of a scope's own - a command, or
+// a keychain item - can be kept the same; sbx's global one cannot.
+func (c Config) SameServiceWays(s SecretScope, service string) []TokenWay {
+	out := []TokenWay{}
+	for _, other := range sameTokens[service] {
+		v, ok := c.OwnSecret(s, other)
+		if !ok {
+			continue
+		}
+		out = append(out, TokenWay{Name: "The " + other + " token", ID: other, Keep: &v,
+			Hint: "the same token as " + other + "'s of " + s.String() + ", which must then have what " + service + " needs as well; set anew, either is its own"})
+	}
+	return out
+}
+
+// tokenWayIDs are the ways the team's recommended names that are not
+// a way of its own.
+var tokenWayIDs = []string{"token", "generate", "gh"}
 
 // githubTokenPage is GitHub's page for a fine-grained token, filled in by
 // its parameters: a name, and permissions such as contents=write.
@@ -151,7 +191,7 @@ func GHLoginWay(ctx context.Context, service string) (TokenWay, bool) {
 		return TokenWay{}, false
 	}
 	// sbx runs it without the person's PATH, so gh is named by its path.
-	return TokenWay{Name: "Your gh login", Run: hostQuote(gh) + " auth token", Hint: "sbx runs gh auth token on this machine whenever a sandbox needs the token: " + what}, true
+	return TokenWay{Name: "Your gh login", ID: "gh", Run: hostQuote(gh) + " auth token", Hint: "sbx runs gh auth token on this machine whenever a sandbox needs the token: " + what}, true
 }
 
 // TokenGuides are where an env's tokens are made: unibox's own for the
@@ -179,11 +219,24 @@ func TokenGuides(sbxenvFiles []string) (map[string]TokenGuide, error) {
 			}
 			was := out[service]
 			if len(g.Ways) > 0 {
-				// Ways the team names replace what was said before.
-				out[service] = TokenGuide{Hint: cmp.Or(g.Hint, was.Hint), Ways: g.Ways}
+				// Ways the team names replace what was said before, and
+				// which of the old ways it recommended.
+				out[service] = TokenGuide{Hint: cmp.Or(g.Hint, was.Hint), Ways: g.Ways, Recommended: g.Recommended}
 				continue
 			}
-			out[service] = TokenGuide{Page: cmp.Or(g.Page, was.Page), Hint: cmp.Or(g.Hint, was.Hint), Command: cmp.Or(g.Command, was.Command)}
+			out[service] = TokenGuide{Page: cmp.Or(g.Page, was.Page), Hint: cmp.Or(g.Hint, was.Hint), Command: cmp.Or(g.Command, was.Command), Recommended: cmp.Or(g.Recommended, was.Recommended)}
+		}
+		for service, g := range doc.Secrets {
+			if g.Recommended == "" {
+				continue
+			}
+			known := append(slices.Clone(tokenWayIDs), sameTokens[service]...)
+			for _, w := range out[service].Ways {
+				known = append(known, w.Name)
+			}
+			if !slices.Contains(known, g.Recommended) {
+				return fmt.Errorf("%s: secret %s: recommended %q is no way it is given; say one of %s", name, service, g.Recommended, strings.Join(known, ", "))
+			}
 		}
 		return nil
 	})
@@ -246,6 +299,16 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 	guides, err := TokenGuides(env.Config.Files)
 	if err != nil {
 		return nil, err
+	}
+	// A token that can be kept the same as another service's is asked
+	// for after it, so that one is there to take: github after copilot.
+	for service, others := range sameTokens {
+		for _, other := range others {
+			i, j := slices.Index(order, service), slices.Index(order, other)
+			if i >= 0 && j > i {
+				order = slices.Insert(slices.Delete(order, i, i+1), j, service)
+			}
+		}
 	}
 	out := []NeededSecret{}
 	for _, service := range order {
@@ -503,10 +566,21 @@ func (c Config) SharableSecrets(s SecretScope, service string) []SecretScope {
 // same as this one's was; then one of its own beside it, so the other keeps
 // the token it has.
 func (c Config) FreeKeychainItem(s SecretScope, service string) string {
+	// Another service's token may read it too, kept the same as this one.
 	used := map[string]bool{}
-	for _, from := range c.SharableSecrets(s, service) {
-		v, _ := c.OwnSecret(from, service)
-		used[v.Keychain] = true
+	for name, e := range c.Envs {
+		for other, v := range e.Secrets {
+			if (SecretScope{Env: name}) != s || other != service {
+				used[v.Keychain] = true
+			}
+		}
+	}
+	for name, b := range c.Sandboxes {
+		for other, v := range b.Secrets {
+			if (SecretScope{Sandbox: name}) != s || other != service {
+				used[v.Keychain] = true
+			}
+		}
 	}
 	item := KeychainItem(s, service)
 	for i := 2; used[item]; i++ {

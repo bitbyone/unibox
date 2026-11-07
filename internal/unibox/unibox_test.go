@@ -342,6 +342,39 @@ func TestNeededSecretsAreTheKitsCredentialsAndTheEnvsBindings(t *testing.T) {
 	}
 }
 
+func TestTheCopilotTokenIsAskedForBeforeGitHubs(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	// The kit asks for github first.
+	for ref, k := range f.kits {
+		k.Credentials = []KitCredential{{Service: "github"}, {Service: "copilot"}}
+		f.kits[ref] = k
+	}
+	logins, err := m.NeededSecrets(context.Background(), mustEnv(t, m), "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := []string{}
+	for _, l := range logins {
+		order = append(order, l.Service)
+	}
+	if !slices.Equal(order, []string{"copilot", "github"}) {
+		t.Fatalf("%v", order)
+	}
+}
+
+func TestATokenTypedAnewLeavesTheItemAnotherServiceReads(t *testing.T) {
+	t.Parallel()
+	shared := EnvSecret{Command: "read", Keychain: "env/team/copilot"}
+	c := Config{Envs: map[string]EnvConfig{"team": {Secrets: map[string]EnvSecret{"copilot": shared, "github": shared}}}}
+	if got := c.FreeKeychainItem(SecretScope{Env: "team"}, "copilot"); got != "env/team/copilot-2" {
+		t.Fatal(got)
+	}
+	if ways := c.SameServiceWays(SecretScope{Env: "team"}, "github"); len(ways) != 1 || ways[0].ID != "copilot" || *ways[0].Keep != shared {
+		t.Fatalf("%+v", ways)
+	}
+}
+
 func TestATokenTwoEnvsSendToDifferentHostsIsTold(t *testing.T) {
 	t.Parallel()
 	var kit Kit

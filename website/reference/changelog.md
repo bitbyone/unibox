@@ -6,6 +6,12 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- The copilot token is asked for before the github token, and an env or
+  sandbox with a copilot token of its own offers *The copilot token* for
+  github, so one token can be given for both. The team's `unibox.yaml`
+  names the way it recommends under `secrets.<service>.recommended`,
+  which the question starts on.
+
 - `sandbox recreate` no longer prepares every task again: each is mounted
   or cloned, and given its conversations back, when it is next resumed,
   so a recreate takes as long as sbx does.

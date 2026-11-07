@@ -150,6 +150,28 @@ start: a recreate takes a sandbox's own tokens away, and a changed
 command is applied. Removed with `rm --scope`, or with the sandbox, what
 unibox stored in the keychain goes too, once no other scope reads it.
 
+One GitHub token can do both Copilot's requests and git's, so `copilot`
+is asked for before `github`, and an env or sandbox that keeps a copilot
+token of its own offers *The copilot token* for `github` too: the same
+command, so the same keychain item, kept apart as below. A fine-grained
+token can reach an organization's repositories only where the
+organization allows it, which is why the two are asked for apart; a token
+for both needs Copilot Requests and what git needs. sbx's global tokens
+cannot be read, so the global `github` token is not offered the global
+copilot one.
+
+The team says which way it recommends under `recommended:` in its
+`unibox.yaml`, and the question starts on it: a way's name, `token` (one
+you have), `generate` (one made on the page), `gh` (your gh login), or
+`copilot` for `github`. A way not offered, as gh signed out, leaves the
+question where it starts otherwise.
+
+```yaml
+secrets:
+  github:
+    recommended: copilot
+```
+
 A second env asks for a token another env or sandbox keeps already: it
 offers *The same as env personal's*, which copies that one's command, and
 so reads the same keychain item, into the new env's own entry. Each is
