@@ -10,7 +10,8 @@ unibox` or `scoop update unibox` takes the latest.
   directory of its own, named after `t` or `--task`, else with a name made
   up such as `brave-otter`. An env whose index names none opens the screen
   too. A task of one context repository alone starts in the task's
-  directory, not in the repository it only reads.
+  directory, not in the repository it only reads. `run`, `task prepare`
+  and `task check` take such a task with `--bare`.
 
 - The copilot token is asked for before the github token, and an env or
   sandbox with a copilot token of its own offers *The copilot token* for

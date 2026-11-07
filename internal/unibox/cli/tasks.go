@@ -192,6 +192,8 @@ func (o *options) taskCommand(name string) *cobra.Command {
 	c.Flags().BoolVar(&defaults, "defaults", false, "Take also the env's indexed repositories that say default: on, as task new picks them to begin with")
 	c.Flags().BoolVar(&only, "only", false, "Take only the repositories named, not even those the index says every task takes")
 	c.MarkFlagsMutuallyExclusive("defaults", "only")
+	c.Flags().BoolVar(&req.Bare, "bare", false, "A task of no repository, a directory of its own, named by --task or with a name made up")
+	c.MarkFlagsMutuallyExclusive("bare", "defaults")
 	if name == "run" {
 		shellFlag(c, &req)
 		rmFlag(c, &req.Remove)
@@ -208,12 +210,20 @@ func (o *options) taskCommand(name string) *cobra.Command {
 		if err := oneSource(&req, args); err != nil {
 			return err
 		}
-		if len(req.Repositories) == 0 {
-			req.Repositories = []unibox.RepoInput{{Source: "."}}
-		}
 		o.defaultTarget(&req)
-		if err := o.withIndexedRepos(&req, !only, defaults); err != nil {
-			return err
+		switch {
+		case req.Bare && len(req.Repositories) > 0:
+			return fmt.Errorf("--bare is a task of no repository; leave out the repositories, or --bare")
+		case req.Bare:
+			// Not even those every task takes: the task is its directory.
+			req.Task = cmp.Or(req.Task, unibox.FreshTaskName(func(n string) bool { return o.taskNames()[n] }))
+		default:
+			if len(req.Repositories) == 0 {
+				req.Repositories = []unibox.RepoInput{{Source: "."}}
+			}
+			if err := o.withIndexedRepos(&req, !only, defaults); err != nil {
+				return err
+			}
 		}
 		if name == "check" {
 			check, err := o.manager.Check(cmd.Context(), req)

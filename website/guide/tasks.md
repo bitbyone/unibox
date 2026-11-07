@@ -38,6 +38,14 @@ The repositories the [index](./repos) says every task takes come along;
 `--defaults` adds those it says `on`, `--only` takes nothing but what is
 named.
 
+A task of no repository is a directory of its own, `/work/<task>`, where
+the agent starts; `unibox task add-repo` adds repositories to it later:
+
+```sh
+unibox run --bare --task scratch    # named by you
+unibox run --bare                   # with a name made up, such as brave-otter
+```
+
 ## Mount or clone
 
 A directory is mounted; an address, or any repository with `--clone`, is

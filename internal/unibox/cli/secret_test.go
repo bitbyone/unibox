@@ -1755,3 +1755,30 @@ func TestANewTaskOfNoRepositoryGoesOnPastThePick(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestRunTakesATaskOfNoRepository(t *testing.T) {
+	fakeSBX(t)
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	if _, _, err := run(t, paths, "", "env", "add", "team", teamEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, paths, "", "var", "set", "user", "person", "-e", "team"); err != nil {
+		t.Fatal(err)
+	}
+	// Nothing is taken, not the current directory nor what every task takes.
+	out, _, err := run(t, paths, "", "task", "check", "--bare", "--task", "scratch", "-e", "team", "--json")
+	var check api.Check
+	if err != nil || json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 0 {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, _, err := run(t, paths, "", "run", ".", "--bare", "-e", "team"); err == nil || !strings.Contains(err.Error(), "--bare is a task of no repository") {
+		t.Fatalf("%v", err)
+	}
+	if _, _, err := run(t, paths, "", "run", "--bare", "--defaults", "-e", "team"); err == nil {
+		t.Fatal("--bare took --defaults")
+	}
+	// Without a name it gets one made up, and goes on to the sandbox.
+	if _, _, err := run(t, paths, "", "task", "prepare", "--bare", "-e", "team"); err == nil || !strings.Contains(err.Error(), "sbx did not list the new sandbox team") {
+		t.Fatalf("%v", err)
+	}
+}
