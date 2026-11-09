@@ -79,6 +79,9 @@ func TestTheMachineIsOutOfReach(t *testing.T) {
 			t.Errorf("%s is on PATH at %s", name, path)
 		}
 	}
+	if out, err := exec.Command("git", "rev-parse", "--git-dir").CombinedOutput(); err == nil {
+		t.Errorf("git finds the repository the tests run inside of: %s", out)
+	}
 	out, err := exec.Command("git", "config", "--get", "user.email").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "tests@unibox.invalid" {
 		t.Errorf("git's identity is %q (%v), not the tests'", out, err)

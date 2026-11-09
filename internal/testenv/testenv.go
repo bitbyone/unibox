@@ -110,17 +110,24 @@ func Isolate() func() {
 	detachedHead = false
 `), 0o600))
 
+	// go test runs in the package's directory, inside unibox's own
+	// repository, whose .git/config may say who the person is: git looks
+	// no further up than the package itself.
+	wd, err := os.Getwd()
+	must(err)
+
 	home := filepath.Join(root, "home")
 	set := map[string]string{
-		"HOME":                home,
-		"XDG_CONFIG_HOME":     filepath.Join(home, ".config"),
-		"XDG_DATA_HOME":       filepath.Join(home, ".local", "share"),
-		"XDG_STATE_HOME":      filepath.Join(home, ".local", "state"),
-		"XDG_CACHE_HOME":      filepath.Join(home, ".cache"),
-		"PATH":                bin,
-		"GIT_CONFIG_GLOBAL":   gitconfig,
-		"GIT_CONFIG_NOSYSTEM": "1",
-		"GIT_TERMINAL_PROMPT": "0",
+		"GIT_CEILING_DIRECTORIES": filepath.Dir(wd),
+		"HOME":                    home,
+		"XDG_CONFIG_HOME":         filepath.Join(home, ".config"),
+		"XDG_DATA_HOME":           filepath.Join(home, ".local", "share"),
+		"XDG_STATE_HOME":          filepath.Join(home, ".local", "state"),
+		"XDG_CACHE_HOME":          filepath.Join(home, ".cache"),
+		"PATH":                    bin,
+		"GIT_CONFIG_GLOBAL":       gitconfig,
+		"GIT_CONFIG_NOSYSTEM":     "1",
+		"GIT_TERMINAL_PROMPT":     "0",
 		// A run asks no network what is newer, nor starts the test binary
 		// to: a test that wants the check clears it.
 		"UNIBOX_NO_UPDATE_CHECK": "1",
