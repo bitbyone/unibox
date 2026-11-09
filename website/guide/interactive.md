@@ -5,7 +5,7 @@ of what it names. Each list hints its keys under it. A key runs the same command
 between the list and the command line.
 
 ```term
-$ unibox
+$ unibox sandbox
 [blue]Sandboxes[/]                                    [dim]context sandbox[/] [b]dev[/] [dim]· env[/] [b]dev[/]
 
   SANDBOX  ENV  AGENT   STATE    TASKS  SESSIONS
@@ -15,7 +15,7 @@ $ unibox
 [key]↑/↓ j/k[/] move · [key]enter[/] tasks · [key]s[/] shell · [key]p[/] ports · [key]i[/] inspect · [key]r[/] resources · [key]t[/] stop · [key]c[/] recreate · [key]d[/] remove · [key]q[/] quit
 ```
 
-Lists open from `unibox` (the sandboxes), `task`, `task new`, `repo`,
+Lists open from `unibox` (the tasks, as `task`), `sandbox`, `task new`, `repo`,
 `port`, `network`, `secret`, `env`, `var` and `context`. Most filter with
 `/`.
 

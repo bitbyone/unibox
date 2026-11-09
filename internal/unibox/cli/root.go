@@ -69,7 +69,7 @@ func (o *options) root() *cobra.Command {
 	root.AddCommand(o.taskCommand("run"), o.resumeCommand(), o.initCommand(), o.contextCommand(), o.configCommand(),
 		o.taskGroup(), o.sandboxGroup(), o.envCommand(), o.varCommand(), o.authorCommand(), o.coAuthorCommand(), o.secretCommand(), o.portCommand(), o.networkCommand(), o.repoCommand(),
 		o.doctorCommand(), o.pruneCommand(), o.destroyCommand(), o.versionCommand(), o.updateCheckCommand())
-	// Alone at a terminal, unibox is its sandboxes, the list one acts in
+	// Alone at a terminal, unibox is its tasks, the list one comes back to
 	// most; anywhere else, or before init, it says how it is used.
 	root.Args = cobra.NoArgs
 	root.RunE = func(cmd *cobra.Command, args []string) error {
@@ -83,7 +83,7 @@ func (o *options) root() *cobra.Command {
 			fmt.Fprintln(o.log, "\nunibox is not set up yet; unibox init sets it up from your team's repository")
 			return nil
 		}
-		return o.runStep(cmd, "sandbox")
+		return o.runStep(cmd, "task")
 	}
 	return root
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -73,6 +74,21 @@ func TestTaskAndResumeAloneListOrAskForATaskWithoutATerminal(t *testing.T) {
 	}
 	if _, _, err := run(t, paths, "", "resume"); err == nil || !strings.Contains(err.Error(), "name the task") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestUniboxAloneAtATerminalIsTheTaskList(t *testing.T) {
+	t.Parallel()
+	paths := cliFixture(t)
+	var out, log bytes.Buffer
+	o := &options{paths: paths, input: strings.NewReader("q"), output: &out, log: &log, interactive: true}
+	root := o.root()
+	root.SetArgs([]string{})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("%v\n%s", err, log.String())
+	}
+	if !strings.Contains(log.String(), "no tasks yet") {
+		t.Fatalf("%q\n%q", out.String(), log.String())
 	}
 }
 

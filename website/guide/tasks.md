@@ -100,7 +100,7 @@ branch_not_pushed: api push the selected branch first (or pass --push)
 ## Come back to a task
 
 ```sh
-unibox task                      # the same as a list
+unibox task                      # the same as a list, as is unibox alone
 unibox task ls                   # every task in every sandbox
 unibox resume login              # its agent again
 unibox resume login --shell      # a shell beside it, also while the agent runs

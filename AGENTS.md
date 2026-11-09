@@ -195,7 +195,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
   settings are its daemon's, so they are Global's alone. A list's `tabs`
   turn by ←/→ as the action `tab:N`, which the command builds anew.
 - **A noun alone at a terminal is a list to act in**, and `unibox`
-  alone is `unibox sandbox` (help elsewhere, or before init). `unibox port`
+  alone is `unibox task` (help elsewhere, or before init). `unibox port`
   switches a running sandbox's ports, `unibox task` (and `resume` without
   a task) resumes, names or removes a task, `unibox sandbox` opens,
   stops, recreates or removes a sandbox; `env`, `var`, `secret`,

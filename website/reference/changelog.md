@@ -6,6 +6,9 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `unibox` alone at a terminal opens the task list, the one come back to
+  most; `unibox sandbox` is the sandbox list.
+
 - `task new` starts a task of no repository: with nothing picked it is a
   directory of its own, named after `t` or `--task`, else with a name made
   up such as `brave-otter`. An env whose index names none opens the screen
