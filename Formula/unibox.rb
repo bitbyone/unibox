@@ -5,28 +5,28 @@
 class Unibox < Formula
   desc "Wrapper over Docker Sandboxes for running coding agents locally"
   homepage "https://bitbyone.github.io/unibox/"
-  version "0.8"
+  version "0.9"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.8/unibox_0.8_darwin_arm64.tar.gz"
-      sha256 "eb27882b0ec2c00e6a4c3edd7c10035d77892b7140a8e3e5bbf74203c6f375cb"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.9/unibox_0.9_darwin_arm64.tar.gz"
+      sha256 "b1061be6a77af23e26d990ce43b01b72ef7caf5dce655485e5c466db45f0bff1"
     end
     on_intel do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.8/unibox_0.8_darwin_amd64.tar.gz"
-      sha256 "1085d40976ca9f11f6f76691ba093a7f08e2a7f6f654366b5d381835d6267694"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.9/unibox_0.9_darwin_amd64.tar.gz"
+      sha256 "783ae6cf66771429f4fc5c0d8199b664c1c9760da2b158f741f26b3a4df28abb"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.8/unibox_0.8_linux_arm64.tar.gz"
-      sha256 "ffe5cc13e7e69f9293712534b3d0db952715c0df3e72f048f770f0f91171f721"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.9/unibox_0.9_linux_arm64.tar.gz"
+      sha256 "393857cdb716fe24ff62c356c5b2bf169f3c642dd932ac28decd7ec06dd199e4"
     end
     on_intel do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.8/unibox_0.8_linux_amd64.tar.gz"
-      sha256 "87f8bba224f0a155ed28f8ecdc6874de597f5aced6b56360b18cd1070b865ea4"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.9/unibox_0.9_linux_amd64.tar.gz"
+      sha256 "4f306736678dbc5f09e2fb8b06b8090d6ce4a1f048960c9a5d79dd7a55739893"
     end
   end
 
