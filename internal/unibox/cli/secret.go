@@ -90,13 +90,13 @@ terminal, s in the list moves a token between the scopes.`, Example: `  unibox s
 			return nil
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "SERVICE\tSTORED\tNEEDED\tFOR")
+		fmt.Fprintln(w, "SERVICE\tSTORED\tNEEDED\tFOR\tCOMMAND")
 		for _, l := range list {
 			stored, needed := storedText(l), "yes"
 			if l.Optional {
 				needed = "optional"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", l.Service, stored, needed, cmp.Or(l.Description, strings.Join(l.Kits, ", "), "the env's bindings"))
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", l.Service, stored, needed, cmp.Or(l.Description, strings.Join(l.Kits, ", "), "the env's bindings"), l.Command)
 		}
 		return w.Flush()
 	}}
@@ -565,7 +565,7 @@ func (o *options) secretOverview(cmd *cobra.Command) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "SERVICE\tSCOPE\tKEPT\tUSED BY")
+	fmt.Fprintln(w, "SERVICE\tSCOPE\tKEPT\tUSED BY\tCOMMAND")
 	for _, u := range uses {
 		used := strings.Join(u.UsedBy, ", ")
 		switch {
@@ -574,7 +574,7 @@ func (o *options) secretOverview(cmd *cobra.Command) error {
 		case u.Kept == "missing" && u.Needed:
 			used += " (needed)"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", u.Service, cmp.Or(u.Scope, "-"), u.Kept, used)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", u.Service, cmp.Or(u.Scope, "-"), u.Kept, used, u.Command)
 	}
 	return w.Flush()
 }

@@ -45,7 +45,7 @@ func (o *options) secretUI(cmd *cobra.Command, envName, sandbox string, leave fu
 		if err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: "tokens sandbox " + sandbox + " of env " + env.Name + " needs", header: []string{"SERVICE", "STORED", "NEEDED", "FOR"}, actions: []listAction{
+		m := listModel{title: "tokens sandbox " + sandbox + " of env " + env.Name + " needs", header: []string{"SERVICE", "STORED", "NEEDED", "FOR", "COMMAND"}, actions: []listAction{
 			{key: "enter", name: "set", help: "store"},
 			{key: "g", name: "generate", help: "generate a new token"},
 			{key: "c", name: "command", help: "store a command for it"},
@@ -56,7 +56,7 @@ func (o *options) secretUI(cmd *cobra.Command, envName, sandbox string, leave fu
 			if l.Optional {
 				needed = "optional"
 			}
-			m.rows = append(m.rows, []string{l.Service, stored, needed, cmp.Or(l.Description, strings.Join(l.Kits, ", "), "the env's bindings")})
+			m.rows = append(m.rows, []string{l.Service, stored, needed, cmp.Or(l.Description, strings.Join(l.Kits, ", "), "the env's bindings"), l.Command})
 			m.ids = append(m.ids, l.Service)
 		}
 		return m, nil

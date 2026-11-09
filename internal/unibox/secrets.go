@@ -49,6 +49,9 @@ type NeededSecret struct {
 	// keychain.
 	Scope string `json:"scope,omitempty"`
 	Own   string `json:"own,omitempty"`
+	// Command is the person's own command sbx reads the token with, ""
+	// for one kept otherwise.
+	Command string `json:"command,omitempty"`
 	// Page is where the token is made, and Hint what to make there.
 	Page string `json:"page,omitempty"`
 	Hint string `json:"hint,omitempty"`
@@ -326,10 +329,10 @@ func (m *Manager) NeededSecrets(ctx context.Context, env Env, sandbox string) ([
 		// sandboxes, stands before a global one, and the sandbox's own
 		// before the env's.
 		if c, ok := env.Config.Secrets[service]; ok && c.Command != "" {
-			l.Stored, l.Scope, l.Own = true, "env "+env.Name, ownText(c)
+			l.Stored, l.Scope, l.Own, l.Command = true, "env "+env.Name, ownText(c), ownCommand(c)
 		}
 		if c, ok := m.Config.Sandboxes[sandbox].Secrets[service]; ok && c.Command != "" {
-			l.Stored, l.Scope, l.Own = true, "sandbox "+sandbox, ownText(c)
+			l.Stored, l.Scope, l.Own, l.Command = true, "sandbox "+sandbox, ownText(c), ownCommand(c)
 		}
 		out = append(out, l)
 	}
@@ -479,6 +482,15 @@ func ownText(s EnvSecret) string {
 		return "keychain"
 	}
 	return "command"
+}
+
+// ownCommand is the command of a token kept by the person's own command,
+// shown so they see what sbx runs; a keychain's read is unibox's affair.
+func ownCommand(s EnvSecret) string {
+	if s.Keychain != "" {
+		return ""
+	}
+	return s.Command
 }
 
 // SecretScope is where a token of a service is kept: the global one sbx
@@ -799,6 +811,9 @@ type SecretUse struct {
 	Needed bool     `json:"needed,omitempty"`
 	// Placeholder is a variable's, by which sbx forgets it.
 	Placeholder string `json:"placeholder,omitempty"`
+	// Command is the person's own command sbx reads the token with, ""
+	// for one kept otherwise.
+	Command string `json:"command,omitempty"`
 }
 
 // SecretOverview is every token kept, global, an env's or a sandbox's,
@@ -847,12 +862,14 @@ func (m *Manager) SecretOverview(ctx context.Context) (out []SecretUse, skipped 
 	}
 	for _, name := range sortedKeys(m.Config.Envs) {
 		for _, service := range sortedKeys(m.Config.Envs[name].Secrets) {
-			row("env "+name, service, ownText(m.Config.Envs[name].Secrets[service]))
+			c := m.Config.Envs[name].Secrets[service]
+			row("env "+name, service, ownText(c)).Command = ownCommand(c)
 		}
 	}
 	for _, name := range sortedKeys(m.Config.Sandboxes) {
 		for _, service := range sortedKeys(m.Config.Sandboxes[name].Secrets) {
-			row("sandbox "+name, service, ownText(m.Config.Sandboxes[name].Secrets[service]))
+			c := m.Config.Sandboxes[name].Secrets[service]
+			row("sandbox "+name, service, ownText(c)).Command = ownCommand(c)
 		}
 	}
 	// Which each sandbox takes is what it would be told it has.
@@ -890,6 +907,7 @@ func (m *Manager) SecretOverview(ctx context.Context) (out []SecretUse, skipped 
 					r = row("", l.Service, "missing")
 				case l.Own != "":
 					r = row(l.Scope, l.Service, l.Own)
+					r.Command = cmp.Or(r.Command, l.Command)
 				case l.Scope == "global":
 					r = row("global", l.Service, "sbx")
 				default:

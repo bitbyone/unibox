@@ -30,7 +30,7 @@ func (o *options) secretAllUI(cmd *cobra.Command) error {
 		if uses, skipped, err = o.manager.SecretOverview(ctx); err != nil {
 			return listModel{}, err
 		}
-		m := listModel{title: "every token kept, and those needed", header: []string{"SERVICE", "SCOPE", "KEPT", "USED BY"}, actions: []listAction{
+		m := listModel{title: "every token kept, and those needed", header: []string{"SERVICE", "SCOPE", "KEPT", "USED BY", "COMMAND"}, actions: []listAction{
 			{key: "enter", name: "set", help: "store"},
 			{key: "s", name: "scope", help: "change scope"},
 			{key: "d", name: "rm", help: "forget", confirm: "forget the token %s? the sandboxes that take it lose it"},
@@ -39,7 +39,7 @@ func (o *options) secretAllUI(cmd *cobra.Command) error {
 			m.note = "left out, as their files cannot be read: env " + strings.Join(skipped, ", ")
 		}
 		for _, u := range uses {
-			m.rows = append(m.rows, []string{u.Service, cmp.Or(u.Scope, "-"), u.Kept, usedText(u)})
+			m.rows = append(m.rows, []string{u.Service, cmp.Or(u.Scope, "-"), u.Kept, usedText(u), u.Command})
 			m.ids = append(m.ids, useID(u))
 		}
 		return m, nil

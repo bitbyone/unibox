@@ -1347,7 +1347,7 @@ func TestSecretAllShowsEveryTokenAndTheSandboxesThatTakeIt(t *testing.T) {
 	}
 	want := []string{
 		"anthropic global sbx personal, team",
-		"gitlab sandbox personal command personal",
+		"gitlab sandbox personal command personal pass gitlab-mine",
 		"gitlab - missing team (needed)",
 		"npm global sbx -",
 	}
