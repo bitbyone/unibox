@@ -34,9 +34,10 @@ type legacyRuntime struct {
 }
 
 type Config struct {
-	// DefaultEnv is the env a sandbox is created from when none is named.
-	DefaultEnv string               `yaml:"default_env,omitempty" json:"default_env,omitempty"`
-	Envs       map[string]EnvConfig `yaml:"envs,omitempty" json:"envs,omitempty"`
+	Envs map[string]EnvConfig `yaml:"envs,omitempty" json:"envs,omitempty"`
+	// LegacyDefaultEnv is the default_env of unibox before 0.10, which
+	// said what the context says; read into the context and dropped.
+	LegacyDefaultEnv string `yaml:"default_env,omitempty" json:"-"`
 	// Context is the sandbox and env a command works on when it is not
 	// told, set by unibox context use.
 	Context Context `yaml:"context,omitempty" json:"context,omitempty"`
@@ -230,6 +231,10 @@ func (p Paths) LoadConfig() (Config, error) {
 		c.EditorSSHOn = c.LegacyEditorSSH
 	}
 	c.LegacyEditorSSH = nil
+	if c.Context.Sandbox == "" && c.Context.Env == "" {
+		c.Context.Env = c.LegacyDefaultEnv
+	}
+	c.LegacyDefaultEnv = ""
 	if r, ok := c.Runtimes["sbx"]; ok {
 		if c.StopIdleSandbox == nil {
 			c.StopIdleSandbox = r.StopIdle

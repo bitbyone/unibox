@@ -81,13 +81,13 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 		return o.success(message)
 	}}
 	add.Flags().StringVar(&sandbox, "name", "", "The sandbox's name (default: the file's name:, or the env's)")
-	add.Flags().BoolVar(&makeDefault, "default", false, "Make it the env new sandboxes come from")
+	add.Flags().BoolVar(&makeDefault, "default", false, "Make it the context: the env commands work in when not told")
 	c.AddCommand(add)
 
 	c.AddCommand(&cobra.Command{Use: "ls", Args: cobra.NoArgs, Short: "List the envs", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		if o.json {
-			return o.write(map[string]any{"api_version": api.Version, "default": cfg.DefaultEnv, "envs": cfg.Envs})
+			return o.write(map[string]any{"api_version": api.Version, "default": o.defaultEnv(), "envs": cfg.Envs})
 		}
 		if len(cfg.Envs) == 0 {
 			fmt.Fprintln(o.output, "no envs; add one with unibox env add <name> <file.sbxenv.yaml>")
@@ -95,9 +95,10 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 		}
 		w := tabwriter.NewWriter(o.output, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "ENV\tSANDBOX\tFILES\tREPO")
+		inUse := o.defaultEnv()
 		for _, name := range sorted(cfg.Envs) {
 			mark, sandbox := name, "?"
-			if name == cfg.DefaultEnv {
+			if name == inUse {
 				mark += " (default)"
 			}
 			if e, err := cfg.LoadEnv(name); err == nil {
@@ -115,9 +116,6 @@ else its own. unibox init finds every file of a repository.`, Example: "  unibox
 		}
 		cfg.Envs = maps.Clone(cfg.Envs)
 		delete(cfg.Envs, args[0])
-		if cfg.DefaultEnv == args[0] {
-			cfg.DefaultEnv = ""
-		}
 		if cfg.Context.Env == args[0] {
 			cfg.Context.Env = ""
 		}
@@ -333,7 +331,7 @@ func envArgs(env string) []string {
 
 // addEnv keeps an env of files, or gives one new files, with the
 // repository they are in; rename, when given, names its sandbox. It is
-// made the default when told or when there is none.
+// made the context when told or when there is none.
 func (o *options) addEnv(ctx context.Context, name string, files []string, rename *string, makeDefault bool) (unibox.Env, error) {
 	cfg := o.manager.Config
 	ec := cfg.Envs[name]
@@ -351,8 +349,13 @@ func (o *options) addEnv(ctx context.Context, name string, files []string, renam
 		cfg.Envs = map[string]unibox.EnvConfig{}
 	}
 	cfg.Envs[name] = ec
-	if makeDefault || cfg.DefaultEnv == "" {
-		cfg.DefaultEnv = name
+	o.manager.Config = cfg
+	if makeDefault || cfg.Context == (unibox.Context{}) {
+		// Its sandbox once made, as unibox context use -e keeps it.
+		cfg.Context = unibox.Context{Env: name}
+		if made := o.madeSandbox(name); made != "" {
+			cfg.Context = unibox.Context{Sandbox: made}
+		}
 	}
 	if err := o.paths.SaveConfig(cfg); err != nil {
 		return unibox.Env{}, err
@@ -369,11 +372,11 @@ func firstArg(args []string) string {
 }
 
 // defaultEnv is the env a command works with when it is not told: from
-// UNIBOX_ENV, the context, the configuration's default, or the only one.
+// UNIBOX_ENV, the context, or the only one.
 func (o *options) defaultEnv() string {
 	cfg := o.manager.Config
 	// The env of the sandbox commands work in, so the two never differ;
-	// then the context's env whose sandbox is to be made, the default.
+	// then the context's env whose sandbox is to be made.
 	if e := os.Getenv("UNIBOX_ENV"); e != "" {
 		return e
 	}
@@ -382,10 +385,8 @@ func (o *options) defaultEnv() string {
 			return e
 		}
 	}
-	for _, e := range []string{cfg.Context.Env, cfg.DefaultEnv} {
-		if e != "" {
-			return e
-		}
+	if cfg.Context.Env != "" {
+		return cfg.Context.Env
 	}
 	if s := o.defaultSandbox(); s != "" {
 		if e := o.sandboxEnv(s); e != "" {

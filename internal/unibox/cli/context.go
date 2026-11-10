@@ -15,11 +15,11 @@ import (
 // What a command works on is its argument; the env or sandbox it works in
 // is a flag. Left out, the sandbox is taken from UNIBOX_SANDBOX, then from
 // unibox context use, then from there being only one; the env from
-// UNIBOX_ENV, then from that sandbox, then from default_env, then from
+// UNIBOX_ENV, then from that sandbox, then from the context, then from
 // there being only one.
 
 func envFlag(c *cobra.Command, e *string) {
-	c.Flags().StringVarP(e, "env", "e", "", "Env (default: UNIBOX_ENV, the sandbox's, default_env, or the only one)")
+	c.Flags().StringVarP(e, "env", "e", "", "Env (default: UNIBOX_ENV, the sandbox's, the context's, or the only one)")
 }
 
 func sandboxFlag(c *cobra.Command, s *string) {
@@ -33,14 +33,14 @@ func (o *options) defaultSandbox() string {
 	if s := o.chosenSandbox(); s != "" {
 		return s
 	}
-	if o.manager.Config.Context.Env != "" {
-		// An env chosen before its sandbox was made has none yet; another
-		// env's sandbox is not it.
-		return ""
-	}
+	// An env chosen before its sandbox was made has none yet; another
+	// env's sandbox is not it, but the only one made from it is.
+	env := o.manager.Config.Context.Env
 	if state, err := o.paths.ReadState(); err == nil && len(state.Sandboxes) == 1 {
-		for name := range state.Sandboxes {
-			return name
+		for name, b := range state.Sandboxes {
+			if env == "" || b.Env == env {
+				return name
+			}
 		}
 	}
 	return ""
@@ -130,7 +130,7 @@ func (o *options) contextCommand() *cobra.Command {
 	c := &cobra.Command{Use: "context", Args: cobra.NoArgs, Short: "Show or set the sandbox commands work in when not told", Long: `Commands take the sandbox they work in as -s and the env as -e. Left
 out, the sandbox comes from UNIBOX_SANDBOX, then from the context set here,
 then from there being only one; the env from UNIBOX_ENV, then from that
-sandbox, then from default_env, then from there being only one. The context
+sandbox, then from the context, then from there being only one. The context
 is a sandbox, or an env whose sandbox is not made yet, which becomes its
 sandbox once it is.`, Example: "  unibox context use -s dev\n  unibox context\n  unibox context clear", RunE: func(cmd *cobra.Command, args []string) error {
 		if !o.interactive || o.json {

@@ -6,6 +6,12 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `default_env` is gone: the context says the env commands work in when
+  not told, and `init`, `env add --default` and the env list set it.
+  A `default_env` in `config.yaml` is read into the context once, where
+  none is set, and not written again; `config set default_env` sets the
+  context. With an env in the context, its only sandbox is taken even
+  when named otherwise.
 - `unibox run` with no directory named starts a task of no repository,
   holding only what the index gives every task, rather than mounting the
   directory it was typed in: `unibox run .` mounts the current one. A

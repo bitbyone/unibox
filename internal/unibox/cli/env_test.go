@@ -28,7 +28,7 @@ func TestEnvsNameTheTeamsFilesAndShowWhatIsMissing(t *testing.T) {
 		t.Fatal(out, err)
 	}
 	cfg, _ := paths.LoadConfig()
-	if cfg.DefaultEnv != "dev" || cfg.Envs["dev"].Files[0] != file {
+	if cfg.Context.Env != "dev" || cfg.Envs["dev"].Files[0] != file {
 		t.Fatal(cfg)
 	}
 	if out, err = runCLI(t, paths, "env", "show"); err != nil || !strings.Contains(out, "missing") {
@@ -40,7 +40,7 @@ func TestEnvsNameTheTeamsFilesAndShowWhatIsMissing(t *testing.T) {
 	if _, err = runCLI(t, paths, "env", "rm", "dev"); err != nil {
 		t.Fatal(err)
 	}
-	if cfg, _ = paths.LoadConfig(); len(cfg.Envs) != 0 || cfg.DefaultEnv != "" {
+	if cfg, _ = paths.LoadConfig(); len(cfg.Envs) != 0 || cfg.Context.Env != "" {
 		t.Fatal(cfg)
 	}
 }

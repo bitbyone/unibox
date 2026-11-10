@@ -49,6 +49,34 @@ func TestEditorSSHIsReadAsSSHSandbox(t *testing.T) {
 	}
 }
 
+// default_env, what the context says since 0.10, is read into the context
+// and not written again; a context already set wins over it.
+func TestDefaultEnvIsReadAsTheContext(t *testing.T) {
+	t.Parallel()
+	p := Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := filepath.Join(p.Config, "config.yaml")
+	if err := os.WriteFile(file, []byte("default_env: dev\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := p.LoadConfig()
+	if err != nil || c.Context != (Context{Env: "dev"}) {
+		t.Fatalf("%+v %v", c.Context, err)
+	}
+	if err := p.SaveConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(file)
+	if !strings.Contains(string(b), "env: dev") || strings.Contains(string(b), "default_env") {
+		t.Fatalf("%s", b)
+	}
+	if err := os.WriteFile(file, []byte("default_env: dev\ncontext: {sandbox: mine}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if c, err = p.LoadConfig(); err != nil || c.Context != (Context{Sandbox: "mine"}) {
+		t.Fatalf("%+v %v", c.Context, err)
+	}
+}
+
 // sbx that lost its SSH endpoint, as after a reset, gets it back at the
 // next start while no sandbox runs; with one running it is only told, as
 // sbx's daemon restarts for it.

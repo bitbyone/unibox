@@ -7,7 +7,7 @@ default to these, on Windows too:
 
 | Path | Holds |
 | --- | --- |
-| `~/.config/unibox/config.yaml` | envs, named ports, network rules, default env, context, settings |
+| `~/.config/unibox/config.yaml` | envs, named ports, network rules, context, settings |
 | `~/.config/unibox/vars.toml` | your values for env args, and resources (mode `0600`) |
 | `~/.config/unibox/state.json` | sandboxes and what each was created from, their tasks, the directories whose mount was told |
 | `~/.config/unibox/state.v1.json` | Unibox 1's state, set aside |
@@ -21,7 +21,6 @@ default to these, on Windows too:
 ### `config.yaml`
 
 ```yaml
-default_env: dev
 envs:
   dev:
     files:
@@ -63,7 +62,7 @@ sandboxes:                        # one sandbox's own, dropped with it
       - allow: stun.example.com:3478
         protocol: udp
       - deny: gist.github.com
-context:
+context:                          # what commands work in when not told; unibox context use
   sandbox: dev
 stop_idle: true
 update_check: true                # tell of newer releases and env commits

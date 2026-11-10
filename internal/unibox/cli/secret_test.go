@@ -370,7 +370,7 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	if r := cfg.RememberHostCommands; r == nil || *r || cfg.ClaudeRemoteControl != nil {
 		t.Fatalf("%v %v", r, cfg.ClaudeRemoteControl)
 	}
-	if cfg.DefaultEnv != "team" || len(cfg.Envs["team"].Files) != 1 {
+	if cfg.Context.Env != "team" || len(cfg.Envs["team"].Files) != 1 {
 		t.Fatalf("%+v", cfg)
 	}
 	values, _ := paths.LoadEnvValues()
@@ -542,7 +542,7 @@ func TestInitAwayFromARepositoryAsksForTheFile(t *testing.T) {
 	if err != nil || !strings.Contains(said, "no sbxenv file in") || !strings.Contains(said, "later: unibox secret set -e team") {
 		t.Fatalf("%v\n%s", err, said)
 	}
-	if cfg, _ := paths.LoadConfig(); cfg.DefaultEnv != "team" {
+	if cfg, _ := paths.LoadConfig(); cfg.Context.Env != "team" {
 		t.Fatalf("%+v", cfg)
 	}
 }
@@ -591,7 +591,7 @@ func TestInitFindsEveryEnvOfTheRepository(t *testing.T) {
 		path, _ = filepath.EvalSymlinks(path)
 		return path
 	}
-	if len(cfg.Envs) != 2 || resolved(cfg.Envs["dev"].Files[0]) != resolved(filepath.Join(repo, "sandboxes", "dev.sbxenv.yaml")) || cfg.Envs["review"].Repo == "" || cfg.DefaultEnv != "dev" {
+	if len(cfg.Envs) != 2 || resolved(cfg.Envs["dev"].Files[0]) != resolved(filepath.Join(repo, "sandboxes", "dev.sbxenv.yaml")) || cfg.Envs["review"].Repo == "" || cfg.Context.Env != "dev" {
 		t.Fatalf("%+v\n%s", cfg, said)
 	}
 	if strings.Contains(said, "ignored") {
@@ -1270,6 +1270,17 @@ func TestTheContextsSandboxAndEnvGoTogether(t *testing.T) {
 	// Another env's only sandbox is not taken for one not made yet.
 	out, _, err := run(t, paths, "", "context", "use", "-e", "team")
 	if err != nil || !strings.Contains(out, "commands work in env team, whose sandbox is not made yet") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// Its only sandbox under another name, as sandbox create --name makes
+	// one, is.
+	if err := paths.State(func(s *unibox.State) error {
+		s.Sandboxes["other"] = api.Sandbox{Name: "other", Env: "team"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err = run(t, paths, "", "context"); err != nil || !strings.Contains(out, "commands work in sandbox other (the only one), of env team") {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }

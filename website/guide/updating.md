@@ -61,7 +61,7 @@ UNIBOX_NO_UPDATE_CHECK=1 unibox ...    # not this time, as in CI
 
 ```sh
 unibox var ls                 # what the env asks for, and what you set
-unibox var set user jdoe      # for the default env
+unibox var set user jdoe      # for the env of the context
 unibox var set -g user jdoe   # for every env that asks for it
 unibox var rm user
 unibox var                    # the same as a list
@@ -77,7 +77,7 @@ Never put a token in a value; `vars.toml` refuses one that starts with
 ```sh
 unibox env ls                 # the envs and their files
 unibox env show dev           # what dev's files declare, and what you set
-unibox config set default_env dev
+unibox context use -e dev     # the env commands work in when not told
 unibox env rm dev             # forget it; files and sandbox stay
 unibox env                    # the same as a list
 ```

@@ -199,7 +199,6 @@ with what it has of its own over them and the args it asks for.`, RunE: func(cmd
 	}})
 	c.AddCommand(&cobra.Command{Use: "set key value", Args: cobra.ExactArgs(2), Short: "Change a setting", Long: `Change a setting of unibox's own configuration. The keys:
 
-  default_env  the env a sandbox is created from when none is named
   stop_idle    whether a sandbox is stopped when its last session ends;
                with -e for one env, over every env's
   update_check whether unibox tells of a newer unibox or sbx and of new
@@ -221,7 +220,7 @@ with what it has of its own over them and the args it asks for.`, RunE: func(cmd
                (sbx's setting)
   clipboard_text_copy
                whether text an agent copies reaches this computer's
-               clipboard, which lets the sandbox write it (sbx's setting)`, Example: "  unibox config set default_env dev\n  unibox config set stop_idle false\n  unibox config set stop_idle true -e dev", RunE: func(cmd *cobra.Command, args []string) error {
+               clipboard, which lets the sandbox write it (sbx's setting)`, Example: "  unibox config set stop_idle false\n  unibox config set stop_idle true -e dev", RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := o.manager.Config
 		key, value := args[0], args[1]
 		if envFlag != "" {
@@ -242,10 +241,11 @@ with what it has of its own over them and the args it asks for.`, RunE: func(cmd
 			}
 			*cfg.SBXSetting(key) = &v
 		case "default_env":
-			if _, ok := cfg.Envs[value]; !ok {
-				return fmt.Errorf("there is no env %s; unibox env ls lists them", value)
+			// Its name before 0.10, when the context did not yet say it.
+			if err := o.useContext("", value); err != nil {
+				return err
 			}
-			cfg.DefaultEnv = value
+			return o.success("commands work in env " + value + " when not told; unibox context use -e sets it from now on")
 		case "ssh_sandbox", "editor_ssh":
 			v, err := strconv.ParseBool(value)
 			if err != nil {
@@ -297,7 +297,7 @@ with what it has of its own over them and the args it asks for.`, RunE: func(cmd
 			}
 			*cfg.SBXSetting(args[0]) = nil
 		case "default_env":
-			cfg.DefaultEnv = ""
+			cfg.Context = unibox.Context{}
 		case "stop_idle":
 			cfg.StopIdleSandbox = nil
 		case "update_check":
@@ -346,12 +346,12 @@ func (o *options) setEnvStopIdle(key, env string, v *bool) error {
 	return o.success("configuration updated")
 }
 
-const configKeys = "default_env, stop_idle, update_check, ssh_agent, ssh_sandbox, remember_host_commands, claude_remote_control, clipboard_image_paste and clipboard_text_copy"
+const configKeys = "stop_idle, update_check, ssh_agent, ssh_sandbox, remember_host_commands, claude_remote_control, clipboard_image_paste and clipboard_text_copy"
 
 func configValue(c unibox.Config, key string) (any, error) {
 	switch key {
 	case "default_env":
-		return c.DefaultEnv, nil
+		return c.Context.Env, nil
 	case "envs":
 		return c.Envs, nil
 	case "stop_idle":

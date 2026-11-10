@@ -66,7 +66,7 @@ func cliFixture(t *testing.T) unibox.Paths {
 	if err := os.WriteFile(file, []byte("name: team-dev\nargs:\n  user: {required: true, description: Your user name}\n  region: {default: eu}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := paths.SaveConfig(unibox.Config{DefaultEnv: "dev", Envs: map[string]unibox.EnvConfig{"dev": {Files: []string{file}}}}); err != nil {
+	if err := paths.SaveConfig(unibox.Config{Context: unibox.Context{Env: "dev"}, Envs: map[string]unibox.EnvConfig{"dev": {Files: []string{file}}}}); err != nil {
 		t.Fatal(err)
 	}
 	return paths
@@ -440,7 +440,7 @@ func TestEveryListsCornerSaysTheContext(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 	t.Setenv("UNIBOX_SANDBOX", "")
-	o.manager.Config.Context, o.manager.Config.DefaultEnv = unibox.Context{}, ""
+	o.manager.Config.Context = unibox.Context{}
 	o.manager.Config.Envs["web"] = o.manager.Config.Envs["dev"]
 	if got := ansi.Strip(o.contextCorner()); got != "no context" {
 		t.Fatalf("%q", got)

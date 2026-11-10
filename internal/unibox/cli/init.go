@@ -288,7 +288,7 @@ func (o *options) initQuietly(cmd *cobra.Command, root string, named, vars []str
 	if len(lacking) > 0 {
 		return unibox.Fail(1, "missing_values", "set up env(s) %s, which still need values of yours: pass %s, or set them with unibox var set", strings.Join(names, ", "), strings.Join(lacking, ", "))
 	}
-	return o.success(fmt.Sprintf("set up env(s) %s from %s, default %s; unibox doctor says what is left, such as tokens (unibox secret set)", strings.Join(names, ", "), root, o.manager.Config.DefaultEnv))
+	return o.success(fmt.Sprintf("set up env(s) %s from %s, default %s; unibox doctor says what is left, such as tokens (unibox secret set)", strings.Join(names, ", "), root, o.defaultEnv()))
 }
 
 // walkStep heads a step of the walk.
@@ -497,7 +497,7 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	if len(envs) > 0 {
 		use := envs[0].Name
 		for _, env := range envs {
-			if env.Name == o.manager.Config.DefaultEnv {
+			if env.Name == o.defaultEnv() {
 				use = env.Name
 			}
 		}
@@ -575,7 +575,7 @@ func (o *options) walkEnvs(cmd *cobra.Command, root string, named []string) ([]s
 			}
 		}
 	}
-	defaultBefore := cfg.DefaultEnv
+	contextBefore := cfg.Context != (unibox.Context{})
 	names := []string{}
 	for _, f := range picked {
 		name, added, err := o.envFor(ctx, root, f, "", "")
@@ -623,16 +623,16 @@ func (o *options) walkEnvs(cmd *cobra.Command, root string, named []string) ([]s
 		fmt.Fprintf(o.log, "  env %s, %s: %s\n", name, relative(root, f), state)
 		names = append(names, name)
 	}
-	if len(names) > 1 && defaultBefore == "" {
+	if len(names) > 1 && !contextBefore {
 		options := []pick{}
 		for _, name := range names {
 			options = append(options, pick{name, name})
 		}
-		choice, err := o.askPick("Default env", "The env unibox run and the other commands use when not told.", options, names[0])
+		choice, err := o.askPick("Default env", "The env unibox run and the other commands use when not told; unibox context use -e changes it.", options, names[0])
 		if err != nil {
 			return nil, err
 		}
-		if err = o.runStep(cmd, "config", "set", "default_env", choice); err != nil {
+		if err = o.runStep(cmd, "context", "use", "-e", choice); err != nil {
 			return nil, err
 		}
 	}
@@ -650,7 +650,7 @@ func (o *options) walkEnv(cmd *cobra.Command) (string, error) {
 			options = append(options, pick{name, name + " (" + strings.Join(cfg.Envs[name].Files, ", ") + ")"})
 		}
 		options = append(options, pick{another, "another, from an sbxenv file"})
-		choice, err := o.askPick("Env to set up", "An env names your team's sbxenv files.", options, cmp.Or(cfg.DefaultEnv, options[0].value))
+		choice, err := o.askPick("Env to set up", "An env names your team's sbxenv files.", options, cmp.Or(o.defaultEnv(), options[0].value))
 		if err != nil || choice != another {
 			return choice, err
 		}

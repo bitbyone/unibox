@@ -22,7 +22,6 @@ type setting struct {
 // globalSettings are the settings of the Global tab, unibox's then sbx's;
 // sbx's are its daemon's, so no env has them of its own.
 var globalSettings = []setting{
-	{key: "default_env", about: "the env a sandbox is made from when none is named"},
 	{key: "stop_idle", about: "stop a sandbox when its last session ends"},
 	{key: "update_check", about: "tell of a newer unibox or sbx and of new env commits"},
 	{key: "author", about: "who your commits in a sandbox are by"},
@@ -83,11 +82,6 @@ func (o *options) settingsUI(cmd *cobra.Command) error {
 			for _, s := range globalSettings {
 				value, from := "", ""
 				switch s.key {
-				case "default_env":
-					value, from = cfg.DefaultEnv, "yours"
-					if value == "" {
-						value, from = portOff.Render("none"), ""
-					}
 				case "stop_idle":
 					value, from = onOff(cfg.StopIdle()), saidFrom(cfg.StopIdleSandbox != nil)
 				case "update_check":
@@ -251,16 +245,6 @@ func (o *options) changeSetting(cmd *cobra.Command, key, env, now string) (strin
 		return "", err
 	}
 	switch key {
-	case "default_env":
-		picks := []pick{}
-		for _, name := range sorted(o.manager.Config.Envs) {
-			picks = append(picks, pick{name, name})
-		}
-		choice, err := o.askPick("Default env", settingOf(key).about, picks, o.manager.Config.DefaultEnv)
-		if err != nil {
-			return "", err
-		}
-		return o.quietStep(cmd, "config", "set", "default_env", choice)
 	case "author":
 		author, err := o.askText("Author", "Name <email>; enter keeps what is there", now, nil)
 		if err != nil {

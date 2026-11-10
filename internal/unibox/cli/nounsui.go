@@ -106,9 +106,10 @@ func (o *options) envUI(cmd *cobra.Command, leave func() error) error {
 			{key: "c", name: "create", help: "create a sandbox"},
 			{key: "d", name: "rm", help: "forget", confirm: "forget env %s? its files and sandbox stay"},
 		}}
+		inUse := o.defaultEnv()
 		for _, name := range sorted(cfg.Envs) {
 			mark, sandbox := name, "?"
-			if name == cfg.DefaultEnv {
+			if name == inUse {
 				mark = portOn.Render(name + " (default)")
 			}
 			if e, err := cfg.LoadEnv(name); err == nil {
@@ -124,7 +125,7 @@ func (o *options) envUI(cmd *cobra.Command, leave func() error) error {
 		case "show":
 			return errListDone, o.runStep(cmd, "env", "show", name)
 		case "default":
-			return o.quietStep(cmd, "config", "set", "default_env", name)
+			return o.quietStep(cmd, "context", "use", "-e", name)
 		case "update":
 			// A pull may ask on the terminal.
 			return "", o.runStep(cmd, "env", "update", name)

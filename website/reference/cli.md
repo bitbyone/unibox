@@ -9,7 +9,7 @@ stand alone.
 `-s`/`--sandbox` is the sandbox a command works in; `-e`/`--env` the env a
 new sandbox is created from. Left out, `-s` comes from `UNIBOX_SANDBOX`,
 the [context](#unibox-context), or the only sandbox; `-e` from
-`UNIBOX_ENV`, the context, `default_env`, or the only env.
+`UNIBOX_ENV`, the context, or the only env.
 `unibox sandbox rm` always names its sandbox, and `unibox task ls` lists
 every sandbox unless given `-s`.
 
@@ -90,7 +90,8 @@ An env names one or more sbxenv files, merged by sbx in order. Kept in
 
 - `add` - add an env or change its files. Without a file, the one sbxenv
   file in this directory; without a name, the file's `name:`.
-  `--name` sets the sandbox's name; `--default` makes it `default_env`.
+  `--name` sets the sandbox's name; `--default` makes it the context, as
+  the first env added is.
 - `ls` - list envs.
 - `show` - what the files declare (args, kits, agent, ports) and what you set.
 - `update` - fast-forward the env repositories and say what changes. A
@@ -455,7 +456,7 @@ Shows, sets or clears the sandbox commands work in when not told. The env
 they work in is that sandbox's; `-e` names an env whose sandbox is not made
 yet, which stands until it is. The list has one row a sandbox, with its
 env, and one an env with no sandbox. Without `-e`, the env is
-`UNIBOX_ENV`, the sandbox's, `default_env`, or the only one. `init` asks to
+`UNIBOX_ENV`, the sandbox's, or the only one. `init` asks to
 set what it set up, and sets it without asking only where nothing is set.
 
 ### `unibox config`
@@ -476,7 +477,6 @@ they are Global's alone. `-e` says an env's own `stop_idle`.
 
 | Key | Meaning |
 | --- | --- |
-| `default_env` | env a sandbox is created from when none is named |
 | `stop_idle` | stop a sandbox when its last session ends (default `true`); `-e` for one env's own |
 | `update_check` | tell of a newer unibox or sbx and of new commits in the env repositories, asked in the background (default `true`; `UNIBOX_NO_UPDATE_CHECK=1` stops it for a run) |
 | `ssh_agent` | may sandboxes use your SSH agent; sbx is set to match ([Security](./security#your-ssh-agent)) |
