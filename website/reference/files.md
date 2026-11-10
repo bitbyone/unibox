@@ -135,6 +135,7 @@ every env, and `<env>.unibox.yaml` beside `<env>.sbxenv.yaml`, for that
 env alone and over the first. Each may hold:
 
 ```yaml
+min_unibox: "0.10"              # the oldest unibox that reads these files as meant
 ports:                          # named ports (see Ports)
   vite: {port: 5173, description: the dev server, default: on}
   devtools: {port: '19222:9222', default: off}
@@ -164,7 +165,23 @@ repos:                          # repositories a task is given by name
 instructions: |                 # told to every task's agents of the env
   Run make test before you commit.
 author: required                # each person gives a commit author (default: optional)
+settings:                       # the team's defaults for each person's machine
+  ssh_agent: false
+  ssh_sandbox: true
+  remember_host_commands: true
+  clipboard_text_copy: true
+  clipboard_image_paste: true
+  claude_remote_control: true
 ```
+
+`settings:` gives the team's value of the settings in `config.yaml` that
+are each person's for the whole machine. One the person has not said is
+taken without a question, by `init` and when a sandbox is created or
+started, and told; one they said otherwise `init` asks again, the team's
+answer first, and leaves as they answer. Envs whose files give one
+different values decide nothing of it. `min_unibox` is read before the
+rest: an older unibox refuses the files and says how to update, rather
+than failing on a key it does not know.
 
 A port is `{port, description, default}`, `default` on or off. A
 repository is its address alone, or the keys above; an address that starts

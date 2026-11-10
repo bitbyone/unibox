@@ -59,6 +59,9 @@ type Env struct {
 	// AuthorRequired is the team's asking each person for a commit author
 	// of their own, without which no task of the env starts.
 	AuthorRequired bool
+	// Settings are the team's defaults for the person's settings of the
+	// whole machine, a later file's over an earlier one's.
+	Settings map[string]bool
 }
 
 // SandboxName is the name of the env's sandbox: the user's, else the
@@ -103,8 +106,15 @@ func (c Config) LoadEnv(name string) (Env, error) {
 	}
 	instructions := []string{}
 	authorRequired := false
+	settings := map[string]bool{}
 	if err := readTeamFiles(ec.Files, func(file, _ string, doc teamDoc) error {
 		instructions = append(instructions, doc.Instructions)
+		if err := checkTeamSettings(file, doc.Settings); err != nil {
+			return err
+		}
+		for k, v := range doc.Settings {
+			settings[k] = v
+		}
 		switch doc.Author {
 		case "":
 		case "required", "optional":
@@ -120,7 +130,7 @@ func (c Config) LoadEnv(name string) (Env, error) {
 		instructions = append(instructions, layer.Instructions)
 	}
 	instructions = slices.DeleteFunc(instructions, func(s string) bool { return strings.TrimSpace(s) == "" })
-	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources, Repos: repos, Instructions: instructions, AuthorRequired: authorRequired}, nil
+	return Env{Name: name, Config: ec, SBX: sbx, Ports: ports, Resources: resources, Repos: repos, Instructions: instructions, AuthorRequired: authorRequired, Settings: settings}, nil
 }
 
 // ValidEnvConfig checks what an env says before it is kept: a name, files

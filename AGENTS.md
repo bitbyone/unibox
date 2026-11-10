@@ -169,7 +169,11 @@ about it. Keep command output short: pipe through `head`, `tail` or
   besides by hand are named by `port add` (`a` in the list) and forgotten
   by `port rm` (`r`), which refuse a name an env has and the team's.
   `port default` (`d`) writes only whether one is on at start for the
-  user, and `port on|off` only switches a running sandbox's.
+  user, and `port on|off` only switches a running sandbox's. The team's
+  `settings:` there are defaults of the person's settings of the whole
+  machine (`TeamSettingKeys`, `teamsettings.go`): taken while unsaid, by
+  init and `ensure`, and asked again by init where the person's differ.
+  `min_unibox` is checked before the rest of such a file is read.
 - **Nobody using unibox needs sbx's CLI.** The network policy
   (`unibox network`), `env.rememberHostCommands` (`unibox config`) and
   stray mounts (`unibox prune`) have commands, and every hint doctor or

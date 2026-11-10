@@ -6,6 +6,14 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- The team's `unibox.yaml` files give defaults for each person's settings
+  of the whole machine under `settings:` (`ssh_agent`, `ssh_sandbox`,
+  `remember_host_commands`, the clipboard's and `claude_remote_control`):
+  one not said yet is taken without a question, by `init` and when a
+  sandbox starts; one said otherwise `init` asks again, the team's first.
+- `min_unibox` in those files refuses an older unibox with how to update
+  it, and a key unibox does not know says it may be too old.
+
 - `init` asks whether agents paste images from your clipboard whatever
   the env's agent, not only for claude and codex: sbx serves them to any
   process in a sandbox.

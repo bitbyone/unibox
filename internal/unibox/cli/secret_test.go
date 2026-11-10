@@ -390,6 +390,43 @@ func TestInitWalksThroughAnEnvItsArgsAndSecrets(t *testing.T) {
 	}
 }
 
+func TestInitTakesTheTeamsSettingsAndAsksAgainWhereThePersonsDiffer(t *testing.T) {
+	log := fakeSBX(t)
+	t.Setenv("ACCESSIBLE", "1")
+	paths := unibox.Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	file := teamEnv(t)
+	repo := filepath.Dir(filepath.Dir(file))
+	if err := os.WriteFile(filepath.Join(filepath.Dir(file), "team.unibox.yaml"), []byte("settings:\n  ssh_agent: false\n  ssh_sandbox: true\n  remember_host_commands: true\n  clipboard_text_copy: true\n  clipboard_image_paste: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Nothing asked of the settings: the arg; store the secrets; no sandbox.
+	_, said, err := runAt(t, paths, "person\ny\n2\nn\n", "init", repo)
+	if err != nil || strings.Contains(said, "Yes - agents use my SSH agent") || !strings.Contains(said, "Host commands: yes, as the team says") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	cfg, _ := paths.LoadConfig()
+	if cfg.SSHAgentOn == nil || *cfg.SSHAgentOn || !*cfg.EditorSSHOn || !*cfg.RememberHostCommands || !*cfg.ClipboardTextCopy || !*cfg.ClipboardImagePaste {
+		t.Fatalf("%+v", cfg)
+	}
+	if c := calls(t, log); !strings.Contains(c, "settings set env.rememberHostCommands true\n") || !strings.Contains(c, "settings set clipboard.imagePaste true\n") {
+		t.Fatalf("%s", c)
+	}
+	// One the person changed since is asked again, the team's first; the
+	// rest as the team says is not.
+	no := false
+	cfg.ClipboardImagePaste = &no
+	if err := paths.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	_, said, err = runAt(t, paths, "1\nn\n", "init", repo)
+	if err != nil || !strings.Contains(said, "You said no; the team recommends yes.") || !strings.Contains(said, "Yes - paste images from my clipboard (recommended)") || strings.Contains(said, "Copying text") {
+		t.Fatalf("%v\n%s", err, said)
+	}
+	if cfg, _ := paths.LoadConfig(); !*cfg.ClipboardImagePaste {
+		t.Fatal("the team's recommendation was not taken")
+	}
+}
+
 func TestInitTakesEditorsOverSSHThatSbxHasOnAlready(t *testing.T) {
 	log := fakeSBX(t)
 	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "editor-ssh"), nil, 0o600); err != nil {

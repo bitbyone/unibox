@@ -7,6 +7,7 @@ import (
 
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -68,21 +69,6 @@ func (o *options) working(what string, do func() error) error {
 	}
 }
 
-// askSSHAgent is the question init asks once: whether sandboxes may use the user's SSH agent.
-func (o *options) askSSHAgent(cmd *cobra.Command) error {
-	if _, said := o.manager.Config.SSHAgent(); said {
-		return nil
-	}
-	choice, err := o.askPick("SSH agent in sandboxes", "With it, git over SSH works in a sandbox with no token - a mounted checkout pushes as you do. "+sshAgentRisk, []pick{
-		{"no", "No - agents reach git through the services' tokens alone (recommended)"},
-		{"yes", "Yes - agents use my SSH agent"},
-	}, "no")
-	if err != nil {
-		return err
-	}
-	return o.setSSHAgent(cmd, choice == "yes")
-}
-
 // setEditorSSH records whether editors may reach sandboxes over SSH, and
 // has sbx serve it or not to match. Turning it on always restarts sbx's
 // daemon, since one started before the flag was on serves no SSH.
@@ -107,37 +93,6 @@ func (o *options) setEditorSSH(cmd *cobra.Command, on bool) error {
 		what = "keeping editors out of sandboxes, restarting the sbx daemon"
 	}
 	return o.working(what, func() error { return sbx.SetEditorSSH(cmd.Context(), on) })
-}
-
-// askEditorSSH is the question init asks once on a machine: whether
-// editors and desktop apps may reach sandboxes over SSH. It is sbx's own
-// setting, for every sandbox, so one sbx has on already was decided and is
-// only recorded.
-func (o *options) askEditorSSH(cmd *cobra.Command) error {
-	if _, said := o.manager.Config.EditorSSH(); said {
-		return nil
-	}
-	if sbx := o.manager.SBX; sbx.Present() {
-		if on, err := sbx.EditorSSH(cmd.Context()); err == nil && on {
-			cfg := o.manager.Config
-			cfg.EditorSSHOn = &on
-			if err := o.paths.SaveConfig(cfg); err != nil {
-				return err
-			}
-			o.manager.Config = cfg
-			// sbx serving SSH says nothing of the SSH client's own
-			// configuration, which only sbx setup ssh writes.
-			return sbx.SetupSSHClient(cmd.Context())
-		}
-	}
-	choice, err := o.askPick("Editors over SSH", "VS Code, Cursor, Orca and other apps reach a sandbox as ssh <sandbox>.sbx. sbx serves it to your user alone, signed in to Docker, and adds the host entry to your SSH client's configuration. An editor's session is not unibox's: unibox config set stop_idle false keeps a sandbox running for it.", []pick{
-		{"yes", "Yes - editors connect over SSH"},
-		{"no", "No"},
-	}, "yes")
-	if err != nil {
-		return err
-	}
-	return o.setEditorSSH(cmd, choice == "yes")
 }
 
 // waiting shows a spinner while do runs, as long as it takes more than a
@@ -170,18 +125,92 @@ func (o *options) waiting(what string, do func() error) error {
 	}
 }
 
-// askSBXSetting is a question init asks once on a machine about one of
-// sbx's settings, unless config.yaml already says it; the answer is kept
-// there and sbx set to match.
-func (o *options) askSBXSetting(cmd *cobra.Command, key, title, description string, options []pick, preset string) error {
-	if *o.manager.Config.SBXSetting(key) != nil {
+// settingQuestion is what init asks of one of the person's settings of
+// the whole machine: a yes and a no, preset as unibox recommends.
+type settingQuestion struct {
+	key, title, description string
+	picks                   []pick
+	preset                  string
+}
+
+// askSetting asks one of the person's settings of the whole machine once,
+// unless config.yaml says it already. The team's value, from the
+// settings: of its unibox.yaml files, is taken without a question while
+// the person's is unsaid, and where theirs differs it is asked again, the
+// team's first.
+func (o *options) askSetting(cmd *cobra.Command, team map[string]bool, q settingQuestion) error {
+	said := *o.manager.Config.Setting(q.key)
+	recommended, has := team[q.key]
+	switch {
+	case has && said == nil:
+		fmt.Fprintf(o.log, "  %s: %s, as the team says\n", q.title, yesNo(recommended))
+		return o.setSetting(cmd, q.key, recommended)
+	case has && *said == recommended, !has && said != nil:
 		return nil
+	case has:
+		q.picks = teamFirst(q.picks, yesNo(recommended))
+		q.preset = yesNo(recommended)
+		q.description += fmt.Sprintf(" You said %s; the team recommends %s.", yesNo(*said), yesNo(recommended))
+	case q.key == "ssh_sandbox":
+		// sbx's own setting, for every sandbox: one sbx has on already was
+		// decided and is only recorded.
+		if sbx := o.manager.SBX; sbx.Present() {
+			if on, err := sbx.EditorSSH(cmd.Context()); err == nil && on {
+				cfg := o.manager.Config
+				cfg.EditorSSHOn = &on
+				if err := o.paths.SaveConfig(cfg); err != nil {
+					return err
+				}
+				o.manager.Config = cfg
+				// sbx serving SSH says nothing of the SSH client's own
+				// configuration, which only sbx setup ssh writes.
+				return sbx.SetupSSHClient(cmd.Context())
+			}
+		}
 	}
-	choice, err := o.askPick(title, description, options, preset)
+	choice, err := o.askPick(q.title, q.description, q.picks, q.preset)
 	if err != nil {
 		return err
 	}
 	v := choice == "yes"
+	if said != nil && *said == v {
+		return nil
+	}
+	return o.setSetting(cmd, q.key, v)
+}
+
+func yesNo(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "no"
+}
+
+// teamFirst puts the team's answer first and calls it the recommended
+// one, over unibox's own recommendation.
+func teamFirst(picks []pick, team string) []pick {
+	out := []pick{}
+	for _, p := range picks {
+		p.label = strings.TrimSuffix(p.label, " (recommended)")
+		if p.value == team {
+			p.label += " (recommended)"
+			out = append([]pick{p}, out...)
+		} else {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// setSetting keeps one of the person's settings of the whole machine in
+// config.yaml and sets sbx to match.
+func (o *options) setSetting(cmd *cobra.Command, key string, v bool) error {
+	switch key {
+	case "ssh_agent":
+		return o.setSSHAgent(cmd, v)
+	case "ssh_sandbox":
+		return o.setEditorSSH(cmd, v)
+	}
 	if err := o.manager.SBX.SetSetting(cmd.Context(), unibox.SBXSettings[key], strconv.FormatBool(v)); err != nil {
 		return err
 	}

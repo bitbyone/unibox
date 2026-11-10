@@ -326,34 +326,16 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 	}
 	// Decided before sbx is used: unibox refuses an SSH agent sbx forwards
-	// without the user's word.
-	if err := o.askSSHAgent(cmd); err != nil {
+	// without the user's word. The team's files say what it recommends,
+	// read from those of the repository, as the envs are picked later.
+	team, err := o.repositorySettings(root, named)
+	if err != nil {
 		return err
 	}
-	if err := o.askEditorSSH(cmd); err != nil {
-		return err
-	}
-	if err := o.askSBXSetting(cmd, "remember_host_commands", "Host commands", "An env may run commands on this computer, which sbx shows you to approve when a sandbox is created. It can remember an approval and run the same commands again without asking.", []pick{
-		{"no", "No - ask each time (recommended)"},
-		{"yes", "Yes - remember what I approved"},
-	}, "no"); err != nil {
-		return err
-	}
-	// Since sbx 0.51 text an agent copies stays in the sandbox until told
-	// otherwise, whatever the agent.
-	if err := o.askSBXSetting(cmd, "clipboard_text_copy", "Copying text", "Agents copy text, such as a command or a reply, to your clipboard. sbx lets it out of a sandbox only when let to, and then any process in a sandbox can put what you next paste here.", []pick{
-		{"yes", "Yes - copy text to my clipboard"},
-		{"no", "No - keep it in the sandbox"},
-	}, "yes"); err != nil {
-		return err
-	}
-	// sbx serves images from this computer's clipboard to a sandbox only
-	// once told to, to any process in it, so whatever the agent.
-	if err := o.askSBXSetting(cmd, "clipboard_image_paste", "Pasting images", "Agents paste a screenshot with Ctrl+V. sbx hands them images from this computer's clipboard only when let to, and then any process in a sandbox can read an image you copy. Text pastes either way.", []pick{
-		{"yes", "Yes - paste images from my clipboard"},
-		{"no", "No - text only"},
-	}, "yes"); err != nil {
-		return err
+	for _, q := range machineQuestions {
+		if err := o.askSetting(cmd, team, q); err != nil {
+			return err
+		}
 	}
 	if err := sbx.Available(ctx); err != nil {
 		return err
@@ -398,11 +380,9 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 		}
 		claude = claude || slices.Contains(agents, "claude")
 	}
-	if claude {
-		if err := o.askSBXSetting(cmd, "claude_remote_control", "Claude remote control", "Claude Code's /remote-control lets claude.ai and the Claude app drive a session in a sandbox. Claude signs that channel in with a session token of its own, not your credentials.", []pick{
-			{"yes", "Yes - allow /remote-control"},
-			{"no", "No"},
-		}, "yes"); err != nil {
+	// A team may say it for envs that do not run claude yet.
+	if _, said := team["claude_remote_control"]; claude || said {
+		if err := o.askSetting(cmd, team, remoteControlQuestion); err != nil {
 			return err
 		}
 	}
@@ -725,4 +705,66 @@ func (o *options) runStep(cmd *cobra.Command, args ...string) error {
 	}
 	c.SetContext(cmd.Context())
 	return c.RunE(c, c.Flags().Args())
+}
+
+// machineQuestions are the person's settings of the whole machine init
+// asks before the envs: sbx is set to match each.
+var machineQuestions = []settingQuestion{
+	{"ssh_agent", "SSH agent in sandboxes", "With it, git over SSH works in a sandbox with no token - a mounted checkout pushes as you do. " + sshAgentRisk, []pick{
+		{"no", "No - agents reach git through the services' tokens alone (recommended)"},
+		{"yes", "Yes - agents use my SSH agent"},
+	}, "no"},
+	{"ssh_sandbox", "Editors over SSH", "VS Code, Cursor, Orca and other apps reach a sandbox as ssh <sandbox>.sbx. sbx serves it to your user alone, signed in to Docker, and adds the host entry to your SSH client's configuration. An editor's session is not unibox's: unibox config set stop_idle false keeps a sandbox running for it.", []pick{
+		{"yes", "Yes - editors connect over SSH"},
+		{"no", "No"},
+	}, "yes"},
+	{"remember_host_commands", "Host commands", "An env may run commands on this computer, which sbx shows you to approve when a sandbox is created. It can remember an approval and run the same commands again without asking.", []pick{
+		{"no", "No - ask each time (recommended)"},
+		{"yes", "Yes - remember what I approved"},
+	}, "no"},
+	// Since sbx 0.51 text an agent copies stays in the sandbox until told
+	// otherwise, whatever the agent.
+	{"clipboard_text_copy", "Copying text", "Agents copy text, such as a command or a reply, to your clipboard. sbx lets it out of a sandbox only when let to, and then any process in a sandbox can put what you next paste here.", []pick{
+		{"yes", "Yes - copy text to my clipboard"},
+		{"no", "No - keep it in the sandbox"},
+	}, "yes"},
+	// sbx serves images from this computer's clipboard to a sandbox only
+	// once told to, to any process in it, so whatever the agent.
+	{"clipboard_image_paste", "Pasting images", "Agents paste a screenshot with Ctrl+V. sbx hands them images from this computer's clipboard only when let to, and then any process in a sandbox can read an image you copy. Text pastes either way.", []pick{
+		{"yes", "Yes - paste images from my clipboard"},
+		{"no", "No - text only"},
+	}, "yes"},
+}
+
+// remoteControlQuestion is asked once an env runs claude.
+var remoteControlQuestion = settingQuestion{"claude_remote_control", "Claude remote control", "Claude Code's /remote-control lets claude.ai and the Claude app drive a session in a sandbox. Claude signs that channel in with a session token of its own, not your credentials.", []pick{
+	{"yes", "Yes - allow /remote-control"},
+	{"no", "No"},
+}, "yes"}
+
+// repositorySettings are the settings the team's files of every env init
+// may set up from the repository agree on; one they give different
+// values is the person's to choose, and said so.
+func (o *options) repositorySettings(root string, named []string) (map[string]bool, error) {
+	found, err := envFiles(root, named)
+	if err != nil {
+		// The envs' step says why.
+		return nil, nil
+	}
+	envs := [][]string{}
+	for _, f := range found {
+		files := []string{f}
+		if env, ok := o.manager.Config.EnvOf(f); ok {
+			files = o.manager.Config.Envs[env].Files
+		}
+		envs = append(envs, files)
+	}
+	team, differ, err := unibox.TeamSettings(envs)
+	if err != nil {
+		return nil, err
+	}
+	if len(differ) > 0 {
+		fmt.Fprintf(o.log, "  the envs here recommend %s differently; you choose\n", strings.Join(differ, ", "))
+	}
+	return team, nil
 }

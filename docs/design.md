@@ -835,7 +835,12 @@ for `remember_host_commands`, `clipboard_text_copy` and
 0.51 keeps text an agent copies in the sandbox until told otherwise, and
 serves no image from the host's clipboard until told to, to any process
 in the sandbox alike. It asks for `claude_remote_control` once an env it
-sets up runs claude. doctor says so while it
+sets up runs claude. The team's `settings:` in its unibox.yaml files
+answers each of these for whoever has not: init and every start take its
+value then, while init asks again, the team's answer first, where the
+person said otherwise - the choice stays theirs. init reads the team's
+value from every env of the repository before the envs are picked, as an
+SSH agent must be decided before sbx is used. doctor says so while it
 is off and unsaid, and leaves turning it on to the person, as it lets a
 sandbox read images copied on the host.
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/tobola/unibox/internal/version"
 )
 
 // TeamFile is the file of unibox's own beside an sbxenv file, in which a
@@ -141,6 +143,12 @@ type teamDoc struct {
 	// Author says whether each person gives the env a commit author of
 	// their own: required, else optional, as when it is left out.
 	Author string `yaml:"author"`
+	// Settings are the team's defaults for the person's settings of the
+	// whole machine, by TeamSettingKeys.
+	Settings map[string]bool `yaml:"settings"`
+	// MinUnibox is the oldest release of unibox that reads the file as
+	// the team means it, checked before the rest is read.
+	MinUnibox string `yaml:"min_unibox"`
 }
 
 // readTeamFiles reads the team's files of an env in the order they apply:
@@ -156,10 +164,23 @@ func readTeamFiles(sbxenvFiles []string, each func(name, from string, doc teamDo
 		if err != nil {
 			return err
 		}
+		// The release the file needs is read before the rest, which an
+		// older unibox would not know.
+		var needs struct {
+			MinUnibox string `yaml:"min_unibox"`
+		}
+		if err := yaml.Unmarshal(b, &needs); err == nil {
+			if err := requireUnibox(name, needs.MinUnibox); err != nil {
+				return err
+			}
+		}
 		var doc teamDoc
 		d := yaml.NewDecoder(bytes.NewReader(b))
 		d.KnownFields(true)
 		if err := d.Decode(&doc); err != nil && !errors.Is(err, io.EOF) {
+			if strings.Contains(err.Error(), "not found in type") {
+				return fmt.Errorf("%s: %w; the team may write it for a newer unibox than this %s: %s", name, err, version.String(), upgradeHint())
+			}
 			return fmt.Errorf("%s: %w", name, err)
 		}
 		return each(name, from, doc)

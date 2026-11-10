@@ -427,6 +427,11 @@ func (m *Manager) progress(what string) {
 
 func (m *Manager) ensure(ctx context.Context, b *api.Sandbox, env Env, recreate, force bool) error {
 	m.progress("checking sandbox " + b.Name)
+	// Before sbx is checked, which refuses an SSH agent the person has
+	// not allowed.
+	if err := m.adoptTeamSettings(ctx, env); err != nil {
+		return err
+	}
 	if err := m.SBX.Available(ctx); err != nil {
 		return err
 	}
