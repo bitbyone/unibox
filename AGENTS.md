@@ -173,7 +173,7 @@ about it. Keep command output short: pipe through `head`, `tail` or
   `settings:` there are defaults of the person's settings of the whole
   machine (`TeamSettingKeys`, `teamsettings.go`): taken while unsaid, by
   init and `ensure`, and asked again by init where the person's differ.
-  `min_unibox` is checked before the rest of such a file is read.
+  `version_required` is checked before the rest of such a file is read.
 - **Nobody using unibox needs sbx's CLI.** The network policy
   (`unibox network`), `env.rememberHostCommands` (`unibox config`) and
   stray mounts (`unibox prune`) have commands, and every hint doctor or

@@ -71,7 +71,7 @@ func TestATeamsFileNeedingANewerUniboxIsRefused(t *testing.T) {
 	file := filepath.Join(root, "dev.sbxenv.yaml")
 	write(t, file, "name: dev\n")
 	// Read before the keys this release does not know.
-	write(t, filepath.Join(root, "unibox.yaml"), "min_unibox: \"0.10\"\nsomething_new: true\n")
+	write(t, filepath.Join(root, "unibox.yaml"), "version_required: \"0.10\"\nsomething_new: true\n")
 	_, err := ReadTeamPorts([]string{file})
 	var failure *Failure
 	if !errors.As(err, &failure) || failure.Code != "unibox_outdated" || !strings.Contains(err.Error(), "needs unibox 0.10 or newer, and this is 0.9") {
@@ -82,12 +82,12 @@ func TestATeamsFileNeedingANewerUniboxIsRefused(t *testing.T) {
 	if _, err := ReadTeamPorts([]string{file}); err == nil || !strings.Contains(err.Error(), "newer unibox than this 0.9") {
 		t.Fatalf("%v", err)
 	}
-	write(t, filepath.Join(root, "unibox.yaml"), "min_unibox: \"0.9\"\n")
+	write(t, filepath.Join(root, "unibox.yaml"), "version_required: \"0.9\"\n")
 	if _, err := ReadTeamPorts([]string{file}); err != nil {
 		t.Fatal(err)
 	}
-	write(t, filepath.Join(root, "unibox.yaml"), "min_unibox: soon\n")
-	if _, err := ReadTeamPorts([]string{file}); err == nil || !strings.Contains(err.Error(), "min_unibox is a release") {
+	write(t, filepath.Join(root, "unibox.yaml"), "version_required: soon\n")
+	if _, err := ReadTeamPorts([]string{file}); err == nil || !strings.Contains(err.Error(), "version_required is a release") {
 		t.Fatalf("%v", err)
 	}
 	_ = os.Remove(filepath.Join(root, "unibox.yaml"))

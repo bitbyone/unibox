@@ -146,9 +146,9 @@ type teamDoc struct {
 	// Settings are the team's defaults for the person's settings of the
 	// whole machine, by TeamSettingKeys.
 	Settings map[string]bool `yaml:"settings"`
-	// MinUnibox is the oldest release of unibox that reads the file as
+	// VersionRequired is the oldest release of unibox that reads the file as
 	// the team means it, checked before the rest is read.
-	MinUnibox string `yaml:"min_unibox"`
+	VersionRequired string `yaml:"version_required"`
 }
 
 // readTeamFiles reads the team's files of an env in the order they apply:
@@ -167,10 +167,10 @@ func readTeamFiles(sbxenvFiles []string, each func(name, from string, doc teamDo
 		// The release the file needs is read before the rest, which an
 		// older unibox would not know.
 		var needs struct {
-			MinUnibox string `yaml:"min_unibox"`
+			VersionRequired string `yaml:"version_required"`
 		}
 		if err := yaml.Unmarshal(b, &needs); err == nil {
-			if err := requireUnibox(name, needs.MinUnibox); err != nil {
+			if err := requireUnibox(name, needs.VersionRequired); err != nil {
 				return err
 			}
 		}

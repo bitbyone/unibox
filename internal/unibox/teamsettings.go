@@ -142,7 +142,7 @@ func requireUnibox(file, need string) error {
 		return nil
 	}
 	if !uniboxRelease.MatchString(need) {
-		return fmt.Errorf("%s: min_unibox is a release such as \"0.10\", not %q", file, need)
+		return fmt.Errorf("%s: version_required is a release such as \"0.10\", not %q", file, need)
 	}
 	if have := version.String(); !UniboxAtLeast(have, need) {
 		return Fail(4, "unibox_outdated", "%s needs unibox %s or newer, and this is %s; %s, then run it again", file, need, have, upgradeHint())
