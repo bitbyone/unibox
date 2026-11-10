@@ -481,6 +481,7 @@ func (o *options) allTasks(cmd *cobra.Command, sandbox string) ([]api.Task, []ap
 // list; resuming takes the terminal and ends it.
 func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 	ctx := cmd.Context()
+	last := ""
 	for {
 		_, _, rows, err := o.allTasks(cmd, sandbox)
 		if err != nil {
@@ -491,7 +492,8 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			return nil
 		}
 		lipgloss.HasDarkBackground()
-		out, err := tea.NewProgram(tasksModel{rows: rows, context: o.contextCorner()}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run()
+		start := startRow(rows, last, o.defaultSandbox())
+		out, err := tea.NewProgram(tasksModel{rows: rows, cursor: start, context: o.contextCorner()}, tea.WithInput(o.input), tea.WithOutput(o.log), tea.WithContext(ctx)).Run()
 		if err != nil {
 			return err
 		}
@@ -506,6 +508,7 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			return o.runStep(cmd, args...)
 		}
 		t := chosen.task
+		last = t.ID
 		switch chosen.kind {
 		case "resume", "shell":
 			req := unibox.Request{Task: t.ID, Agent: chosen.agent, Shell: chosen.kind == "shell"}
@@ -545,6 +548,17 @@ func (o *options) tasksUI(cmd *cobra.Command, sandbox string) error {
 			}
 		}
 	}
+}
+
+// startRow is where the task list's cursor starts: on the task last
+// acted on when the list comes back, else on the first task of the
+// context's sandbox, as the tasks of every sandbox are listed whatever the
+// context says and the first may be another sandbox's, with other agents.
+func startRow(rows []taskRow, task, sandbox string) int {
+	if i := slices.IndexFunc(rows, func(r taskRow) bool { return r.ID == task }); task != "" && i >= 0 {
+		return i
+	}
+	return max(slices.IndexFunc(rows, func(r taskRow) bool { return r.Sandbox == sandbox }), 0)
 }
 
 func (o *options) resumeCommand() *cobra.Command {

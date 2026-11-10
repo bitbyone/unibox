@@ -133,3 +133,31 @@ func TestATasksRepositoriesSayWhetherEachIsMountedAndFromWhere(t *testing.T) {
 		t.Fatalf("%s", s)
 	}
 }
+
+// The list shows every sandbox's tasks, so it starts on the context's
+// sandbox, whose agents a person expects, and comes back to the task
+// acted on.
+func TestTaskListStartsInTheContextsSandbox(t *testing.T) {
+	t.Parallel()
+	rows := []taskRow{
+		{Task: api.Task{ID: "a1", Sandbox: "work"}},
+		{Task: api.Task{ID: "a2", Sandbox: "work"}},
+		{Task: api.Task{ID: "b1", Sandbox: "personal"}},
+		{Task: api.Task{ID: "b2", Sandbox: "personal"}},
+	}
+	for _, c := range []struct {
+		task, sandbox string
+		want          int
+	}{
+		{"", "personal", 2},
+		{"", "work", 0},
+		{"", "", 0},
+		{"", "gone", 0},
+		{"b2", "work", 3},
+		{"removed", "personal", 2},
+	} {
+		if got := startRow(rows, c.task, c.sandbox); got != c.want {
+			t.Fatalf("startRow(%q, %q) = %d, want %d", c.task, c.sandbox, got, c.want)
+		}
+	}
+}
