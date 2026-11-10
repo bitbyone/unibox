@@ -6,6 +6,10 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `init` asks whether agents paste images from your clipboard whatever
+  the env's agent, not only for claude and codex: sbx serves them to any
+  process in a sandbox.
+
 - `unibox` alone at a terminal opens the task list, the one come back to
   most; `unibox sandbox` is the sandbox list.
 

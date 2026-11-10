@@ -347,6 +347,14 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	}, "yes"); err != nil {
 		return err
 	}
+	// sbx serves images from this computer's clipboard to a sandbox only
+	// once told to, to any process in it, so whatever the agent.
+	if err := o.askSBXSetting(cmd, "clipboard_image_paste", "Pasting images", "Agents paste a screenshot with Ctrl+V. sbx hands them images from this computer's clipboard only when let to, and then any process in a sandbox can read an image you copy. Text pastes either way.", []pick{
+		{"yes", "Yes - paste images from my clipboard"},
+		{"no", "No - text only"},
+	}, "yes"); err != nil {
+		return err
+	}
 	if err := sbx.Available(ctx); err != nil {
 		return err
 	}
@@ -376,7 +384,7 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 	// Reading a kit of files has sbx build it, which the first time takes
 	// minutes and may fail; the spinner says so, and a kit that does not
 	// build stops the walk here rather than at the sandbox.
-	claude, pastes := false, false
+	claude := false
 	for _, env := range envs {
 		if err = unibox.CheckLineEndings(env); err != nil {
 			return err
@@ -389,22 +397,11 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			return err
 		}
 		claude = claude || slices.Contains(agents, "claude")
-		pastes = pastes || slices.Contains(agents, "claude") || slices.Contains(agents, "codex")
 	}
 	if claude {
 		if err := o.askSBXSetting(cmd, "claude_remote_control", "Claude remote control", "Claude Code's /remote-control lets claude.ai and the Claude app drive a session in a sandbox. Claude signs that channel in with a session token of its own, not your credentials.", []pick{
 			{"yes", "Yes - allow /remote-control"},
 			{"no", "No"},
-		}, "yes"); err != nil {
-			return err
-		}
-	}
-	// Claude Code and Codex paste images with Ctrl+V, which sbx serves
-	// from this computer's clipboard only once told to.
-	if pastes {
-		if err := o.askSBXSetting(cmd, "clipboard_image_paste", "Pasting images", "Claude Code and Codex paste a screenshot with Ctrl+V. sbx hands them images from this computer's clipboard only when let to, and then any process in a sandbox can read an image you copy. Text pastes either way.", []pick{
-			{"yes", "Yes - paste images from my clipboard"},
-			{"no", "No - text only"},
 		}, "yes"); err != nil {
 			return err
 		}
