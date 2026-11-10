@@ -218,11 +218,17 @@ func (o *options) taskCommand(name string) *cobra.Command {
 			// Not even those every task takes: the task is its directory.
 			req.Task = cmp.Or(req.Task, unibox.FreshTaskName(func(n string) bool { return o.taskNames()[n] }))
 		default:
-			if len(req.Repositories) == 0 {
-				req.Repositories = []unibox.RepoInput{{Source: "."}}
-			}
+			// A directory is mounted only when named, the current one as
+			// ".": run alone must not hand the agent wherever it was typed.
+			named := len(req.Repositories) > 0
 			if err := o.withIndexedRepos(&req, !only, defaults); err != nil {
 				return err
+			}
+			if !named && (req.Task == "" || !o.taskExists(req.Task)) {
+				// Nothing named to call it after, so it is named as --bare's
+				// is, and holds only what the index gives every task.
+				req.Task = cmp.Or(req.Task, unibox.FreshTaskName(func(n string) bool { return o.taskNames()[n] }))
+				req.Bare = len(req.Repositories) == 0
 			}
 		}
 		if name == "check" {

@@ -528,7 +528,7 @@ func (o *options) walk(cmd *cobra.Command, root string, named, vars []string) er
 			}
 		}
 	}
-	fmt.Fprintf(o.log, "\nset up; start a task with unibox run <directory>, or unibox run --shell for a shell\n")
+	fmt.Fprintf(o.log, "\nset up; start a task with unibox run <directory>, unibox run alone for one of no repository, or unibox run --shell for a shell\n")
 	return nil
 }
 

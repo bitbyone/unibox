@@ -33,7 +33,7 @@ When a teammate changes the env, or you change a value, the next start and
 `unibox doctor` say so. Nothing is applied until you ask:
 
 ```term ~/code/api
-$ unibox run
+$ unibox run .
 env dev changed since sandbox dev was created; unibox sandbox recreate dev applies it
 [dim]...[/]
 
@@ -85,7 +85,7 @@ says where each value comes from.
 
 ```sh
 unibox sandbox create dev-big -e dev --cpus 8 --memory 50%
-unibox run -s dev-big
+unibox run . -s dev-big
 ```
 
 `-s` names the sandbox a command works in, `-e` the env a new one is

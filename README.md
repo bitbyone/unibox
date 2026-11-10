@@ -100,7 +100,7 @@ unibox sandbox create -e dev                    # or let run create it
 unibox                                          # alone at a terminal: the task list
 
 cd ~/src/payments
-unibox run --branch feat/refunds                # mount this checkout, run the agent
+unibox run . --branch feat/refunds              # mount this checkout, run the agent
 unibox run --clone --repo ../api --repo .       # fresh clones from the forge instead
 
 unibox task                                     # pick a task: resume, another agent, shell, rename, remove
@@ -179,13 +179,15 @@ A name from that index works wherever a repository does (`unibox run
 adrs`); `unibox task new .` opens the same screen with your checkout
 mounted among them.
 
-By default `run` mounts the directories you name (the current one when
-none) into the sandbox at `/work/<task>/<name>`: the agent works on your
-files and your `.git` as they are, and what it writes there - a git hook
-included - is on your machine at once. Unibox says so the first time a
-directory is mounted. `--branch` switches your checkout first, making the
-branch from HEAD when you have none of that name. A git worktree cannot
-be mounted; mount the repository's own checkout.
+By default `run` mounts the directories you name - the current one as
+`unibox run .` - into the sandbox at `/work/<task>/<name>`; with none
+named it starts a task of no repository, holding only what the index
+gives every task. In a mounted one the agent works on your files and your
+`.git` as they are, and what it writes there - a git hook included - is on
+your machine at once. Unibox says so the first time a directory is
+mounted. `--branch` switches your checkout first, making the branch from
+HEAD when you have none of that name. A git worktree cannot be mounted;
+mount the repository's own checkout.
 
 `--clone` clones from the forge inside the sandbox instead, on a branch
 of the task's, and nothing of yours is mounted; `--push` pushes local

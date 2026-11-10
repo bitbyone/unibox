@@ -6,6 +6,10 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `unibox run` with no directory named starts a task of no repository,
+  holding only what the index gives every task, rather than mounting the
+  directory it was typed in: `unibox run .` mounts the current one. A
+  mount hands the agent your files and your `.git`, so it is asked for.
 - The team's `unibox.yaml` files give defaults for each person's settings
   of the whole machine under `settings:` (`ssh_agent`, `ssh_sandbox`,
   `remember_host_commands`, the clipboard's and `claude_remote_control`):

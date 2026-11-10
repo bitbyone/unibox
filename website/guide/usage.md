@@ -9,15 +9,15 @@ whose kit runs Claude Code.
 
 ```sh
 cd ~/code/api
-unibox run
+unibox run .
 ```
 
-`run` mounts the current checkout into the env's sandbox, clones beside it
+`run .` mounts the current checkout into the env's sandbox, clones beside it
 the repositories the team says every task takes, and starts the env's
 agent in your terminal. Nothing is asked.
 
 ```term ~/code/api
-$ unibox run
+$ unibox run .
 preparing task api-4c1d2e9a
 mounted /Users/jdoe/code/api at /work/api-4c1d2e9a/api in sandbox dev
 [dim]note: the agent can write to /Users/jdoe/code/api, its .git included; a hook or setting it leaves there runs on this host with your next git command in it. Look at what it changed, or use --clone to keep it out of the checkout.[/]

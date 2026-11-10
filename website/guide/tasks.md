@@ -9,13 +9,14 @@ working there. A task is kept until it is removed, and resumed by name.
 
 ```sh
 cd ~/code/api
-unibox run                          # this checkout, the default sandbox
+unibox run .                        # this checkout, the default sandbox
 unibox run ~/code/api               # the same, by path
-unibox run --task login             # a name of yours (default: its first repository and a digest)
-unibox run --branch feat/login      # switch the checkout to feat/login first, made from HEAD if missing
-unibox run --agent codex            # another agent the sandbox has
-unibox run --shell                  # a shell in the task instead of an agent
-unibox run -- --model opus          # what follows -- goes to the agent
+unibox run                          # nothing mounted: a task of no repository
+unibox run . --task login           # a name of yours (default: its first repository and a digest)
+unibox run . --branch feat/login    # switch the checkout to feat/login first, made from HEAD if missing
+unibox run . --agent codex          # another agent the sandbox has
+unibox run . --shell                # a shell in the task instead of an agent
+unibox run . -- --model opus        # what follows -- goes to the agent
 ```
 
 The sandbox is created on first use. A value the env asks for and you have
@@ -59,9 +60,9 @@ cloned from the forge inside the sandbox.
 | It can change your `.git` (hooks, config) | yes | no |
 
 ```sh
-unibox run --clone --branch feat/login
-unibox run --clone --push --branch feat/login    # push your local branch first, never forced
-unibox run --clone --ignore-local                # take the forge's version despite local changes
+unibox run . --clone --branch feat/login
+unibox run . --clone --push --branch feat/login  # push your local branch first, never forced
+unibox run . --clone --ignore-local              # take the forge's version despite local changes
 unibox run https://github.com/acme/api           # an address is always cloned
 unibox run --repo api=https://github.com/acme/api --repo docs=https://github.com/acme/docs
 ```
@@ -89,7 +90,7 @@ what is in the way: a missing value or token, a branch not on the forge,
 local work a clone would miss, an env changed since the sandbox was made.
 
 ```term ~/code/api
-$ unibox task check --clone --branch feat/login
+$ unibox task check . --clone --branch feat/login
 uncommitted: api local edits will not reach the sandbox; commit and push them or use --ignore-local
 branch_not_pushed: api push the selected branch first (or pass --push)
 ```

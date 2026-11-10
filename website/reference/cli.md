@@ -194,8 +194,9 @@ unibox run [directory|url] [-- agent-args...] [flags]
 
 Prepares a task and runs its agent, or a shell, in this terminal. The
 argument is the repository - a directory, an HTTPS URL or a name of the
-env's index (default: the current directory); several are named with
-`--repo`, which does not mix with the argument. A new task also takes the
+env's index, the current directory as `.`; several are named with
+`--repo`, which does not mix with the argument. With none, the task holds
+no repository of yours and gets a name made up, as `--bare`'s does. A new task also takes the
 index's repositories that say `default: always`, cloned beside what it
 mounts, unless `--only`. Arguments after `--` go to the agent.
 

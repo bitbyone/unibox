@@ -89,7 +89,7 @@ is a set of repositories in the sandbox, a branch and an agent, and is
 resumed by name. Several tasks share one sandbox.
 
 ```term ~/code/api
-$ unibox run
+$ unibox run .
 mounted /Users/jdoe/code/api at /work/api-4c1d2e9a/api in sandbox dev
 [dim]... claude works ...[/]
 

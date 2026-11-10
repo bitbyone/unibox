@@ -1051,6 +1051,11 @@ func TestTheEnvsReposAreNamedAndEveryNewTaskTakesThoseThatSayAlways(t *testing.T
 	if json.Unmarshal([]byte(out), &check) != nil || check.Repositories[0].Branch != "fix-1" || check.Repositories[1].Branch != "main" {
 		t.Fatalf("%s", out)
 	}
+	// With nothing named, a task holds only what every task takes.
+	out, _, _ = run(t, paths, "", "task", "check", "--json")
+	if json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 1 || check.Repositories[0].Name != "adrs" || check.Repositories[0].Mounted {
+		t.Fatalf("%s", out)
+	}
 	// A checkout of the repository every task takes is not given it again.
 	checkout := t.TempDir()
 	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "git@gitlab.example.com:arch/adrs.git"}} {
@@ -1811,6 +1816,15 @@ func TestRunTakesATaskOfNoRepository(t *testing.T) {
 	out, _, err := run(t, paths, "", "task", "check", "--bare", "--task", "scratch", "-e", "team", "--json")
 	var check api.Check
 	if err != nil || json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 0 {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	// Alone it takes nothing either; the current directory only as ".".
+	out, _, err = run(t, paths, "", "task", "check", "-e", "team", "--json")
+	if err != nil || json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 0 {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	out, _, err = run(t, paths, "", "task", "check", ".", "-e", "team", "--json")
+	if err != nil || json.Unmarshal([]byte(out), &check) != nil || len(check.Repositories) != 1 || !check.Repositories[0].Mounted {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if _, _, err := run(t, paths, "", "run", ".", "--bare", "-e", "team"); err == nil || !strings.Contains(err.Error(), "--bare is a task of no repository") {
