@@ -702,9 +702,14 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 	if out, _, _ = run(t, paths, "", "doctor"); !strings.Contains(out, "1 new commit(s) on its remote") {
 		t.Fatalf("%s", out)
 	}
+	// The background check found it behind too; the update forgets that.
+	paths.SaveUpdates(unibox.Updates{Behind: map[string]int{dir: 1, "/elsewhere": 2}})
 	out, _, err = run(t, paths, "", "env", "update")
 	if err != nil || !strings.Contains(out, dir+": updated") || !strings.Contains(out, "env dev now asks for mirror") || !strings.Contains(out, "new sbxenv file(s) extra/new.sbxenv.yaml") {
 		t.Fatalf("%v\n%s", err, out)
+	}
+	if behind := paths.ReadUpdates().Behind; behind[dir] != 0 || behind["/elsewhere"] != 2 {
+		t.Fatalf("%v", behind)
 	}
 	if out, _, err = run(t, paths, "", "env", "update", "dev"); err != nil || !strings.Contains(out, ": up to date") {
 		t.Fatalf("%v\n%s", err, out)

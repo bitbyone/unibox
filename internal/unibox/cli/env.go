@@ -160,7 +160,10 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 		if err != nil {
 			return err
 		}
-		said, updated := []string{}, false
+		said, updated, caughtUp := []string{}, false, []string{}
+		// What the check found behind is not told again of a repository
+		// pulled now, though the pull fails on another.
+		defer func() { o.paths.CaughtUp(caughtUp) }()
 		for _, repo := range sorted(repos) {
 			if own[repo] {
 				if why := unibox.Untouched(cmd.Context(), repo); why != "" {
@@ -178,6 +181,7 @@ left as it is, saying why.`, RunE: func(cmd *cobra.Command, args []string) error
 			if err != nil {
 				return err
 			}
+			caughtUp = append(caughtUp, repo)
 			if !moved {
 				said = append(said, repo+": up to date")
 				continue

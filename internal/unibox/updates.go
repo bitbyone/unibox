@@ -143,6 +143,19 @@ func (p Paths) Check(ctx context.Context, sbx Runtime, c UpdateCheck, releases, 
 	})
 }
 
+// CaughtUp forgets that env repositories were behind their remotes, as
+// unibox env update has brought them up to them.
+func (p Paths) CaughtUp(dirs []string) {
+	if len(dirs) == 0 {
+		return
+	}
+	p.keep(func(u *Updates) {
+		for _, dir := range dirs {
+			delete(u.Behind, dir)
+		}
+	})
+}
+
 // KeepReleases keeps what doctor found of the releases, as a check of
 // them at now.
 func (p Paths) KeepReleases(now time.Time, unibox, sbx string) {

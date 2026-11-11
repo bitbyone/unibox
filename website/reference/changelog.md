@@ -6,6 +6,8 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `unibox env update` no longer leaves the notice that a repository it
+  just pulled has new commits, until the next check.
 - `unibox sandbox start`, or `b` in the sandbox list, starts a sandbox
   with no session in it and keeps it running until `unibox sandbox stop`,
   whatever `stop_idle` says; the list says it `running (kept)` and
