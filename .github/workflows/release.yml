@@ -41,13 +41,30 @@ jobs:
     timeout-minutes: 45
     permissions:
       actions: read
+      contents: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Wait for the tests of the commit
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
+          TAGGED: ${{ github.sha }}
         run: |
+          # A commit of this workflow's, pointing the formula and the
+          # manifest at a release, was pushed with its token, which starts
+          # no workflow, so it has no tests of its own: the tests are those
+          # of the commit it follows, the code being the same.
+          SHA=$TAGGED
+          while files=$(git diff-tree --no-commit-id --name-only -r "$SHA") && [ -n "$files" ] &&
+            ! grep -qv -e '^Formula/' -e '^bucket/' <<<"$files"; do
+            SHA=$(git rev-parse "$SHA^")
+          done
+          if [ "$SHA" != "$TAGGED" ]; then
+            echo "$TAGGED changes only Formula/ and bucket/; taking the tests of $SHA"
+          fi
           # Tagged right after the push, its tests are still running: wait.
           for attempt in $(seq 1 80); do
             run=$(gh run list --repo "$REPO" --workflow test.yml --commit "$SHA" --branch main \
