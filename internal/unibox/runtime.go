@@ -27,6 +27,9 @@ type Runtime interface {
 	List(ctx context.Context) ([]Box, error)
 	Exec(ctx context.Context, name string, c Command) *exec.Cmd
 	Stop(ctx context.Context, name string) error
+	// Start starts a sandbox detached: it runs, with no session, until
+	// stopped.
+	Start(ctx context.Context, name string) error
 	Remove(ctx context.Context, name string) error
 	EnvCreate(ctx context.Context, name, args string, files []string, approve bool, in io.Reader, out, errout io.Writer) error
 	EnvRemove(ctx context.Context, name, args string, files []string, log io.Writer) error

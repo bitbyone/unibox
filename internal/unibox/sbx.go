@@ -211,6 +211,14 @@ func (r *SBX) Stop(ctx context.Context, name string) error {
 	return err
 }
 
+// Start runs a sandbox detached (sbx run -d), which sbx keeps running
+// after every session ends and until it is stopped; sbx keeps a sandbox
+// detached from then on, through stops and starts, until it is made anew.
+func (r *SBX) Start(ctx context.Context, name string) error {
+	_, err := commandOutput(hostCommand(ctx, "sbx", "run", "--detach", "--name", name))
+	return err
+}
+
 // EnvCreate creates a sandbox from sbxenv files with sbx env create, on the
 // user's terminal: sbx asks there what it needs to, and runs the files'
 // host commands. args is the file of the person's args, or empty.

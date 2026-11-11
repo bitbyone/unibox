@@ -570,6 +570,8 @@ func (m *Manager) ready(ctx context.Context, b *api.Sandbox, env Env, box Box, f
 	// under its name: sbx may still list the removed one's, which the new
 	// sandbox does not get, and it would take the global token instead.
 	b.Secrets = nil
+	// sbx makes it anew attached, stopped when its sessions end.
+	b.KeepRunning = false
 	b.State = "running"
 	return m.saveBox(*b)
 }

@@ -34,16 +34,17 @@ agent, another or a shell, or to name or remove it, each by a key.`}
 }
 
 func (o *options) sandboxGroup() *cobra.Command {
-	c := &cobra.Command{Use: "sandbox", Args: cobra.NoArgs, Short: "Create, enter, stop, recreate and remove sandboxes", Long: `Create, enter, stop, recreate and remove sandboxes. Alone at a terminal,
-unibox sandbox lists them to open one's tasks, a shell, its ports or what
-unibox keeps of it, or to stop, recreate or remove it, each by a key.`}
+	c := &cobra.Command{Use: "sandbox", Args: cobra.NoArgs, Short: "Create, enter, start, stop, recreate and remove sandboxes", Long: `Create, enter, start, stop, recreate and remove sandboxes. Alone at a
+terminal, unibox sandbox lists them to open one's tasks, a shell, its ports
+or what unibox keeps of it, or to keep it running, stop, recreate or remove
+it, each by a key.`}
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		if o.json || !o.interactive {
 			return o.runStep(cmd, "sandbox", "ls")
 		}
 		return o.sandboxesUI(cmd)
 	}
-	c.AddCommand(o.listCommand(), o.createCommand(), o.inspectCommand(), o.resourcesCommand(), o.shellCommand(), o.stopCommand(), o.recreateCommand(), o.removeCommand(false))
+	c.AddCommand(o.listCommand(), o.createCommand(), o.inspectCommand(), o.resourcesCommand(), o.shellCommand(), o.startCommand(), o.stopCommand(), o.recreateCommand(), o.removeCommand(false))
 	return c
 }
 
@@ -93,7 +94,7 @@ func (o *options) sandboxesUI(cmd *cobra.Command) error {
 			continue
 		case "shell", "inspect":
 			return o.runStep(cmd, "sandbox", chosen.kind, name)
-		case "stop", "recreate", "remove":
+		case "start", "stop", "recreate", "remove":
 			// Asked in the list already; the command still refuses to
 			// discard running sessions or unpushed work.
 			verb := chosen.kind

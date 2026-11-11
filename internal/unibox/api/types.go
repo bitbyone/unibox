@@ -68,8 +68,11 @@ type Sandbox struct {
 	// then removes only when forced.
 	Adopted bool   `json:"adopted,omitempty"`
 	State   string `json:"state"`
-	Tasks   []Task `json:"tasks"`
-	Runs    []Run  `json:"runs"`
+	// KeepRunning says the sandbox was started to run until stopped:
+	// unibox does not stop it when its last session ends.
+	KeepRunning bool   `json:"keep_running"`
+	Tasks       []Task `json:"tasks"`
+	Runs        []Run  `json:"runs"`
 	// Ports are what unibox published of the sandbox, by name - an env's
 	// port, or a spec switched on for the sandbox alone - and PortSwitches
 	// what was switched for it until it next starts; PortMaps the mapping

@@ -289,6 +289,61 @@ func TestIdleStoppingCountsEverySessionAndOwnsOnlyItsSandbox(t *testing.T) {
 	}
 }
 
+// A sandbox started to run until stopped outlives its last session, and
+// is stopped again with it once stopped by hand; one made anew is not
+// kept running, as sbx makes it attached.
+func TestASandboxStartedRunsUntilStopped(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	if _, err := m.Create(ctx, Request{Sandbox: "dev", Env: "dev"}, false); err != nil {
+		t.Fatal(err)
+	}
+	b, err := m.Start(ctx, "dev")
+	if err != nil || !b.KeepRunning || len(f.called("start dev")) != 1 {
+		t.Fatalf("%+v %v %v", b, err, f.calls)
+	}
+	session := func() {
+		t.Helper()
+		u, err := m.usage("dev", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, l, err := m.recordRun(b, api.Task{ID: "first"}, "claude")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.finishRun(b, r, l, u, nil, nil)
+	}
+	session()
+	if f.stops != 0 {
+		t.Fatal("stopped a sandbox started to run until stopped")
+	}
+	if err := m.Stop(ctx, "dev"); err != nil || f.stops != 1 {
+		t.Fatalf("%v %d", err, f.stops)
+	}
+	if now, _ := m.sandbox("dev"); now.KeepRunning {
+		t.Fatal("still kept running after a stop")
+	}
+	f.setState("dev", "running")
+	session()
+	if f.stops != 2 {
+		t.Fatal("not stopped with its last session after a stop by hand")
+	}
+	if _, err := m.Start(ctx, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Recreate(ctx, "dev", false); err != nil {
+		t.Fatal(err)
+	}
+	if now, _ := m.sandbox("dev"); now.KeepRunning {
+		t.Fatal("kept running after it was made anew")
+	}
+	if _, err := m.Start(ctx, "nope"); err == nil {
+		t.Fatal("started a sandbox unibox does not have")
+	}
+}
+
 func TestATaskNamedAloneFindsItsSandbox(t *testing.T) {
 	t.Parallel()
 	m, _ := managerFixture(t)

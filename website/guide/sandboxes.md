@@ -13,11 +13,15 @@ unibox sandbox                  # the same as a list
 unibox sandbox ls               # every sandbox and its state
 unibox sandbox shell dev        # a shell in it
 unibox sandbox inspect dev      # what unibox records about it
+unibox sandbox start dev        # start it to run until stopped
 unibox sandbox stop dev         # stop it; disk and tasks stay
 ```
 
-A sandbox stops by itself when its last session ends. To keep sandboxes
-running, `unibox config set stop_idle false`.
+A sandbox stops by itself when its last session ends. `unibox sandbox
+start` (`b` in the list) keeps one running with no session in it, for a
+server, an editor over SSH or a published port, until `unibox sandbox
+stop` (`x`); the list says it `running (kept)`. To keep every sandbox
+running after its sessions, `unibox config set stop_idle false`.
 
 ```term
 $ unibox sandbox ls

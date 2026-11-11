@@ -12,7 +12,7 @@ $ unibox sandbox
 [blue]>[/] [b]dev      dev  claude  running  2      1[/]
   dev-big  dev  claude  stopped  0      0
 
-[key]↑/↓ j/k[/] move · [key]enter[/] tasks · [key]s[/] shell · [key]p[/] ports · [key]i[/] inspect · [key]r[/] resources · [key]t[/] stop · [key]c[/] recreate · [key]d[/] remove · [key]q[/] quit
+[key]↑/↓ j/k[/] move · [key]enter[/] tasks · [key]s[/] shell · [key]p[/] ports · [key]i[/] inspect · [key]r[/] resources · [key]b[/] keep running · [key]x[/] stop · [key]c[/] recreate · [key]d[/] remove · [key]q[/] quit
 ```
 
 Lists open from `unibox` (the tasks, as `task`), `sandbox`, `task new`, `repo`,

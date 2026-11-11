@@ -11,7 +11,7 @@ import (
 
 // sandboxAction is what a person chose to do with a sandbox.
 type sandboxAction struct {
-	kind    string // tasks, shell, ports, inspect, resources, stop, recreate, remove
+	kind    string // tasks, shell, ports, inspect, resources, start, stop, recreate, remove
 	sandbox string
 	box     api.Sandbox
 }
@@ -76,11 +76,13 @@ func (m sandboxesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return choose("inspect")
 	case "r":
 		return choose("resources")
-	case "t":
+	case "b":
+		return choose("start")
+	case "x":
 		return choose("stop")
 	case "c":
 		m.confirm = "recreate"
-	case "d", "x":
+	case "d":
 		m.confirm = "remove"
 	}
 	return m, nil
@@ -96,6 +98,10 @@ func (m sandboxesModel) View() string {
 	for _, r := range m.rows {
 		state := r.State
 		if state == "running" {
+			// Started to run until stopped, it runs with no session.
+			if r.KeepRunning {
+				state += " (kept)"
+			}
 			state = portOn.Render(state)
 		}
 		cols = append(cols, []string{r.Name, r.Env, cmp.Or(r.Agent, "-"), state, fmt.Sprint(len(r.Tasks)), fmt.Sprint(len(r.Runs))})
@@ -108,7 +114,7 @@ func (m sandboxesModel) View() string {
 	case "remove":
 		foot = []string{fmt.Sprintf("Remove sandbox %s? [y/N]", name)}
 	default:
-		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "t", "stop", "c", "recreate", "d", "remove", "q", "quit")
+		foot = helpLines(m.width, "↑/↓ j/k", "move", "enter", "tasks", "s", "shell", "p", "ports", "i", "inspect", "r", "resources", "b", "keep running", "x", "stop", "c", "recreate", "d", "remove", "q", "quit")
 	}
 	table := strings.Split(strings.TrimSuffix(drawTable(cols, m.cursor), "\n"), "\n")
 	// The title, the header, the lines of how many more, the blank one,

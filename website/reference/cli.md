@@ -312,6 +312,7 @@ unibox sandbox ls
 unibox sandbox create [name] [-e <env>] [--cpus <n>] [--memory <size>] [--author "Name <email>"] [--adopt]
 unibox sandbox inspect [sandbox]
 unibox sandbox shell [sandbox]
+unibox sandbox start [sandbox]
 unibox sandbox stop [sandbox]
 unibox sandbox recreate [sandbox] [--force]
 unibox sandbox resources [sandbox] [--cpus <n>] [--memory <size>]
@@ -326,7 +327,12 @@ unibox sandbox rm <sandbox> [--force]
   removes it only with `--force`.
 - `inspect` - what unibox records about it.
 - `shell` - an interactive shell; counts as a session.
-- `stop` - stop an idle sandbox; the disk stays.
+- `start` - start it with no session and keep it running until `stop`,
+  whatever `stop_idle` says: for a server in it, an editor over SSH or a
+  published port. sbx runs it detached (`sbx run -d`). `ls --json` says
+  it as `keep_running`.
+- `stop` - stop an idle sandbox, one started to run too; the disk stays.
+  After it, the sandbox stops with its last session again.
 - `recreate` - remove and create again from the env and your values as
   they are now, after checking for sessions and unpushed work; `--force`
   discards the unpushed work. Tasks come back; anything else in the
@@ -337,7 +343,7 @@ unibox sandbox rm <sandbox> [--force]
   discards them, and removes an adopted sandbox.
 
 List keys: `enter` tasks, `s` shell, `p` ports, `i` inspect, `r`
-resources (then offers a recreate), `t` stop, `c` recreate, `d` remove.
+resources (then offers a recreate), `b` keep running, `x` stop, `c` recreate, `d` remove.
 
 ### `unibox port`
 

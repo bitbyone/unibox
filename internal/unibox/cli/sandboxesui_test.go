@@ -10,7 +10,7 @@ import (
 
 func TestASandboxIsPickedAndActedOnByAKey(t *testing.T) {
 	t.Parallel()
-	rows := []api.Sandbox{{Name: "dev", Env: "dev", State: "running"}, {Name: "web", Env: "web", State: "stopped"}}
+	rows := []api.Sandbox{{Name: "dev", Env: "dev", State: "running", KeepRunning: true}, {Name: "web", Env: "web", State: "stopped"}}
 	keys := func(ks ...string) sandboxesModel {
 		t.Helper()
 		var m tea.Model = sandboxesModel{rows: rows}
@@ -31,7 +31,8 @@ func TestASandboxIsPickedAndActedOnByAKey(t *testing.T) {
 		{[]string{"j", "s"}, "shell", "web"},
 		{[]string{"p"}, "ports", "dev"},
 		{[]string{"i"}, "inspect", "dev"},
-		{[]string{"j", "t"}, "stop", "web"},
+		{[]string{"j", "b"}, "start", "web"},
+		{[]string{"x"}, "stop", "dev"},
 		{[]string{"c", "y"}, "recreate", "dev"},
 		{[]string{"d", "n", "j", "d", "y"}, "remove", "web"},
 	} {
@@ -39,6 +40,9 @@ func TestASandboxIsPickedAndActedOnByAKey(t *testing.T) {
 		if m.chosen == nil || m.chosen.kind != c.kind || m.chosen.sandbox != c.sandbox {
 			t.Fatalf("%v: %+v", c.keys, m.chosen)
 		}
+	}
+	if view := keys().View(); !strings.Contains(view, "running (kept)") || !strings.Contains(view, "keep running") {
+		t.Fatalf("%q", view)
 	}
 	if m := keys("c"); m.chosen != nil || !strings.Contains(m.View(), "Recreate sandbox dev") {
 		t.Fatalf("%+v %q", m.chosen, m.View())

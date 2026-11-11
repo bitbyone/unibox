@@ -6,6 +6,11 @@ unibox` or `scoop update unibox` takes the latest.
 
 ## Unreleased
 
+- `unibox sandbox start`, or `b` in the sandbox list, starts a sandbox
+  with no session in it and keeps it running until `unibox sandbox stop`,
+  whatever `stop_idle` says; the list says it `running (kept)` and
+  `--json` `keep_running`. Stop is `x` in the list now, no longer `t`.
+
 - `default_env` is gone: the context says the env commands work in when
   not told, and `init`, `env add --default` and the env list set it.
   A `default_env` in `config.yaml` is read into the context once, where

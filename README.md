@@ -261,8 +261,9 @@ restarts its daemon, which serves SSH only when started with it, and has
 `sbx setup ssh` add the host entry to your SSH client's configuration.
 Should sbx lose it, as after a reset, the next sandbox started while none
 runs turns it on again. Open a task's directory under `/work/<task>/<repo>`. An editor's session
-is not unibox's, so `unibox config set stop_idle false` keeps a sandbox
-running for it.
+is not unibox's, so `unibox sandbox start` keeps a sandbox running for it
+until `unibox sandbox stop`, or `unibox config set stop_idle false` keeps
+every sandbox running.
 
 ## Coming from unibox 1
 

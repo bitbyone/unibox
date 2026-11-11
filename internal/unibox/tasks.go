@@ -608,6 +608,10 @@ func (m *Manager) stopIdle(b api.Sandbox) {
 	if on, _ := m.Config.StopIdleFor(b.Env); !on {
 		return
 	}
+	// Started to run until stopped, perhaps while this session ran.
+	if now, err := m.sandbox(b.Name); err == nil && now.KeepRunning {
+		return
+	}
 	guard, err := m.guard(b.Name)
 	if err != nil {
 		return
@@ -861,13 +865,60 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if !exists || box.State == "stopped" {
+	if exists && box.State != "stopped" {
+		if _, err = guestOutput(ctx, m.SBX, b.Name, "bash", "-c", guestIdleScript); err != nil {
+			return Fail(4, "guest_busy", "a guest session may still be active; inspect it with unibox sandbox shell")
+		}
+		if err = m.SBX.Stop(ctx, b.Name); err != nil {
+			return err
+		}
+	}
+	// Stopped by hand, it is stopped again when its last session ends.
+	return m.keepRunning(name, false)
+}
+
+// Start starts a sandbox to run until it is stopped, with no session:
+// created from its env when sbx has none, its ports, network rules and
+// tokens as a session's start gives them, and left running when the last
+// session in it ends, whatever stop_idle says. One running already is
+// only kept running.
+func (m *Manager) Start(ctx context.Context, name string) (api.Sandbox, error) {
+	l, err := m.guard(name)
+	if err != nil {
+		return api.Sandbox{}, err
+	}
+	defer l.Close()
+	// Only a sandbox unibox has; unibox sandbox create makes one.
+	if _, err = m.sandbox(name); err != nil {
+		return api.Sandbox{}, err
+	}
+	b, env, err := m.Definition(Request{Sandbox: name})
+	if err != nil {
+		return api.Sandbox{}, err
+	}
+	if err = m.ensure(ctx, &b, env, false, false); err != nil {
+		return api.Sandbox{}, err
+	}
+	m.progress("starting sandbox " + name)
+	if err = m.SBX.Start(ctx, name); err != nil {
+		return api.Sandbox{}, fmt.Errorf("sbx did not start sandbox %s: %w", name, err)
+	}
+	if err = m.keepRunning(name, true); err != nil {
+		return api.Sandbox{}, err
+	}
+	b.KeepRunning, b.State = true, "running"
+	return b, nil
+}
+
+// keepRunning records whether a sandbox runs until stopped.
+func (m *Manager) keepRunning(name string, on bool) error {
+	return m.Paths.State(func(s *State) error {
+		if b, ok := s.Sandboxes[name]; ok && b.KeepRunning != on {
+			b.KeepRunning = on
+			s.Sandboxes[name] = b
+		}
 		return nil
-	}
-	if _, err = guestOutput(ctx, m.SBX, b.Name, "bash", "-c", guestIdleScript); err != nil {
-		return Fail(4, "guest_busy", "a guest session may still be active; inspect it with unibox sandbox shell")
-	}
-	return m.SBX.Stop(ctx, b.Name)
+	})
 }
 func (m *Manager) Remove(ctx context.Context, name, task string, force bool) error {
 	return m.remove(ctx, name, task, force)

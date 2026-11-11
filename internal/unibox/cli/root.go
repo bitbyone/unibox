@@ -604,8 +604,31 @@ func (o *options) shellCommand() *cobra.Command {
 		return o.manager.Shell(cmd.Context(), name, o.input, o.output, o.log)
 	}}
 }
+func (o *options) startCommand() *cobra.Command {
+	return &cobra.Command{Use: "start [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Start a sandbox to run until stopped, with no session in it", Long: `Start a sandbox with no session in it and keep it running until unibox
+sandbox stop: unibox does not stop it when its last session ends, whatever
+stop_idle says, so a server in it, an editor over SSH or a published port
+stays reachable. One running already is only kept running. sbx runs it
+detached (sbx run -d), as it then keeps doing through stops and starts
+until the sandbox is made anew; after unibox sandbox stop, unibox again
+stops it when its last session ends.`, Example: "  unibox sandbox start\n  unibox sandbox start dev --json", RunE: func(cmd *cobra.Command, args []string) error {
+		name, err := o.sandboxName(first(args))
+		if err != nil {
+			return err
+		}
+		b, err := o.manager.Start(cmd.Context(), name)
+		if err != nil {
+			return err
+		}
+		if o.json {
+			return o.write(map[string]any{"api_version": api.Version, "sandbox": b})
+		}
+		fmt.Fprintf(o.output, "sandbox %s runs until unibox sandbox stop %s\n", name, name)
+		return nil
+	}}
+}
 func (o *options) stopCommand() *cobra.Command {
-	return &cobra.Command{Use: "stop [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Stop an idle sandbox without deleting its disk", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "stop [sandbox]", Args: cobra.MaximumNArgs(1), Short: "Stop an idle sandbox without deleting its disk, one started to run too", RunE: func(cmd *cobra.Command, args []string) error {
 		name, err := o.sandboxName(first(args))
 		if err != nil {
 			return err

@@ -161,6 +161,12 @@ func (f *fakeRuntime) Stop(_ context.Context, name string) error {
 	return nil
 }
 
+func (f *fakeRuntime) Start(_ context.Context, name string) error {
+	f.record("start " + name)
+	f.setState(name, "running")
+	return nil
+}
+
 func (f *fakeRuntime) Remove(_ context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
