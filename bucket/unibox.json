@@ -1,16 +1,16 @@
 {
-  "version": "0.9",
+  "version": "0.10",
   "description": "Wrapper over Docker Sandboxes for running coding agents locally",
   "homepage": "https://bitbyone.github.io/unibox/",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/bitbyone/unibox/releases/download/v0.9/unibox_0.9_windows_amd64.zip",
-      "hash": "e2c16930711d6fa7be67e1418a7daee6e94f842dd81cd522a89b501112d4d56c"
+      "url": "https://github.com/bitbyone/unibox/releases/download/v0.10/unibox_0.10_windows_amd64.zip",
+      "hash": "da6efdf320a3b5c5891decaa1fbe22aee7ceab3a2b96b8a12fbdbbc9ebfefd2c"
     },
     "arm64": {
-      "url": "https://github.com/bitbyone/unibox/releases/download/v0.9/unibox_0.9_windows_arm64.zip",
-      "hash": "6361493ade2f64ac4c8ba393459f7b17a031b8a15db93f26e8d8bdfadf1a6431"
+      "url": "https://github.com/bitbyone/unibox/releases/download/v0.10/unibox_0.10_windows_arm64.zip",
+      "hash": "0c7642fee16d6fc2f7be83b859c60c3963988d1c84d6c4936908e83d03ed88fc"
     }
   },
   "bin": "unibox.exe",
