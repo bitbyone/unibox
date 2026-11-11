@@ -703,12 +703,19 @@ func TestInitClonesARepositoryGivenByAddress(t *testing.T) {
 		t.Fatalf("%s", out)
 	}
 	// The background check found it behind too; the update forgets that.
-	paths.SaveUpdates(unibox.Updates{Behind: map[string]int{dir: 1, "/elsewhere": 2}})
+	// It is kept by the env's repository, which on macOS is the clone's
+	// directory past /var's link.
+	cfg, _ = paths.LoadConfig()
+	envRepo := cfg.Envs["dev"].Repo
+	if envRepo == "" {
+		t.Fatal("env dev is in no repository")
+	}
+	paths.SaveUpdates(unibox.Updates{Behind: map[string]int{envRepo: 1, "/elsewhere": 2}})
 	out, _, err = run(t, paths, "", "env", "update")
 	if err != nil || !strings.Contains(out, dir+": updated") || !strings.Contains(out, "env dev now asks for mirror") || !strings.Contains(out, "new sbxenv file(s) extra/new.sbxenv.yaml") {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if behind := paths.ReadUpdates().Behind; behind[dir] != 0 || behind["/elsewhere"] != 2 {
+	if behind := paths.ReadUpdates().Behind; behind[envRepo] != 0 || behind["/elsewhere"] != 2 {
 		t.Fatalf("%v", behind)
 	}
 	if out, _, err = run(t, paths, "", "env", "update", "dev"); err != nil || !strings.Contains(out, ": up to date") {
