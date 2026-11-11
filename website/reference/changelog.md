@@ -8,6 +8,8 @@ unibox` or `scoop update unibox` takes the latest.
 
 - `unibox env update` no longer leaves the notice that a repository it
   just pulled has new commits, until the next check.
+- A newer unibox or sbx is no longer told once you have upgraded to it:
+  the check keeps what it compared with, and after an upgrade asks again.
 - `unibox sandbox start`, or `b` in the sandbox list, starts a sandbox
   with no session in it and keeps it running until `unibox sandbox stop`,
   whatever `stop_idle` says; the list says it `running (kept)` and

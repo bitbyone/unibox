@@ -31,9 +31,13 @@ type Updates struct {
 	// were last checked, or a check of them was started.
 	Released time.Time `json:"released"`
 	Fetched  time.Time `json:"fetched"`
-	// Unibox and SBX are newer releases than the ones installed, or "".
-	Unibox string `json:"unibox,omitempty"`
-	SBX    string `json:"sbx,omitempty"`
+	// Unibox and SBX are newer releases than the ones installed, or "";
+	// UniboxFrom and SBXFrom what was installed then, as Installed says it,
+	// so a finding about what has been upgraded since is not told.
+	Unibox     string `json:"unibox,omitempty"`
+	SBX        string `json:"sbx,omitempty"`
+	UniboxFrom string `json:"unibox_from,omitempty"`
+	SBXFrom    string `json:"sbx_from,omitempty"`
 	// Behind are the env repositories behind their remotes, by directory,
 	// with how many commits.
 	Behind map[string]int `json:"behind,omitempty"`
@@ -95,7 +99,9 @@ func (p Paths) ClaimCheck(now time.Time) (releases, repos bool, err error) {
 // repositories.
 type UpdateCheck struct {
 	Unibox string
-	Repos  []string
+	// SBX is sbx's binary as BinaryStamp says it.
+	SBX   string
+	Repos []string
 }
 
 // Check finds what is newer and keeps it, the releases and the
@@ -127,10 +133,10 @@ func (p Paths) Check(ctx context.Context, sbx Runtime, c UpdateCheck, releases, 
 	}
 	return p.keep(func(u *Updates) {
 		if newUnibox != nil {
-			u.Unibox = *newUnibox
+			u.Unibox, u.UniboxFrom = *newUnibox, c.Unibox
 		}
 		if newSBX != nil {
-			u.SBX = *newSBX
+			u.SBX, u.SBXFrom = *newSBX, c.SBX
 		}
 		if repos {
 			for dir, n := range u.Behind {
@@ -157,9 +163,49 @@ func (p Paths) CaughtUp(dirs []string) {
 }
 
 // KeepReleases keeps what doctor found of the releases, as a check of
-// them at now.
-func (p Paths) KeepReleases(now time.Time, unibox, sbx string) {
-	p.keep(func(u *Updates) { u.Released, u.Unibox, u.SBX = now, unibox, sbx })
+// them at now against the unibox and sbx installed.
+func (p Paths) KeepReleases(now time.Time, unibox, sbx string, installed UpdateCheck) {
+	p.keep(func(u *Updates) {
+		u.Released, u.Unibox, u.SBX = now, unibox, sbx
+		u.UniboxFrom, u.SBXFrom = installed.Unibox, installed.SBX
+	})
+}
+
+// Current are the updates as they stand for the unibox and sbx installed
+// now: a release found newer than what was installed then is forgotten
+// once either was upgraded since, which unibox learns of no other way,
+// and the releases are checked again by the next command.
+func (p Paths) Current(installed UpdateCheck) Updates {
+	u := p.ReadUpdates()
+	if (u.Unibox == "" || u.UniboxFrom == installed.Unibox) && (u.SBX == "" || u.SBXFrom == installed.SBX) {
+		return u
+	}
+	return p.keep(func(u *Updates) {
+		if u.UniboxFrom != installed.Unibox {
+			u.Unibox = ""
+		}
+		if u.SBXFrom != installed.SBX {
+			u.SBX = ""
+		}
+		u.Released = time.Time{}
+	})
+}
+
+// BinaryStamp tells one install of a program from another without running
+// it: its path past links, where Homebrew's Cellar names the version, its
+// size and when it was written. "" when there is none.
+func BinaryStamp(path string) string {
+	if path == "" {
+		return ""
+	}
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		path = r
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%s %d %d", path, fi.Size(), fi.ModTime().UnixNano())
 }
 
 func (p Paths) keep(change func(*Updates)) Updates {

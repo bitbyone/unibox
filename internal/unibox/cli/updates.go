@@ -79,7 +79,13 @@ func (o *options) startUpdateCheck(releases, repos bool) {
 func (o *options) notices() []unibox.Notice {
 	exe, _ := os.Executable()
 	sbx, _ := exec.LookPath("sbx")
-	return o.paths.ReadUpdates().Notices(resolved(exe), resolved(sbx), o.manager.Config.ReposOfEnvs())
+	return o.paths.Current(installed()).Notices(resolved(exe), resolved(sbx), o.manager.Config.ReposOfEnvs())
+}
+
+// installed are the unibox and sbx a check of the releases compares with.
+func installed() unibox.UpdateCheck {
+	sbx, _ := exec.LookPath("sbx")
+	return unibox.UpdateCheck{Unibox: version.String(), SBX: unibox.BinaryStamp(sbx)}
 }
 
 // resolved is a program's path past its links, where Homebrew's Cellar or
@@ -109,7 +115,7 @@ func (o *options) tellUpdates(cmd *cobra.Command) {
 func (o *options) updateCheckCommand() *cobra.Command {
 	var releases, repos bool
 	c := &cobra.Command{Use: "update-check", Hidden: true, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		check := unibox.UpdateCheck{Unibox: version.String()}
+		check := installed()
 		for repo := range o.manager.Config.ReposOfEnvs() {
 			check.Repos = append(check.Repos, repo)
 		}
@@ -175,6 +181,6 @@ func (o *options) doctorReleases(ctx context.Context, add func(area, name, statu
 		add("Updates", "sbx", "pass", "the newest", "")
 	}
 	if uniboxErr == nil && sbxErr == nil {
-		o.paths.KeepReleases(time.Now(), newUnibox, newSBX)
+		o.paths.KeepReleases(time.Now(), newUnibox, newSBX, installed())
 	}
 }

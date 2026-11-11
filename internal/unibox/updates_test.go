@@ -4,9 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/tobola/unibox/internal/testenv"
 )
 
 func TestReleasesAreOrderedWithAPrereleaseBeforeItsRelease(t *testing.T) {
@@ -92,5 +95,35 @@ func TestACheckIsClaimedOnceAndKeepsWhatItCouldNotAskAgain(t *testing.T) {
 	}
 	if slices.ContainsFunc(u.Notices("", "", nil), func(n Notice) bool { return n.Run != "" }) {
 		t.Fatal("a repository no env is in was told of")
+	}
+}
+
+// A newer release found is told only while what it was found newer than
+// is still installed: after an upgrade unibox forgets it and asks again.
+func TestAReleaseFoundIsForgottenOnceUpgraded(t *testing.T) {
+	t.Parallel()
+	p := Paths{Config: t.TempDir(), Cache: t.TempDir()}
+	sbx := filepath.Join(t.TempDir(), "sbx")
+	if err := testenv.WriteExecutable(sbx, []byte("0.51")); err != nil {
+		t.Fatal(err)
+	}
+	was := UpdateCheck{Unibox: "0.10-pre.3", SBX: BinaryStamp(sbx)}
+	now := time.Now()
+	p.KeepReleases(now, "0.10", "0.53.0", was)
+	if u := p.Current(was); u.Unibox != "0.10" || u.SBX != "0.53.0" || !u.Released.Equal(now) {
+		t.Fatalf("%+v", u)
+	}
+	if err := testenv.WriteExecutable(sbx, []byte("0.53.0")); err != nil {
+		t.Fatal(err)
+	}
+	u := p.Current(UpdateCheck{Unibox: "0.10-pre.3", SBX: BinaryStamp(sbx)})
+	if u.Unibox != "0.10" || u.SBX != "" || !u.Released.IsZero() {
+		t.Fatalf("sbx upgraded: %+v", u)
+	}
+	if u = p.Current(UpdateCheck{Unibox: "0.10", SBX: BinaryStamp(sbx)}); u.Unibox != "" {
+		t.Fatalf("unibox upgraded: %+v", u)
+	}
+	if releases, _ := u.Due(now); !releases {
+		t.Fatal("the releases are not asked again")
 	}
 }
