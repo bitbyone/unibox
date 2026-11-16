@@ -1,173 +1,245 @@
 # Changelog
 
-What each release brought, newest first. Every release's archives are on
+What each release brings, newest first. Breaking changes come first in a
+release and say what to do. Every release's archives are on
 [GitHub](https://github.com/bitbyone/unibox/releases); `brew upgrade
 unibox` or `scoop update unibox` takes the latest.
 
 ## 0.11 <Badge type="tip" text="2026-11-16" />
 
-- `unibox env update` no longer leaves the notice that a repository it
-  just pulled has new commits, until the next check.
-- A newer unibox or sbx is no longer told once you have upgraded to it:
-  the check keeps what it compared with, and after an upgrade asks again.
-- `unibox sandbox start`, or `b` in the sandbox list, starts a sandbox
-  with no session in it and keeps it running until `unibox sandbox stop`,
-  whatever `stop_idle` says; the list says it `running (kept)` and
-  `--json` `keep_running`. Stop is `x` in the list now, no longer `t`.
-- With sbx 0.54 or newer, ports are listed and switched with `sbx port
-  ls|publish|unpublish`, as `sbx ports` is deprecated there; an older sbx
-  is still asked with `sbx ports`.
-- With `ssh_sandbox` on, the next sandbox start after sbx is upgraded
-  has sbx write its entry in your SSH client's configuration again
-  (`sbx setup ssh`), as sbx 0.54 asks: the entry an older sbx wrote let a
-  crafted host or user name run commands with an older OpenSSH.
+Long-running sandboxes, and ready for sbx 0.54.
 
-## 0.7 – 0.10 <Badge type="info" text="2026-11-05 – 2026-11-11" />
+### Breaking changes
 
-- `default_env` is gone: the context says the env commands work in when
-  not told, and `init`, `env add --default` and the env list set it.
-  A `default_env` in `config.yaml` is read into the context once, where
-  none is set, and not written again; `config set default_env` sets the
-  context. With an env in the context, its only sandbox is taken even
-  when named otherwise.
-- `unibox run` with no directory named starts a task of no repository,
-  holding only what the index gives every task, rather than mounting the
-  directory it was typed in: `unibox run .` mounts the current one. A
-  mount hands the agent your files and your `.git`, so it is asked for.
-- The team's `unibox.yaml` files give defaults for each person's settings
-  of the whole machine under `settings:` (`ssh_agent`, `ssh_sandbox`,
-  `remember_host_commands`, the clipboard's and `claude_remote_control`):
-  one not said yet is taken without a question, by `init` and when a
-  sandbox starts; one said otherwise `init` asks again, the team's first.
-- `version_required` in those files refuses an older unibox with how to
-  update it, and a key unibox does not know says it may be too old.
+- Stop in the sandbox list is `x` now, not `t`.
 
-- `init` asks whether agents paste images from your clipboard whatever
-  the env's agent, not only for claude and codex: sbx serves them to any
-  process in a sandbox.
+### New
 
-- `unibox` alone at a terminal opens the task list, the one come back to
-  most; `unibox sandbox` is the sandbox list.
+- **Keep a sandbox running.** `b` in `unibox sandbox`, or
+  `unibox sandbox start`, starts a sandbox with no task in it and keeps
+  it up until you stop it, whatever `stop_idle` says: for an editor over
+  SSH or a dev server. The list shows it as `running (kept)`.
+  [Sandboxes](/guide/sandboxes)
 
-- `task new` starts a task of no repository: with nothing picked it is a
-  directory of its own, named after `t` or `--task`, else with a name made
-  up such as `brave-otter`. An env whose index names none opens the screen
-  too. A task of one context repository alone starts in the task's
-  directory, not in the repository it only reads. `run`, `task prepare`
-  and `task check` take such a task with `--bare`.
+### Improvements
 
-- The copilot token is asked for before the github token, and an env or
-  sandbox with a copilot token of its own offers *The copilot token* for
-  github, so one token can be given for both. The team's `unibox.yaml`
-  names the way it recommends under `secrets.<service>.recommended`,
-  which the question starts on.
+- Works with sbx 0.54's new `sbx port` commands; an older sbx still
+  works as before.
+- After you upgrade sbx, unibox refreshes its SSH entry
+  (`sbx setup ssh`) for you, as sbx 0.54 asks, when `ssh_sandbox` is on.
 
-- `sandbox recreate` no longer prepares every task again: each is mounted
-  or cloned, and given its conversations back, when it is next resumed,
-  so a recreate takes as long as sbx does.
+### Fixes
 
-- `unibox config` alone at a terminal is the settings in tabs: Global,
-  then each env with its own over Global and its args, to change in place.
-- `stop_idle` can be an env's own (`unibox config set stop_idle false -e
+- The "commits behind" notice goes away right after `unibox env update`.
+- The "newer version available" notice goes away once you have upgraded.
+
+## 0.10 <Badge type="info" text="2026-11-11" />
+
+Tasks without a repository, and team defaults for personal settings.
+
+### Breaking changes
+
+- **`unibox run` alone no longer mounts the current directory**: it
+  starts a task of no repository. Use `unibox run .` to mount where you
+  are. A mount gives the agent your files and your `.git`, so it is
+  asked for, not assumed.
+- **`unibox` alone opens the task list**, the one you come back to most;
+  the sandbox list is `unibox sandbox`.
+- **`default_env` is gone.** The context says which env commands work in;
+  `init`, `env add --default` and the env list set it. An existing
+  `default_env` is moved into the context once, nothing to do.
+
+### New
+
+- **Team defaults for personal settings.** The team's `unibox.yaml` can
+  give defaults under `settings:` (`ssh_agent`, `ssh_sandbox`, clipboard,
+  `claude_remote_control` and more). One you have not set is taken
+  without a question; one you set otherwise, `init` asks about again.
+  [Team and Personal Configuration](/guide/configuration)
+- **`version_required`** in the team's files stops an older unibox with
+  how to update it.
+
+### Improvements
+
+- `init` asks about pasting clipboard images for every agent, not only
+  claude and codex.
+- An unknown key in the team's files says unibox may be too old.
+
+## 0.9 <Badge type="info" text="2026-11-07" />
+
+Faster recreates, and one token for Copilot and GitHub.
+
+### New
+
+- **Tasks with no repository.** `task new` with nothing picked starts a
+  task in a directory of its own, named by you or made up
+  (`brave-otter`). `run`, `task prepare` and `task check` take one with
+  `--bare`. [Tasks](/guide/tasks)
+
+### Improvements
+
+- **`sandbox recreate` is as fast as sbx**: tasks are mounted or cloned
+  again, with their conversations, when each is next resumed rather than
+  all at once.
+- The Copilot token is asked for first, and can be used for GitHub too,
+  so one token does both. The team can recommend how to give each token
+  (`secrets.<service>.recommended`).
+- A task of one context repository starts in the task's directory, not
+  in the repository it only reads.
+
+## 0.8 <Badge type="info" text="2026-11-06" />
+
+### Fixes
+
+- `init` on a machine whose sbx had never built a kit no longer fails
+  with "sandbox sbx-kit-builder already exists".
+
+## 0.7 <Badge type="info" text="2026-11-05" />
+
+Settings in tabs, and update notices.
+
+### Breaking changes
+
+- **unibox needs sbx 0.51 or newer.** Update Docker Sandboxes first.
+- **`unibox herdr` is gone**: herdr now shows the agent's state on its
+  own. The first command after upgrading unlinks the old plugin.
+- **`editor_ssh` is `ssh_sandbox` now**, as it lets anything SSH into a
+  sandbox, not editors alone. The old key is read and rewritten for you.
+- **A team's `unibox.yaml` no longer places tokens** (variable,
+  placeholder, hosts): each token's kit says where it goes. Move any such
+  entries into the kit.
+
+### New
+
+- **Settings in tabs.** `unibox config` alone opens the settings: Global,
+  then each env with its own on top, changed in place.
+  [Team and Personal Configuration](/guide/configuration)
+- **Update notices.** After a command and in each list's corner, unibox
+  says when an env repository has new commits or a newer unibox or sbx is
+  out, with the command to get it. `update_check: false` or
+  `UNIBOX_NO_UPDATE_CHECK` turns it off.
+  [Keeping the Env Current](/guide/updating)
+- **`clipboard_text_copy`** says whether text an agent copies reaches
+  your clipboard, which sbx 0.51 no longer does unless told; `init` asks.
+- `stop_idle` can be set per env (`unibox config set stop_idle false -e
   dev`).
-- `editor_ssh` is `ssh_sandbox` now, as it lets anything SSH into every
-  sandbox, not editors alone; the old key is read and written anew. A
-  sandbox started while none runs turns sbx's SSH back on when sbx lost
-  it, and `init` that finds it on writes the SSH client's entry too.
 
-- At a terminal unibox tells, after a command and in every list's right
-  corner, when an env repository has new commits or a newer unibox or sbx
-  is out, with the command that brings it. It asks in the background, at
-  most daily for releases and every four hours for the repositories;
-  `update_check: false` or `UNIBOX_NO_UPDATE_CHECK` stops it. doctor asks
-  there and then, and checks your own checkouts of env repositories too.
+### Improvements
 
-- herdr shows a sandboxed agent's state by `HERDR_AGENT` on the session's
-  `sbx exec`, as herdr asks of a wrapper, instead of unibox's plugin and
-  its observer, which did not work. `unibox herdr` is gone; the first
-  command after upgrading unlinks the plugin.
-- A team's `unibox.yaml` no longer gives a token a variable, placeholder
-  and hosts of its own: where a token goes is its kit's to say, so it
-  works the same for anyone using sbx alone.
-- `clipboard_text_copy` says whether text an agent copies reaches your
-  clipboard, which sbx 0.51 stopped doing until told; `init` asks it and
-  doctor says while it is off and unsaid.
-- unibox needs sbx 0.51 or newer. doctor and `unibox prune` read a
-  sandbox's mounts from sbx, so they check and tidy stopped sandboxes
-  too, without starting one.
-- A sandbox's creation canceled at sbx's prompt says so and exits 130,
-  rather than reading as a failure; the next `run` or `sandbox create`
-  goes on with it.
+- `doctor` and `unibox prune` check and tidy stopped sandboxes too,
+  without starting them.
+- `doctor` checks for new releases there and then, and checks your own
+  checkouts of env repositories.
+- A sandbox started while none runs turns sbx's SSH back on if sbx lost
+  it.
+
+### Fixes
+
+- Cancelling a sandbox's creation at sbx's prompt is reported as
+  cancelled (exit 130), not as a failure; the next `run` goes on with it.
 
 ## 0.6 <Badge type="info" text="2026-11-02" />
 
-- A person keeps who their commits are by, for every env, an env or a
-  sandbox (`unibox author`), and the team can require one; commits in a
-  mounted repository now go out as that author, not the sandbox's user.
-- Agents name themselves co-author as their own settings say, or not at
-  all for every env or one (`unibox co-author`).
-- A task whose mounted checkout was moved to another branch on the host
-  is refused until it is back, rather than taken up on the wrong branch.
-- `unibox port add` and `port rm`, or `a` and `r` in the port list, name
-  and forget a port of your own and publish it at once.
-- A repository added to a task is mounted or cloned as its row says, and
-  `task rm-repo` (`u` in the task list) takes one out again.
+Commit authors, co-authors and your own ports.
+
+### New
+
+- **Commit author** for every env, an env or a sandbox
+  (`unibox author`), which the team can require: commits in a mounted
+  repository go out as you, not the sandbox's user.
+- **Co-author lines** as each agent's settings say, or none
+  (`unibox co-author`).
+- **Ports of your own**: `unibox port add` and `port rm`, or `a` and `r`
+  in the port list, name a port and publish it at once.
+  [Ports](/guide/ports)
+- `task rm-repo`, or `u` in the task list, takes a repository out of a
+  task.
+
+### Improvements
+
 - `sandbox recreate` and `task rm` take `--force` to discard work the
   forge lacks.
-- An agent's session is told which terminal it draws on, so agents show
-  images in Ghostty, kitty and iTerm.
-- A recreated sandbox takes its own token again instead of the global one.
-- The herdr plugin installs from inside a herdr pane and starts its
-  observer at once, without restarting herdr.
+- Agents show images in Ghostty, kitty and iTerm.
+- The herdr plugin installs from inside a herdr pane without restarting
+  herdr.
+
+### Fixes
+
+- A task whose mounted checkout was switched to another branch on the
+  host is refused until it is back, instead of resumed on the wrong
+  branch.
+- A repository added to a task is mounted or cloned as its row says.
+- A recreated sandbox takes its own token again, not the global one.
 
 ## 0.5 <Badge type="info" text="2026-10-29" />
 
-- A sandbox made anew gets its env's and its own tokens again, instead of
-  the global token sbx would otherwise give it after a recreate.
-- A task's conversations are put back without tar's complaints about
-  directories the sandbox already has.
+### Fixes
+
+- A recreated sandbox gets its env's and its own tokens again, instead
+  of sbx's global one.
+- Restoring a task's conversations no longer prints tar's complaints
+  about directories the sandbox already has.
 
 ## 0.4 <Badge type="info" text="2026-10-29" />
 
-- A task's agent conversations are kept on the host after each session
-  and before a recreate, so `unibox resume` carries on the last one even
-  in a sandbox made anew.
+### New
+
+- **Conversations survive a recreate.** A task's agent conversations are
+  kept on the host, so `unibox resume` carries on the last one even in a
+  new sandbox.
+
+### Fixes
+
 - Copilot resumes the last session of the task's own directory, not the
   last of the whole sandbox.
 - `make uninstall` removes what `make install` put in place.
 
 ## 0.3 <Badge type="info" text="2026-10-29" />
 
-- `unibox resume` continues the agent's last conversation in the task;
+Tasks, the repository index and interactive lists.
+
+### New
+
+- **`unibox resume`** continues the agent's last conversation in a task;
   `--new` starts afresh.
-- Tasks get repositories by name from the env's index, picked on one
-  screen with their role, mount or clone, branch and push; repositories
-  your tasks have held are offered again.
-- Tokens of an env's or a sandbox's own, typed into the system's keychain,
-  beside sbx's global ones.
-- Every noun is a list to act in at a terminal, scrolled to fit, and
-  `unibox` alone opens the sandbox list.
+- **Repository index.** Tasks get repositories by name from the env's
+  index, picked on one screen with their role, mount or clone, branch and
+  push; repositories you used before are offered again.
+  [Repository Index](/guide/repos)
+- **Interactive lists** for every noun, scrolled to fit; `unibox` alone
+  opens the sandbox list. [Interactive Lists](/guide/interactive)
+- **Tokens per env or sandbox**, kept in the system's keychain, beside
+  sbx's global ones.
+- Agents can paste images from your clipboard.
+- Editors over SSH, sbx's settings kept in `config.yaml`, and `doctor`'s
+  fixes offered one by one.
+
+### Improvements
+
 - A spinner says what a run is doing until the session starts.
-- Agents can paste images from the host's clipboard.
-- Editors over SSH, sbx's settings kept in config.yaml, and doctor's fixes
-  offered one by one.
 - Homebrew installs the release's binary instead of building it.
 
 ## 0.2 <Badge type="info" text="2026-10-26" />
 
-- Unibox becomes a thin layer over sbx: sandboxes are created by sbx from
-  the team's sbxenv files and kits, with each person's values kept apart
-  in vars.toml.
-- `unibox init` sets up from the team's repository, local or cloned from
-  its address, and `unibox doctor` checks what it set up.
+unibox becomes a companion to Docker Sandboxes.
+
+### Breaking changes
+
+- **A new start, not an upgrade of 0.1**: sandboxes are created by sbx
+  from the team's sbxenv files and kits, and 0.1's profiles are not
+  migrated. Set up again with `unibox init`.
+
+### New
+
+- `unibox init` sets up from the team's repository, local or cloned, and
+  `unibox doctor` checks what it set up.
+- Your own values are kept apart in `vars.toml`.
 - Ports, the network policy and secrets have commands of their own, so
   nobody needs sbx's CLI.
-- A sandbox's CPUs and memory, given by the team or the person.
-- Builds for Linux, macOS and Windows, with a Homebrew tap and a Scoop
-  bucket.
+- A sandbox's CPUs and memory, set by the team or by you.
+- Builds for Linux, macOS and Windows, with Homebrew and Scoop.
 
 ## 0.1 <Badge type="info" text="2026-10-16" />
 
-- The first release: one CLI over sandbox runtimes for coding agents,
-  with profiles in an environments repository and an adapter per runtime.
-  It is set aside by 0.2, not migrated.
+The first release: one CLI over sandbox runtimes for coding agents, with
+profiles in an environments repository and an adapter per runtime.

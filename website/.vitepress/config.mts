@@ -12,6 +12,7 @@ const guideSidebar = [
       { text: 'Introduction', link: '/' },
       { text: 'Installation', link: '/guide/installation' },
       { text: 'Usage', link: '/guide/usage' },
+      { text: 'Changelog', link: '/reference/changelog' },
     ],
   },
   {

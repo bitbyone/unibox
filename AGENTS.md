@@ -46,6 +46,13 @@ nightly channel: a GitHub prerelease, never the latest, and
 `Formula/unibox-nightly.rb` and `bucket/unibox-nightly.json`, leaving the
 stable ones as they are. Release by pushing such a tag; never edit the
 formula or the manifest by hand - change the workflow that writes them.
+The changelog (`website/reference/changelog.md`) is for the person using
+unibox, not a list of commits: each release has a line saying what it is
+about, then `### Breaking changes`, `### New`, `### Improvements` and
+`### Fixes`, in that order and only those with something in them. An entry
+says what the person gets or must do, shortly, and links the guide for
+more; how unibox does it stays in the commit. A breaking change says what
+to do about it. Changes not yet released go under `## Unreleased`.
 A test that fails one run in a few is a bug to find, not to rerun: the
 lock tests did, until FileLock.Close unlocked before closing (a forked
 child holds a copy of the descriptor, and with it the flock).
