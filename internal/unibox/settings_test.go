@@ -101,3 +101,38 @@ func TestSandboxSSHIsTurnedBackOnWhileNoSandboxRuns(t *testing.T) {
 		t.Fatalf("turned on again: %v", f.calls[calls:])
 	}
 }
+
+// The host entry of ssh <sandbox>.sbx is written again once sbx was
+// upgraded, as a newer one may write it otherwise, and only then.
+func TestSandboxSSHEntryIsWrittenAgainAfterAnSBXUpgrade(t *testing.T) {
+	t.Parallel()
+	m, f := managerFixture(t)
+	ctx := context.Background()
+	on := true
+	m.Config.EditorSSHOn = &on
+	f.servesSSH, f.binary = true, "sbx 0.53"
+	written := func() int {
+		n := 0
+		for _, c := range f.calls {
+			if c == "ssh client" {
+				n++
+			}
+		}
+		return n
+	}
+	for _, want := range []struct {
+		binary string
+		times  int
+	}{{"sbx 0.53", 1}, {"sbx 0.53", 1}, {"sbx 0.54", 2}, {"sbx 0.54", 2}} {
+		f.binary = want.binary
+		if err := m.syncSandboxSSH(ctx); err != nil || written() != want.times {
+			t.Fatalf("%s: %v, written %d times, want %d", want.binary, err, written(), want.times)
+		}
+	}
+	off := false
+	m.Config.EditorSSHOn = &off
+	f.binary = "sbx 0.55"
+	if err := m.syncSandboxSSH(ctx); err != nil || written() != 2 {
+		t.Fatalf("written with ssh_sandbox off: %v %d", err, written())
+	}
+}

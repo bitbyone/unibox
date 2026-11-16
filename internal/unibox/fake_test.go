@@ -47,7 +47,9 @@ type fakeRuntime struct {
 	sshAgent                             bool
 	// servesSSH is sbx's feature.ssh.
 	servesSSH bool
-	settings  map[string]string
+	// binary is what Binary says of the installed sbx.
+	binary   string
+	settings map[string]string
 	// hostEnv is what the last session gave sbx's own process.
 	hostEnv []string
 }
@@ -90,7 +92,13 @@ func (f *fakeRuntime) SetEditorSSH(_ context.Context, on bool) error {
 	f.servesSSH = on
 	return nil
 }
-func (f *fakeRuntime) SetupSSHClient(context.Context) error { return nil }
+func (f *fakeRuntime) SetupSSHClient(context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("ssh client")
+	return nil
+}
+func (f *fakeRuntime) Binary() string { return f.binary }
 func (f *fakeRuntime) NetworkPolicyChosen(context.Context) (bool, error) {
 	return !f.policyUnchosen, nil
 }

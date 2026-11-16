@@ -17,6 +17,10 @@ unibox` or `scoop update unibox` takes the latest.
 - With sbx 0.54 or newer, ports are listed and switched with `sbx port
   ls|publish|unpublish`, as `sbx ports` is deprecated there; an older sbx
   is still asked with `sbx ports`.
+- With `ssh_sandbox` on, the next sandbox start after sbx is upgraded
+  has sbx write its entry in your SSH client's configuration again
+  (`sbx setup ssh`), as sbx 0.54 asks: the entry an older sbx wrote let a
+  crafted host or user name run commands with an older OpenSSH.
 
 - `default_env` is gone: the context says the env commands work in when
   not told, and `init`, `env add --default` and the env list set it.

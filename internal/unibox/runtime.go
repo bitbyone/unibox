@@ -81,6 +81,9 @@ type Runtime interface {
 	SetEditorSSH(ctx context.Context, on bool) error
 	// SetupSSHClient writes the host entry ssh <sandbox>.sbx needs.
 	SetupSSHClient(ctx context.Context) error
+	// Binary tells this install of the runtime from another, as
+	// BinaryStamp does; "" when it cannot.
+	Binary() string
 	// AllowSSHAgent records the user's leave for sandboxes to use their
 	// SSH agent, which Available holds sbx's forwarding to.
 	AllowSSHAgent(on bool)

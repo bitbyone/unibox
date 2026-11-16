@@ -296,6 +296,9 @@ type State struct {
 	Mounted []string `json:"mounted,omitempty"`
 	// Recent are the repositories tasks have held, the newest first.
 	Recent []RecentRepo `json:"recent,omitempty"`
+	// SSHClientFor is the sbx, as its Binary says, that last wrote the
+	// host entry of ssh <sandbox>.sbx.
+	SSHClientFor string `json:"ssh_client_for,omitempty"`
 }
 
 func freshState() State {

@@ -845,14 +845,18 @@ func (m *Manager) syncSBXSettings(ctx context.Context) error {
 // syncSandboxSSH turns sbx's SSH endpoint back on where config.yaml says
 // it is on and sbx lost it, as a reset or a new install of sbx does: sbx
 // serves it only from a daemon restarted with it, which unibox does while
-// no sandbox runs, and says how to otherwise.
+// no sandbox runs, and says how to otherwise. A host entry written by
+// another sbx is written again: a newer one may write it otherwise, as
+// 0.54 did to keep crafted names from running commands.
 func (m *Manager) syncSandboxSSH(ctx context.Context) error {
 	on, said := m.Config.EditorSSH()
 	if !said || !on {
 		return nil
 	}
-	if serving, err := m.SBX.EditorSSH(ctx); err != nil || serving {
+	if serving, err := m.SBX.EditorSSH(ctx); err != nil {
 		return nil
+	} else if serving {
+		return m.syncSSHClient(ctx)
 	}
 	boxes, err := m.SBX.List(ctx)
 	if err != nil {
@@ -863,7 +867,35 @@ func (m *Manager) syncSandboxSSH(ctx context.Context) error {
 		return nil
 	}
 	m.progress("turning sbx's SSH endpoint back on")
-	return m.SBX.SetEditorSSH(ctx, true)
+	if err := m.SBX.SetEditorSSH(ctx, true); err != nil {
+		return err
+	}
+	return m.sshClientWritten()
+}
+
+// syncSSHClient has sbx write the host entry again when it was written by
+// another sbx, or by none unibox knows of. A failure is told and tried
+// again at the next start, as SSH keeps working with the entry there.
+func (m *Manager) syncSSHClient(ctx context.Context) error {
+	s, err := m.Paths.ReadState()
+	if err != nil {
+		return err
+	}
+	if binary := m.SBX.Binary(); binary == "" || binary == s.SSHClientFor {
+		return nil
+	}
+	m.progress("updating sbx's entry in your SSH client's configuration")
+	if err := m.SBX.SetupSSHClient(ctx); err != nil {
+		fmt.Fprintln(m.Log, "warning:", err)
+		return nil
+	}
+	return m.sshClientWritten()
+}
+
+// sshClientWritten keeps that the installed sbx wrote the host entry.
+func (m *Manager) sshClientWritten() error {
+	binary := m.SBX.Binary()
+	return m.Paths.State(func(s *State) error { s.SSHClientFor = binary; return nil })
 }
 
 // EnvAgents are the agents an env's sandbox may run, by unibox's names.

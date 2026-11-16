@@ -150,6 +150,11 @@ func sbxForwarding(ctx context.Context) (bool, error) {
 
 func (r *SBX) AllowSSHAgent(on bool) { r.SSHAgent = on }
 
+func (r *SBX) Binary() string {
+	path, _ := exec.LookPath("sbx")
+	return BinaryStamp(path)
+}
+
 func (r *SBX) Present() bool {
 	_, err := exec.LookPath("sbx")
 	return err == nil
