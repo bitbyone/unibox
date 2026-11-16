@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tobola/unibox/internal/unibox/api"
@@ -23,6 +24,11 @@ type SBX struct {
 	// SSHAgent is the user's leave for sandboxes to use their SSH agent,
 	// which sbx forwards when its setting says so.
 	SSHAgent bool
+
+	// portVerbs is whether this sbx has sbx port VERB (0.54), read from its
+	// version the first time a port is listed or switched.
+	portVerbs     bool
+	portVerbsOnce sync.Once
 }
 
 // SSHForwarding says whether sbx forwards the host's SSH agent now.
@@ -497,20 +503,40 @@ func (r *SBX) Remove(ctx context.Context, name string) error {
 	return err
 }
 
+// portArgs lists, publishes or unpublishes a sandbox's port in the form
+// the installed sbx takes: sbx port VERB SANDBOX [SPEC] since 0.54, which
+// keeps sbx ports SANDBOX --VERB SPEC only as deprecated; an sbx whose
+// version does not read is given the old form, which every one takes.
+func (r *SBX) portArgs(ctx context.Context, verb, sandbox, spec string) []string {
+	r.portVerbsOnce.Do(func() {
+		version, err := r.Version(ctx)
+		r.portVerbs = err == nil && VersionAtLeast(version, "0.54.0")
+	})
+	switch {
+	case verb == "ls" && r.portVerbs:
+		return []string{"port", "ls", sandbox, "--json"}
+	case verb == "ls":
+		return []string{"ports", sandbox, "--json"}
+	case r.portVerbs:
+		return []string{"port", verb, sandbox, spec}
+	}
+	return []string{"ports", sandbox, "--" + verb, spec}
+}
+
 func (r *SBX) PublishedPorts(ctx context.Context, sandbox string) ([]api.PublishedPort, error) {
-	b, err := commandOutput(hostCommand(ctx, "sbx", "ports", sandbox, "--json"))
+	b, err := commandOutput(hostCommand(ctx, "sbx", r.portArgs(ctx, "ls", sandbox, "")...))
 	if err != nil {
 		return nil, err
 	}
 	var ports []api.PublishedPort
 	if err = json.Unmarshal(b, &ports); err != nil {
-		return nil, fmt.Errorf("sbx ports answered in a form unibox does not know; upgrade unibox: %w", err)
+		return nil, fmt.Errorf("sbx listed the ports in a form unibox does not know; upgrade unibox: %w", err)
 	}
 	return ports, nil
 }
 
 func (r *SBX) PublishPort(ctx context.Context, sandbox, spec string, log io.Writer) error {
-	if err := runQuiet(hostCommand(ctx, "sbx", "ports", sandbox, "--publish", spec)); err != nil {
+	if err := runQuiet(hostCommand(ctx, "sbx", r.portArgs(ctx, "publish", sandbox, spec)...)); err != nil {
 		return fmt.Errorf("sbx did not publish it: %w", err)
 	}
 	return nil
@@ -525,7 +551,7 @@ func (r *SBX) UnpublishPort(ctx context.Context, sandbox string, p api.Published
 		ip = "[" + ip + "]"
 	}
 	spec := fmt.Sprintf("%s:%d:%d/%s", ip, p.HostPort, p.SandboxPort, p.Protocol)
-	if err := runQuiet(hostCommand(ctx, "sbx", "ports", sandbox, "--unpublish", spec)); err != nil {
+	if err := runQuiet(hostCommand(ctx, "sbx", r.portArgs(ctx, "unpublish", sandbox, spec)...)); err != nil {
 		return fmt.Errorf("sbx did not unpublish %s: %w", spec, err)
 	}
 	return nil

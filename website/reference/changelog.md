@@ -14,6 +14,9 @@ unibox` or `scoop update unibox` takes the latest.
   with no session in it and keeps it running until `unibox sandbox stop`,
   whatever `stop_idle` says; the list says it `running (kept)` and
   `--json` `keep_running`. Stop is `x` in the list now, no longer `t`.
+- With sbx 0.54 or newer, ports are listed and switched with `sbx port
+  ls|publish|unpublish`, as `sbx ports` is deprecated there; an older sbx
+  is still asked with `sbx ports`.
 
 - `default_env` is gone: the context says the env commands work in when
   not told, and `init`, `env add --default` and the env list set it.

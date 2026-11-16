@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/tobola/unibox/internal/testenv"
+	"github.com/tobola/unibox/internal/unibox/api"
 )
 
 func mustWriteExecutable(t *testing.T, path string, content []byte) {
@@ -333,5 +334,39 @@ func TestACanceledCreationIsSaidSoAndExitsAsSbxDid(t *testing.T) {
 	f, ok := errors.AsType[*Failure](err)
 	if !ok || f.Status != 130 || !strings.Contains(f.Message, "was canceled") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestSBXSwitchesPortsInTheFormItsVersionTakes(t *testing.T) {
+	for version, want := range map[string]string{
+		"0.53.0": "ports dev --json|ports dev --publish 3000:3000|ports dev --unpublish 127.0.0.1:3000:3000/tcp4|",
+		"0.54.0": "port ls dev --json|port publish dev 3000:3000|port unpublish dev 127.0.0.1:3000:3000/tcp4|",
+		"":       "ports dev --json|ports dev --publish 3000:3000|ports dev --unpublish 127.0.0.1:3000:3000/tcp4|",
+	} {
+		bin := t.TempDir()
+		log := filepath.Join(t.TempDir(), "argv")
+		mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
+case "$1" in
+--version|version) printf '%s\n' `+Quote("sbx version "+version)+`; exit 0 ;;
+esac
+printf '%s|' "$*" >> `+Quote(log)+`
+case "$*" in *--json*) echo '[]' ;; esac
+`))
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		r := &SBX{}
+		ctx := context.Background()
+		if _, err := r.PublishedPorts(ctx, "dev"); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.PublishPort(ctx, "dev", "3000:3000", io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		p := api.PublishedPort{HostIP: "127.0.0.1", HostPort: 3000, SandboxPort: 3000, Protocol: "tcp4"}
+		if err := r.UnpublishPort(ctx, "dev", p, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(log); string(got) != want {
+			t.Errorf("sbx %q: %s, want %s", version, got, want)
+		}
 	}
 }

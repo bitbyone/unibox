@@ -1174,6 +1174,9 @@ to the team's kits and bindings; what sbx does stays true.
   start drops the switches of a sandbox that was stopped: sbx would
   otherwise bring back whatever was on. A switch on a stopped sandbox is
   refused, as publishing would start it.
+  sbx 0.54 moves this to `sbx port ls|publish|unpublish SANDBOX [SPEC]`
+  and keeps `sbx ports` as deprecated; unibox uses the new form from 0.54
+  and the old one before it.
 - `sbx create --help`: sbx refuses more than 75% of the host's memory, and
   `--cpus 0` means all host CPUs.
 - `sbx env create` (0.49) has no `--memory` or `--cpus`; it merges its

@@ -199,7 +199,7 @@ func wantedPorts(ports map[string]Port, b api.Sandbox) map[string]string {
 
 // syncPorts brings a running sandbox's published ports to what it should
 // have, touching only ports unibox published or should; a port published
-// by hand with sbx ports stays.
+// by hand with sbx port publish stays.
 func (m *Manager) syncPorts(ctx context.Context, b *api.Sandbox, env Env) error {
 	want := wantedPorts(env.Ports, *b)
 	if len(want) == 0 && len(b.Ports) == 0 {
