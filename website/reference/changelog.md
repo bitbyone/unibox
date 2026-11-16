@@ -4,7 +4,7 @@ What each release brought, newest first. Every release's archives are on
 [GitHub](https://github.com/bitbyone/unibox/releases); `brew upgrade
 unibox` or `scoop update unibox` takes the latest.
 
-## Unreleased
+## 0.11 <Badge type="tip" text="2026-11-16" />
 
 - `unibox env update` no longer leaves the notice that a repository it
   just pulled has new commits, until the next check.
@@ -21,6 +21,8 @@ unibox` or `scoop update unibox` takes the latest.
   has sbx write its entry in your SSH client's configuration again
   (`sbx setup ssh`), as sbx 0.54 asks: the entry an older sbx wrote let a
   crafted host or user name run commands with an older OpenSSH.
+
+## 0.7 – 0.10 <Badge type="info" text="2026-11-05 – 2026-11-11" />
 
 - `default_env` is gone: the context says the env commands work in when
   not told, and `init`, `env add --default` and the env list set it.
@@ -97,7 +99,7 @@ unibox` or `scoop update unibox` takes the latest.
   rather than reading as a failure; the next `run` or `sandbox create`
   goes on with it.
 
-## 0.6 <Badge type="tip" text="2026-11-02" />
+## 0.6 <Badge type="info" text="2026-11-02" />
 
 - A person keeps who their commits are by, for every env, an env or a
   sandbox (`unibox author`), and the team can require one; commits in a
