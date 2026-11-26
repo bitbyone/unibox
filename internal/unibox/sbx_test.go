@@ -370,3 +370,28 @@ case "$*" in *--json*) echo '[]' ;; esac
 		}
 	}
 }
+
+func TestSecretSetSandboxTellsAKeychainThatRefusesTheRemove(t *testing.T) {
+	bin, dir := t.TempDir(), t.TempDir()
+	set := filepath.Join(dir, "set")
+	// sbx 0.54 on macOS, over a token an older sbx stored: the remove
+	// fails with the keychain's -25244, and a set alone would say it took.
+	mustWriteExecutable(t, filepath.Join(bin, "sbx"), []byte(`#!/bin/sh
+case "$1 $2" in
+"secret rm") echo "error: delete credential: An invalid attempt to change the owner of an item. (-25244)" >&2; exit 1 ;;
+"secret set") touch `+Quote(set)+` ;;
+esac
+`))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := &SBX{}
+	err := r.SecretSetSandbox(context.Background(), "copilot", "dev", "true")
+	if err == nil || !strings.Contains(err.Error(), "keeps the one it had") || !strings.Contains(err.Error(), `"docker/sandbox/credentials/dev/copilot" in Keychain Access`) {
+		t.Fatalf("the refused remove was not told: %v", err)
+	}
+	if _, err := os.Stat(set); err == nil {
+		t.Fatal("the set went on past the refused remove")
+	}
+	if err := r.SecretRemove(context.Background(), "github", ""); err == nil || !strings.Contains(err.Error(), "docker/sandbox/credentials/_/github") {
+		t.Fatalf("the global token's item was not named: %v", err)
+	}
+}

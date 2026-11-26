@@ -1104,6 +1104,16 @@ to the team's kits and bindings; what sbx does stays true.
   github --sandbox S` before the set, though nothing is listed to remove,
   makes it take, every time; a sandbox never made before takes a set
   alone. So unibox removes before it sets.
+- **The keychain keeps a token for the sbx that stored it** (macOS, sbx
+  0.54). Tokens an older sbx stored for a sandbox were read by 0.54's proxy,
+  but `sbx secret rm` of them failed with `delete credential: An invalid
+  attempt to change the owner of an item. (-25244)`, and a `set` after
+  that exited 0 while the item kept its old content and modification
+  date. sbx exits 0 when there is nothing to remove, so unibox takes any
+  failed remove as this and stops, naming the item
+  (`docker/sandbox/credentials/<sandbox|_>/<service>`, service
+  `sandboxes`) to remove in Keychain Access. Nothing tells it without
+  trying a write, so doctor does not look.
 - **sbx's own `github` secret takes github.com over.** With the built-in
   `github` service stored (copilot's `gh auth token`), the proxy sets
   Authorization on requests to github.com itself, and overwrites any the

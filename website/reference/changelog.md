@@ -5,6 +5,16 @@ release and say what to do. Every release's archives are on
 [GitHub](https://github.com/bitbyone/unibox/releases); `brew upgrade
 unibox` or `scoop update unibox` takes the latest.
 
+## Unreleased
+
+### Fixes
+
+- **A token that could not be replaced says so.** On macOS, a token an
+  older sbx stored for a sandbox could not be replaced by a newer one,
+  and the sandbox went on using the old token while unibox said the new
+  one was set. unibox now stops with the keychain item to remove in
+  Keychain Access; remove it and start the sandbox again.
+
 ## 0.11 <Badge type="tip" text="2026-11-16" />
 
 Long-running sandboxes, and ready for sbx 0.54.

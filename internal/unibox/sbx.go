@@ -443,16 +443,35 @@ func (r *SBX) SecretSetSandbox(ctx context.Context, service, sandbox, command st
 	// A sandbox sbx env rm removed and env create made again under its
 	// name keeps getting the global token after a set alone, though sbx
 	// says it applied the sandbox's own (sbx 0.50.1); a remove before it
-	// makes the set take. There may be nothing to remove.
-	_ = runQuiet(hostCommand(ctx, "sbx", "secret", "rm", service, "--sandbox", sandbox, "--force"))
+	// makes the set take. sbx exits 0 when there is nothing to remove, so
+	// a failure is one to tell: past it the set leaves the old token in
+	// place while saying it kept the new one.
+	if err := r.SecretRemoveSandbox(ctx, service, sandbox); err != nil {
+		return fmt.Errorf("sbx could not replace the %s token of sandbox %s, which keeps the one it had: %w", service, sandbox, err)
+	}
 	if err := runQuiet(hostCommand(ctx, "sbx", "secret", "set", service, "--sandbox", sandbox, "--command", command)); err != nil {
-		return fmt.Errorf("sbx did not keep the %s token of sandbox %s; check the command in config.yaml prints it: %w", service, sandbox, err)
+		return keychainOwner(fmt.Errorf("sbx did not keep the %s token of sandbox %s; check the command in config.yaml prints it: %w", service, sandbox, err), sandbox, service)
 	}
 	return nil
 }
 
 func (r *SBX) SecretRemoveSandbox(ctx context.Context, service, sandbox string) error {
-	return runQuiet(hostCommand(ctx, "sbx", "secret", "rm", service, "--sandbox", sandbox, "--force"))
+	return keychainOwner(runQuiet(hostCommand(ctx, "sbx", "secret", "rm", service, "--sandbox", sandbox, "--force")), sandbox, service)
+}
+
+// keychainOwner says what to do when macOS's keychain refuses sbx a change
+// of a token it stored (-25244, errSecInvalidOwnerEdit). Seen with sbx
+// 0.54: tokens an older sbx stored could be read but neither replaced nor
+// removed, and only the person can remove them, in Keychain Access. scope
+// is the sandbox, or "" for a global token.
+func keychainOwner(err error, scope, service string) error {
+	if err == nil || !strings.Contains(err.Error(), "-25244") {
+		return err
+	}
+	if scope == "" {
+		scope = "_"
+	}
+	return fmt.Errorf("%w\nthe keychain lets only the sbx that stored this token change it: remove %q in Keychain Access, then try again", err, "docker/sandbox/credentials/"+scope+"/"+service)
 }
 
 // SecretRemove has sbx forget a service's global token, or with a
@@ -462,7 +481,11 @@ func (r *SBX) SecretRemove(ctx context.Context, service, placeholder string) err
 	if placeholder != "" {
 		args = []string{"secret", "rm", "--placeholder", placeholder, "--force"}
 	}
-	return runQuiet(hostCommand(ctx, "sbx", args...))
+	err := runQuiet(hostCommand(ctx, "sbx", args...))
+	if placeholder != "" {
+		return err
+	}
+	return keychainOwner(err, "", service)
 }
 
 // SecretSet has sbx ask the person for a service's token on their own
