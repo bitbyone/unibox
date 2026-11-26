@@ -5,30 +5,30 @@
 class UniboxNightly < Formula
   desc "Wrapper over Docker Sandboxes for running coding agents locally"
   homepage "https://bitbyone.github.io/unibox/"
-  version "0.10-pre.3"
+  version "0.12-pre.1"
   license "MIT"
 
   conflicts_with "unibox", because: "both install the unibox command"
 
   on_macos do
     on_arm do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.10-pre.3/unibox_0.10-pre.3_darwin_arm64.tar.gz"
-      sha256 "c05fad540d44764e5fd25fed195ffe95c768ce60e3320ef4c412d6fccc17878e"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.12-pre.1/unibox_0.12-pre.1_darwin_arm64.tar.gz"
+      sha256 "9f906f01bf7760aca8ccf04cadc408888598db385e5e689c134041073ca54888"
     end
     on_intel do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.10-pre.3/unibox_0.10-pre.3_darwin_amd64.tar.gz"
-      sha256 "9c2ac2843356d87379cc573a0418af193b717e84214dfd85ff12c6847b3ecb98"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.12-pre.1/unibox_0.12-pre.1_darwin_amd64.tar.gz"
+      sha256 "97aec3f7c64bc3dfcd8846e9f4cd57501522db8721847bf7508066b6f214eac4"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.10-pre.3/unibox_0.10-pre.3_linux_arm64.tar.gz"
-      sha256 "0b2cd744dd90ea7421c11550c4642af54f3c468796a83dee22acf12ea68a1cf8"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.12-pre.1/unibox_0.12-pre.1_linux_arm64.tar.gz"
+      sha256 "8fd7b00d122d2468c63d66936f8aa343885f9703e3acaea5d4d0545a5aa1203a"
     end
     on_intel do
-      url "https://github.com/bitbyone/unibox/releases/download/v0.10-pre.3/unibox_0.10-pre.3_linux_amd64.tar.gz"
-      sha256 "c1e5186fb9e3477163b3fe7ac68ba733d2ac54c67ba9378ceeb6b14313fafbdc"
+      url "https://github.com/bitbyone/unibox/releases/download/v0.12-pre.1/unibox_0.12-pre.1_linux_amd64.tar.gz"
+      sha256 "5f51fb40957705198fb1b335a016e6ba590d73e7c484ffe239edeb3434d83644"
     end
   end
 
